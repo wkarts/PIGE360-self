@@ -5,7 +5,7 @@ from datetime import date
 from pathlib import Path
 from xml.sax.saxutils import escape
 from fastapi import APIRouter, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from sqlalchemy import select, or_
 from PIL import Image
 from pypdf import PdfReader
@@ -18,6 +18,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from . import models as m, schemas as s
 from .config import settings
 from .db import uid, now
+from .storage import delete_file, put_bytes, read_bytes
 from .common import audit, output
 from .security import Actor, DB, Scope, check_version, fail, lock_school, require, scoped
 
@@ -41,25 +42,27 @@ def checklist(db, school_id, student_id, grade_id=None):
                        'status': state, 'complete': state in ('validated', 'waived'), 'document_id': doc.id if doc else None})
     return result
 
-def write_file(db, school_id, user_id, name, mime, data):
-    root = settings().storage_path.resolve()
+def write_file(db, school_id, user_id, name, mime, data, file_kind='document'):
+    cfg = settings()
     key = f'{school_id}/{uid()}'
-    path = (root / key).resolve()
-    if not path.is_relative_to(root):
-        fail(400, 'Caminho de armazenamento inválido.')
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix('.part')
-    try:
-        with open(temporary, 'xb') as handle:
-            handle.write(data); handle.flush(); os.fsync(handle.fileno())
-        temporary.chmod(0o600)
-        temporary.replace(path)
-    finally:
-        temporary.unlink(missing_ok=True)
-    db.info.setdefault('new_files', []).append(path)
-    obj = m.FileRecord(school_id=school_id, original_name=Path(name.replace('\\', '/')).name[:240], storage_key=key,
-                       mime_type=mime, size=len(data), sha256=hashlib.sha256(data).hexdigest(), created_by=user_id)
-    db.add(obj); db.flush()
+    put_bytes(key, data, mime)
+    backend = cfg.storage_backend.lower()
+    bucket = cfg.storage_bucket if backend == 's3' else ''
+    db.info.setdefault('new_storage_objects', []).append((backend, bucket, key))
+    obj = m.FileRecord(
+        school_id=school_id,
+        original_name=Path(name.replace('\\', '/')).name[:240],
+        storage_key=key,
+        mime_type=mime,
+        size=len(data),
+        sha256=hashlib.sha256(data).hexdigest(),
+        storage_backend=backend,
+        bucket_name=bucket,
+        file_kind=file_kind,
+        created_by=user_id,
+    )
+    db.add(obj)
+    db.flush()
     return obj
 
 def validate_upload(data, filename):
@@ -95,7 +98,7 @@ def validate_upload(data, filename):
 def doc_output(db, doc):
     kind = db.get(m.DocumentType, doc.document_type_id)
     file = db.get(m.FileRecord, doc.file_id) if doc.file_id else None
-    return {**output(doc), 'type_name': kind.name, 'file': output(file, ('storage_key',)) if file else None,
+    return {**output(doc), 'type_name': kind.name, 'file': output(file, ('storage_key', 'storage_backend', 'bucket_name', 'file_kind')) if file else None,
             'effective_status': 'expired' if doc.expires_on and doc.expires_on < date.today() else doc.status}
 
 @router.get('/students/{student_id}/documents')
@@ -146,14 +149,24 @@ def waive(student_id: str, data: s.WaiverInput, db: DB, user: Actor, school: Sco
 @router.get('/files/{file_id}/download')
 def download(file_id: str, db: DB, user: Actor, school: Scope, request: Request):
     obj = scoped(db, m.FileRecord, file_id, school.id)
-    root = settings().storage_path.resolve(); path = (root / obj.storage_key).resolve()
-    if not path.is_relative_to(root) or not path.is_file():
+    try:
+        data = read_bytes(obj)
+    except (FileNotFoundError, KeyError):
         fail(404, 'Arquivo não disponível no armazenamento.')
-    with path.open('rb') as handle:
-        actual = hashlib.file_digest(handle, 'sha256').hexdigest()
-    if actual != obj.sha256: fail(409, 'A verificação de integridade do arquivo falhou.')
+    actual = hashlib.sha256(data).hexdigest()
+    if actual != obj.sha256:
+        fail(409, 'A verificação de integridade do arquivo falhou.')
     audit(db, request, user, 'file.downloaded', obj, school.id)
-    return FileResponse(path, media_type=obj.mime_type, filename=obj.original_name, headers={'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff'})
+    filename = Path(obj.original_name.replace('\\', '/')).name.replace('"', '')
+    return Response(
+        content=data,
+        media_type=obj.mime_type,
+        headers={
+            'Content-Disposition': f'attachment; filename="{filename}"',
+            'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff',
+        },
+    )
 
 PDF_TITLES = {'student_record':'Ficha cadastral do aluno', 'enrollment_receipt':'Comprovante de matrícula', 'enrollment_declaration':'Declaração de matrícula', 'enrollment_form':'Ficha de matrícula'}
 
