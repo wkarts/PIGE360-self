@@ -1,7 +1,7 @@
 name: pige360-self
 services:
   db:
-    image: ${POSTGRES_IMAGE:-postgres:17-bookworm}
+    image: ${POSTGRES_IMAGE:-ghcr.io/wkarts/pige360-self-postgres:17-bookworm}
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-pige360}
       POSTGRES_USER: ${POSTGRES_USER:-pige360}

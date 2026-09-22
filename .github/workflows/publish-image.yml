@@ -6,6 +6,9 @@ on:
       version: {type: string, required: true}
       candidate: {type: string, required: true}
       channel: {type: string, required: true}
+      node_ref: {type: string, required: true}
+      python_ref: {type: string, required: true}
+      postgres_ref: {type: string, required: true}
     outputs:
       image:
         value: ${{ jobs.publish.outputs.image }}
@@ -34,22 +37,22 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Nome e bases imutáveis
+      - name: Validar referências imutáveis da própria execução
         id: names
         env:
           CHANNEL: ${{ inputs.channel }}
+          NODE_BASE: ${{ inputs.node_ref }}
+          PYTHON_BASE: ${{ inputs.python_ref }}
+          POSTGRES_BASE: ${{ inputs.postgres_ref }}
         run: |
           set -Eeuo pipefail
           [[ "$CHANNEL" == develop || "$CHANNEL" == release ]]
           OWNER="${GITHUB_REPOSITORY_OWNER,,}"
-          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-          for pair in node:22-alpine python:3.13-slim; do
-            KIND="${pair%%:*}"; TAG="${pair#*:}"
-            BASE="ghcr.io/$OWNER/pige360-self-base-$KIND:$TAG"
-            DIGEST="$(docker buildx imagetools inspect "$BASE" --format '{{.Manifest.Digest}}')"
-            [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
-            echo "${KIND}_base=ghcr.io/$OWNER/pige360-self-base-$KIND@$DIGEST" >> "$GITHUB_OUTPUT"
+          for value in "$NODE_BASE" "$PYTHON_BASE" "$POSTGRES_BASE"; do
+            [[ "$value" == "ghcr.io/$OWNER/pige360-self-"* ]]
+            [[ "$value" =~ @sha256:[0-9a-f]{64}$ ]]
           done
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
       - name: Build do candidato (sem atualizar aliases)
         id: build
         uses: docker/build-push-action@v6
@@ -61,16 +64,18 @@ jobs:
           build-args: |
             APP_VERSION=${{ inputs.version }}
             SOURCE_REVISION=${{ inputs.ref }}
-            NODE_BASE_IMAGE=${{ steps.names.outputs.node_base }}
-            PYTHON_BASE_IMAGE=${{ steps.names.outputs.python_base }}
-          cache-from: type=gha,scope=pige360-${{ inputs.channel }}
-          cache-to: type=gha,scope=pige360-${{ inputs.channel }},mode=min
+            NODE_BASE_IMAGE=${{ inputs.node_ref }}
+            PYTHON_BASE_IMAGE=${{ inputs.python_ref }}
+            POSTGRES_IMAGE=${{ inputs.postgres_ref }}
+          cache-from: type=gha,scope=pige360-${{ inputs.channel }},version=2
+          cache-to: type=gha,scope=pige360-${{ inputs.channel }},mode=max,version=2
           provenance: false
           sbom: false
       - name: Testar a imagem publicada por digest
         env:
           IMAGE: ${{ steps.names.outputs.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
+          POSTGRES_IMAGE: ${{ inputs.postgres_ref }}
         run: bash scripts/ci/smoke.sh "$IMAGE@$DIGEST" remote
       - name: Promover somente aliases develop após smoke
         if: inputs.channel == 'develop'

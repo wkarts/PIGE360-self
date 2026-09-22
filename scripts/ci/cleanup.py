@@ -76,8 +76,9 @@ def cleanup_packages(args, repo, report):
     repository=api('repos/'+repo)
     scope='orgs' if repository['owner']['type']=='Organization' else 'users'
     package=name.lower()
-    # Allowlist exclusiva. Nunca varrer todos os pacotes da conta.
-    packages=[package,'pige360-self-base-node','pige360-self-base-python','pige360-self-postgres']
+    # Bases e espelhos ficam fora da limpeza, inclusive com --orphans.
+    # Referencias de releases antigas podem apontar para os seus digests.
+    packages=[package]
     now=datetime.now(timezone.utc)
     for package in packages:
         endpoint=f'{scope}/{quote(owner,safe="")}/packages/container/{quote(package,safe="")}'

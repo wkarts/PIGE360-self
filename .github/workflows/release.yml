@@ -49,15 +49,20 @@ jobs:
           VALUE=false
           if [[ "$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null || true)" == false ]]; then VALUE=true; fi
           echo "value=$VALUE" >> "$GITHUB_OUTPUT"
-  tests:
+  bases:
     needs: version
     if: needs.version.outputs.published != 'true'
+    uses: ./.github/workflows/container-bases.yml
+    with:
+      ref: ${{ needs.version.outputs.sha }}
+  tests:
+    needs: [version, bases]
     uses: ./.github/workflows/ci.yml
     with:
       ref: ${{ needs.version.outputs.sha }}
-  bases:
-    needs: tests
-    uses: ./.github/workflows/container-bases.yml
+      node_ref: ${{ needs.bases.outputs.node_ref }}
+      python_ref: ${{ needs.bases.outputs.python_ref }}
+      postgres_ref: ${{ needs.bases.outputs.postgres_ref }}
   candidate:
     needs: [version, tests, bases]
     uses: ./.github/workflows/publish-image.yml
@@ -66,6 +71,9 @@ jobs:
       version: ${{ needs.version.outputs.version }}
       candidate: ${{ needs.version.outputs.candidate }}
       channel: release
+      node_ref: ${{ needs.bases.outputs.node_ref }}
+      python_ref: ${{ needs.bases.outputs.python_ref }}
+      postgres_ref: ${{ needs.bases.outputs.postgres_ref }}
   release:
     needs: [version, candidate]
     runs-on: ubuntu-latest
@@ -87,6 +95,11 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Recuperar as bases imutáveis usadas nesta execução
+        uses: actions/download-artifact@v4
+        with:
+          name: base-images-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ci-evidence
       - name: Release, checkpoint e promoção por digest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "platform": "linux/amd64",
+  "images": [
+    {
+      "id": "python",
+      "package": "pige360-self-base-python",
+      "upstream": "docker.io/library/python:3.13-slim",
+      "dockerfile": "containers/base-python.Dockerfile",
+      "inputs": [
+        "backend/requirements.txt"
+      ],
+      "aliases": [
+        "3.13-slim",
+        "3.13",
+        "3",
+        "latest"
+      ],
+      "security_revision": 1,
+      "enabled": true
+    },
+    {
+      "id": "node",
+      "package": "pige360-self-base-node",
+      "upstream": "docker.io/library/node:22-alpine",
+      "dockerfile": "containers/base-node.Dockerfile",
+      "inputs": [
+        "frontend/package.json",
+        "frontend/package-lock.json"
+      ],
+      "aliases": [
+        "22-alpine",
+        "22",
+        "latest"
+      ],
+      "security_revision": 1,
+      "enabled": true
+    },
+    {
+      "id": "postgres",
+      "package": "pige360-self-postgres",
+      "upstream": "docker.io/library/postgres:17-bookworm",
+      "dockerfile": "containers/service.Dockerfile",
+      "inputs": [],
+      "aliases": [
+        "17-bookworm",
+        "17",
+        "latest"
+      ],
+      "security_revision": 1,
+      "enabled": true
+    },
+    {
+      "id": "redis",
+      "package": "pige360-self-redis",
+      "upstream": "docker.io/library/redis:8-alpine",
+      "dockerfile": "containers/service.Dockerfile",
+      "inputs": [],
+      "aliases": [
+        "8-alpine",
+        "8",
+        "latest"
+      ],
+      "security_revision": 1,
+      "enabled": true
+    },
+    {
+      "id": "rabbitmq",
+      "package": "pige360-self-rabbitmq",
+      "upstream": "docker.io/library/rabbitmq:4-management-alpine",
+      "dockerfile": "containers/service.Dockerfile",
+      "inputs": [],
+      "aliases": [
+        "4-management-alpine",
+        "4",
+        "latest"
+      ],
+      "security_revision": 1,
+      "enabled": true
+    }
+  ]
+}

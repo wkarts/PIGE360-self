@@ -1,14 +1,22 @@
-name: GHCR - Bases e PostgreSQL
+name: GHCR - Bases e servicos sob demanda
 on:
   workflow_call:
     inputs:
+      ref: {type: string, default: ''}
       force:
         type: boolean
         default: false
+      refresh_upstream:
+        type: boolean
+        default: false
+    outputs:
+      python_ref: {value: '${{ jobs.publish.outputs.python_ref }}'}
+      node_ref: {value: '${{ jobs.publish.outputs.node_ref }}'}
+      postgres_ref: {value: '${{ jobs.publish.outputs.postgres_ref }}'}
   workflow_dispatch:
     inputs:
-      force:
-        description: Reconstruir mesmo sem mudança no upstream
+      refresh_upstream:
+        description: Consultar upstream e atualizar somente se o digest ou as dependencias mudaram
         type: boolean
         default: false
   schedule:
@@ -16,64 +24,40 @@ on:
 permissions:
   contents: read
   packages: write
+concurrency:
+  group: pige360-self-ghcr-bases
+  cancel-in-progress: false
 jobs:
   publish:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    concurrency:
-      group: pige360-ghcr-mutation
-      cancel-in-progress: false
-    strategy:
-      max-parallel: 1
-      matrix:
-        include:
-          - package: pige360-self-base-node
-            tag: 22-alpine
-            aliases: '22-alpine 22 latest'
-            upstream: node:22-alpine
-            file: containers/base-node.Dockerfile
-          - package: pige360-self-base-python
-            tag: 3.13-slim
-            aliases: '3.13-slim 3.13 3 latest'
-            upstream: python:3.13-slim
-            file: containers/base-python.Dockerfile
-          - package: pige360-self-postgres
-            tag: 17-bookworm
-            aliases: '17-bookworm 17 latest'
-            upstream: postgres:17-bookworm
-            file: containers/postgres.Dockerfile
+    timeout-minutes: 40
+    outputs:
+      python_ref: ${{ steps.bases.outputs.python_ref }}
+      node_ref: ${{ steps.bases.outputs.node_ref }}
+      postgres_ref: ${{ steps.bases.outputs.postgres_ref }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Comparar upstream e definição
-        id: policy
+      - name: Reutilizar ou construir bases por fingerprint
+        id: bases
         env:
-          BASE_PACKAGE: ${{ matrix.package }}
-          BASE_TAG: ${{ matrix.tag }}
-          BASE_ALIASES: ${{ matrix.aliases }}
-          BASE_UPSTREAM: ${{ matrix.upstream }}
-          BASE_FILE: ${{ matrix.file }}
-          FORCE_REBUILD: ${{ inputs.force == true }}
-        run: bash scripts/ci/base-policy.sh
-      - name: Publicar somente base alterada
-        if: steps.policy.outputs.rebuild == 'true'
-        uses: docker/build-push-action@v6
+          REFRESH: ${{ github.event_name == 'schedule' || inputs.refresh_upstream == true || inputs.force == true }}
+        run: |
+          args=()
+          if [[ "$REFRESH" == true ]]; then args+=(--refresh-upstream); fi
+          python scripts/ci/base_images.py "${args[@]}"
+      - uses: actions/upload-artifact@v4
         with:
-          context: .
-          file: ${{ matrix.file }}
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.policy.outputs.tags }}
-          build-args: UPSTREAM_IMAGE=${{ steps.policy.outputs.upstream }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            br.com.argws.pige360.base.fingerprint=${{ steps.policy.outputs.fingerprint }}
-          provenance: false
-          sbom: false
+          name: base-images-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ci-evidence/base-images.lock.json
+          retention-days: 30
+          overwrite: true

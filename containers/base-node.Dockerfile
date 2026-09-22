@@ -1,5 +1,8 @@
-# syntax=docker/dockerfile:1
-ARG UPSTREAM_IMAGE=node:22-alpine
+ARG UPSTREAM_IMAGE
 FROM ${UPSTREAM_IMAGE}
-LABEL org.opencontainers.image.source="https://github.com/wkarts/PIGE360-self" \
-      org.opencontainers.image.title="PIGE360 Self — node"
+WORKDIR /opt/pige360
+COPY frontend/package.json frontend/package-lock.json ./frontend/
+RUN npm ci --prefix frontend --ignore-scripts --no-audit --no-fund \
+    && node frontend/node_modules/typescript/bin/tsc --version \
+    && npm cache clean --force
+WORKDIR /build
