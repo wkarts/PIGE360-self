@@ -10,6 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from .config import settings
 from .db import engine
+from .storage import ensure_storage
 from . import auth, people, registry, enrollments, documents, reports, portal, admissions, integrations, banking, profiles
 
 cfg = settings()
@@ -17,7 +18,7 @@ logger = logging.getLogger('pige360')
 
 @asynccontextmanager
 async def lifespan(app):
-    cfg.storage_path.mkdir(parents=True, exist_ok=True)
+    ensure_storage()
     yield
     engine.dispose()
 
