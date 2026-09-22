@@ -13,9 +13,9 @@ ROLE_CHECK = "role IN ('admin','direction','coordination','secretary','teacher',
 def upgrade():
     with op.batch_alter_table('users', schema=None) as batch_op:
         batch_op.add_column(sa.Column('person_id', sa.String(length=36), nullable=True))
-        batch_op.create_index('ix_users_person_id', ['person_id'], unique=False)
+        batch_op.create_index(op.f('ix_users_person_id', ['person_id'], unique=False)
         batch_op.create_foreign_key(
-            'fk_users_person_id_persons',
+            op.f('fk_users_person_id_persons'),
             'persons',
             ['person_id'],
             ['id'],
@@ -59,11 +59,11 @@ def downgrade():
     op.drop_table('teacher_assignments')
 
     with op.batch_alter_table('users', schema=None) as batch_op:
-        batch_op.drop_constraint('ck_users_valid_role', type_='check')
+        batch_op.drop_constraint(op.f('ck_users_valid_role'), type_='check')
         batch_op.create_check_constraint(
             op.f('ck_users_valid_role'),
             "role IN ('admin','secretary','viewer')",
         )
-        batch_op.drop_constraint('fk_users_person_id_persons', type_='foreignkey')
-        batch_op.drop_index('ix_users_person_id')
+        batch_op.drop_constraint(op.f('fk_users_person_id_persons'), type_='foreignkey')
+        batch_op.drop_index(op.f('ix_users_person_id'))
         batch_op.drop_column('person_id')
