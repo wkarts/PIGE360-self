@@ -133,6 +133,22 @@ def create_student(data: s.StudentInput, db: DB, user: Actor, school: Scope, req
     db.add(obj); db.flush(); audit(db, request, user, 'student.created', obj, school.id)
     return student_output(db, obj)
 
+@router.patch('/students/{student_id}')
+def update_student(student_id: str, data: s.Edit, db: DB, user: Actor, school: Scope, request: Request):
+    require(user, 'people.write')
+    lock_school(db, school.id)
+    obj = scoped(db, m.Student, student_id, school.id)
+    check_version(obj, data.version)
+    values = validate(s.StudentData, data.data).model_dump()
+    before = output(obj)
+    for key, value in values.items():
+        setattr(obj, key, value)
+    obj.version += 1
+    db.flush()
+    audit(db, request, user, 'student.updated', obj, school.id, {'before': before, 'after': output(obj)})
+    return student_output(db, obj)
+
+
 @router.get('/students/{student_id}')
 def student(student_id: str, db: DB, user: Actor, school: Scope):
     obj = scoped(db, m.Student, student_id, school.id)
