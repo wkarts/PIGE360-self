@@ -62,7 +62,7 @@ try:
         admin=adminContext.new_page();admin.set_default_timeout(8000);admin.on('pageerror',lambda e:errors.append('admin: '+str(e)));page=admin
         if bridge:admin_http=install(admin,ROOT,URL,OUT)
         else:admin.goto(URL)
-        admin.get_by_label('E-mail',exact=True).fill('secretaria@example.com');admin.get_by_label('Senha',exact=True).fill(password);admin.get_by_role('button',name='Entrar na Secretaria').click()
+        admin.get_by_label('E-mail',exact=True).fill('secretaria@example.com');admin.get_by_label('Senha',exact=True).fill(password);admin.get_by_role('button',name='Entrar na aplicação').click()
         expect(admin.get_by_role('heading',name='Visão da Secretaria',exact=True)).to_be_visible()
         admin.locator('aside').get_by_role('link',name='Inscrições online',exact=False).click()
         expect(admin.get_by_role('button',name='Processos e link público')).to_be_visible();expect(admin.locator('.x-record',has_text='Lucas Almeida — Teste')).to_be_visible();record('Fila administrativa exibe a inscrição enviada no portal')
