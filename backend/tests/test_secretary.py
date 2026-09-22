@@ -207,3 +207,82 @@ def test_postgresql_concurrent_activation_one_vacancy(api):
         return api.client.post(api.base+'/enrollments/'+e['id']+'/movements',headers=api.headers,json={'version':e['version'],'action':'activate','reason':'Concorrência PostgreSQL'}).status_code
     with ThreadPoolExecutor(max_workers=2) as pool:results=list(pool.map(activate,[first,second]))
     assert sorted(results)==[200,409]
+
+def test_unified_person_registry_complete_fields_and_private_photo(api):
+    person=api.post('/persons',{
+        'name':'João da Silva',
+        'social_name':'João',
+        'cpf':'529.982.247-25',
+        'birth_date':'2012-04-10',
+        'birth_certificate':'REG-123',
+        'birth_city':'Salvador',
+        'birth_state':'BA',
+        'nationality':'Brasileira',
+        'sex':'male',
+        'race_color':'parda',
+        'rg':'1234567',
+        'rg_issuer':'SSP',
+        'rg_state':'BA',
+        'rg_issued_on':'2020-01-10',
+        'mother_name':'Maria da Silva',
+        'phone':'5571999999999',
+        'phone_secondary':'5571988888888',
+        'postal_code':'40000000',
+        'street':'Rua Central',
+        'address_number':'10',
+        'district':'Centro',
+        'city':'Salvador',
+        'state':'BA',
+        'country':'Brasil',
+        'emergency_contact_name':'Maria da Silva',
+        'emergency_contact_phone':'5571999999999',
+    })
+    assert person['country']=='Brasil'
+    student=api.post('/students',{'person_id':person['id'],'previous_school':'Escola anterior','nis':'123'})
+    assert student['nis']=='123'
+    listed=api.get('/persons?q=1234567')['items'][0]
+    assert 'Aluno' in listed['roles']
+    from PIL import Image
+    image=io.BytesIO()
+    Image.new('RGB',(20,20),(0,109,119)).save(image,format='PNG')
+    photo=api.call('POST','/persons/'+person['id']+'/photo',expect=200,files={'file':('joao.png',image.getvalue(),'image/png')})
+    assert photo['photo_file_id']
+    downloaded=api.get('/files/'+photo['photo_file_id']+'/download')
+    assert downloaded.content.startswith(b'\\x89PNG')
+    assert api.call('DELETE','/persons/'+person['id']+'/photo',expect=200)['photo_file_id'] is None
+
+
+def test_complete_student_and_enrollment_fields_are_persisted(api):
+    catalogs=api.catalogs(capacity=5)
+    student=api.student('Aluno Completo',adult=True)
+    edited=api.patch('/students/'+student['id'],{
+        'version':student['version'],
+        'data':{
+            'previous_school':'Colégio de Origem',
+            'nis':'NIS-99',
+            'sus_card':'SUS-99',
+            'inep_code':'INEP-99',
+            'health_plan':'Plano Escola',
+            'allergies':'Amendoim',
+            'medications':'Nenhum',
+            'health_notes':'Acompanhamento',
+            'special_needs':'Nenhuma',
+            'authorized_transport':'Van 1',
+            'student_notes':'Observação integral',
+        }
+    })
+    assert edited['previous_school']=='Colégio de Origem'
+    assert edited['special_needs']=='Nenhuma'
+    enrollment=api.post('/enrollments',{
+        'student_id':student['id'],
+        'class_group_id':catalogs['group']['id'],
+        'enrolled_on':'2026-09-21',
+        'enrollment_type':'transfer_in',
+        'origin_school':'Escola de Origem',
+        'origin_city':'Salvador',
+        'entry_reason':'Transferência regular',
+        'external_reference':'DOC-2026-01',
+    })
+    assert enrollment['enrollment_type']=='transfer_in'
+    assert enrollment['origin_school']=='Escola de Origem'
+\n
