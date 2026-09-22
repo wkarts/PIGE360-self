@@ -77,7 +77,7 @@ def cleanup_packages(args, repo, report):
     scope='orgs' if repository['owner']['type']=='Organization' else 'users'
     package=name.lower()
     # Allowlist exclusiva. Nunca varrer todos os pacotes da conta.
-    packages=[package,'pige360-base-node','pige360-base-python','pige360-postgres']
+    packages=[package,'pige360-self-base-node','pige360-self-base-python','pige360-self-postgres']
     now=datetime.now(timezone.utc)
     for package in packages:
         endpoint=f'{scope}/{quote(owner,safe="")}/packages/container/{quote(package,safe="")}'

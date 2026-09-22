@@ -28,17 +28,17 @@ jobs:
       max-parallel: 1
       matrix:
         include:
-          - package: pige360-base-node
+          - package: pige360-self-base-node
             tag: 22-alpine
             aliases: '22-alpine 22 latest'
             upstream: node:22-alpine
             file: containers/base-node.Dockerfile
-          - package: pige360-base-python
+          - package: pige360-self-base-python
             tag: 3.13-slim
             aliases: '3.13-slim 3.13 3 latest'
             upstream: python:3.13-slim
             file: containers/base-python.Dockerfile
-          - package: pige360-postgres
+          - package: pige360-self-postgres
             tag: 17-bookworm
             aliases: '17-bookworm 17 latest'
             upstream: postgres:17-bookworm

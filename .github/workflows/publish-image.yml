@@ -45,10 +45,10 @@ jobs:
           echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
           for pair in node:22-alpine python:3.13-slim; do
             KIND="${pair%%:*}"; TAG="${pair#*:}"
-            BASE="ghcr.io/$OWNER/pige360-base-$KIND:$TAG"
+            BASE="ghcr.io/$OWNER/pige360-self-base-$KIND:$TAG"
             DIGEST="$(docker buildx imagetools inspect "$BASE" --format '{{.Manifest.Digest}}')"
             [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
-            echo "${KIND}_base=ghcr.io/$OWNER/pige360-base-$KIND@$DIGEST" >> "$GITHUB_OUTPUT"
+            echo "${KIND}_base=ghcr.io/$OWNER/pige360-self-base-$KIND@$DIGEST" >> "$GITHUB_OUTPUT"
           done
       - name: Build do candidato (sem atualizar aliases)
         id: build

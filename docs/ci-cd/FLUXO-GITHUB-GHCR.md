@@ -39,9 +39,9 @@ Tags móveis apontam ao último build aprovado; para rollback e instalações co
 ## Imagens
 
 - `ghcr.io/wkarts/pige360-self`: API, PWA e worker (mesma imagem; comandos diferentes).
-- `ghcr.io/wkarts/pige360-base-node:22-alpine`: compilação Node.
-- `ghcr.io/wkarts/pige360-base-python:3.13-slim`: runtime Python.
-- `ghcr.io/wkarts/pige360-postgres:17-bookworm`: wrapper do PostgreSQL da instalação.
+- `ghcr.io/wkarts/pige360-self-base-node:22-alpine`: compilação Node.
+- `ghcr.io/wkarts/pige360-self-base-python:3.13-slim`: runtime Python.
+- `ghcr.io/wkarts/pige360-self-postgres:17-bookworm`: wrapper do PostgreSQL da instalação.
 
 Build inicial: `linux/amd64`. Nenhum build ARM/mobile/desktop é alegado. Bases são reconstruídas quando mudam digest upstream, Dockerfile ou aliases; execução manual pode forçar. O pipeline resolve bases por digest antes do build da aplicação. `provenance`/`sbom` automáticos do BuildKit permanecem desativados, como nos anexos; não alegar SBOM/atestado assinado como entregue.
 
@@ -122,3 +122,7 @@ O processo mantém draft antes da promoção final. Reexecuções de release pub
 ## Fontes técnicas externas utilizadas na adaptação
 
 GitHub Docs: REST Actions Cache; Working with the Container registry; Deleting and restoring a package. Docker Docs: buildx imagetools create (`--prefer-index=false`). O contrato das Actions utilizadas vem dos workflows anexados; o npm lock registra a integridade oficial de TypeScript 5.8.3.
+
+## Isolamento do namespace das bases
+
+As bases usam o prefixo `pige360-self-`, exclusivo desta aplicação. A primeira tentativa com `pige360-base-node` encontrou `permission_denied: write_package`. Nenhum pacote antigo foi excluído, desvinculado ou teve permissões alteradas para contornar esse bloqueio. A criação de novas bases próprias do repositório evita depender de pacotes gerais ou de outra instalação. Se houver bloqueio também no namespace novo, conceder acesso de Actions ao pacote correto é uma operação administrativa; não habilitar publicação com credenciais amplas de outros projetos.
