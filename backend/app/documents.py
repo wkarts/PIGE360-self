@@ -1,6 +1,5 @@
 import hashlib
 import io
-import os
 from datetime import date
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -18,7 +17,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from . import models as m, schemas as s
 from .config import settings
 from .db import uid, now
-from .storage import delete_file, put_bytes, read_bytes
+from .storage import put_bytes, read_bytes
 from .common import audit, output
 from .security import Actor, DB, Scope, check_version, fail, lock_school, require, scoped
 
