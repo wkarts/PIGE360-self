@@ -64,7 +64,7 @@ try:
         nav('Responsáveis');page.get_by_role('button',name='+ Novo responsável').click()
         dialog().get_by_label('Nome completo').fill('Mariana Almeida — Teste');dialog().get_by_label('Telefone / WhatsApp').fill('5575999990000');save()
         nav('Alunos');page.get_by_role('button',name='+ Novo aluno').click()
-        dialog().get_by_label('Nome completo').fill('Lucas Almeida — Teste');dialog().get_by_label('Nascimento').fill('2018-05-15');dialog().get_by_label('Endereço').fill('Endereço fictício para validação');save()
+        dialog().get_by_label('Nome completo').fill('Lucas Almeida — Teste');dialog().get_by_label('Data de nascimento').fill('2018-05-15');dialog().get_by_label('Endereço').fill('Endereço fictício para validação');save()
         expect(page.get_by_role('heading',name='Lucas Almeida — Teste',exact=True).first).to_be_visible()
         page.get_by_role('button',name='Responsáveis',exact=True).click();page.get_by_role('button',name='+ Vincular responsável').click()
         dialog().locator('select').first.select_option(label='Mariana Almeida — Teste · Não informado')
