@@ -78,7 +78,7 @@ PERMISSIONS = {
     'guardian': {
         'read', 'profile.read', 'profile.self', 'guardian.self.read',
     },
-    'viewer': {'read', 'reports.read', 'profile.read'},
+    'viewer': {'read', 'dashboard.read', 'reports.read', 'profile.read'},
 }
 
 def fail(status: int, detail: str):
