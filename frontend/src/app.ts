@@ -8,7 +8,7 @@ namespace PigeUI {
   const text = (value: unknown): string => value === null || value === undefined ? '' : String(value);
   const statusLabels: Record<string,string> = {active:'Ativo', archived:'Arquivado', draft:'Rascunho', suspended:'Suspenso', transferred:'Transferido', cancelled:'Cancelado', completed:'Concluído', pending:'Pendente', received:'Recebido', validated:'Validado', rejected:'Rejeitado', expired:'Vencido', waived:'Dispensado', open:'Aberto', in_progress:'Em atendimento', waiting:'Aguardando', closed:'Fechado', admin:'Administrador', direction:'Direção', coordination:'Coordenação', secretary:'Secretaria', teacher:'Professor', student:'Aluno', guardian:'Responsável', viewer:'Consulta'};
   const catalogLabels: Record<string,string> = {'units':'Unidades','academic-years':'Anos letivos','grades':'Séries e etapas','shifts':'Turnos','class-groups':'Turmas','document-types':'Tipos de documento'};
-  const pageLabels: Record<string,string> = {online:'Inscrições online',banking:'Cobranças',integrations:'Integrações',dashboard:'Visão geral',students:'Alunos',guardians:'Responsáveis',academic:'Estrutura acadêmica',enrollments:'Matrículas',documents:'Pendências documentais',protocols:'Protocolos',reports:'Relatórios',settings:'Instituição',users:'Usuários e acessos',audit:'Auditoria'};
+  const pageLabels: Record<string,string> = {online:'Inscrições online',banking:'Cobranças',integrations:'Integrações',dashboard:'Visão geral',people:'Cadastro único',students:'Alunos',guardians:'Responsáveis',academic:'Estrutura acadêmica',enrollments:'Matrículas',documents:'Pendências documentais',protocols:'Protocolos',reports:'Relatórios',settings:'Instituição',users:'Usuários e acessos',audit:'Auditoria'};
   const blankModal = (): Modal => ({kind:'',title:'',fields:[],form:{},target:null,action:'',error:''});
   const state = Vue.reactive({
     ready:false, configured:true, online:navigator.onLine, loginBusy:false, busy:false, loading:false,
@@ -16,7 +16,7 @@ namespace PigeUI {
     schools:[] as PigeAPI.School[], schoolId:'', page:'dashboard', q:'', pageNumber:1, total:0,
     rows:[] as Row[], dashboard:{} as Row, catalogs:{} as Record<string,Row[]>, catalog:'class-groups',
     selectedStudent:null as Student|null, studentTab:'cadastro', profileContext:{} as Row, studentDocs:{items:[],checklist:[],issued:[]} as {items:Row[];checklist:Row[];issued:Row[]}, history:[] as Row[],
-    studentChoices:[] as Student[], personChoices:[] as Row[], companies:[] as Row[], reportClass:'', reportRows:[] as Row[],
+    studentChoices:[] as Student[], personChoices:[] as Row[], photoUrls:{} as Record<string,string>, companies:[] as Row[], reportClass:'', reportRows:[] as Row[],
     modal:blankModal(), login:{email:'',password:''}, setup:{token:'',admin_name:'',admin_email:'',admin_password:'',company_name:'',company_document:'',school_name:'',unit_name:'Unidade principal',academic_year:new Date().getFullYear()},
     filters:{status:'',academic_year_id:'',class_group_id:'',document_type_id:'',document_status:'',overdue:false},
     pendencySummary:{truncated:false,total_documents:0,scanned_students:0,total_students:0},
@@ -48,7 +48,33 @@ namespace PigeUI {
   function getName(list: string,id: unknown): string { return text(state.catalogs[list]?.find(x=>x.id===id)?.name) || '—'; }
   function options(list: string): Option[] { return (state.catalogs[list]||[]).map(x=>({value:x.id,label:text(x.name)+(list==='class-groups'?' · '+getName('academic-years',x.academic_year_id)+' · '+getName('shifts',x.shift_id):'')})); }
   function field(key:string,caption:string,type='text',required=false,opts?:Option[],wide=false):Field { return {key,label:caption,type,required,options:opts,wide}; }
-  function personFields():Field[] { return [field('name','Nome completo','text',true),field('social_name','Nome social'),field('cpf','CPF (opcional)'),field('birth_date','Nascimento','date'),field('phone','Telefone / WhatsApp'),field('email','E-mail','email'),field('address','Endereço','text',false,undefined,true),field('notes','Observações administrativas','textarea',false,undefined,true)]; }
+  const studentFieldKeys=['previous_school','nis','sus_card','inep_code','health_plan','allergies','medications','health_notes','special_needs','authorized_transport','student_notes'];
+  function personFields():Field[] { return [
+    field('name','Nome completo','text',true),field('social_name','Nome social'),field('cpf','CPF'),field('birth_date','Data de nascimento','date'),
+    field('birth_certificate','Certidão / registro de nascimento'),field('birth_city','Cidade de nascimento'),field('birth_state','UF de nascimento'),
+    field('nationality','Nacionalidade'),field('sex','Sexo','select',false,[{value:'female',label:'Feminino'},{value:'male',label:'Masculino'},{value:'intersex',label:'Intersexo'},{value:'not_informed',label:'Não informado'}]),
+    field('gender','Identidade de gênero'),field('race_color','Raça / cor','select',false,[{value:'branca',label:'Branca'},{value:'preta',label:'Preta'},{value:'parda',label:'Parda'},{value:'amarela',label:'Amarela'},{value:'indigena',label:'Indígena'},{value:'not_informed',label:'Não informado'}]),
+    field('marital_status','Estado civil','select',false,[{value:'single',label:'Solteiro(a)'},{value:'married',label:'Casado(a)'},{value:'divorced',label:'Divorciado(a)'},{value:'widowed',label:'Viúvo(a)'},{value:'not_informed',label:'Não informado'}]),
+    field('rg','RG / documento de identidade'),field('rg_issuer','Órgão expedidor'),field('rg_state','UF do RG'),field('rg_issued_on','Data de expedição','date'),
+    field('mother_name','Nome da mãe'),field('father_name','Nome do pai'),field('phone','Telefone / WhatsApp'),field('phone_secondary','Telefone secundário'),field('email','E-mail','email'),
+    field('postal_code','CEP'),field('street','Logradouro'),field('address_number','Número'),field('address_complement','Complemento'),field('district','Bairro'),field('city','Cidade'),field('state','UF'),field('country','País'),
+    field('address','Endereço livre / referência','text',false,undefined,true),field('occupation','Profissão'),field('employer','Empresa / empregador'),field('education','Escolaridade'),
+    field('emergency_contact_name','Contato de emergência'),field('emergency_contact_phone','Telefone de emergência'),field('active','Cadastro ativo','checkbox'),
+    field('photo','Foto da pessoa (PNG ou JPEG)','photo',false,undefined,true),field('notes','Observações administrativas','textarea',false,undefined,true)
+  ]; }
+  function studentFields():Field[] { return [
+    field('previous_school','Escola anterior'),field('nis','NIS / PIS'),field('sus_card','Cartão SUS'),field('inep_code','Código INEP'),
+    field('health_plan','Plano de saúde'),field('allergies','Alergias','textarea',false,undefined,true),field('medications','Medicamentos de uso contínuo','textarea',false,undefined,true),
+    field('health_notes','Informações de saúde','textarea',false,undefined,true),field('special_needs','Necessidades específicas','textarea',false,undefined,true),
+    field('authorized_transport','Transporte autorizado'),field('student_notes','Observações pedagógicas / administrativas','textarea',false,undefined,true)
+  ]; }
+  function photoFileId(row:unknown):string { return text((row as {photo_file_id?:unknown})?.photo_file_id); }
+  async function hydratePhoto(row:unknown):Promise<void> {
+    const id=photoFileId(row);if(!id||state.photoUrls[id])return;
+    try{state.photoUrls[id]=await PigeAPI.objectUrl(base()+'/files/'+id+'/download');}catch{/* A listagem continua utilizável se a foto foi removida. */}
+  }
+  function photoSrc(row:unknown):string { const id=photoFileId(row);if(id&&!state.photoUrls[id])void hydratePhoto(row);return id?state.photoUrls[id]||'':''; }
+  async function hydratePhotos(rows:unknown[]):Promise<void>{await Promise.all(rows.map(row=>hydratePhoto(row)));}
   function catalogFields(kind:string):Field[] {
     if(kind==='academic-years') return [field('name','Nome do ano letivo','text',true),field('starts_on','Data inicial','date',true),field('ends_on','Data final','date',true),field('status','Situação','select',true,[{value:'active',label:'Ativo'},{value:'closed',label:'Fechado'}])];
     if(kind==='class-groups') return [field('name','Nome da turma','text',true),field('unit_id','Unidade','select',true,options('units')),field('academic_year_id','Ano letivo','select',true,options('academic-years')),field('grade_id','Série / etapa','select',true,options('grades')),field('shift_id','Turno','select',true,options('shifts')),field('capacity','Capacidade','number',true),field('active','Turma ativa','checkbox')];
@@ -121,9 +147,10 @@ namespace PigeUI {
       }else if(state.page==='users'){
         const data=await PigeAPI.request<Row[]>('/users');if(current===sequence){state.rows=data;state.total=data.length;}
       }else if(state.page!=='reports'){
-        const resource=state.page==='guardians'?'persons':state.page;
-        const data=await PigeAPI.request<PigeAPI.Page<Row>>(base()+'/'+resource+'?'+query+(state.page==='guardians'?'&guardians_only=true':''));
-        if(current===sequence&&sid===state.schoolId){state.rows=data.items;state.total=data.total;}
+        const resource=['guardians','people'].includes(state.page)?'persons':state.page;
+        const suffix=state.page==='guardians'?'&guardians_only=true':'';
+        const data=await PigeAPI.request<PigeAPI.Page<Row>>(base()+'/'+resource+'?'+query+suffix);
+        if(current===sequence&&sid===state.schoolId){state.rows=data.items;state.total=data.total;void hydratePhotos(state.page==='students'?data.items.map(x=>(x as {person?:unknown}).person):data.items);}
       }
     }finally{if(current===sequence)state.loading=false;}
   }
@@ -135,19 +162,24 @@ namespace PigeUI {
     try{
       const [student,docs,events,protocols]=await Promise.all([PigeAPI.request<Student>(base()+'/students/'+id),PigeAPI.request<typeof state.studentDocs>(base()+'/students/'+id+'/documents'),PigeAPI.request<Row[]>(base()+'/students/'+id+'/history'),PigeAPI.request<PigeAPI.Page<Row>>(base()+'/protocols?student_id='+id+'&page_size=100')]);
       if(sid!==state.schoolId)return;
-      state.selectedStudent=student;state.studentDocs=docs;state.history=events;state.studentProtocols=protocols.items;state.studentProtocolTotal=protocols.total;state.page='students';state.studentTab='cadastro';
+      state.selectedStudent=student;state.studentDocs=docs;state.history=events;state.studentProtocols=protocols.items;state.studentProtocolTotal=protocols.total;void hydratePhotos([student.person,...(student.guardians||[]).map(g=>(g as {person?:unknown}).person)]);state.page='students';state.studentTab='cadastro';
     }catch(error){notify(error);}finally{state.loading=false;}
   }
   function openModal(kind:string,title:string,fields:Field[],values:PigeAPI.FormDataMap={},target:Row|null=null):void{
-    const form:PigeAPI.FormDataMap={};for(const f of fields)form[f.key]=values[f.key]??(f.type==='checkbox'?false:f.type==='number'?30:'');
+    const form:PigeAPI.FormDataMap={};for(const f of fields)form[f.key]=values[f.key]??(f.type==='checkbox'?(f.key==='active'):f.type==='number'?30:'');
     state.modal={kind,title,fields,form,target,action:'',error:''};selectedFile=null;state.error='';
   }
   function closeModal():void{if(!state.busy)state.modal=blankModal();}
   function valuesFrom(row:Row|PigeAPI.Person,fields:Field[]):PigeAPI.FormDataMap {const map:PigeAPI.FormDataMap={};for(const f of fields)map[f.key]=(row as unknown as Record<string,Value>)[f.key]??'';return map;}
-  function newStudent():void{const fields=personFields();fields[3].required=true;fields.push(field('previous_school','Escola anterior'));openModal('student','Cadastrar aluno',fields);}
-  function editStudent():void{const p=state.selectedStudent?.person;if(!p)return;openModal('person','Editar dados do aluno',personFields(),{...valuesFrom(p,personFields()),is_guardian:p.is_guardian},p as unknown as Row);}
-  function newGuardian():void{openModal('guardian','Cadastrar responsável',personFields());}
-  function editPerson(row:Row):void{openModal('person','Editar responsável',personFields(),valuesFrom(row,personFields()),row);}
+  function newPerson():void{openModal('person','Cadastrar pessoa',personFields(),{active:true});}
+  function newStudent():void{const fields=[...personFields(),...studentFields()];const birth=fields.find(f=>f.key==='birth_date');if(birth)birth.required=true;openModal('student','Cadastrar aluno',fields,{active:true});}
+  function editStudent():void{
+    const student=state.selectedStudent;if(!student)return;
+    const personFieldsList=personFields(),fields=[...personFieldsList,...studentFields()];
+    openModal('student-edit','Editar cadastro completo do aluno',fields,{...valuesFrom(student.person,personFieldsList),...valuesFrom(student,studentFields()),is_guardian:student.person.is_guardian},student as unknown as Row);
+  }
+  function newGuardian():void{openModal('guardian','Cadastrar responsável',personFields(),{active:true});}
+  function editPerson(row:Row):void{openModal('person','Editar cadastro da pessoa',personFields(),valuesFrom(row,personFields()),row);}
   function newCatalog(row:Row|null=null):void{const fields=catalogFields(state.catalog);const defaults:PigeAPI.FormDataMap={active:true,capacity:30,status:'active',level:'Educação básica'};openModal('catalog',(row?'Editar ':'Cadastrar ')+catalogLabels[state.catalog],fields,row?valuesFrom(row,fields):defaults,row);state.modal.action=state.catalog;}
   async function searchStudents(value=''):Promise<void>{
     const data=await PigeAPI.request<PigeAPI.Page<Student>>(base()+'/students?page_size=100&q='+encodeURIComponent(value));state.studentChoices=data.items;
@@ -156,10 +188,16 @@ namespace PigeUI {
     const data=await PigeAPI.request<PigeAPI.Page<Row>>(base()+'/persons?page_size=100&q='+encodeURIComponent(value));state.personChoices=data.items;
   }
   async function newEnrollment():Promise<void>{await safe(async()=>{
-    await searchStudents();const selected=state.selectedStudent;
+    await searchStudents();await searchPersons();const selected=state.selectedStudent;
     if(selected&&!state.studentChoices.some(s=>s.id===selected.id))state.studentChoices.unshift(selected);
-    const fields=[field('student_id','Aluno','student',true),field('class_group_id','Turma de destino','select',true,options('class-groups')),field('enrolled_on','Data da matrícula','date',true),field('notes','Observações','textarea',false,undefined,true)];
-    openModal('enrollment','Nova matrícula',fields,{student_id:selected?.id||'',enrolled_on:new Date().toISOString().slice(0,10)});
+    const fields=[
+      field('student_id','Aluno','student',true),field('class_group_id','Turma de destino','select',true,options('class-groups')),
+      field('enrolled_on','Data da matrícula','date',true),
+      field('enrollment_type','Tipo de entrada','select',true,[{value:'new',label:'Nova matrícula'},{value:'renewal',label:'Rematrícula'},{value:'transfer_in',label:'Transferência recebida'},{value:'returning',label:'Retorno'}]),
+      field('financial_person_id','Responsável financeiro','person'),field('origin_school','Escola de origem'),field('origin_city','Cidade de origem'),
+      field('entry_reason','Motivo / observação de entrada','textarea',false,undefined,true),field('external_reference','Referência externa'),field('notes','Observações','textarea',false,undefined,true)
+    ];
+    openModal('enrollment','Nova matrícula',fields,{student_id:selected?.id||'',enrolled_on:new Date().toISOString().slice(0,10),enrollment_type:'new'});
   });}
   async function viewEnrollment(id:string):Promise<void>{await safe(async()=>{const data=await PigeAPI.request<Row>(base()+'/enrollments/'+id);openModal('enrollment-detail','Matrícula '+text(data.number),[],{},data);});}
   function editDraft():void{
@@ -224,8 +262,27 @@ namespace PigeUI {
   async function downloadFile(id:string,name='documento.pdf'):Promise<void>{await safe(()=>PigeAPI.download(base()+'/files/'+id+'/download',name));}
   async function saveModal():Promise<void>{
     if(state.busy)return;state.busy=true;state.modal.error='';
-    const modal=state.modal,form={...modal.form},target=modal.target,studentId=state.selectedStudent?.id;let createdStudent:Student|null=null;
+    const modal=state.modal,form={...modal.form},target=modal.target,studentId=state.selectedStudent?.id;let createdStudent:Student|null=null;let savedPersonId='';
     try{
+      const photo=selectedFile;delete form.photo;
+      if(modal.kind==='student'){
+        const studentData:{[key:string]:Value}={};for(const key of studentFieldKeys){studentData[key]=form[key]??'';delete form[key];}
+        const previous=text(studentData.previous_school);createdStudent=await PigeAPI.post<Student>(base()+'/students',{person:{...form,cpf:form.cpf||null,birth_date:form.birth_date||null,is_guardian:false},previous_school:previous,...studentData});
+        savedPersonId=createdStudent.person.id;
+      }else if(modal.kind==='student-edit'){
+        const studentData:{[key:string]:Value}={};for(const key of studentFieldKeys){studentData[key]=form[key]??'';delete form[key];}
+        const personTarget=(target as unknown as Student).person;
+        await PigeAPI.patch(base()+'/persons/'+personTarget.id,{version:personTarget.version,data:{...form,cpf:form.cpf||null,birth_date:form.birth_date||null,is_guardian:Boolean(personTarget.is_guardian)}});
+        await PigeAPI.patch(base()+'/students/'+target!.id,{version:target!.version,data:studentData});
+        savedPersonId=personTarget.id;
+      }else if(modal.kind==='guardian'||modal.kind==='person'){
+        const data={...form,cpf:form.cpf||null,birth_date:form.birth_date||null,is_guardian:modal.kind==='guardian'?true:Boolean(target?.is_guardian)};
+        if(target){await PigeAPI.patch(base()+'/persons/'+target.id,{version:target.version,data});savedPersonId=target.id;}else{const created=await PigeAPI.post<PigeAPI.Person>(base()+'/persons',data);savedPersonId=created.id;}
+      }
+      if(photo&&savedPersonId){
+        const photoData=new FormData();photoData.append('file',photo);
+        await PigeAPI.request(base()+'/persons/'+savedPersonId+'/photo',{method:'POST',body:photoData});
+      }
       if(modal.kind==='student'){
         const previous=text(form.previous_school);delete form.previous_school;createdStudent=await PigeAPI.post<Student>(base()+'/students',{person:{...form,cpf:form.cpf||null,birth_date:form.birth_date||null,is_guardian:false},previous_school:previous});
       }else if(modal.kind==='guardian'||modal.kind==='person'){
@@ -278,7 +335,7 @@ namespace PigeUI {
   async function exportClass():Promise<void>{if(state.reportClass)await safe(()=>PigeAPI.download(base()+'/reports/class/'+state.reportClass+'/pdf','alunos-da-turma.pdf'));}
   async function logout():Promise<void>{
     try{await PigeAPI.post('/auth/logout',{});}catch{/* Limpar a interface mesmo sem rede. */}
-    PigeAPI.clear();state.user=null;state.selectedStudent=null;state.rows=[];state.dashboard={} as Row;state.studentDocs={items:[],checklist:[],issued:[]};state.history=[];state.studentProtocols=[];state.studentProtocolTotal=0;resetFilters();state.personChoices=[];state.studentChoices=[];state.catalogs={};state.reportRows=[];state.companies=[];state.schools=[];state.modal=blankModal();state.error='';state.login.password='';
+    PigeAPI.clear();state.user=null;state.selectedStudent=null;state.rows=[];state.dashboard={} as Row;state.studentDocs={items:[],checklist:[],issued:[]};state.history=[];state.studentProtocols=[];state.studentProtocolTotal=0;resetFilters();state.personChoices=[];state.studentChoices=[];state.photoUrls={};state.catalogs={};state.reportRows=[];state.companies=[];state.schools=[];state.modal=blankModal();state.error='';state.login.password='';
   }
   async function install():Promise<void>{if(installEvent){await installEvent.prompt();installEvent=null;state.canInstall=false;}}
   function updateApp():void{if(waitingWorker&&!state.modal.kind)waitingWorker.postMessage({type:'SKIP_WAITING'});}
@@ -296,5 +353,5 @@ namespace PigeUI {
     }
     window.addEventListener('keydown',(event)=>{if(event.key==='Escape')closeModal();});
   }
-  Vue.createApp({components:{'expansion-panel':PigeExpansion.component},render:PigeRenders.app,setup(){Vue.onMounted(()=>{setupPWA();void initialize();});return{state,text,can,isProfileRole,school,label,date,cpf,initials,getName,options,pageLabels,catalogLabels,configure,login,logout,navigate,changeSchool,setCatalog,search,page,loadPage,viewStudent,newStudent,editStudent,newGuardian,editPerson,newCatalog,newEnrollment,viewEnrollment,startMovement,reenroll,newLink,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,newUser,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,protocolReceipt,exportPendencies,install,updateApp};}}).mount('#app');
+  Vue.createApp({components:{'expansion-panel':PigeExpansion.component},render:PigeRenders.app,setup(){Vue.onMounted(()=>{setupPWA();void initialize();});return{state,text,can,isProfileRole,school,label,date,cpf,initials,photoSrc,getName,options,pageLabels,catalogLabels,configure,login,logout,navigate,changeSchool,setCatalog,search,page,loadPage,viewStudent,newStudent,editStudent,newGuardian,editPerson,newCatalog,newEnrollment,viewEnrollment,startMovement,reenroll,newLink,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,newUser,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,protocolReceipt,exportPendencies,install,updateApp};}}).mount('#app');
 }
