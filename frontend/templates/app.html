@@ -24,11 +24,11 @@
         <button class="btn btn-primary full" :disabled="state.loginBusy || !state.online">{{ state.loginBusy ? 'Configurando…' : 'Concluir instalação' }}</button>
       </form>
       <form v-else class="auth-form" @submit.prevent="login">
-        <p class="eyebrow">BEM-VINDO À SECRETARIA</p><h2>Acesse sua instituição</h2><p class="muted">Informe suas credenciais para continuar.</p>
+        <p class="eyebrow">BEM-VINDO AO PIGE360 SELF</p><h2>Acesse sua instituição</h2><p class="muted">Informe suas credenciais para continuar.</p>
         <div v-if="state.error" class="alert error" role="alert">{{ state.error }}</div><div v-if="state.success" class="alert success">{{ state.success }}</div>
         <label class="field">E-mail<input v-model="state.login.email" type="email" required autocomplete="username" autofocus placeholder="seu.nome@escola.com.br"></label>
         <label class="field">Senha<input v-model="state.login.password" type="password" required maxlength="128" autocomplete="current-password" placeholder="Sua senha de acesso"></label>
-        <button class="btn btn-primary full" :disabled="state.loginBusy || !state.online">{{ state.loginBusy ? 'Autenticando…' : 'Entrar na Secretaria' }} <span>→</span></button>
+        <button class="btn btn-primary full" :disabled="state.loginBusy || !state.online">{{ state.loginBusy ? 'Autenticando…' : 'Entrar na aplicação' }} <span>→</span></button>
         <p class="small muted">Problemas de acesso? Solicite a recuperação ao administrador desta instalação.</p>
       </form>
       <p v-if="!state.online" class="alert warning">Sem conexão com o servidor. O acesso aos dados exige conexão.</p>
@@ -39,7 +39,7 @@
     <aside class="sidebar" :class="{visible:state.menuOpen}">
       <a href="#/dashboard" class="brand-line" @click.prevent="navigate('dashboard')"><img class="sidebar-logo" src="/branding/pige360/logo-horizontal.png" alt="PIGE360"><span class="self-label">SELF</span></a>
       <div class="sidebar-label">OPERAÇÃO ESCOLAR</div>
-      <nav aria-label="Menu principal">
+      <nav v-if="!isProfileRole()" aria-label="Menu principal">
         <a href="#/dashboard" :class="{active:state.page==='dashboard'}" @click.prevent="navigate('dashboard')"><span class="nav-icon">▦</span>Visão da Secretaria</a>
         <a href="#/students" :class="{active:state.page==='students'}" @click.prevent="navigate('students')"><span class="nav-icon">◉</span>Alunos</a>
         <a href="#/guardians" :class="{active:state.page==='guardians'}" @click.prevent="navigate('guardians')"><span class="nav-icon">◎</span>Responsáveis</a>
@@ -50,7 +50,7 @@
         <a v-if="can('reports.read')" href="#/reports" :class="{active:state.page==='reports'}" @click.prevent="navigate('reports')"><span class="nav-icon">▧</span>Relatórios</a>
       </nav>
       <div class="sidebar-label">ADMINISTRAÇÃO</div>
-      <nav aria-label="Administração">
+      <nav v-if="!isProfileRole()" aria-label="Administração">
         <a v-if="can('admissions.read')" href="#/online" :class="{active:state.page==='online'}" @click.prevent="navigate('online')"><span class="nav-icon">↗</span>Inscrições online</a>
         <a v-if="can('banking.read')" href="#/banking" :class="{active:state.page==='banking'}" @click.prevent="navigate('banking')"><span class="nav-icon">＄</span>Cobranças</a>
         <a v-if="can('integrations.manage')" href="#/integrations" :class="{active:state.page==='integrations'}" @click.prevent="navigate('integrations')"><span class="nav-icon">⇄</span>Integrações</a>
@@ -85,7 +85,7 @@
         </div>
         <div v-if="state.loading" class="loading-strip" role="status">Carregando registros…</div>
         <expansion-panel v-if="['online','banking','integrations'].includes(state.page)" :key="state.schoolId+':'+state.page" :school-id="state.schoolId" :page="state.page" :permissions="state.user.permissions"></expansion-panel>
-        <section v-if="state.page==='dashboard'" class="dashboard">
+        <section v-if="state.page==='dashboard' && !isProfileRole()" class="dashboard">
           <div class="welcome-card"><div><p class="eyebrow">ROTINA ESCOLAR EM DIA</p><h2>Uma visão completa.<br>Uma Secretaria mais próxima.</h2><p>Comece um cadastro, acompanhe matrículas ou consulte a documentação dos alunos.</p><div class="actions"><button v-if="can('people.write')" class="btn btn-primary" @click="newStudent">+ Cadastrar aluno</button><button v-if="can('enrollments.write')" class="btn btn-secondary" @click="newEnrollment">Nova matrícula →</button></div></div><div class="welcome-art" aria-hidden="true"><span>ALUNO</span><strong>Cadastro<br>Documentos<br>Matrícula</strong><i>✓</i></div></div>
           <div class="stats-grid">
             <div class="stat-card"><span>Alunos cadastrados</span><strong>{{ state.dashboard.students ?? '—' }}</strong><small>Cadastros ativos na escola</small><i>◎</i></div>
@@ -94,6 +94,30 @@
             <div class="stat-card"><span>Vagas disponíveis</span><strong>{{ state.dashboard.available ?? '—' }}</strong><small>Nos períodos letivos ativos</small><i>▥</i></div>
           </div>
           <div class="dashboard-grid"><section class="panel"><div class="panel-header"><h2>Matrículas recentes</h2><button class="link-button" @click="navigate('enrollments')">Ver todas →</button></div><div class="table-scroll"><table><thead><tr><th>Aluno</th><th>Turma</th><th>Situação</th></tr></thead><tbody><tr v-for="e in state.dashboard.recent_enrollments" :key="e.id" @click="viewEnrollment(e.id)" class="clickable"><td><strong>{{ e.student_name }}</strong><small>{{ e.number }}</small></td><td>{{ e.class_name }}<small>{{ e.year_name }}</small></td><td><span class="badge" :class="e.status">{{ label(e.status) }}</span></td></tr></tbody></table><div v-if="!state.dashboard.recent_enrollments?.length" class="empty-state"><span>▤</span><h3>Sua primeira matrícula começa aqui</h3><p>Cadastre o aluno e configure uma turma para iniciar.</p></div></div></section><section class="panel attention-panel"><p class="eyebrow">ACOMPANHAMENTO</p><h2>O que precisa de atenção?</h2><button @click="navigate('documents')"><span>Documentos recebidos<small>Aguardando análise da Secretaria</small></span><b>{{ state.dashboard.received_documents ?? 0 }}</b></button><button @click="navigate('protocols')"><span>Protocolos abertos<small>{{ state.dashboard.overdue_protocols ?? 0 }} com prazo vencido</small></span><b>{{ state.dashboard.open_protocols ?? 0 }}</b></button><button @click="navigate('academic')"><span>Turmas disponíveis<small>Estrutura dos períodos ativos</small></span><b>{{ state.dashboard.classes ?? 0 }}</b></button></section></div>
+        </section>
+        <section v-if="state.page==='dashboard' && isProfileRole()" class="dashboard">
+          <div v-if="state.user.role==='teacher'">
+            <div class="welcome-card"><div><p class="eyebrow">ESPAÇO DO PROFESSOR</p><h2>Suas turmas e alunos.</h2><p>Consulte as turmas atribuídas a você e acompanhe a lista real de alunos de cada classe.</p></div><div class="welcome-art" aria-hidden="true"><span>PROFESSOR</span><strong>Turmas<br>Alunos<br>Vínculos</strong><i>✓</i></div></div>
+            <div v-if="!state.profileContext.assignments?.length" class="alert info">Seu usuário ainda não possui turmas atribuídas. Solicite à Direção ou à Coordenação o vínculo com uma turma.</div>
+            <section v-for="assignment in state.profileContext.assignments || []" :key="assignment.id" class="panel spaced">
+              <div class="panel-header"><div><p class="eyebrow">{{ assignment.school_name }}</p><h2>{{ assignment.class_name }}</h2><p class="muted">{{ assignment.grade_name }} · {{ assignment.shift_name }} · {{ assignment.year_name }}<span v-if="assignment.subject_name"> · {{ assignment.subject_name }}</span></p></div><span class="badge active">{{ assignment.students.length }} aluno(s)</span></div>
+              <div class="table-scroll"><table><thead><tr><th>Número</th><th>Aluno</th><th>Situação</th></tr></thead><tbody><tr v-for="student in assignment.students" :key="student.id"><td class="mono">{{ student.number }}</td><td><strong>{{ student.name }}</strong></td><td><span class="badge" :class="student.status">{{ label(student.status) }}</span></td></tr></tbody></table></div>
+            </section>
+          </div>
+          <div v-else-if="state.user.role==='student'">
+            <div class="welcome-card"><div><p class="eyebrow">ESPAÇO DO ALUNO</p><h2>Acompanhe sua vida escolar.</h2><p>Este espaço mostra somente os dados escolares vinculados ao seu próprio cadastro.</p></div><div class="welcome-art" aria-hidden="true"><span>ALUNO</span><strong>Matrículas<br>Documentos<br>Histórico</strong><i>✓</i></div></div>
+            <div v-if="!state.profileContext.students?.length" class="alert warning">Seu usuário ainda não possui um cadastro de aluno vinculado. Solicite a correção ao administrador.</div>
+            <section v-for="student in state.profileContext.students || []" :key="student.id" class="panel spaced">
+              <div class="panel-header"><div><p class="eyebrow">{{ student.school_name }}</p><h2>{{ student.name }}</h2><p class="muted">{{ student.number }} · {{ label(student.status) }}</p></div><span class="badge active">{{ student.enrollments.length }} matrícula(s)</span></div>
+              <h3>Matrículas</h3><div class="table-scroll"><table><thead><tr><th>Número</th><th>Turma</th><th>Ano letivo</th><th>Situação</th></tr></thead><tbody><tr v-for="enrollment in student.enrollments" :key="enrollment.id"><td class="mono">{{ enrollment.number }}</td><td>{{ enrollment.class_name }}<small>{{ enrollment.grade_name }} · {{ enrollment.shift_name }}</small></td><td>{{ enrollment.year_name }}</td><td><span class="badge" :class="enrollment.status">{{ label(enrollment.status) }}</span></td></tr></tbody></table></div>
+              <h3 class="spaced">Documentos registrados</h3><div v-if="!student.documents?.length" class="empty-state"><p>Nenhum documento registrado para consulta.</p></div><div v-else class="table-scroll"><table><thead><tr><th>Documento</th><th>Situação</th><th>Validade</th></tr></thead><tbody><tr v-for="document in student.documents" :key="document.id"><td>{{ document.type_name }}</td><td><span class="badge" :class="document.status">{{ label(document.status) }}</span></td><td>{{ date(document.expires_on) }}</td></tr></tbody></table></div>
+            </section>
+          </div>
+          <div v-else>
+            <div class="welcome-card"><div><p class="eyebrow">ESPAÇO DO RESPONSÁVEL</p><h2>Acompanhe os alunos vinculados à família.</h2><p>O acesso é limitado aos vínculos ativos autorizados pela instituição.</p></div><div class="welcome-art" aria-hidden="true"><span>FAMÍLIA</span><strong>Alunos<br>Matrículas<br>Vínculos</strong><i>✓</i></div></div>
+            <div v-if="!state.profileContext.students?.length" class="alert warning">Seu usuário ainda não possui vínculo ativo com um aluno. Solicite a correção à Secretaria.</div>
+            <div class="dashboard-grid"><section v-for="student in state.profileContext.students || []" :key="student.id" class="panel"><p class="eyebrow">{{ student.school_name }}</p><h2>{{ student.name }}</h2><p class="muted">{{ student.number }} · {{ student.relationship }} · {{ label(student.status) }}</p><h3 class="spaced">Matrículas</h3><div v-if="!student.enrollments.length" class="empty-state"><p>Nenhuma matrícula disponível.</p></div><div v-else class="table-scroll"><table><thead><tr><th>Turma</th><th>Ano</th><th>Situação</th></tr></thead><tbody><tr v-for="enrollment in student.enrollments" :key="enrollment.id"><td>{{ enrollment.class_name }}<small>{{ enrollment.grade_name }} · {{ enrollment.shift_name }}</small></td><td>{{ enrollment.year_name }}</td><td><span class="badge" :class="enrollment.status">{{ label(enrollment.status) }}</span></td></tr></tbody></table></div></section></div>
+          </div>
         </section>
         <section v-if="state.page==='students' && state.selectedStudent" class="student-detail">
           <div class="student-banner"><div class="avatar large">{{ initials(state.selectedStudent.person.name) }}</div><div class="grow"><h2>{{ state.selectedStudent.person.social_name || state.selectedStudent.person.name }}</h2><p>{{ state.selectedStudent.number }} · Nascimento {{ date(state.selectedStudent.person.birth_date) }}</p></div><span class="badge" :class="state.selectedStudent.status">{{ label(state.selectedStudent.status) }}</span><button v-if="can('enrollments.write')" class="btn btn-primary" @click="newEnrollment">+ Matricular aluno</button></div>
@@ -154,13 +178,13 @@
           <div class="school-grid"><article v-for="s in state.schools" :key="s.id" class="panel school-card"><p class="eyebrow">INSTITUIÇÃO DE ENSINO</p><h2>{{ s.name }}</h2><p>{{ state.companies.find(c=>c.id===s.company_id)?.name }}</p><p class="muted">{{ s.address || 'Endereço não informado' }}</p><div class="divider"></div><p class="small">Documentação: <strong>{{ s.document_policy==='block'?'obrigatória antes de ativar':'aviso sem bloqueio' }}</strong></p><button class="btn btn-secondary" @click="newSchool(s)">Editar instituição</button></article></div>
           <div class="alert info spaced">Cada cliente utiliza sua própria instalação. Empresas, escolas e unidades são cadastros internos, sem contratação SaaS nem provisionamento remoto.</div>
         </section>
-        <footer class="content-footer"><span>PIGE360 Self · Secretaria escolar</span><span>Acesso controlado · Histórico preservado</span></footer>
+        <footer class="content-footer"><span>PIGE360 Self · Gestão educacional</span><span>Acesso controlado · Histórico preservado</span></footer>
       </main>
     </div>
   </div>
   <div v-if="state.modal.kind" class="modal-backdrop" @click.self="closeModal">
     <section class="modal" :class="{'modal-wide':['enrollment-detail','protocol-detail'].includes(state.modal.kind)}" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <header class="modal-header"><div><p class="eyebrow">SECRETARIA ESCOLAR</p><h2 id="modal-title">{{ state.modal.title }}</h2></div><button class="icon-button" :disabled="state.busy" @click="closeModal" aria-label="Fechar janela">×</button></header>
+      <header class="modal-header"><div><p class="eyebrow">PIGE360 SELF</p><h2 id="modal-title">{{ state.modal.title }}</h2></div><button class="icon-button" :disabled="state.busy" @click="closeModal" aria-label="Fechar janela">×</button></header>
       <div v-if="state.modal.kind==='enrollment-detail' && state.modal.target" class="modal-body">
         <div class="enrollment-summary"><h3>{{ state.modal.target.student_name }}</h3><span class="badge" :class="state.modal.target.status">{{ label(state.modal.target.status) }}</span><p>{{ state.modal.target.class_name }} · {{ state.modal.target.grade_name }} · {{ state.modal.target.shift_name }} · {{ state.modal.target.year_name }}</p></div>
         <p class="small preserve">{{ state.modal.target.notes || 'Sem observações.' }}</p><div class="actions spaced"><button v-if="state.modal.target.status==='draft' && can('enrollments.write')" class="btn btn-primary" @click="editDraft">Editar pré-matrícula</button><button v-if="can('documents.write')" class="btn btn-secondary" @click="issueDocument('enrollment_form',state.modal.target)">Ficha de matrícula PDF</button></div><h3 class="spaced">Checklist documental</h3><div class="checklist-grid"><div v-for="c in state.modal.target.checklist" :key="c.document_type_id" class="checklist-item"><span :class="c.complete?'check-ok':'check-pending'">{{ c.complete?'✓':'!' }}</span><div><strong>{{ c.name }}</strong><small>{{ label(c.status) }} · {{ c.required?'Obrigatório':'Opcional' }}</small></div></div></div>
