@@ -1,9 +1,9 @@
 <div class="app-root" :aria-busy="state.busy || state.loading">
-  <div v-if="!state.ready" class="loading-screen"><img class="brand-symbol official-symbol" src="/branding/pige360/symbol.png" alt="PIGE360"><h1>PIGE360 Self</h1><p>Preparando a Secretaria…</p></div>
+  <div v-if="!state.ready" class="loading-screen"><img class="brand-symbol official-symbol" src="/branding/pige360/symbol.png" alt="PIGE360"><h1>PIGE360 Self</h1><p>Preparando a aplicação…</p></div>
   <div v-else-if="!state.user" class="auth-layout">
     <section class="auth-intro">
       <div class="official-brand"><img src="/branding/pige360/logo-horizontal.png" alt="PIGE360 School Platform"><span class="self-label">SELF · APLICAÇÃO WEB/PWA</span></div>
-      <div class="auth-copy"><p class="eyebrow">GESTÃO EDUCACIONAL • WEB / PWA</p><h1>A Secretaria.<br>Organizada, de verdade.</h1><p>Alunos, famílias, matrículas e documentos reunidos em uma aplicação da sua instituição.</p><div class="auth-features"><span>01 &nbsp; Cadastro único</span><span>02 &nbsp; Matrículas e turmas</span><span>03 &nbsp; Documentação e histórico</span></div></div>
+      <div class="auth-copy"><p class="eyebrow">GESTÃO EDUCACIONAL • WEB / PWA</p><h1>A gestão educacional.<br>Organizada, de verdade.</h1><p>Alunos, famílias, matrículas e documentos reunidos em uma aplicação da sua instituição.</p><div class="auth-features"><span>01 &nbsp; Cadastro único</span><span>02 &nbsp; Matrículas e turmas</span><span>03 &nbsp; Documentação e histórico</span></div></div>
       <div><a class="btn btn-secondary" href="/online.html">Sou responsável · Pré-matrícula online →</a><p class="small muted">Instalação própria · Dados sob gestão da instituição</p></div>
     </section>
     <section class="auth-panel">
@@ -40,7 +40,7 @@
       <a href="#/dashboard" class="brand-line" @click.prevent="navigate('dashboard')"><img class="sidebar-logo" src="/branding/pige360/logo-horizontal.png" alt="PIGE360"><span class="self-label">SELF</span></a>
       <div class="sidebar-label">OPERAÇÃO ESCOLAR</div>
       <nav v-if="!isProfileRole()" aria-label="Menu principal">
-        <a href="#/dashboard" :class="{active:state.page==='dashboard'}" @click.prevent="navigate('dashboard')"><span class="nav-icon">▦</span>Visão da Secretaria</a>
+        <a href="#/dashboard" :class="{active:state.page==='dashboard'}" @click.prevent="navigate('dashboard')"><span class="nav-icon">▦</span>Visão geral</a>
         <a href="#/students" :class="{active:state.page==='students'}" @click.prevent="navigate('students')"><span class="nav-icon">◉</span>Alunos</a>
         <a href="#/guardians" :class="{active:state.page==='guardians'}" @click.prevent="navigate('guardians')"><span class="nav-icon">◎</span>Responsáveis</a>
         <a href="#/enrollments" :class="{active:state.page==='enrollments'}" @click.prevent="navigate('enrollments')"><span class="nav-icon">▤</span>Matrículas</a>
