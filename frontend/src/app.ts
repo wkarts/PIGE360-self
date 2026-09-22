@@ -283,12 +283,7 @@ namespace PigeUI {
         const photoData=new FormData();photoData.append('file',photo);
         await PigeAPI.request(base()+'/persons/'+savedPersonId+'/photo',{method:'POST',body:photoData});
       }
-      if(modal.kind==='student'){
-        const previous=text(form.previous_school);delete form.previous_school;createdStudent=await PigeAPI.post<Student>(base()+'/students',{person:{...form,cpf:form.cpf||null,birth_date:form.birth_date||null,is_guardian:false},previous_school:previous});
-      }else if(modal.kind==='guardian'||modal.kind==='person'){
-        const data={...form,cpf:form.cpf||null,birth_date:form.birth_date||null,is_guardian:modal.kind==='guardian'?true:Boolean(target?.is_guardian)};
-        if(target)await PigeAPI.patch(base()+'/persons/'+target.id,{version:target.version,data});else await PigeAPI.post(base()+'/persons',data);
-      }else if(modal.kind==='catalog'){
+      if(modal.kind==='catalog'){
         if(modal.action==='document-types')form.grade_id=form.grade_id||null;
         if(modal.action==='class-groups')form.capacity=Number(form.capacity);
         if(target)await PigeAPI.patch(base()+'/'+modal.action+'/'+target.id,{version:target.version,data:form});else await PigeAPI.post(base()+'/'+modal.action,form);
