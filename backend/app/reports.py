@@ -91,6 +91,7 @@ def pendencies(db, school_id, student_limit=5000):
 
 @router.get('/dashboard')
 def dashboard(db: DB, user: Actor, school: Scope):
+    require(user, 'dashboard.read')
     def count(model, *filters):
         return db.scalar(select(func.count()).select_from(model).where(model.school_id == school.id, *filters)) or 0
     groups = db.scalars(select(m.ClassGroup).join(m.AcademicYear, m.AcademicYear.id == m.ClassGroup.academic_year_id).where(m.ClassGroup.school_id == school.id, m.ClassGroup.active.is_(True), m.AcademicYear.status == 'active')).all()
