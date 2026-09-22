@@ -76,6 +76,20 @@ class PersonInput(Input):
             raise ValueError('A data informada não pode ser futura.')
         return value
 
+class StudentData(Input):
+    previous_school: str = Field(default='', max_length=180)
+    nis: str = Field(default='', max_length=32)
+    sus_card: str = Field(default='', max_length=32)
+    inep_code: str = Field(default='', max_length=32)
+    health_plan: str = Field(default='', max_length=120)
+    allergies: str = Field(default='', max_length=4000)
+    medications: str = Field(default='', max_length=4000)
+    health_notes: str = Field(default='', max_length=4000)
+    special_needs: str = Field(default='', max_length=4000)
+    authorized_transport: str = Field(default='', max_length=120)
+    student_notes: str = Field(default='', max_length=4000)
+
+
 class StudentInput(Input):
     person: PersonInput | None = None
     person_id: str | None = None
