@@ -24,8 +24,12 @@ def inspect(ref: str, field: str = 'Manifest', optional: bool = False) -> dict |
                              text=True, capture_output=True, cwd=ROOT)
     if process.returncode:
         error = process.stderr.lower()
+        # A CLI também pode devolver ERROR: <referência exata>: not found.
+        exact_missing = re.search(r'(?:^|\n)(?:error:\s*)?' + re.escape(ref.lower())
+                                  + r':\s*not found\s*(?:\n|$)', error) is not None
         # Não confundir falta de permissão, rate limit ou rede com imagem ausente.
-        if optional and any(x in error for x in ('manifest unknown', 'manifest_unknown', 'name unknown', '404 not found')) \
+        missing = exact_missing or any(x in error for x in ('manifest unknown', 'manifest_unknown', 'name unknown', '404 not found'))
+        if optional and missing \
                 and not any(x in error for x in ('unauthorized', 'denied', 'forbidden', 'no such host', 'temporary failure', 'timeout', 'timed out', '502', '503')):
             return None
         raise RuntimeError(f'Não foi possível inspecionar {ref}: {process.stderr.strip()}')
