@@ -51,6 +51,7 @@ O preparador preserva as credenciais anteriores, cria cópia protegida de `.env`
 | app | FastAPI + frontend compilado | `APP_BIND:APP_PORT`, padrão `127.0.0.1:58080` |
 | db | PostgreSQL persistente | Nenhuma |
 | worker | Fila persistente de mensagens, códigos e cobranças; conciliação | Nenhuma |
+| storage | Volume local ou bucket S3/MinIO privado para fotos e anexos | Nenhuma (quando externo, endpoint interno) |
 
 Não há Nginx, Traefik, Redis ou RabbitMQ internos. O worker compartilha a imagem da aplicação e usa fila persistente no PostgreSQL. O proxy HTTPS externo deve encaminhar para a porta da aplicação e preservar o hostname. `TRUSTED_PROXY_IPS` permite confiar somente em IP/CIDR conhecido do proxy, quando necessário. Não aceite qualquer remetente como proxy confiável.
 
@@ -63,6 +64,12 @@ O link é `/online.html?campaign=SLUG`. O responsável cria uma conta própria, 
 **A pré-matrícula não garante nem reserva vaga.** A efetivação exige conferência de identidade/vínculo, disponibilidade e documentação segundo as políticas configuradas. Cobrança obrigatória, quando definida, precisa estar recebida; `CONFIRMED` não basta.
 
 A verificação de contato vem habilitada por padrão no processo. Configure SMTP ou Connect API antes de publicar um processo que a exija. Não desative a verificação apenas para contornar uma integração mal configurada em produção.
+
+## Secretaria: cadastro único e arquivos
+
+A Secretaria opera uma tela de **Cadastro único** para Pessoa, Aluno, Responsável, Professor e usuários vinculados. Os perfis não criam aplicativos separados: permissões controlam o que cada usuário pode consultar e alterar. A ficha inclui dados civis, documentos, filiação, contatos, endereço, saúde escolar, matrícula, histórico e foto.
+
+Arquivos e fotos ficam privados. Por padrão, o Compose usa o volume persistente `documents_data`; para um bucket S3/MinIO, configure `STORAGE_BACKEND=s3`, `STORAGE_BUCKET`, endpoint, região e credenciais nos arquivos `.env.develop` ou `.env.production`. A API não publica URL direta e verifica integridade SHA-256 no download.
 
 ## Perfis e módulos
 

@@ -37,8 +37,15 @@ def get_db():
             yield session
             session.commit()
             session.info.pop('new_files', None)
+            session.info.pop('new_storage_objects', None)
         except BaseException:
             session.rollback()
             for path in session.info.pop('new_files', []):
                 path.unlink(missing_ok=True)
+            for backend, bucket, key in session.info.pop('new_storage_objects', []):
+                try:
+                    from .storage import delete_key
+                    delete_key(backend, key, bucket)
+                except Exception:
+                    pass
             raise

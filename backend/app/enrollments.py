@@ -21,9 +21,13 @@ def enrollment_output(db, obj):
     student = db.get(m.Student, obj.student_id)
     person = db.get(m.Person, student.person_id)
     group = db.get(m.ClassGroup, obj.class_group_id)
+    financial = db.get(m.Person, obj.financial_person_id) if obj.financial_person_id else None
+    type_labels = {'new': 'Nova matrícula', 'renewal': 'Rematrícula', 'transfer_in': 'Transferência recebida', 'returning': 'Retorno'}
     return {**output(obj), 'student_name': person.name, 'student_number': student.number, 'class_name': group.name,
             'year_name': db.get(m.AcademicYear, obj.academic_year_id).name,
             'grade_name': db.get(m.Grade, group.grade_id).name, 'shift_name': db.get(m.Shift, group.shift_id).name,
+            'financial_person_name': financial.name if financial else '',
+            'enrollment_type_label': type_labels.get(obj.enrollment_type, obj.enrollment_type),
             'actions': sorted(ALLOWED[obj.status])}
 
 def check_group(db, group, school_id):
@@ -151,7 +155,18 @@ def reenroll(enrollment_id: str, data: s.ReenrollmentInput, db: DB, user: Actor,
     new_year = db.get(m.AcademicYear, target.academic_year_id)
     if new_year.starts_on <= old_year.starts_on:
         fail(422, 'Selecione um período posterior ao período de origem.')
-    payload = s.EnrollmentInput(student_id=obj.student_id, class_group_id=target.id, enrolled_on=data.enrolled_on, notes=data.notes, financial_person_id=obj.financial_person_id)
+    payload = s.EnrollmentInput(
+        student_id=obj.student_id,
+        class_group_id=target.id,
+        enrolled_on=data.enrolled_on,
+        notes=data.notes,
+        financial_person_id=obj.financial_person_id,
+        enrollment_type='renewal',
+        origin_school='',
+        origin_city='',
+        entry_reason='Rematrícula',
+        external_reference='',
+    )
     return enrollment_output(db, create_record(payload, school, db, user, request, previous=obj.id))
 
 

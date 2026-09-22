@@ -2,6 +2,15 @@ namespace PigeAPI {
   export interface Person {
     id: string; version: number; name: string; social_name: string; cpf: string | null;
     birth_date: string | null; phone: string; email: string; address: string; notes: string; is_guardian: boolean;
+    rg: string; rg_issuer: string; rg_state: string; rg_issued_on: string | null;
+    birth_certificate: string; birth_city: string; birth_state: string; nationality: string;
+    sex: string; gender: string; race_color: string; marital_status: string;
+    mother_name: string; father_name: string; phone_secondary: string;
+    postal_code: string; street: string; address_number: string; address_complement: string;
+    district: string; city: string; state: string; country: string;
+    occupation: string; employer: string; education: string;
+    emergency_contact_name: string; emergency_contact_phone: string;
+    photo_file_id?: string | null; role_keys?: string[]; roles?: string[]; active: boolean;
   }
   export interface User { id: string; version: number; name: string; email: string; role: string; role_label?: string; active: boolean; person_id?: string | null; permissions: string[]; school_ids: string[] }
   export type Value = string | number | boolean | null | string[];
@@ -48,11 +57,20 @@ namespace PigeAPI {
   }
   export function post<T>(path: string, body: unknown): Promise<T> { return request<T>(path, { method: 'POST', body: JSON.stringify(body) }); }
   export function patch<T>(path: string, body: unknown): Promise<T> { return request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }); }
-  export async function download(path: string, filename: string): Promise<void> {
+  async function blob(path: string): Promise<Blob> {
     let response = await fetch('/api/v1' + path, { headers: { Authorization: `Bearer ${token}` }, credentials: 'same-origin', cache: 'no-store' });
-    if (response.status === 401) { await refresh(); response = await fetch('/api/v1' + path, { headers: { Authorization: `Bearer ${token}` }, credentials: 'same-origin', cache: 'no-store' }); }
+    if (response.status === 401 && token) {
+      await refresh();
+      response = await fetch('/api/v1' + path, { headers: { Authorization: `Bearer ${token}` }, credentials: 'same-origin', cache: 'no-store' });
+    }
     if (!response.ok) throw await error(response);
-    const url = URL.createObjectURL(await response.blob());
+    return response.blob();
+  }
+  export async function objectUrl(path: string): Promise<string> {
+    return URL.createObjectURL(await blob(path));
+  }
+  export async function download(path: string, filename: string): Promise<void> {
+    const url = URL.createObjectURL(await blob(path));
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
