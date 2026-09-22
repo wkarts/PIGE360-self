@@ -16,6 +16,36 @@ class PersonInput(Input):
     address: str = Field(default='', max_length=400)
     notes: str = Field(default='', max_length=4000)
     is_guardian: bool = False
+    rg: str = Field(default='', max_length=40)
+    rg_issuer: str = Field(default='', max_length=80)
+    rg_state: str = Field(default='', max_length=2)
+    rg_issued_on: date | None = None
+    birth_certificate: str = Field(default='', max_length=80)
+    birth_city: str = Field(default='', max_length=120)
+    birth_state: str = Field(default='', max_length=2)
+    nationality: str = Field(default='', max_length=80)
+    sex: str = Field(default='', max_length=32)
+    gender: str = Field(default='', max_length=80)
+    race_color: str = Field(default='', max_length=80)
+    marital_status: str = Field(default='', max_length=40)
+    mother_name: str = Field(default='', max_length=180)
+    father_name: str = Field(default='', max_length=180)
+    phone_secondary: str = Field(default='', max_length=32)
+    postal_code: str = Field(default='', max_length=16)
+    street: str = Field(default='', max_length=180)
+    address_number: str = Field(default='', max_length=24)
+    address_complement: str = Field(default='', max_length=120)
+    district: str = Field(default='', max_length=120)
+    city: str = Field(default='', max_length=120)
+    state: str = Field(default='', max_length=2)
+    country: str = Field(default='Brasil', max_length=80)
+    occupation: str = Field(default='', max_length=120)
+    employer: str = Field(default='', max_length=180)
+    education: str = Field(default='', max_length=100)
+    emergency_contact_name: str = Field(default='', max_length=180)
+    emergency_contact_phone: str = Field(default='', max_length=32)
+    active: bool = True
+
 
     @field_validator('cpf', mode='before')
     @classmethod
@@ -39,17 +69,27 @@ class PersonInput(Input):
             return str(TypeAdapter(EmailStr).validate_python(value)).lower()
         return value
 
-    @field_validator('birth_date')
+    @field_validator('birth_date', 'rg_issued_on')
     @classmethod
     def not_future(cls, value):
         if value and value > date.today():
-            raise ValueError('Data de nascimento não pode ser futura.')
+            raise ValueError('A data informada não pode ser futura.')
         return value
 
 class StudentInput(Input):
     person: PersonInput | None = None
     person_id: str | None = None
     previous_school: str = Field(default='', max_length=180)
+    nis: str = Field(default='', max_length=32)
+    sus_card: str = Field(default='', max_length=32)
+    inep_code: str = Field(default='', max_length=32)
+    health_plan: str = Field(default='', max_length=120)
+    allergies: str = Field(default='', max_length=4000)
+    medications: str = Field(default='', max_length=4000)
+    health_notes: str = Field(default='', max_length=4000)
+    special_needs: str = Field(default='', max_length=4000)
+    authorized_transport: str = Field(default='', max_length=120)
+    student_notes: str = Field(default='', max_length=4000)
     @model_validator(mode='after')
     def one_person(self):
         if bool(self.person) == bool(self.person_id):
@@ -113,6 +153,11 @@ class EnrollmentInput(Input):
     class_group_id: str
     enrolled_on: date
     financial_person_id: str | None = None
+    enrollment_type: Literal['new','renewal','transfer_in','returning'] = 'new'
+    origin_school: str = Field(default='', max_length=180)
+    origin_city: str = Field(default='', max_length=120)
+    entry_reason: str = Field(default='', max_length=1000)
+    external_reference: str = Field(default='', max_length=120)
     notes: str = Field(default='', max_length=4000)
 
 class MovementInput(Input):
