@@ -16,14 +16,70 @@ from .models import User, AuthSession, School, SchoolAccess
 hasher = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=4)
 bearer = HTTPBearer(auto_error=False)
 DB = Annotated[Session, Depends(get_db, scope='function')]
-PERMISSIONS = {
-    'admin': {'read', 'people.write', 'academic.write', 'enrollments.write', 'documents.write', 'documents.validate', 'documents.waive', 'protocols.write', 'reports.read', 'users.manage', 'schools.manage', 'audit.read'},
-    'secretary': {'read', 'people.write', 'academic.write', 'enrollments.write', 'documents.write', 'documents.validate', 'protocols.write', 'reports.read', 'audit.read'},
-    'viewer': {'read', 'reports.read'},
+
+ROLE_LABELS = {
+    'admin': 'Administrador',
+    'direction': 'Direção',
+    'coordination': 'Coordenação',
+    'secretary': 'Secretaria',
+    'teacher': 'Professor',
+    'student': 'Aluno',
+    'guardian': 'Responsável',
+    'viewer': 'Consulta',
 }
 
-PERMISSIONS['admin'].update({'admissions.read', 'admissions.write', 'admissions.manage', 'banking.read', 'banking.write', 'integrations.manage', 'communications.send'})
-PERMISSIONS['secretary'].update({'admissions.read', 'admissions.write', 'banking.read', 'communications.send'})
+# Catálogo único de capacidades. Os endpoints continuam autorizando por capacidade,
+# nunca por texto apresentado no perfil.
+ALL_PERMISSIONS = {
+    'read', 'dashboard.read',
+    'people.read', 'people.write', 'students.read', 'students.write',
+    'guardians.read', 'guardians.write',
+    'academic.read', 'academic.write',
+    'enrollments.read', 'enrollments.write',
+    'documents.read', 'documents.write', 'documents.validate', 'documents.waive', 'documents.generate',
+    'protocols.read', 'protocols.write',
+    'reports.read', 'audit.read',
+    'users.manage', 'schools.manage',
+    'admissions.read', 'admissions.write', 'admissions.manage',
+    'banking.read', 'banking.write', 'integrations.manage', 'communications.send',
+    'profile.read', 'profile.self',
+    'teacher.classes.read', 'teacher.students.read',
+    'student.self.read', 'guardian.self.read',
+    'staff.assignments.read', 'staff.assignments.write',
+}
+
+PERMISSIONS = {
+    'admin': set(ALL_PERMISSIONS),
+    'direction': set(ALL_PERMISSIONS) - {'integrations.manage'},
+    'coordination': {
+        'read', 'dashboard.read', 'people.read', 'people.write', 'students.read', 'students.write',
+        'guardians.read', 'guardians.write', 'academic.read', 'academic.write',
+        'enrollments.read', 'enrollments.write', 'documents.read', 'documents.validate',
+        'documents.waive', 'documents.generate', 'protocols.read', 'protocols.write',
+        'reports.read', 'audit.read', 'admissions.read', 'admissions.manage',
+        'communications.send', 'profile.read', 'staff.assignments.read', 'staff.assignments.write',
+    },
+    'secretary': {
+        'read', 'dashboard.read', 'people.read', 'people.write', 'students.read', 'students.write',
+        'guardians.read', 'guardians.write', 'academic.read', 'academic.write',
+        'enrollments.read', 'enrollments.write', 'documents.read', 'documents.write',
+        'documents.validate', 'documents.waive', 'documents.generate',
+        'protocols.read', 'protocols.write', 'reports.read', 'audit.read',
+        'admissions.read', 'admissions.write', 'banking.read', 'communications.send',
+        'profile.read',
+    },
+    'teacher': {
+        'read', 'profile.read', 'profile.self', 'academic.read',
+        'teacher.classes.read', 'teacher.students.read', 'communications.send',
+    },
+    'student': {
+        'read', 'profile.read', 'profile.self', 'student.self.read',
+    },
+    'guardian': {
+        'read', 'profile.read', 'profile.self', 'guardian.self.read',
+    },
+    'viewer': {'read', 'reports.read', 'profile.read'},
+}
 
 def fail(status: int, detail: str):
     raise HTTPException(status, detail)
@@ -75,6 +131,10 @@ def require(user: User, permission: str):
         fail(403, 'Seu perfil não possui permissão para esta operação.')
 
 def school_scope(school_id: str, db: DB, user: Actor) -> School:
+    # Os endpoints administrativos existentes não podem ser usados como atalho
+    # por alunos, responsáveis ou professores para consultar toda a escola.
+    if user.role in {'teacher', 'student', 'guardian'}:
+        fail(403, 'Este recurso pertence à operação administrativa da escola.')
     school = db.get(School, school_id)
     if not school or not school.active:
         fail(404, 'Escola não encontrada.')
