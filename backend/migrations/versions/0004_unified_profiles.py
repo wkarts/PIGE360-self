@@ -3,7 +3,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "0004_unified_profiles"
-down_revision = "0003_online_admissions_portal_admissions_banking_integrations"
+down_revision = "0003_online_admissions"
 branch_labels = None
 depends_on = None
 
