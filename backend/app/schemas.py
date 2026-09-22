@@ -69,6 +69,11 @@ class PersonInput(Input):
             return str(TypeAdapter(EmailStr).validate_python(value)).lower()
         return value
 
+    @field_validator('birth_date', 'rg_issued_on', mode='before')
+    @classmethod
+    def blank_date(cls, value):
+        return None if value in ('', None) else value
+
     @field_validator('birth_date', 'rg_issued_on')
     @classmethod
     def not_future(cls, value):
