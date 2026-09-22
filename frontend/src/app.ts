@@ -267,16 +267,16 @@ namespace PigeUI {
       const photo=selectedFile;delete form.photo;
       if(modal.kind==='student'){
         const studentData:{[key:string]:Value}={};for(const key of studentFieldKeys){studentData[key]=form[key]??'';delete form[key];}
-        const previous=text(studentData.previous_school);createdStudent=await PigeAPI.post<Student>(base()+'/students',{person:{...form,cpf:form.cpf||null,birth_date:form.birth_date||null,is_guardian:false},previous_school:previous,...studentData});
+        const previous=text(studentData.previous_school);createdStudent=await PigeAPI.post<Student>(base()+'/students',{person:{...form,cpf:form.cpf||null,birth_date:form.birth_date||null,rg_issued_on:form.rg_issued_on||null,is_guardian:false},previous_school:previous,...studentData});
         savedPersonId=createdStudent.person.id;
       }else if(modal.kind==='student-edit'){
         const studentData:{[key:string]:Value}={};for(const key of studentFieldKeys){studentData[key]=form[key]??'';delete form[key];}
         const personTarget=(target as unknown as Student).person;
-        await PigeAPI.patch(base()+'/persons/'+personTarget.id,{version:personTarget.version,data:{...form,cpf:form.cpf||null,birth_date:form.birth_date||null,is_guardian:Boolean(personTarget.is_guardian)}});
+        await PigeAPI.patch(base()+'/persons/'+personTarget.id,{version:personTarget.version,data:{...form,cpf:form.cpf||null,birth_date:form.birth_date||null,rg_issued_on:form.rg_issued_on||null,is_guardian:Boolean(personTarget.is_guardian)}});
         await PigeAPI.patch(base()+'/students/'+target!.id,{version:target!.version,data:studentData});
         savedPersonId=personTarget.id;
       }else if(modal.kind==='guardian'||modal.kind==='person'){
-        const data={...form,cpf:form.cpf||null,birth_date:form.birth_date||null,is_guardian:modal.kind==='guardian'?true:Boolean(target?.is_guardian)};
+        const data={...form,cpf:form.cpf||null,birth_date:form.birth_date||null,rg_issued_on:form.rg_issued_on||null,is_guardian:modal.kind==='guardian'?true:Boolean(target?.is_guardian)};
         if(target){await PigeAPI.patch(base()+'/persons/'+target.id,{version:target.version,data});savedPersonId=target.id;}else{const created=await PigeAPI.post<PigeAPI.Person>(base()+'/persons',data);savedPersonId=created.id;}
       }
       if(photo&&savedPersonId){
