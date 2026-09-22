@@ -13,7 +13,7 @@ ROLE_CHECK = "role IN ('admin','direction','coordination','secretary','teacher',
 def upgrade():
     with op.batch_alter_table('users', schema=None) as batch_op:
         batch_op.add_column(sa.Column('person_id', sa.String(length=36), nullable=True))
-        batch_op.create_index(op.f('ix_users_person_id', ['person_id'], unique=False)
+        batch_op.create_index(op.f('ix_users_person_id'), ['person_id'], unique=False)
         batch_op.create_foreign_key(
             op.f('fk_users_person_id_persons'),
             'persons',
