@@ -50,6 +50,14 @@ Ainda não são declarados como concluídos:
 
 Esses domínios devem entrar como módulos do mesmo produto, com seus próprios contratos, migrations, permissões e testes ponta a ponta. Não devem ser criados menus vazios ou endpoints simulados para aparentar abrangência.
 
+## Secretaria: cadastro único e matrícula
+
+A tela **Cadastro único** é a fonte administrativa da pessoa. O mesmo registro pode ser aluno, responsável, professor vinculado a um acesso ou usuário administrativo, sem duplicação por perfil. Os papéis são derivados dos vínculos persistidos e exibidos no cadastro.
+
+A ficha civil inclui identificação, nascimento, filiação, contatos, endereço estruturado, emergência, escolaridade, ocupação, observações e foto. A ficha do aluno acrescenta identificadores educacionais, saúde, transporte e observações escolares. A matrícula registra tipo de entrada, escola/cidade de origem, referência externa, responsável financeiro e histórico de movimentações.
+
+Fotos e anexos são privados: a API verifica sessão, escola e SHA-256 antes do download. `STORAGE_BACKEND=local` usa o volume persistente existente; `STORAGE_BACKEND=s3` usa AWS S3, MinIO ou outro endpoint compatível, sem URL pública no navegador.
+
 ## Fluxo de evolução
 
 1. Concluir e homologar o núcleo Secretaria.
