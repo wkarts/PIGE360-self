@@ -10,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from .config import settings
 from .db import engine
-from . import auth, people, registry, enrollments, documents, reports, portal, admissions, integrations, banking
+from . import auth, people, registry, enrollments, documents, reports, portal, admissions, integrations, banking, profiles
 
 cfg = settings()
 logger = logging.getLogger('pige360')
@@ -21,8 +21,8 @@ async def lifespan(app):
     yield
     engine.dispose()
 
-app = FastAPI(title='PIGE360 Self — Secretaria', version=cfg.app_version, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url='/api/v1/openapi.json')
-for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, banking.router]:
+app = FastAPI(title='PIGE360 Self — Gestão Educacional', version=cfg.app_version, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url='/api/v1/openapi.json')
+for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, banking.router, profiles.router]:
     app.include_router(router)
 
 @app.exception_handler(HTTPException)
