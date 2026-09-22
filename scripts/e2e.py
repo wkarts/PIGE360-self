@@ -42,7 +42,7 @@ try:
         assert page.locator('.official-brand img').get_attribute('alt')=='PIGE360 School Platform'
         checks.append('Logo oficial carregada com bytes locais originais')
         page.screenshot(path=str(OUT/'01-login.png'),full_page=True)
-        page.get_by_label('Senha',exact=True).fill('Test-Only-Secretaria-2026!');page.get_by_role('button',name='Entrar na Secretaria').click()
+        page.get_by_label('Senha',exact=True).fill('Test-Only-Secretaria-2026!');page.get_by_role('button',name='Entrar na aplicação').click()
         expect(page.get_by_role('heading',name='Visão da Secretaria',exact=True)).to_be_visible();checks.append('Instalação inicial e login pela interface')
         def nav(name):
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
