@@ -4,16 +4,18 @@ from fastapi import APIRouter, Header, Request, Response
 from sqlalchemy import delete, select, update
 from .config import settings
 from .db import now
-from .models import Installation, Company, School, Unit, AcademicYear, User, SchoolAccess, AuthSession, LoginAttempt
+from .models import Installation, Company, School, Unit, AcademicYear, User, Person, Student, GuardianLink, SchoolAccess, AuthSession, LoginAttempt
 from .schemas import Login, Setup, UserInput, UserEdit, PasswordChange
-from .security import Actor, DB, PERMISSIONS, access_token, check_version, digest, fail, hash_password, require, request_csrf, utc, verify
+from .security import Actor, DB, PERMISSIONS, ROLE_LABELS, access_token, check_version, digest, fail, hash_password, require, request_csrf, utc, verify
 from .common import audit, output
 
 router = APIRouter(prefix='/api/v1', tags=['Autenticação e instalação'])
 DUMMY_PASSWORD_HASH = hash_password('not-an-account-password-93401980')
 
 def user_output(db, user):
-    return {**output(user, ('password_hash',)), 'permissions': sorted(PERMISSIONS[user.role]),
+    return {**output(user, ('password_hash',)),
+            'role_label': ROLE_LABELS.get(user.role, user.role),
+            'permissions': sorted(PERMISSIONS.get(user.role, set())),
             'school_ids': list(db.scalars(select(SchoolAccess.school_id).where(SchoolAccess.user_id == user.id)))}
 
 def set_refresh(response, session, secret):
@@ -141,13 +143,32 @@ def check_schools(db, ids):
         if db.get(School, school_id) is None:
             fail(422, 'Escola inválida na lista de acesso.')
 
+
+def check_profile_link(db, role, person_id, school_ids):
+    individual_roles = {'teacher', 'student', 'guardian'}
+    if role not in individual_roles:
+        return
+    if not person_id:
+        fail(422, 'Este perfil precisa estar vinculado a uma pessoa cadastrada.')
+    if len(set(school_ids)) != 1:
+        fail(422, 'Perfis de Professor, Aluno e Responsável devem estar vinculados a uma única escola.')
+    person = db.get(Person, person_id)
+    if not person or person.school_id != school_ids[0]:
+        fail(422, 'A pessoa vinculada não pertence à escola informada.')
+    if role == 'student' and not db.scalar(select(Student.id).where(Student.person_id == person.id, Student.school_id == person.school_id)):
+        fail(422, 'O perfil Aluno exige um cadastro de aluno vinculado à pessoa.')
+    if role == 'guardian' and not db.scalar(select(GuardianLink.id).where(GuardianLink.person_id == person.id, GuardianLink.school_id == person.school_id, GuardianLink.active.is_(True))):
+        fail(422, 'O perfil Responsável exige um vínculo ativo com pelo menos um aluno.')
+
+
 @router.post('/users', status_code=201)
 def create_user(data: UserInput, db: DB, user: Actor, request: Request):
     require(user, 'users.manage')
     check_schools(db, data.school_ids)
     if data.role != 'admin' and not data.school_ids:
         fail(422, 'Vincule ao menos uma escola ao usuário.')
-    obj = User(name=data.name, email=str(data.email).lower(), password_hash=hash_password(data.password), role=data.role)
+    check_profile_link(db, data.role, data.person_id, data.school_ids)
+    obj = User(name=data.name, email=str(data.email).lower(), password_hash=hash_password(data.password), role=data.role, person_id=data.person_id)
     db.add(obj); db.flush()
     for sid in set(data.school_ids):
         db.add(SchoolAccess(user_id=obj.id, school_id=sid))
@@ -166,7 +187,8 @@ def edit_user(user_id: str, data: UserEdit, db: DB, user: Actor, request: Reques
     check_version(obj, data.version); check_schools(db, data.school_ids)
     if data.role != 'admin' and not data.school_ids:
         fail(422, 'Vincule ao menos uma escola ao usuário.')
-    obj.name, obj.role, obj.active = data.name, data.role, data.active
+    check_profile_link(db, data.role, data.person_id, data.school_ids)
+    obj.name, obj.role, obj.active, obj.person_id = data.name, data.role, data.active, data.person_id
     obj.version += 1
     db.execute(delete(SchoolAccess).where(SchoolAccess.user_id == obj.id))
     for sid in set(data.school_ids):
