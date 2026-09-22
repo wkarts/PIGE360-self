@@ -1,0 +1,103 @@
+name: Main - Release SemVer e GHCR estável
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Incremento após a primeira release numérica
+        type: choice
+        default: patch
+        options: [patch, minor, major]
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: pige360-stable-release
+  cancel-in-progress: false
+jobs:
+  version:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.pull_request.merged == true &&
+       github.event.pull_request.head.ref == 'develop' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       startsWith(github.event.pull_request.title, 'release('))
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      candidate: ${{ steps.version.outputs.candidate_tag }}
+      sha: ${{ steps.version.outputs.target_sha }}
+      published: ${{ steps.published.outputs.value }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+          fetch-depth: 0
+      - id: version
+        env:
+          MANUAL_BUMP: ${{ inputs.bump }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: python scripts/ci/version.py release
+      - name: Não republicar release concluída do mesmo commit
+        id: published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          VALUE=false
+          if [[ "$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null || true)" == false ]]; then VALUE=true; fi
+          echo "value=$VALUE" >> "$GITHUB_OUTPUT"
+  tests:
+    needs: version
+    if: needs.version.outputs.published != 'true'
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.version.outputs.sha }}
+  bases:
+    needs: tests
+    uses: ./.github/workflows/container-bases.yml
+  candidate:
+    needs: [version, tests, bases]
+    uses: ./.github/workflows/publish-image.yml
+    with:
+      ref: ${{ needs.version.outputs.sha }}
+      version: ${{ needs.version.outputs.version }}
+      candidate: ${{ needs.version.outputs.candidate }}
+      channel: release
+  release:
+    needs: [version, candidate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: pige360-ghcr-mutation
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          fetch-depth: 0
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Release, checkpoint e promoção por digest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.version.outputs.version }}
+          TARGET_SHA: ${{ needs.version.outputs.sha }}
+          IMAGE: ${{ needs.candidate.outputs.image }}
+          DIGEST: ${{ needs.candidate.outputs.digest }}
+        run: bash scripts/ci/finalize-release.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-${{ needs.version.outputs.version }}-${{ github.run_attempt }}
+          path: release/
+          retention-days: 30

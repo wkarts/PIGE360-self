@@ -1,0 +1,40 @@
+name: Develop - Testes e imagem GHCR
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: pige360-develop-pipeline
+  cancel-in-progress: false
+jobs:
+  version:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    outputs:
+      app_version: ${{ steps.version.outputs.app_version }}
+      candidate: ${{ steps.version.outputs.candidate_tag }}
+      sha: ${{ steps.version.outputs.target_sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with: {fetch-depth: 0}
+      - id: version
+        run: python scripts/ci/version.py develop
+  tests:
+    needs: version
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.version.outputs.sha }}
+  bases:
+    needs: tests
+    uses: ./.github/workflows/container-bases.yml
+  publish:
+    needs: [version, tests, bases]
+    uses: ./.github/workflows/publish-image.yml
+    with:
+      ref: ${{ needs.version.outputs.sha }}
+      version: ${{ needs.version.outputs.app_version }}
+      candidate: ${{ needs.version.outputs.candidate }}
+      channel: develop

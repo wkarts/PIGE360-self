@@ -1,0 +1,79 @@
+name: Manutenção - Cache e GHCR não estável
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Somente listar; não excluir
+        type: boolean
+        default: true
+      orphans:
+        description: Incluir órfãos após verificar dependências OCI
+        type: boolean
+        default: true
+permissions:
+  contents: read
+jobs:
+  caches:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v6
+        with: {ref: main, persist-credentials: false}
+      - name: Remover caches efêmeros antigos; preservar main/develop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=(cache --report ci-evidence/cache-cleanup.json)
+          if [[ "$EVENT" == schedule || "$DRY_RUN" == false ]]; then args+=(--apply); fi
+          python scripts/ci/cleanup.py "${args[@]}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cache-cleanup-${{ github.run_id }}
+          path: ci-evidence/
+          retention-days: 14
+  ghcr:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: pige360-ghcr-mutation
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with: {ref: main, persist-credentials: false}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Limpar somente versões não estáveis deste produto
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          ORPHANS: ${{ inputs.orphans }}
+          MIN_DAYS: ${{ vars.GHCR_MIN_AGE_DAYS || '7' }}
+          KEEP: ${{ vars.GHCR_KEEP_RECENT || '10' }}
+        run: |
+          args=(ghcr --days "$MIN_DAYS" --keep "$KEEP" --report ci-evidence/ghcr-cleanup.json)
+          if [[ "$EVENT" == schedule || "$DRY_RUN" == false ]]; then args+=(--apply); fi
+          if [[ "$EVENT" == schedule || "$ORPHANS" == true ]]; then args+=(--orphans); fi
+          python scripts/ci/cleanup.py "${args[@]}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghcr-cleanup-${{ github.run_id }}
+          path: ci-evidence/
+          retention-days: 30

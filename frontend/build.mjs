@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 const root=path.dirname(fileURLToPath(import.meta.url));
-const dist=path.join(root,'dist');fs.mkdirSync(dist,{recursive:true});
+const version=process.env.APP_VERSION || fs.readFileSync(path.join(root,'../VERSION'),'utf8').trim();
+if(!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/.test(version))throw new Error('APP_VERSION inválida');
+const dist=path.join(root,'dist');fs.rmSync(dist,{recursive:true,force:true});fs.mkdirSync(dist,{recursive:true});
 const compiler=process.env.TSC_BINARY || (fs.existsSync(path.join(root,'node_modules/typescript/bin/tsc')) ? path.join(root,'node_modules/typescript/bin/tsc') : 'tsc');
 execFileSync(compiler,['-p',path.join(root,'tsconfig.json')],{stdio:'inherit'});
 const source=fs.readFileSync(path.join(root,'vendor/vue-3.5.13.global.prod.js'),'utf8');
@@ -37,7 +39,7 @@ function collectPublic(dir,prefix='') { for(const entry of fs.readdirSync(dir,{w
  else if(!staticFiles.includes(name))staticFiles.push(name);
 } }
 collectPublic(path.join(root,'public'));
-const fingerprint=createHash('sha256');
+const fingerprint=createHash('sha256');fingerprint.update(version);
 for(const asset of [...new Set(staticFiles.map(f=>f==='/'?'/index.html':f))].sort()){fingerprint.update(asset);fingerprint.update(fs.readFileSync(path.join(dist,asset.slice(1))));}
 const hash=fingerprint.digest('hex').slice(0,16);
 const sw=`const CACHE='pige360-shell-${hash}'; const ASSETS=${JSON.stringify(staticFiles)};
@@ -51,5 +53,5 @@ self.addEventListener('fetch',event=>{
  if(ASSETS.includes(url.pathname))event.respondWith(caches.match(event.request).then(cached=>cached||fetch(event.request)));
 });\n`;
 fs.writeFileSync(path.join(dist,'sw.js'),sw);
-fs.writeFileSync(path.join(dist,'build-info.json'),JSON.stringify({product:'PIGE360 Self',version:'0.3.0',vue:'3.5.13',build_id:hash,pipeline:'typescript-vue-precompiled',external_cdn:false},null,2)+'\n');
+fs.writeFileSync(path.join(dist,'build-info.json'),JSON.stringify({product:'PIGE360 Self',version,vue:'3.5.13',build_id:hash,pipeline:'typescript-vue-precompiled',external_cdn:false},null,2)+'\n');
 console.log('PWA compilada:',hash);

@@ -1,5 +1,5 @@
 .git
-.env
+.env*
 **/__pycache__
 **/.pytest_cache
 **/*.pyc
@@ -9,7 +9,7 @@
 reference
 evidence
 docs
-frontend/src
-frontend/templates
-frontend/vendor
+release
+checkpoints
+frontend/dist
 backend/tests

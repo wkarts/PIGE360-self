@@ -1,3 +1,5 @@
+> **Fluxo GitHub/GHCR:** veja [desenvolvimento, releases, limpeza e implantação self-hosted](docs/ci-cd/FLUXO-GITHUB-GHCR.md). O fluxo main/develop agora é versionado neste repositório. Os comandos abaixo de build local permanecem válidos; para imagens publicadas use `deploy/compose.yaml`. Nenhum deploy externo é executado automaticamente.
+
 # PIGE360 Self 0.3.0
 ## Secretaria, pré-matrícula online, comunicação e cobrança
 
@@ -7,7 +9,7 @@ Esta versão acrescenta um portal separado de responsáveis e o fluxo integrado 
 
 ## Instalação nova
 
-Pré-requisitos: Docker com Compose, Python 3 para gerar a configuração, armazenamento persistente e acesso aos registries/pacotes na construção da imagem. Não é um instalador air-gapped. Node.js não é necessário para instalar, pois `frontend/dist` acompanha o pacote.
+Pré-requisitos: Docker com Compose, Python 3 para gerar a configuração, armazenamento persistente e acesso aos registries/pacotes na construção da imagem. Não é um instalador air-gapped. Node.js não é necessário no host: o Docker compila a PWA no estágio Node da imagem. O checkpoint também inclui `frontend/dist` para inspeção local.
 
 ```bash
 cd pige360-self
@@ -78,7 +80,7 @@ Foi preservado o backend SQLAlchemy síncrono e o frontend Vue/TypeScript com te
 
 ```bash
 python3 -m pip install -r backend/requirements-dev.txt
-npm install --prefix frontend --ignore-scripts --no-audit --no-fund
+npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
 node frontend/build.mjs
 cd backend
 python3 -m pytest -q

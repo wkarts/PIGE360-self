@@ -1,0 +1,97 @@
+name: GHCR - Construir candidato e testar
+on:
+  workflow_call:
+    inputs:
+      ref: {type: string, required: true}
+      version: {type: string, required: true}
+      candidate: {type: string, required: true}
+      channel: {type: string, required: true}
+    outputs:
+      image:
+        value: ${{ jobs.publish.outputs.image }}
+      digest:
+        value: ${{ jobs.publish.outputs.digest }}
+permissions:
+  contents: read
+  packages: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: pige360-ghcr-mutation
+      cancel-in-progress: false
+    outputs:
+      image: ${{ steps.names.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Nome e bases imutáveis
+        id: names
+        env:
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$CHANNEL" == develop || "$CHANNEL" == release ]]
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          for pair in node:22-alpine python:3.13-slim; do
+            KIND="${pair%%:*}"; TAG="${pair#*:}"
+            BASE="ghcr.io/$OWNER/pige360-base-$KIND:$TAG"
+            DIGEST="$(docker buildx imagetools inspect "$BASE" --format '{{.Manifest.Digest}}')"
+            [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+            echo "${KIND}_base=ghcr.io/$OWNER/pige360-base-$KIND@$DIGEST" >> "$GITHUB_OUTPUT"
+          done
+      - name: Build do candidato (sem atualizar aliases)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.names.outputs.image }}:${{ inputs.candidate }}
+          build-args: |
+            APP_VERSION=${{ inputs.version }}
+            SOURCE_REVISION=${{ inputs.ref }}
+            NODE_BASE_IMAGE=${{ steps.names.outputs.node_base }}
+            PYTHON_BASE_IMAGE=${{ steps.names.outputs.python_base }}
+          cache-from: type=gha,scope=pige360-${{ inputs.channel }}
+          cache-to: type=gha,scope=pige360-${{ inputs.channel }},mode=min
+          provenance: false
+          sbom: false
+      - name: Testar a imagem publicada por digest
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: bash scripts/ci/smoke.sh "$IMAGE@$DIGEST" remote
+      - name: Promover somente aliases develop após smoke
+        if: inputs.channel == 'develop'
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          VERSION: ${{ inputs.version }}
+        run: python scripts/ci/promote.py develop
+      - name: Verificar possibilidade de pull anônimo
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          ANON="$(mktemp -d)"
+          if ! docker --config "$ANON" manifest inspect "$IMAGE@$DIGEST" >/dev/null 2>&1; then
+            echo '::warning::Imagem exige autenticação. Para pull sem login, torne o pacote público em Package settings.'
+          fi
+          rm -rf "$ANON"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: image-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ci-evidence/
+          retention-days: 14

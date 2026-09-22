@@ -1,11 +1,20 @@
-name: Validar Secretaria Self
+name: CI - FastAPI, Vue PWA e Docker
 on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: false
+        default: ''
   workflow_dispatch:
+  push:
+    branches: [main]
 permissions:
   contents: read
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:17-bookworm
@@ -13,40 +22,67 @@ jobs:
           POSTGRES_USER: pige_test
           POSTGRES_PASSWORD: disposable-test-password
           POSTGRES_DB: pige_test
-        ports: ["5432:5432"]
+        ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U pige_test -d pige_test"
           --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: {python-version: '3.13'}
-      - uses: actions/setup-node@v4
-        with: {node-version: '22'}
-      - name: Dependências
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - name: Preparar evidências limpas
         run: |
-          pip install -r backend/requirements-dev.txt
-          npm install --prefix frontend --ignore-scripts --no-audit --no-fund
-      - name: Compilar PWA
-        run: node frontend/build.mjs
-      - name: Testar no PostgreSQL
+          rm -rf ci-evidence evidence/0.3.0
+          mkdir -p ci-evidence
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Dependências reproduzíveis
+        run: |
+          python -m pip install -r backend/requirements-dev.txt
+          npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
+      - name: Políticas de CI, sintaxe e frontend
+        run: |
+          python -m unittest discover -s tests/ci -v
+          python -m compileall -q backend/app backend/migrations scripts
+          npm run typecheck --prefix frontend
+          npm run build --prefix frontend
+          node --check frontend/dist/sw.js
+          python scripts/ci/validate.py
+      - name: Testes FastAPI com PostgreSQL real
         working-directory: backend
         env:
-          PIGE_TEST_DATABASE_URL: postgresql+psycopg://pige_test:disposable-test-password@localhost:5432/pige_test
+          PIGE_TEST_DATABASE_URL: postgresql+psycopg://pige_test:disposable-test-password@127.0.0.1:5432/pige_test
           PYTHONPATH: .
-        run: python -m pytest -q --junitxml=../evidence/postgresql-tests.xml
-      - name: Chromium e E2E HTTP
+        run: python -m pytest -q --junitxml=../ci-evidence/postgresql-tests.xml
+      - name: E2E HTTP no Chromium (sem bridge)
         run: |
           python -m playwright install --with-deps chromium
           python scripts/e2e.py
           python scripts/e2e-online.py
-      - name: Validar Compose e imagem (sem publicar)
+      - name: Reunir somente evidências E2E novas
+        if: always()
+        run: |
+          mkdir -p ci-evidence/browser
+          if [[ -d evidence/0.3.0 ]]; then cp -a evidence/0.3.0/. ci-evidence/browser/; fi
+      - name: Docker Compose e teste de inicialização
         run: |
           python scripts/configure.py
           docker compose config --quiet
-          docker compose build app worker
-      - uses: actions/upload-artifact@v4
+          docker build --build-arg SOURCE_REVISION="$GITHUB_SHA" -t pige360-self:ci .
+          bash scripts/ci/smoke.sh pige360-self:ci local
+      - name: Evidências desta execução
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: validation-results
-          path: evidence/
+          name: ci-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ci-evidence/
+          retention-days: 14
+          if-no-files-found: warn

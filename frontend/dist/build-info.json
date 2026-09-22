@@ -2,7 +2,7 @@
   "product": "PIGE360 Self",
   "version": "0.3.0",
   "vue": "3.5.13",
-  "build_id": "f538488daa7ff3be",
+  "build_id": "c69fa9921dbd7073",
   "pipeline": "typescript-vue-precompiled",
   "external_cdn": false
 }

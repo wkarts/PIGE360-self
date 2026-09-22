@@ -1,0 +1,79 @@
+name: GHCR - Bases e PostgreSQL
+on:
+  workflow_call:
+    inputs:
+      force:
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Reconstruir mesmo sem mudança no upstream
+        type: boolean
+        default: false
+  schedule:
+    - cron: '31 4 * * 1'
+permissions:
+  contents: read
+  packages: write
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: pige360-ghcr-mutation
+      cancel-in-progress: false
+    strategy:
+      max-parallel: 1
+      matrix:
+        include:
+          - package: pige360-base-node
+            tag: 22-alpine
+            aliases: '22-alpine 22 latest'
+            upstream: node:22-alpine
+            file: containers/base-node.Dockerfile
+          - package: pige360-base-python
+            tag: 3.13-slim
+            aliases: '3.13-slim 3.13 3 latest'
+            upstream: python:3.13-slim
+            file: containers/base-python.Dockerfile
+          - package: pige360-postgres
+            tag: 17-bookworm
+            aliases: '17-bookworm 17 latest'
+            upstream: postgres:17-bookworm
+            file: containers/postgres.Dockerfile
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Comparar upstream e definição
+        id: policy
+        env:
+          BASE_PACKAGE: ${{ matrix.package }}
+          BASE_TAG: ${{ matrix.tag }}
+          BASE_ALIASES: ${{ matrix.aliases }}
+          BASE_UPSTREAM: ${{ matrix.upstream }}
+          BASE_FILE: ${{ matrix.file }}
+          FORCE_REBUILD: ${{ inputs.force == true }}
+        run: bash scripts/ci/base-policy.sh
+      - name: Publicar somente base alterada
+        if: steps.policy.outputs.rebuild == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.policy.outputs.tags }}
+          build-args: UPSTREAM_IMAGE=${{ steps.policy.outputs.upstream }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            br.com.argws.pige360.base.fingerprint=${{ steps.policy.outputs.fingerprint }}
+          provenance: false
+          sbom: false

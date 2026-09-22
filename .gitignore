@@ -10,3 +10,9 @@ __pycache__/
 node_modules/
 backups/
 data/
+
+.env*
+!.env.example
+release/
+checkpoints/
+ci-evidence/
