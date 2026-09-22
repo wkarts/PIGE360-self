@@ -1,0 +1,80 @@
+INFO:     Started server process [17549]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:46237 (Press CTRL+C to quit)
+INFO:     127.0.0.1:41110 - "GET /health/ready HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41110 - "POST /api/v1/setup HTTP/1.1" 201 Created
+INFO:     127.0.0.1:41110 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41110 - "GET /api/v1/schools HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41110 - "POST /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/units HTTP/1.1" 201 Created
+INFO:     127.0.0.1:41110 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/academic-years HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41110 - "POST /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/grades HTTP/1.1" 201 Created
+INFO:     127.0.0.1:41110 - "POST /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/shifts HTTP/1.1" 201 Created
+INFO:     127.0.0.1:41110 - "POST /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/class-groups HTTP/1.1" 201 Created
+INFO:     127.0.0.1:41110 - "POST /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/document-types HTTP/1.1" 201 Created
+INFO:     127.0.0.1:41110 - "POST /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/admission-campaigns HTTP/1.1" 201 Created
+INFO:     127.0.0.1:46574 - "GET /api/v1/portal/campaigns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46574 - "GET /api/v1/portal/campaigns/matriculas-2027-teste HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46574 - "GET /api/v1/portal/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:46574 - "POST /api/v1/portal/register HTTP/1.1" 201 Created
+INFO:     127.0.0.1:46574 - "GET /api/v1/portal/admissions?page=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46574 - "POST /api/v1/portal/admissions HTTP/1.1" 201 Created
+INFO:     127.0.0.1:46574 - "GET /api/v1/portal/admissions/bdb5186f-9ec1-4ca0-8184-e8ea95d3f363 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46574 - "GET /api/v1/portal/admissions/bdb5186f-9ec1-4ca0-8184-e8ea95d3f363/charges HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46574 - "GET /api/v1/portal/admissions?page=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46574 - "POST /api/v1/portal/admissions/bdb5186f-9ec1-4ca0-8184-e8ea95d3f363/attachments HTTP/1.1" 201 Created
+INFO:     127.0.0.1:46574 - "GET /api/v1/portal/admissions/bdb5186f-9ec1-4ca0-8184-e8ea95d3f363 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46574 - "GET /api/v1/portal/admissions/bdb5186f-9ec1-4ca0-8184-e8ea95d3f363/charges HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46574 - "POST /api/v1/portal/admissions/bdb5186f-9ec1-4ca0-8184-e8ea95d3f363/submit HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46574 - "GET /api/v1/portal/admissions/bdb5186f-9ec1-4ca0-8184-e8ea95d3f363 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46574 - "GET /api/v1/portal/admissions/bdb5186f-9ec1-4ca0-8184-e8ea95d3f363/charges HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46574 - "GET /api/v1/portal/admissions?page=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/setup/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "POST /api/v1/auth/refresh HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:46586 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/units HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/academic-years HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/grades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/shifts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/class-groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/document-types HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/admission-campaigns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/class-groups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/admissions?page=1&q=&status= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/admissions-summary HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/admissions/bdb5186f-9ec1-4ca0-8184-e8ea95d3f363 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/bank-charges?admission_id=bdb5186f-9ec1-4ca0-8184-e8ea95d3f363 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "POST /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/admissions/bdb5186f-9ec1-4ca0-8184-e8ea95d3f363/attachments/b6fee1d4-de95-44e9-9e74-69f87cdc34fe/review HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/admissions/bdb5186f-9ec1-4ca0-8184-e8ea95d3f363 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/bank-charges?admission_id=bdb5186f-9ec1-4ca0-8184-e8ea95d3f363 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "POST /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/admissions/bdb5186f-9ec1-4ca0-8184-e8ea95d3f363/approve HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/admissions/bdb5186f-9ec1-4ca0-8184-e8ea95d3f363 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/bank-charges?admission_id=bdb5186f-9ec1-4ca0-8184-e8ea95d3f363 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/admissions?page=1&q=&status= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/admissions-summary HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "POST /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/admissions/bdb5186f-9ec1-4ca0-8184-e8ea95d3f363/finalize HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/admissions/bdb5186f-9ec1-4ca0-8184-e8ea95d3f363 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/bank-charges?admission_id=bdb5186f-9ec1-4ca0-8184-e8ea95d3f363 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/admissions?page=1&q=&status= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/admissions-summary HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46574 - "GET /api/v1/portal/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46574 - "GET /api/v1/portal/admissions?page=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46574 - "GET /api/v1/portal/admissions/bdb5186f-9ec1-4ca0-8184-e8ea95d3f363 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46574 - "GET /api/v1/portal/admissions/bdb5186f-9ec1-4ca0-8184-e8ea95d3f363/charges HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46574 - "GET /api/v1/portal/admissions/bdb5186f-9ec1-4ca0-8184-e8ea95d3f363/issued/96d2aedc-5683-4fd9-b067-2926ab04dfed HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/integrations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/integration-jobs?page=1&status= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "POST /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/integrations/asaas HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/integrations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/integration-jobs?page=1&status= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/bank-charges?page=1&q=&status= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/bank-summary HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/enrollments?q=Lucas HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "POST /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/bank-charges HTTP/1.1" 201 Created
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/bank-charges?page=1&q=&status= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46586 - "GET /api/v1/schools/86ce0bc9-73d6-499f-955a-173959d8911e/bank-summary HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [17549]

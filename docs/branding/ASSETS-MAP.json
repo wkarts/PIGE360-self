@@ -1,0 +1,90 @@
+{
+  "source_archive": "PIGE360_BRANDING_COMPLETO (1).zip",
+  "source_sha256": "9cc110eddc20c82b7176580f0aff09f16471cb0650d4ba32a2fe059f3d76f2ef",
+  "assets": [
+    {
+      "source": "01_LOGOS/PNG/pige360-horizontal-1024.png",
+      "destination": "frontend/public/branding/pige360/logo-horizontal.png",
+      "sha256": "02ef32957388e61f82774b738f4c3ec5281bb34d3d2ded09d4aab1b99c508521",
+      "transformed": false
+    },
+    {
+      "source": "01_LOGOS/PNG/pige360-stacked-512.png",
+      "destination": "frontend/public/branding/pige360/logo-stacked.png",
+      "sha256": "0e68f16787ebf9160f21074a5a837cec208f734a9117d583b4891cd3485bcd2a",
+      "transformed": false
+    },
+    {
+      "source": "01_LOGOS/PNG/pige360-symbol-512.png",
+      "destination": "frontend/public/branding/pige360/symbol.png",
+      "sha256": "79bd7ed8459feedc546fb08a2a6bbfe7e730c48e24ff2fad8507d268fca9b0ea",
+      "transformed": false
+    },
+    {
+      "source": "01_LOGOS/SVG/pige360-horizontal.svg",
+      "destination": "frontend/public/branding/pige360/logo-horizontal.svg",
+      "sha256": "c7e89ba26c962d9f126a0073066d43f8d8cedff1be8b2b333bf1709b3be44f26",
+      "transformed": false
+    },
+    {
+      "source": "01_LOGOS/SVG/pige360-symbol.svg",
+      "destination": "frontend/public/branding/pige360/symbol.svg",
+      "sha256": "7bec2501cc67b00930c282805979dfdef7a985af8f942542311b6f4be98e8946",
+      "transformed": false
+    },
+    {
+      "source": "02_ICONS/favicon.ico",
+      "destination": "frontend/public/favicon.ico",
+      "sha256": "c7cf347b57e5041d82ccd6b15e7b236a7397de796dace37d96c407c3a79b95e6",
+      "transformed": false
+    },
+    {
+      "source": "02_ICONS/favicon.svg",
+      "destination": "frontend/public/favicon.svg",
+      "sha256": "7bec2501cc67b00930c282805979dfdef7a985af8f942542311b6f4be98e8946",
+      "transformed": false
+    },
+    {
+      "source": "02_ICONS/apple-touch-icon.png",
+      "destination": "frontend/public/apple-touch-icon.png",
+      "sha256": "e72f4e1161ce807c742723a1a909e8ac312b9d4a3c9d723450ca417875b98d7d",
+      "transformed": false
+    },
+    {
+      "source": "02_ICONS/pwa/icon-192.png",
+      "destination": "frontend/public/icons/icon-192.png",
+      "sha256": "a648a932a1702cd88f5437328c6db3d907a28660fa9a5fbca0247236d0286c8d",
+      "transformed": false
+    },
+    {
+      "source": "02_ICONS/pwa/icon-512.png",
+      "destination": "frontend/public/icons/icon-512.png",
+      "sha256": "13b3d059143fa32850875cff68da58be3b9e26de9cc508cbaf13df25fbadc74c",
+      "transformed": false
+    },
+    {
+      "source": "09_DESIGN_TOKENS/tokens.css",
+      "destination": "frontend/public/branding/pige360/tokens.css",
+      "sha256": "c0a1133f43924d05b71e3e2bded21ea6ecab912284c30f8ad385e9addc09eb90",
+      "transformed": false
+    },
+    {
+      "source": "09_DESIGN_TOKENS/tokens.json",
+      "destination": "frontend/public/branding/pige360/tokens.json",
+      "sha256": "3edd554f969cd6b8375511f3e5fa3b38c32a8db0c7d5d98290cbc4f2583e0b7a",
+      "transformed": false
+    },
+    {
+      "source": "00_MASTER/BRAND_MANIFEST.json",
+      "destination": "docs/branding/BRAND_MANIFEST.original.json",
+      "sha256": "3edd554f969cd6b8375511f3e5fa3b38c32a8db0c7d5d98290cbc4f2583e0b7a",
+      "transformed": false
+    },
+    {
+      "source": "00_MASTER/BRAND_GUIDELINES.md",
+      "destination": "docs/branding/BRAND_GUIDELINES.original.md",
+      "sha256": "d8713a5d621fbaefc71b1bba063f50379d1d1780a3ae9bf5e309ada1c5a3c518",
+      "transformed": false
+    }
+  ]
+}

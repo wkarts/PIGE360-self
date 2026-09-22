@@ -1,0 +1,33 @@
+{
+  "product": "PIGE360 Self",
+  "version": "0.3.0",
+  "date": "2026-09-22",
+  "base": "0.2.0-Branding",
+  "distribution": "self-hosted-web-pwa",
+  "original_template_included": false,
+  "database_target": "PostgreSQL",
+  "database_runtime_tested": "SQLite",
+  "backend_tests": {
+    "passed": 70,
+    "skipped": 1,
+    "failed": 0
+  },
+  "ui_tests": {
+    "passed": 34,
+    "mode": "ui_api_bridge"
+  },
+  "integrations": {
+    "asaas": "implemented_contract_tested_not_live_homologated",
+    "connect_api": "configurable_http_adapter_real_contract_not_verified",
+    "smtp": "implemented_not_live_homologated"
+  },
+  "docker_built": false,
+  "remote_actions_executed": false,
+  "backup_restore_runtime_tested": false,
+  "schema_migrations": [
+    "0001_secretary",
+    "0002_protocol_events",
+    "0003_online_admissions"
+  ],
+  "artifact": "source-and-precompiled-web"
+}

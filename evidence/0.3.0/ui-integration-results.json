@@ -1,0 +1,36 @@
+{
+  "status": "passed",
+  "mode": "ui_api_bridge",
+  "not_validated": [
+    "Navegação HTTP nativa",
+    "Cookies do navegador",
+    "CSP em navegação",
+    "Instalação PWA",
+    "Download nativo"
+  ],
+  "checks": [
+    "Logo oficial carregada com bytes locais originais",
+    "Instalação inicial e login pela interface",
+    "Série, turno e turma criados pela interface",
+    "Responsável e aluno cadastrados, vínculo legal/financeiro persistido",
+    "Upload e validação documental pela interface",
+    "Edição da pré-matrícula com justificativa e histórico",
+    "Ficha da pré-matrícula emitida antes da ativação",
+    "Matrícula criada e ativada pela interface",
+    "PDF emitido pela UI e bytes conferidos no harness",
+    "Relatório por turma com PDF",
+    "Responsividade 390px sem overflow horizontal",
+    "Menu e navegação mobile",
+    "Filtros de matrícula com resultado persistido",
+    "Protocolo com atendimento acrescentado ao histórico",
+    "Filtro de protocolo vencido e comprovante PDF",
+    "Protocolos acessíveis dentro da ficha do aluno",
+    "Pendências filtradas e exportadas em CSV/PDF pela interface",
+    "Novos filtros documentais responsivos em 390px",
+    "Queda de rede sinalizada sem confirmar operações offline",
+    "Nenhum erro de JavaScript observado nas telas exercitadas"
+  ],
+  "browser": "144.0.7559.96",
+  "database": "SQLite (validação local)",
+  "errors": []
+}

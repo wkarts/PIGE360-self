@@ -1,0 +1,90 @@
+name: pige360-self
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pige360}
+      POSTGRES_USER: ${POSTGRES_USER:-pige360}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Execute scripts/configure.py antes de iniciar}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+  app:
+    image: ${APP_IMAGE:-pige360-self:0.3.0}
+    build: {context: ., dockerfile: Dockerfile}
+    init: true
+    environment: &application_environment
+      APP_ENV: ${APP_ENV:-production}
+      APP_URL: ${APP_URL:-http://localhost:58080}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:?Chave obrigatoria}
+      SETUP_TOKEN: ${SETUP_TOKEN:?Chave de instalacao obrigatoria}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-pige360}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-pige360}
+      STORAGE_PATH: /data/documents
+      FRONTEND_PATH: /app/frontend/dist
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
+      ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-15}
+      REFRESH_TOKEN_DAYS: ${REFRESH_TOKEN_DAYS:-7}
+      TZ: ${TZ:-America/Bahia}
+      INTEGRATION_ENCRYPTION_KEY: ${INTEGRATION_ENCRYPTION_KEY:-}
+      INTEGRATION_TIMEOUT_SECONDS: ${INTEGRATION_TIMEOUT_SECONDS:-15}
+      CONNECT_ALLOWED_HOSTS: ${CONNECT_ALLOWED_HOSTS:-}
+      CONNECT_ALLOW_PRIVATE: ${CONNECT_ALLOW_PRIVATE:-false}
+      PORTAL_SESSION_HOURS: ${PORTAL_SESSION_HOURS:-12}
+      PORTAL_MAX_FILES: ${PORTAL_MAX_FILES:-20}
+      PORTAL_MAX_STORAGE_MB: ${PORTAL_MAX_STORAGE_MB:-50}
+      WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-5}
+      BANK_RECONCILE_INTERVAL_SECONDS: ${BANK_RECONCILE_INTERVAL_SECONDS:-900}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+    ports:
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-58080}:8000"
+    volumes:
+      - documents_data:/data
+    depends_on:
+      db: {condition: service_healthy}
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+  worker:
+    image: ${APP_IMAGE:-pige360-self:0.3.0}
+    build: {context: ., dockerfile: Dockerfile}
+    command: ["worker"]
+    init: true
+    environment: *application_environment
+    volumes:
+      - documents_data:/data
+    depends_on:
+      app: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.integration_worker", "--health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+volumes:
+  postgres_data:
+  documents_data:

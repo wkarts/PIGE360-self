@@ -1,0 +1,16 @@
+{
+  "name": "pige360-self-web",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Vue 3 local com templates pré-compilados e TypeScript strict",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.portal.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "5.8.3"
+  },
+  "engines": {
+    "node": ">=22 <23"
+  }
+}

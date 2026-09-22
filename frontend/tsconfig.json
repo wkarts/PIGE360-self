@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "none",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "strict": true,
+    "skipLibCheck": true,
+    "outFile": "dist/app.js",
+    "removeComments": false
+  },
+  "files": [
+    "src/vue-globals.d.ts",
+    "src/api.ts",
+    "src/online-types.ts",
+    "src/expansion.ts",
+    "src/app.ts"
+  ]
+}

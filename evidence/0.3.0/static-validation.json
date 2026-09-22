@@ -1,0 +1,33 @@
+{
+  "migrations_sqlite": [
+    {
+      "command": "alembic upgrade head",
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "command": "alembic check",
+      "exit_code": 0,
+      "output": "No new upgrade operations detected.\n"
+    },
+    {
+      "command": "alembic downgrade base",
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "command": "alembic upgrade head",
+      "exit_code": 0,
+      "output": ""
+    }
+  ],
+  "schema_counts": {
+    "tables": 37,
+    "routes": 122,
+    "openapi_paths": 97
+  },
+  "postgresql_ddl": "compilado estaticamente; não executado em PostgreSQL",
+  "python_compileall": true,
+  "docker_executed": false,
+  "postgresql_runtime_executed": false
+}

@@ -1,0 +1,232 @@
+from datetime import date, datetime
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, JSON, UniqueConstraint, CheckConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+from .db import Base, Record, now
+
+class Installation(Base):
+    __tablename__ = 'installation'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    configured: Mapped[bool] = mapped_column(Boolean, default=False)
+    configured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+class Company(Record, Base):
+    __tablename__ = 'companies'
+    name: Mapped[str] = mapped_column(String(160))
+    document: Mapped[str | None] = mapped_column(String(24))
+
+class School(Record, Base):
+    __tablename__ = 'schools'
+    company_id: Mapped[str] = mapped_column(ForeignKey('companies.id'))
+    name: Mapped[str] = mapped_column(String(160))
+    address: Mapped[str] = mapped_column(String(400), default='')
+    phone: Mapped[str] = mapped_column(String(32), default='')
+    email: Mapped[str] = mapped_column(String(254), default='')
+    document_policy: Mapped[str] = mapped_column(String(16), default='warn')
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    __table_args__ = (CheckConstraint("document_policy IN ('warn','block')", name='document_policy'),)
+
+class User(Record, Base):
+    __tablename__ = 'users'
+    name: Mapped[str] = mapped_column(String(160))
+    email: Mapped[str] = mapped_column(String(254), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(512))
+    role: Mapped[str] = mapped_column(String(32), default='secretary')
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    __table_args__ = (CheckConstraint("role IN ('admin','secretary','viewer')", name='valid_role'),)
+
+class SchoolAccess(Base):
+    __tablename__ = 'school_access'
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), primary_key=True)
+    school_id: Mapped[str] = mapped_column(ForeignKey('schools.id'), primary_key=True)
+
+class AuthSession(Record, Base):
+    __tablename__ = 'auth_sessions'
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64))
+    previous_hash: Mapped[str | None] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+
+class LoginAttempt(Base):
+    __tablename__ = 'login_attempts'
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, default=0)
+    window_started: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+class Scoped:
+    school_id: Mapped[str] = mapped_column(ForeignKey('schools.id'), index=True)
+
+class Unit(Record, Scoped, Base):
+    __tablename__ = 'units'
+    name: Mapped[str] = mapped_column(String(160))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    __table_args__ = (UniqueConstraint('school_id', 'name'),)
+
+class AcademicYear(Record, Scoped, Base):
+    __tablename__ = 'academic_years'
+    name: Mapped[str] = mapped_column(String(40))
+    starts_on: Mapped[date] = mapped_column(Date)
+    ends_on: Mapped[date] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(16), default='active')
+    __table_args__ = (UniqueConstraint('school_id', 'name'), CheckConstraint('ends_on >= starts_on', name='year_dates'))
+
+class Grade(Record, Scoped, Base):
+    __tablename__ = 'grades'
+    name: Mapped[str] = mapped_column(String(100))
+    level: Mapped[str] = mapped_column(String(100), default='Educação básica')
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    __table_args__ = (UniqueConstraint('school_id', 'name'),)
+
+class Shift(Record, Scoped, Base):
+    __tablename__ = 'shifts'
+    name: Mapped[str] = mapped_column(String(80))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    __table_args__ = (UniqueConstraint('school_id', 'name'),)
+
+class ClassGroup(Record, Scoped, Base):
+    __tablename__ = 'class_groups'
+    name: Mapped[str] = mapped_column(String(120))
+    unit_id: Mapped[str] = mapped_column(ForeignKey('units.id'))
+    academic_year_id: Mapped[str] = mapped_column(ForeignKey('academic_years.id'))
+    grade_id: Mapped[str] = mapped_column(ForeignKey('grades.id'))
+    shift_id: Mapped[str] = mapped_column(ForeignKey('shifts.id'))
+    capacity: Mapped[int] = mapped_column(Integer, default=30)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    __table_args__ = (UniqueConstraint('school_id', 'academic_year_id', 'unit_id', 'name'), CheckConstraint('capacity > 0', name='positive_capacity'))
+
+class Person(Record, Scoped, Base):
+    __tablename__ = 'persons'
+    name: Mapped[str] = mapped_column(String(180), index=True)
+    social_name: Mapped[str] = mapped_column(String(180), default='')
+    cpf: Mapped[str | None] = mapped_column(String(11))
+    birth_date: Mapped[date | None] = mapped_column(Date)
+    email: Mapped[str] = mapped_column(String(254), default='')
+    phone: Mapped[str] = mapped_column(String(32), default='')
+    address: Mapped[str] = mapped_column(String(400), default='')
+    notes: Mapped[str] = mapped_column(Text, default='')
+    is_guardian: Mapped[bool] = mapped_column(Boolean, default=False)
+    __table_args__ = (UniqueConstraint('school_id', 'cpf'),)
+
+class Student(Record, Scoped, Base):
+    __tablename__ = 'students'
+    person_id: Mapped[str] = mapped_column(ForeignKey('persons.id'), unique=True)
+    number: Mapped[str] = mapped_column(String(32))
+    previous_school: Mapped[str] = mapped_column(String(180), default='')
+    status: Mapped[str] = mapped_column(String(20), default='active')
+    __table_args__ = (UniqueConstraint('school_id', 'number'),)
+
+class GuardianLink(Record, Scoped, Base):
+    __tablename__ = 'student_guardians'
+    student_id: Mapped[str] = mapped_column(ForeignKey('students.id'), index=True)
+    person_id: Mapped[str] = mapped_column(ForeignKey('persons.id'))
+    relationship: Mapped[str] = mapped_column(String(60), default='Responsável')
+    legal: Mapped[bool] = mapped_column(Boolean, default=False)
+    financial: Mapped[bool] = mapped_column(Boolean, default=False)
+    pickup: Mapped[bool] = mapped_column(Boolean, default=False)
+    primary_contact: Mapped[bool] = mapped_column(Boolean, default=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    __table_args__ = (UniqueConstraint('student_id', 'person_id'),)
+
+class Enrollment(Record, Scoped, Base):
+    __tablename__ = 'enrollments'
+    student_id: Mapped[str] = mapped_column(ForeignKey('students.id'), index=True)
+    academic_year_id: Mapped[str] = mapped_column(ForeignKey('academic_years.id'))
+    class_group_id: Mapped[str] = mapped_column(ForeignKey('class_groups.id'))
+    number: Mapped[str] = mapped_column(String(40))
+    enrolled_on: Mapped[date] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(32), default='draft')
+    financial_person_id: Mapped[str | None] = mapped_column(ForeignKey('persons.id'))
+    previous_enrollment_id: Mapped[str | None] = mapped_column(ForeignKey('enrollments.id'))
+    activation_key: Mapped[str | None] = mapped_column(String(160), unique=True)
+    notes: Mapped[str] = mapped_column(Text, default='')
+    __table_args__ = (UniqueConstraint('school_id', 'number'), CheckConstraint("status IN ('draft','active','suspended','transferred','cancelled','completed')", name='enrollment_status'))
+
+class EnrollmentEvent(Record, Scoped, Base):
+    __tablename__ = 'enrollment_events'
+    enrollment_id: Mapped[str] = mapped_column(ForeignKey('enrollments.id'), index=True)
+    action: Mapped[str] = mapped_column(String(32))
+    reason: Mapped[str] = mapped_column(String(1000))
+    before: Mapped[dict] = mapped_column(JSON, default=dict)
+    after: Mapped[dict] = mapped_column(JSON, default=dict)
+    actor_id: Mapped[str] = mapped_column(ForeignKey('users.id'))
+
+class DocumentType(Record, Scoped, Base):
+    __tablename__ = 'document_types'
+    name: Mapped[str] = mapped_column(String(120))
+    required: Mapped[bool] = mapped_column(Boolean, default=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    grade_id: Mapped[str | None] = mapped_column(ForeignKey('grades.id'))
+    __table_args__ = (UniqueConstraint('school_id', 'name'),)
+
+class FileRecord(Record, Scoped, Base):
+    __tablename__ = 'files'
+    original_name: Mapped[str] = mapped_column(String(240))
+    storage_key: Mapped[str] = mapped_column(String(200), unique=True)
+    mime_type: Mapped[str] = mapped_column(String(100))
+    size: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    created_by: Mapped[str] = mapped_column(ForeignKey('users.id'))
+
+class StudentDocument(Record, Scoped, Base):
+    __tablename__ = 'student_documents'
+    student_id: Mapped[str] = mapped_column(ForeignKey('students.id'), index=True)
+    document_type_id: Mapped[str] = mapped_column(ForeignKey('document_types.id'))
+    file_id: Mapped[str | None] = mapped_column(ForeignKey('files.id'))
+    status: Mapped[str] = mapped_column(String(20), default='received')
+    expires_on: Mapped[date | None] = mapped_column(Date)
+    notes: Mapped[str] = mapped_column(Text, default='')
+    validated_by: Mapped[str | None] = mapped_column(ForeignKey('users.id'))
+    __table_args__ = (CheckConstraint("status IN ('received','validated','rejected','waived','archived')", name='document_status'),)
+
+class IssuedDocument(Record, Scoped, Base):
+    __tablename__ = 'issued_documents'
+    student_id: Mapped[str] = mapped_column(ForeignKey('students.id'), index=True)
+    enrollment_id: Mapped[str | None] = mapped_column(ForeignKey('enrollments.id'))
+    kind: Mapped[str] = mapped_column(String(40))
+    file_id: Mapped[str] = mapped_column(ForeignKey('files.id'))
+    template_version: Mapped[str] = mapped_column(String(20), default='1')
+    snapshot: Mapped[dict] = mapped_column(JSON)
+    created_by: Mapped[str] = mapped_column(ForeignKey('users.id'))
+
+class Protocol(Record, Scoped, Base):
+    __tablename__ = 'protocols'
+    number: Mapped[str] = mapped_column(String(40))
+    student_id: Mapped[str | None] = mapped_column(ForeignKey('students.id'))
+    kind: Mapped[str] = mapped_column(String(120))
+    description: Mapped[str] = mapped_column(Text, default='')
+    status: Mapped[str] = mapped_column(String(24), default='open')
+    due_on: Mapped[date | None] = mapped_column(Date)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (UniqueConstraint('school_id', 'number'),)
+
+class AuditEvent(Record, Base):
+    __tablename__ = 'audit_events'
+    school_id: Mapped[str | None] = mapped_column(ForeignKey('schools.id'), index=True)
+    actor_id: Mapped[str | None] = mapped_column(ForeignKey('users.id'))
+    action: Mapped[str] = mapped_column(String(80))
+    entity_type: Mapped[str] = mapped_column(String(60))
+    entity_id: Mapped[str] = mapped_column(String(64))
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    request_id: Mapped[str] = mapped_column(String(64), default='')
+    ip: Mapped[str] = mapped_column(String(64), default='')
+
+class Sequence(Base):
+    __tablename__ = 'number_sequences'
+    key: Mapped[str] = mapped_column(String(160), primary_key=True)
+    value: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ProtocolEvent(Record, Scoped, Base):
+    """Histórico operacional imutável pela API, isolado por escola."""
+    __tablename__ = 'protocol_events'
+    protocol_id: Mapped[str] = mapped_column(ForeignKey('protocols.id'), index=True)
+    actor_id: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    action: Mapped[str] = mapped_column(String(24))
+    message: Mapped[str] = mapped_column(Text, default='')
+    before: Mapped[dict] = mapped_column(JSON, default=dict)
+    after: Mapped[dict] = mapped_column(JSON, default=dict)
+
+# Registro das tabelas aditivas; os modelos anteriores permanecem inalterados.
+from .online_models import (AdmissionCampaign, PortalAccount, PortalSession, PortalChallenge,
+    Admission, AdmissionMessage, AdmissionAttachment, IntegrationConnection,
+    IntegrationJob, BankCharge, BankEvent, IntegrationWebhook)

@@ -1,0 +1,18 @@
+{
+  "original_template_included": false,
+  "baseline_archive": "PIGE360-Self-Secretaria-0.2.0-Branding.zip",
+  "migrations": [
+    {
+      "path": "backend/migrations/versions/0001_secretary.py",
+      "sha256": "1a4f452b1581898bbe0deacf43039dc031363c056f9c0bd9545b9c6f5c1fe094",
+      "unchanged": true
+    },
+    {
+      "path": "backend/migrations/versions/0002_protocol_events.py",
+      "sha256": "a100d2db7f583fe818d01ab16ab9a6ca24a873dc136a7eea6015811ce4793c46",
+      "unchanged": true
+    }
+  ],
+  "official_assets_checked": 14,
+  "official_assets_preserved": true
+}

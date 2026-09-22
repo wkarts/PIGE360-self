@@ -1,0 +1,11 @@
+{
+  "checks": [
+    "Instalação nova gera chave de criptografia",
+    "Upgrade mantém credenciais anteriores e acrescenta chave ausente",
+    "Reexecução mantém todas as chaves e configurações",
+    "Backup antes da alteração e permissão 0600",
+    "Sintaxe dos scripts shell válida",
+    "Compose: app/db/worker, variáveis compartilhadas, porta somente do app (análise YAML)"
+  ],
+  "docker_executed": false
+}

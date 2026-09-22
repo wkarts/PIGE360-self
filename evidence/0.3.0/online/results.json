@@ -1,0 +1,32 @@
+{
+  "status": "passed",
+  "mode": "ui_api_bridge",
+  "checks": [
+    "Responsável cria conta no portal, sem usuário administrativo",
+    "Autocadastro do aluno e escolha da oferta persistidos",
+    "Upload documental privado pelo responsável",
+    "Aceites explícitos e envio de pré-matrícula pela interface",
+    "Portal responsivo a 390px, sem rolagem horizontal",
+    "Fila administrativa exibe a inscrição enviada no portal",
+    "Documento do portal validado pela Secretaria",
+    "Aprovação cria aluno, responsável e matrícula sem duplicação",
+    "Efetivação da matrícula e emissão persistida do comprovante",
+    "Responsável consulta a matrícula efetivada e baixa o documento autorizado",
+    "Painel Connect API/ASAAS acessível; sem ativação automática",
+    "Configuração bancária persistida sem expor as credenciais no retorno",
+    "Cobrança de mensalidade criada e enfileirada pela interface, sem simular pagamento",
+    "Nenhum erro de JavaScript nas novas telas exercitadas"
+  ],
+  "errors": [],
+  "database": "SQLite descartável",
+  "remote_requests_executed": false,
+  "not_validated": [
+    "Navegação HTTP nativa",
+    "Cookies do navegador",
+    "CSP em navegação",
+    "Instalação PWA",
+    "Provedores reais",
+    "PostgreSQL"
+  ],
+  "browser": "144.0.7559.96"
+}

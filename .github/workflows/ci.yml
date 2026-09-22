@@ -1,0 +1,52 @@
+name: Validar Secretaria Self
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_USER: pige_test
+          POSTGRES_PASSWORD: disposable-test-password
+          POSTGRES_DB: pige_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pige_test -d pige_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.13'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Dependências
+        run: |
+          pip install -r backend/requirements-dev.txt
+          npm install --prefix frontend --ignore-scripts --no-audit --no-fund
+      - name: Compilar PWA
+        run: node frontend/build.mjs
+      - name: Testar no PostgreSQL
+        working-directory: backend
+        env:
+          PIGE_TEST_DATABASE_URL: postgresql+psycopg://pige_test:disposable-test-password@localhost:5432/pige_test
+          PYTHONPATH: .
+        run: python -m pytest -q --junitxml=../evidence/postgresql-tests.xml
+      - name: Chromium e E2E HTTP
+        run: |
+          python -m playwright install --with-deps chromium
+          python scripts/e2e.py
+          python scripts/e2e-online.py
+      - name: Validar Compose e imagem (sem publicar)
+        run: |
+          python scripts/configure.py
+          docker compose config --quiet
+          docker compose build app worker
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: validation-results
+          path: evidence/

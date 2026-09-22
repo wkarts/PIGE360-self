@@ -1,0 +1,8 @@
+{
+  "filename": "comprovante-matricula.pdf",
+  "pages": 1,
+  "extractable_text": true,
+  "expected_test_student_present": true,
+  "rendered_preview": "07-comprovante-matricula-pdf.png",
+  "sha256": "cafc95604bd96aa36fca0672a089420338360f86c54c7195d79688a368de4fdb"
+}
