@@ -129,7 +129,8 @@ def create_student(data: s.StudentInput, db: DB, user: Actor, school: Scope, req
         person = m.Person(school_id=school.id, **data.person.model_dump()); db.add(person); db.flush()
     if not person.birth_date:
         fail(422, 'Informe a data de nascimento do aluno.')
-    obj = m.Student(school_id=school.id, person_id=person.id, number=number(db, school.id, 'student', 'AL-'), previous_school=data.previous_school)
+    student_values = data.model_dump(exclude={'person', 'person_id'})
+    obj = m.Student(school_id=school.id, person_id=person.id, number=number(db, school.id, 'student', 'AL-'), **student_values)
     db.add(obj); db.flush(); audit(db, request, user, 'student.created', obj, school.id)
     return student_output(db, obj)
 
