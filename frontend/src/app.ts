@@ -110,7 +110,7 @@ namespace PigeUI {
     else state.error='Nenhuma escola está vinculada ao seu usuário. Solicite acesso ao administrador.';
   }
   async function changeSchool():Promise<void>{
-    resetFilters();state.studentProtocols=[];state.studentProtocolTotal=0;localStorage.setItem('pige-school',state.schoolId);state.selectedStudent=null;state.studentDocs={items:[],checklist:[],issued:[]};state.rows=[];state.catalogs={};state.reportRows=[];state.reportClass='';state.q='';state.pageNumber=1;
+    resetFilters();state.studentProtocols=[];state.studentProtocolTotal=0;state.photoUrls={};localStorage.setItem('pige-school',state.schoolId);state.selectedStudent=null;state.studentDocs={items:[],checklist:[],issued:[]};state.rows=[];state.catalogs={};state.reportRows=[];state.reportClass='';state.q='';state.pageNumber=1;
     await safe(async()=>{if(!isProfileRole()) await loadCatalogs();await loadPage();});
   }
   async function loadCatalogs():Promise<void>{
@@ -289,7 +289,7 @@ namespace PigeUI {
         if(target)await PigeAPI.patch(base()+'/'+modal.action+'/'+target.id,{version:target.version,data:form});else await PigeAPI.post(base()+'/'+modal.action,form);
       }else if(modal.kind==='link'||modal.kind==='link-edit'){
         if(target)await PigeAPI.patch(base()+'/students/'+studentId+'/guardians/'+target.id,{version:target.version,data:{...form,person_id:target.person_id}});else await PigeAPI.post(base()+'/students/'+studentId+'/guardians',{...form,active:true});
-      }else if(modal.kind==='enrollment')await PigeAPI.post(base()+'/enrollments',form);
+      }else if(modal.kind==='enrollment'){form.financial_person_id=form.financial_person_id||null;await PigeAPI.post(base()+'/enrollments',form);}
       else if(modal.kind==='draft-edit')await PigeAPI.patch(base()+'/enrollments/'+target!.id,{...form,version:target!.version});
       else if(modal.kind==='protocol-note')await PigeAPI.post(base()+'/protocols/'+target!.id+'/notes',{...form,version:target!.version});
       else if(modal.kind==='movement')await PigeAPI.post(base()+'/enrollments/'+target!.id+'/movements',{...form,version:target!.version,action:modal.action});
