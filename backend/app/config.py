@@ -15,6 +15,15 @@ class Settings(BaseSettings):
     setup_token: str
     database_url: str = 'postgresql+psycopg://pige360:pige360@db:5432/pige360'
     storage_path: Path = Path('/data/documents')
+    storage_backend: str = 'local'
+    storage_bucket: str = 'pige360-documents'
+    storage_endpoint_url: str = ''
+    storage_region: str = 'us-east-1'
+    storage_access_key: str = ''
+    storage_secret_key: str = ''
+    storage_use_ssl: bool = True
+    storage_auto_create_bucket: bool = True
+    storage_force_path_style: bool = True
     frontend_path: Path = Path(__file__).resolve().parents[2] / 'frontend' / 'dist'
     trusted_proxy_ips: str = ''
     allowed_hosts: str = 'localhost,127.0.0.1'
@@ -22,6 +31,7 @@ class Settings(BaseSettings):
     access_token_minutes: int = 15
     refresh_token_days: int = 7
     max_upload_mb: int = 10
+    max_photo_mb: int = 5
     allow_sqlite: bool = False
     integration_encryption_key: str = ''
     integration_timeout_seconds: int = 15
@@ -47,6 +57,14 @@ class Settings(BaseSettings):
                 network=ipaddress.ip_network(item.strip(),strict=False)
                 if network.prefixlen==0:
                     raise ValueError('TRUSTED_PROXY_IPS não aceita confiança irrestrita.')
+        if self.storage_backend not in ('local', 's3'):
+            raise ValueError('STORAGE_BACKEND deve ser local ou s3.')
+        if self.max_upload_mb < 1 or self.max_photo_mb < 1 or self.max_photo_mb > self.max_upload_mb:
+            raise ValueError('MAX_PHOTO_MB deve estar entre 1 e MAX_UPLOAD_MB.')
+        if self.storage_backend == 's3' and not self.storage_bucket.strip():
+            raise ValueError('STORAGE_BUCKET é obrigatório quando STORAGE_BACKEND=s3.')
+        if self.storage_endpoint_url and not urlsplit(self.storage_endpoint_url).scheme:
+            raise ValueError('STORAGE_ENDPOINT_URL deve conter http:// ou https://.')
         if not 300 <= self.bank_reconcile_interval_seconds <= 86400:
             raise ValueError('BANK_RECONCILE_INTERVAL_SECONDS: 300 a 86400 segundos.')
         if not 1 <= self.portal_session_hours <= 48 or not 1 <= self.portal_max_files <= 100 or not 1 <= self.portal_max_storage_mb <= 1000:
