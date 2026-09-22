@@ -248,7 +248,7 @@ def test_unified_person_registry_complete_fields_and_private_photo(api):
     photo=api.call('POST','/persons/'+person['id']+'/photo',expect=200,files={'file':('joao.png',image.getvalue(),'image/png')})
     assert photo['photo_file_id']
     downloaded=api.get('/files/'+photo['photo_file_id']+'/download')
-    assert downloaded.content.startswith(b'\\x89PNG')
+    assert downloaded.content.startswith(b'\x89PNG')
     assert api.call('DELETE','/persons/'+person['id']+'/photo',expect=200)['photo_file_id'] is None
 
 
@@ -285,4 +285,4 @@ def test_complete_student_and_enrollment_fields_are_persisted(api):
     })
     assert enrollment['enrollment_type']=='transfer_in'
     assert enrollment['origin_school']=='Escola de Origem'
-\n
+
