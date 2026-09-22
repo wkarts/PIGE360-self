@@ -2,22 +2,26 @@ name: CI - FastAPI, Vue PWA e Docker
 on:
   workflow_call:
     inputs:
-      ref:
-        type: string
-        required: false
-        default: ''
+      ref: {type: string, required: false, default: ''}
+      node_ref: {type: string, default: 'ghcr.io/wkarts/pige360-self-base-node:22-alpine'}
+      python_ref: {type: string, default: 'ghcr.io/wkarts/pige360-self-base-python:3.13-slim'}
+      postgres_ref: {type: string, default: 'ghcr.io/wkarts/pige360-self-postgres:17-bookworm'}
   workflow_dispatch:
   push:
     branches: [main]
 permissions:
   contents: read
+  packages: read
 jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
       postgres:
-        image: postgres:17-bookworm
+        image: ${{ inputs.postgres_ref || 'ghcr.io/wkarts/pige360-self-postgres:17-bookworm' }}
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
         env:
           POSTGRES_USER: pige_test
           POSTGRES_PASSWORD: disposable-test-password
@@ -44,6 +48,11 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Dependências reproduzíveis
         run: |
           python -m pip install -r backend/requirements-dev.txt
@@ -73,10 +82,17 @@ jobs:
           mkdir -p ci-evidence/browser
           if [[ -d evidence/0.3.0 ]]; then cp -a evidence/0.3.0/. ci-evidence/browser/; fi
       - name: Docker Compose e teste de inicialização
+        env:
+          NODE_BASE_IMAGE: ${{ inputs.node_ref || 'ghcr.io/wkarts/pige360-self-base-node:22-alpine' }}
+          PYTHON_BASE_IMAGE: ${{ inputs.python_ref || 'ghcr.io/wkarts/pige360-self-base-python:3.13-slim' }}
+          POSTGRES_IMAGE: ${{ inputs.postgres_ref || 'ghcr.io/wkarts/pige360-self-postgres:17-bookworm' }}
         run: |
           python scripts/configure.py
           docker compose config --quiet
-          docker build --build-arg SOURCE_REVISION="$GITHUB_SHA" -t pige360-self:ci .
+          docker build --build-arg SOURCE_REVISION="$GITHUB_SHA" \
+            --build-arg NODE_BASE_IMAGE="$NODE_BASE_IMAGE" \
+            --build-arg PYTHON_BASE_IMAGE="$PYTHON_BASE_IMAGE" \
+            --build-arg POSTGRES_IMAGE="$POSTGRES_IMAGE" -t pige360-self:ci .
           bash scripts/ci/smoke.sh pige360-self:ci local
       - name: Evidências desta execução
         if: always()

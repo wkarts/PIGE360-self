@@ -22,14 +22,19 @@ jobs:
         with: {fetch-depth: 0}
       - id: version
         run: python scripts/ci/version.py develop
-  tests:
+  bases:
     needs: version
+    uses: ./.github/workflows/container-bases.yml
+    with:
+      ref: ${{ needs.version.outputs.sha }}
+  tests:
+    needs: [version, bases]
     uses: ./.github/workflows/ci.yml
     with:
       ref: ${{ needs.version.outputs.sha }}
-  bases:
-    needs: tests
-    uses: ./.github/workflows/container-bases.yml
+      node_ref: ${{ needs.bases.outputs.node_ref }}
+      python_ref: ${{ needs.bases.outputs.python_ref }}
+      postgres_ref: ${{ needs.bases.outputs.postgres_ref }}
   publish:
     needs: [version, tests, bases]
     uses: ./.github/workflows/publish-image.yml
@@ -38,3 +43,6 @@ jobs:
       version: ${{ needs.version.outputs.app_version }}
       candidate: ${{ needs.version.outputs.candidate }}
       channel: develop
+      node_ref: ${{ needs.bases.outputs.node_ref }}
+      python_ref: ${{ needs.bases.outputs.python_ref }}
+      postgres_ref: ${{ needs.bases.outputs.postgres_ref }}
