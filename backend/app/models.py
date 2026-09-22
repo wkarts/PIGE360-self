@@ -122,7 +122,7 @@ class Person(Record, Scoped, Base):
     address: Mapped[str] = mapped_column(String(400), default='')
     notes: Mapped[str] = mapped_column(Text, default='')
     is_guardian: Mapped[bool] = mapped_column(Boolean, default=False)
-    rg: Mapped[str] = mapped_column(String(40), default='')
+    rg: Mapped[str] = mapped_column(String(40), default='', index=True)
     rg_issuer: Mapped[str] = mapped_column(String(80), default='')
     rg_state: Mapped[str] = mapped_column(String(2), default='')
     rg_issued_on: Mapped[date | None] = mapped_column(Date)
