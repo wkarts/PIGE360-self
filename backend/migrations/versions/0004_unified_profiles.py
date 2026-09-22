@@ -20,8 +20,8 @@ def upgrade():
             ['person_id'],
             ['id'],
         )
-        batch_op.drop_constraint('ck_users_valid_role', type_='check')
-        batch_op.create_check_constraint('ck_users_valid_role', ROLE_CHECK)
+        batch_op.drop_constraint(op.f('ck_users_valid_role'), type_='check')
+        batch_op.create_check_constraint(op.f('ck_users_valid_role'), ROLE_CHECK)
 
     op.create_table(
         'teacher_assignments',
@@ -61,7 +61,7 @@ def downgrade():
     with op.batch_alter_table('users', schema=None) as batch_op:
         batch_op.drop_constraint('ck_users_valid_role', type_='check')
         batch_op.create_check_constraint(
-            'ck_users_valid_role',
+            op.f('ck_users_valid_role'),
             "role IN ('admin','secretary','viewer')",
         )
         batch_op.drop_constraint('fk_users_person_id_persons', type_='foreignkey')
