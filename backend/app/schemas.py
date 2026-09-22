@@ -177,19 +177,28 @@ class UserInput(Input):
     name: str = Field(min_length=2, max_length=160)
     email: EmailStr
     password: str = Field(min_length=12, max_length=128)
-    role: Literal['admin','secretary','viewer'] = 'secretary'
+    role: Literal['admin','direction','coordination','secretary','teacher','student','guardian','viewer'] = 'secretary'
     school_ids: list[str] = Field(default_factory=list, max_length=100)
+    person_id: str | None = None
 
 class UserEdit(Input):
     name: str = Field(min_length=2, max_length=160)
-    role: Literal['admin','secretary','viewer']
+    role: Literal['admin','direction','coordination','secretary','teacher','student','guardian','viewer']
     active: bool
     school_ids: list[str] = Field(default_factory=list, max_length=100)
+    person_id: str | None = None
     version: int = Field(ge=1)
 
 class PasswordChange(Input):
     current_password: str = Field(min_length=1, max_length=128)
     new_password: str = Field(min_length=12, max_length=128)
+
+
+class TeacherAssignmentInput(Input):
+    teacher_user_id: str
+    class_group_id: str
+    subject_name: str = Field(default='', max_length=120)
+    active: bool = True
 
 
 class DraftEnrollmentEdit(Input):

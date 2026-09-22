@@ -32,7 +32,12 @@ class User(Record, Base):
     password_hash: Mapped[str] = mapped_column(String(512))
     role: Mapped[str] = mapped_column(String(32), default='secretary')
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    __table_args__ = (CheckConstraint("role IN ('admin','secretary','viewer')", name='valid_role'),)
+    # Perfis de autoatendimento apontam para a pessoa correspondente.
+    person_id: Mapped[str | None] = mapped_column(ForeignKey('persons.id'), index=True)
+    __table_args__ = (CheckConstraint(
+        "role IN ('admin','direction','coordination','secretary','teacher','student','guardian','viewer')",
+        name='valid_role'
+    ),)
 
 class SchoolAccess(Base):
     __tablename__ = 'school_access'
@@ -93,6 +98,18 @@ class ClassGroup(Record, Scoped, Base):
     capacity: Mapped[int] = mapped_column(Integer, default=30)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     __table_args__ = (UniqueConstraint('school_id', 'academic_year_id', 'unit_id', 'name'), CheckConstraint('capacity > 0', name='positive_capacity'))
+
+class TeacherAssignment(Record, Scoped, Base):
+    __tablename__ = 'teacher_assignments'
+    teacher_user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    class_group_id: Mapped[str] = mapped_column(ForeignKey('class_groups.id'), index=True)
+    academic_year_id: Mapped[str] = mapped_column(ForeignKey('academic_years.id'), index=True)
+    subject_name: Mapped[str] = mapped_column(String(120), default='')
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    __table_args__ = (
+        UniqueConstraint('school_id', 'teacher_user_id', 'class_group_id', 'academic_year_id', 'subject_name'),
+    )
+
 
 class Person(Record, Scoped, Base):
     __tablename__ = 'persons'

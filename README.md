@@ -1,7 +1,7 @@
 > **Fluxo GitHub/GHCR:** veja [desenvolvimento, releases, limpeza e implantação self-hosted](docs/ci-cd/FLUXO-GITHUB-GHCR.md). O fluxo main/develop agora é versionado neste repositório. Os comandos abaixo de build local permanecem válidos; para imagens publicadas use `deploy/compose.yaml`. Nenhum deploy externo é executado automaticamente.
 
 # PIGE360 Self 0.3.0
-## Secretaria, pré-matrícula online, comunicação e cobrança
+## Gestão educacional modular, Secretaria e matrícula online
 
 Aplicação self-hosted em **FastAPI + Vue 3**, exclusivamente Web/PWA. O pacote contém a aplicação, o frontend compilado, migrations, testes, documentação e evidências. **Não contém mais o template original nem um ZIP de template de referência.** O branding oficial da entrega anterior foi preservado.
 
@@ -63,6 +63,12 @@ O link é `/online.html?campaign=SLUG`. O responsável cria uma conta própria, 
 **A pré-matrícula não garante nem reserva vaga.** A efetivação exige conferência de identidade/vínculo, disponibilidade e documentação segundo as políticas configuradas. Cobrança obrigatória, quando definida, precisa estar recebida; `CONFIRMED` não basta.
 
 A verificação de contato vem habilitada por padrão no processo. Configure SMTP ou Connect API antes de publicar um processo que a exija. Não desative a verificação apenas para contornar uma integração mal configurada em produção.
+
+## Perfis e módulos
+
+A instalação continua sendo um único PIGE360 Self. O acesso é separado por permissões e perfis (\`Administrador\`, \`Direção\`, \`Coordenação\`, \`Secretaria\`, \`Professor\`, \`Aluno\`, \`Responsável\` e \`Consulta\`). Professor, Aluno e Responsável recebem somente o contexto vinculado ao próprio usuário; os endpoints administrativos não ficam disponíveis para esses perfis.
+
+A arquitetura e o estado dos módulos estão em [docs/ARQUITETURA-MODULAR-UNIFICADA.md](docs/ARQUITETURA-MODULAR-UNIFICADA.md). Os comandos completos dos ambientes estão em [deploy/README.md](deploy/README.md), com modelos \`.env.develop.example\` e \`.env.production.example\`.
 
 ## Documentação
 

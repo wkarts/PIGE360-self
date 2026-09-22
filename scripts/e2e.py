@@ -42,8 +42,8 @@ try:
         assert page.locator('.official-brand img').get_attribute('alt')=='PIGE360 School Platform'
         checks.append('Logo oficial carregada com bytes locais originais')
         page.screenshot(path=str(OUT/'01-login.png'),full_page=True)
-        page.get_by_label('Senha',exact=True).fill('Test-Only-Secretaria-2026!');page.get_by_role('button',name='Entrar na Secretaria').click()
-        expect(page.get_by_role('heading',name='Visão da Secretaria',exact=True)).to_be_visible();checks.append('Instalação inicial e login pela interface')
+        page.get_by_label('Senha',exact=True).fill('Test-Only-Secretaria-2026!');page.get_by_role('button',name='Entrar na aplicação').click()
+        expect(page.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible();checks.append('Instalação inicial e login pela interface')
         def nav(name):
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
             page.locator('aside').get_by_role('link',name=name).click()
@@ -115,15 +115,15 @@ try:
             with page.expect_download() as down:page.get_by_role('button',name='Gerar PDF da turma').click()
             down.value.save_as(str(OUT/'turma-exemplo.pdf'))
         checks.append('Relatório por turma com PDF')
-        nav('Visão da Secretaria');page.screenshot(path=str(OUT/'02-dashboard.png'),full_page=True)
+        nav('Visão geral');page.screenshot(path=str(OUT/'02-dashboard.png'),full_page=True)
         if not BRIDGE:
-            page.reload();expect(page.get_by_role('heading',name='Visão da Secretaria',exact=True)).to_be_visible();checks.append('Sessão restaurada por refresh após reload')
+            page.reload();expect(page.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible();checks.append('Sessão restaurada por refresh após reload')
         nav('Alunos');page.get_by_role('button',name='Abrir ficha →').first.click();page.screenshot(path=str(OUT/'04-aluno.png'),full_page=True)
         page.set_viewport_size({'width':390,'height':844});page.wait_for_timeout(400);page.screenshot(path=str(OUT/'05-aluno-mobile.png'),full_page=True)
         assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'), 'Overflow horizontal no smartphone'
         checks.append('Responsividade 390px sem overflow horizontal')
-        page.get_by_role('button',name='Abrir menu').click();page.locator('aside').get_by_role('link',name='Visão da Secretaria').click()
-        expect(page.get_by_role('heading',name='Visão da Secretaria',exact=True)).to_be_visible();checks.append('Menu e navegação mobile')
+        page.get_by_role('button',name='Abrir menu').click();page.locator('aside').get_by_role('link',name='Visão geral').click()
+        expect(page.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible();checks.append('Menu e navegação mobile')
         page.set_viewport_size({'width':1440,'height':1000})
         nav('Matrículas')
         page.get_by_label('Situação',exact=True).select_option('draft');page.get_by_role('button',name='Aplicar filtros').click()

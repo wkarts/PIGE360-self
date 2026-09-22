@@ -3,7 +3,7 @@ namespace PigeAPI {
     id: string; version: number; name: string; social_name: string; cpf: string | null;
     birth_date: string | null; phone: string; email: string; address: string; notes: string; is_guardian: boolean;
   }
-  export interface User { id: string; version: number; name: string; email: string; role: string; active: boolean; permissions: string[]; school_ids: string[] }
+  export interface User { id: string; version: number; name: string; email: string; role: string; role_label?: string; active: boolean; person_id?: string | null; permissions: string[]; school_ids: string[] }
   export type Value = string | number | boolean | null | string[];
   export type FormDataMap = Record<string, Value>;
   // Registros de catálogo usam um mapa tipado; dados pessoais têm contrato próprio acima.

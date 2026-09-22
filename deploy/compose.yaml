@@ -1,4 +1,4 @@
-name: pige360-self
+name: ${COMPOSE_PROJECT_NAME:-pige360-self}
 services:
   db:
     image: ${POSTGRES_IMAGE:-ghcr.io/wkarts/pige360-self-postgres:17-bookworm}
