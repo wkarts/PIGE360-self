@@ -20,14 +20,14 @@ def create_user(client, admin, *, name, email, role, school_id, person_id):
 def test_teacher_context_is_limited_to_assigned_class(client, admin, api, school):
     catalog = api.catalogs()
     teacher_person = api.post('/persons', {'name': 'Professor de Teste', 'email': 'professor@example.com'})
-    create_user(
+    teacher_user = create_user(
         client, admin, name='Professor de Teste', email='professor@example.com',
         role='teacher', school_id=school['id'], person_id=teacher_person['id'],
     )
     assignment = client.post(
         '/api/v1/schools/' + school['id'] + '/teacher-assignments',
         headers=admin,
-        json={'teacher_user_id': client.get('/api/v1/users', headers=admin).json()[-1]['id'],
+        json={'teacher_user_id': teacher_user['id'],
               'class_group_id': catalog['group']['id'], 'subject_name': 'Matemática'},
     )
     assert assignment.status_code == 201, assignment.text
@@ -35,6 +35,7 @@ def test_teacher_context_is_limited_to_assigned_class(client, admin, api, school
     student = api.student()
     enrollment = api.enroll(student, catalog['group'])
     assert enrollment['status'] == 'draft'
+    api.move(enrollment, 'activate')
     teacher = login(client, 'professor@example.com', 'Profile-Test-Password-2026!')
     context = client.get('/api/v1/profile/context', headers=teacher)
     assert context.status_code == 200, context.text
@@ -42,7 +43,7 @@ def test_teacher_context_is_limited_to_assigned_class(client, admin, api, school
     assert body['role'] == 'teacher'
     assert len(body['assignments']) == 1
     assert body['assignments'][0]['class_group_id'] == catalog['group']['id']
-    assert body['assignments'][0]['students'] == []
+    assert body['assignments'][0]['students'][0]['number'] == student['number']
 
 
 def test_student_and_guardian_context_do_not_expose_admin_dashboard(client, admin, api, school):
