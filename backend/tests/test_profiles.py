@@ -33,6 +33,7 @@ def test_teacher_context_is_limited_to_assigned_class(client, admin, api, school
     assert assignment.status_code == 201, assignment.text
 
     student = api.student()
+    api.guardian(student)
     enrollment = api.enroll(student, catalog['group'])
     assert enrollment['status'] == 'draft'
     api.move(enrollment, 'activate')
