@@ -18,6 +18,8 @@ namespace PigeAPI {
   // Registros de catálogo usam um mapa tipado; dados pessoais têm contrato próprio acima.
   export interface Row { id: string; version: number; [key: string]: unknown }
   export interface Student extends Row { number: string; person: Person; status: string; previous_school: string; guardians?: Row[]; enrollments?: Row[] }
+  export interface TeacherProfile extends Row { person: Person; registration_number: string; professional_registration: string; employment_type: string; employment_status: string; workload_hours: number }
+  export interface EmployeeProfile extends Row { person: Person; employee_number: string; employment_type: string; employment_status: string; department: string; job_title: string }
   export interface Page<T> { items: T[]; total: number; page: number; page_size: number }
   export interface School extends Row { name: string; company_id: string; document_policy: string; address: string; phone: string; email: string; active: boolean }
   export interface SessionResponse { access_token: string; user: User }

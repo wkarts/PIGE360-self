@@ -56,11 +56,11 @@ Erros de autenticação, rede e registry não são tratados como prova de imagem
 
 ## Instalação e atualização
 
-O Compose raiz continua destinado ao build local. `deploy/compose.yaml` continua image-only. Ambos apontam PostgreSQL para `ghcr.io/wkarts/pige360-self-postgres:17-bookworm`, substituível por `POSTGRES_IMAGE`.
+Os Compose em `deploy/docker`, `deploy/dockge`, `deploy/portainer` e `deploy/cloudpanel` são image-only. Todos apontam PostgreSQL para `ghcr.io/wkarts/pige360-self-postgres:17-bookworm`, substituível por `POSTGRES_IMAGE`.
 
-Para novas instalações de produção, use `python scripts/configure.py --channel stable --url https://sua-escola.example` e o Compose de deploy. Preserve sempre .env, segredos e volumes de instalações existentes. A nova variável está no .env.example; não regenere credenciais para atualizar imagens.
+Para novas instalações de produção, use `python scripts/configure.py --channel stable --env-file deploy/docker/.env.production --url https://sua-escola.example` e o Compose do adaptador escolhido. Preserve sempre o `.env`, segredos e diretórios `data-*` da instalação. A nova variável está nos modelos em `deploy/`; não regenere credenciais para atualizar imagens.
 
-Para fixar uma release, incorpore somente APP_IMAGE, POSTGRES_IMAGE e APP_PULL_POLICY de `deploy/images.env` ao .env existente; não substitua o arquivo inteiro. Depois execute `docker compose --env-file .env -f deploy/compose.yaml pull` e `docker compose --env-file .env -f deploy/compose.yaml up -d --wait`.
+Para fixar uma release, incorpore somente APP_IMAGE, POSTGRES_IMAGE e APP_PULL_POLICY de `deploy/images.env` ao ambiente existente; não substitua o arquivo inteiro. Depois execute `docker compose --env-file deploy/docker/.env.production -f deploy/docker/compose.yaml pull` e `docker compose --env-file deploy/docker/.env.production -f deploy/docker/compose.yaml up -d --wait`.
 
 Não usar `down -v`. A publicação de uma base nova não executa deploy na VPS nem modifica bancos de dados.
 

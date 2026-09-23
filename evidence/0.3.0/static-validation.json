@@ -8,7 +8,7 @@
     {
       "command": "alembic check",
       "exit_code": 0,
-      "output": "No new upgrade operations detected.\n"
+      "output": "No new upgrade operations detected.\n/tmp/pige360-prod-rQVz3j/repo/backend/migrations/env.py:15: SAWarning: Cannot correctly sort tables; there are unresolvable cycles between tables \"files, persons, users\", which is usually caused by mutually dependent foreign key constraints.  Foreign key constraints involving these tables will not be considered; this warning may raise an error in a future release.\n  with context.begin_transaction(): context.run_migrations()\n"
     },
     {
       "command": "alembic downgrade base",
@@ -22,9 +22,9 @@
     }
   ],
   "schema_counts": {
-    "tables": 37,
-    "routes": 122,
-    "openapi_paths": 97
+    "tables": 41,
+    "routes": 135,
+    "openapi_paths": 105
   },
   "postgresql_ddl": "compilado estaticamente; não executado em PostgreSQL",
   "python_compileall": true,

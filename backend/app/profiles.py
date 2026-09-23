@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from . import models as m, schemas as s
 from .common import audit, output
 from .registry import validate
@@ -87,9 +87,13 @@ def teacher_context(db, user):
     assignments = []
     for school_id in school_ids(db, user):
         school = allowed_school(db, user, school_id)
+        person = linked_person(db, user, school.id)
+        assignment_owner = [m.TeacherAssignment.teacher_user_id == user.id]
+        if person:
+            assignment_owner.append(m.TeacherAssignment.teacher_person_id == person.id)
         rows = db.scalars(select(m.TeacherAssignment).where(
             m.TeacherAssignment.school_id == school.id,
-            m.TeacherAssignment.teacher_user_id == user.id,
+            or_(*assignment_owner),
             m.TeacherAssignment.active.is_(True),
         ).order_by(m.TeacherAssignment.created_at)).all()
         for assignment in rows:
@@ -193,12 +197,15 @@ def profile_context(db: DB, user: Actor):
 def assignment_output(db, assignment):
     group = db.get(m.ClassGroup, assignment.class_group_id)
     year = db.get(m.AcademicYear, assignment.academic_year_id)
-    teacher = db.get(m.User, assignment.teacher_user_id)
-    person = db.get(m.Person, teacher.person_id) if teacher and teacher.person_id else None
+    teacher = db.get(m.User, assignment.teacher_user_id) if assignment.teacher_user_id else None
+    person = db.get(m.Person, assignment.teacher_person_id) if assignment.teacher_person_id else None
+    if not person and teacher and teacher.person_id:
+        person = db.get(m.Person, teacher.person_id)
     return {
         **output(assignment),
+        'teacher_person_id': assignment.teacher_person_id,
         'teacher_name': person.name if person else (teacher.name if teacher else ''),
-        'teacher_email': teacher.email if teacher else '',
+        'teacher_email': teacher.email if teacher else (person.email if person else ''),
         'class_name': group.name if group else '',
         'year_name': year.name if year else '',
     }
@@ -216,15 +223,27 @@ def list_teacher_assignments(db: DB, user: Actor, school: Scope):
 @router.post('/schools/{school_id}/teacher-assignments', status_code=201)
 def create_teacher_assignment(data: s.TeacherAssignmentInput, db: DB, user: Actor, school: Scope, request: Request):
     require(user, 'staff.assignments.write')
-    teacher = db.get(m.User, data.teacher_user_id)
-    if not teacher or not teacher.active or teacher.role != 'teacher':
-        fail(422, 'O usuário informado não é um Professor ativo.')
-    if teacher.role != 'admin' and not db.get(m.SchoolAccess, (teacher.id, school.id)):
-        fail(422, 'O Professor não possui acesso à escola informada.')
+    teacher = db.get(m.User, data.teacher_user_id) if data.teacher_user_id else None
+    person = scoped(db, m.Person, data.teacher_person_id, school.id) if data.teacher_person_id else None
+    if teacher:
+        if not teacher.active or teacher.role != 'teacher':
+            fail(422, 'O usuário informado não é um Professor ativo.')
+        if teacher.role != 'admin' and not db.get(m.SchoolAccess, (teacher.id, school.id)):
+            fail(422, 'O Professor não possui acesso à escola informada.')
+        if person and teacher.person_id and teacher.person_id != person.id:
+            fail(422, 'O usuário e a pessoa docente informados não correspondem.')
+    if person and not db.scalar(select(m.TeacherProfile.id).where(
+        m.TeacherProfile.person_id == person.id,
+        m.TeacherProfile.school_id == school.id,
+    ).limit(1)):
+        fail(422, 'A pessoa informada não possui cadastro de Professor nesta escola.')
+    if not teacher and not person:
+        fail(422, 'Informe um usuário de acesso ou uma pessoa docente.')
     group = scoped(db, m.ClassGroup, data.class_group_id, school.id)
     obj = m.TeacherAssignment(
         school_id=school.id,
-        teacher_user_id=teacher.id,
+        teacher_user_id=teacher.id if teacher else None,
+        teacher_person_id=person.id if person else (teacher.person_id if teacher and teacher.person_id else None),
         class_group_id=group.id,
         academic_year_id=group.academic_year_id,
         subject_name=data.subject_name.strip(),
@@ -242,11 +261,24 @@ def update_teacher_assignment(assignment_id: str, data: s.Edit, db: DB, user: Ac
     obj = scoped(db, m.TeacherAssignment, assignment_id, school.id)
     check_version(obj, data.version)
     values = validate(s.TeacherAssignmentInput, data.data)
-    teacher = db.get(m.User, values.teacher_user_id)
-    if not teacher or teacher.role != 'teacher':
-        fail(422, 'O usuário informado não é um Professor.')
+    teacher = db.get(m.User, values.teacher_user_id) if values.teacher_user_id else None
+    person = scoped(db, m.Person, values.teacher_person_id, school.id) if values.teacher_person_id else None
+    if teacher and (not teacher.active or teacher.role != 'teacher'):
+        fail(422, 'O usuário informado não é um Professor ativo.')
+    if teacher and teacher.role != 'admin' and not db.get(m.SchoolAccess, (teacher.id, school.id)):
+        fail(422, 'O Professor não possui acesso à escola informada.')
+    if person and teacher and teacher.person_id and teacher.person_id != person.id:
+        fail(422, 'O usuário e a pessoa docente informados não correspondem.')
+    if person and not db.scalar(select(m.TeacherProfile.id).where(
+        m.TeacherProfile.person_id == person.id,
+        m.TeacherProfile.school_id == school.id,
+    ).limit(1)):
+        fail(422, 'A pessoa informada não possui cadastro de Professor nesta escola.')
+    if not teacher and not person:
+        fail(422, 'Informe um usuário de acesso ou uma pessoa docente.')
     group = scoped(db, m.ClassGroup, values.class_group_id, school.id)
-    obj.teacher_user_id = teacher.id
+    obj.teacher_user_id = teacher.id if teacher else None
+    obj.teacher_person_id = person.id if person else (teacher.person_id if teacher and teacher.person_id else None)
     obj.class_group_id = group.id
     obj.academic_year_id = group.academic_year_id
     obj.subject_name = values.subject_name.strip()

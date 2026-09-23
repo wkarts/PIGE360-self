@@ -79,6 +79,50 @@ def test_student_existing_person_and_date_validation(api):
     api.patch('/persons/'+person['id'],{'version':person['version'],'data':{'name':person['name'],'birth_date':None}},422)
     api.post('/students',{'person':{'name':'Sem Nascimento'}},422)
 
+
+def test_teacher_and_employee_views_share_the_same_person_registry(api):
+    teacher=api.post('/teachers',{
+        'person':{
+            'name':'Docente e funcionário',
+            'birth_date':'1985-03-20',
+            'cpf':'529.982.247-25',
+            'phone':'5571999990000',
+            'person_types':['teacher'],
+        },
+        'registration_number':'DOC-001',
+        'professional_registration':'CREF-BA 123',
+        'employment_type':'public',
+        'employment_status':'active',
+        'admission_date':'2020-02-03',
+        'education_institution':'Universidade Exemplo',
+        'degree_course':'Pedagogia',
+        'teaching_areas':'Educação infantil; anos iniciais',
+        'workload_hours':40,
+    })
+    assert teacher['person']['person_types']==['teacher']
+    assert teacher['registration_number']=='DOC-001'
+    employee=api.post('/employees',{
+        'person_id':teacher['person']['id'],
+        'employee_number':'FUNC-001',
+        'employment_type':'public',
+        'department':'Secretaria escolar',
+        'job_title':'Apoio pedagógico',
+        'work_schedule':'08:00 às 17:00',
+    })
+    assert employee['person']['id']==teacher['person']['id']
+    assert set(employee['person']['person_types'])=={'teacher','employee'}
+    assert api.get('/teachers?q=DOC-001')['total']==1
+    assert api.get('/employees?q=FUNC-001')['total']==1
+    person=api.get('/persons?q=Docente e funcionário')['items'][0]
+    assert set(person['person_types'])=={'teacher','employee'}
+    api.post('/teachers',{'person_id':teacher['person']['id']},409)
+    api.post('/employees',{'person_id':teacher['person']['id']},409)
+    api.post('/employees',{
+        'person':{'name':'Datas inválidas','birth_date':'1990-01-01'},
+        'admission_date':'2025-01-02',
+        'termination_date':'2025-01-01',
+    },422)
+
 def test_guardian_search_and_duplicate_links(api):
     student=api.student();guardian=api.guardian(student,'Maria Responsável')
     assert api.get('/students?q=Maria')['total']==1
@@ -314,4 +358,3 @@ def test_complete_student_and_enrollment_fields_are_persisted(api):
     })
     assert enrollment['enrollment_type']=='transfer_in'
     assert enrollment['origin_school']=='Escola de Origem'
-

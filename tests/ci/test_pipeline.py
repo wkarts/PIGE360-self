@@ -82,7 +82,8 @@ class CleanupTests(unittest.TestCase):
             self.assertNotIn('vercel',path.read_text().lower())
     def test_env_only_migration_code_untouched(self):
         self.assertTrue((ROOT/'backend/migrations').is_dir())
-        self.assertNotIn('build:',(ROOT/'deploy/compose.yaml').read_text())
+        for name in ('docker','dockge','portainer','cloudpanel'):
+            self.assertNotIn('build:',(ROOT/'deploy'/name/'compose.yaml').read_text())
     def test_npm_lock_matches_package(self):
         package=json.loads((ROOT/'frontend/package.json').read_text());lock=json.loads((ROOT/'frontend/package-lock.json').read_text())
         self.assertEqual(package['devDependencies'],lock['packages']['']['devDependencies'])

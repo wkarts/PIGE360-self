@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "PIGE360 Self — Secretaria",
+    "title": "PIGE360 Self — Gestão Educacional",
     "version": "0.3.0"
   },
   "paths": {
@@ -1706,6 +1706,514 @@
         }
       }
     },
+    "/api/v1/schools/{school_id}/persons/{person_id}/photo": {
+      "post": {
+        "tags": [
+          "Pessoas, alunos e responsáveis"
+        ],
+        "summary": "Upload Photo",
+        "operationId": "upload_photo_api_v1_schools__school_id__persons__person_id__photo_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "person_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Person Id"
+            }
+          },
+          {
+            "name": "school_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "School Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_photo_api_v1_schools__school_id__persons__person_id__photo_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Pessoas, alunos e responsáveis"
+        ],
+        "summary": "Remove Photo",
+        "operationId": "remove_photo_api_v1_schools__school_id__persons__person_id__photo_delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "person_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Person Id"
+            }
+          },
+          {
+            "name": "school_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "School Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/schools/{school_id}/teachers": {
+      "get": {
+        "tags": [
+          "Pessoas, alunos e responsáveis"
+        ],
+        "summary": "List Teachers",
+        "operationId": "list_teachers_api_v1_schools__school_id__teachers_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "school_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "School Id"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 160,
+              "default": "",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 30,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Pessoas, alunos e responsáveis"
+        ],
+        "summary": "Create Teacher",
+        "operationId": "create_teacher_api_v1_schools__school_id__teachers_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "school_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "School Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeacherInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/schools/{school_id}/teachers/{teacher_id}": {
+      "patch": {
+        "tags": [
+          "Pessoas, alunos e responsáveis"
+        ],
+        "summary": "Update Teacher",
+        "operationId": "update_teacher_api_v1_schools__school_id__teachers__teacher_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "teacher_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Teacher Id"
+            }
+          },
+          {
+            "name": "school_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "School Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Edit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/schools/{school_id}/employees": {
+      "get": {
+        "tags": [
+          "Pessoas, alunos e responsáveis"
+        ],
+        "summary": "List Employees",
+        "operationId": "list_employees_api_v1_schools__school_id__employees_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "school_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "School Id"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 160,
+              "default": "",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 30,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Pessoas, alunos e responsáveis"
+        ],
+        "summary": "Create Employee",
+        "operationId": "create_employee_api_v1_schools__school_id__employees_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "school_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "School Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmployeeInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/schools/{school_id}/employees/{employee_id}": {
+      "patch": {
+        "tags": [
+          "Pessoas, alunos e responsáveis"
+        ],
+        "summary": "Update Employee",
+        "operationId": "update_employee_api_v1_schools__school_id__employees__employee_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "school_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "School Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Edit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/schools/{school_id}/students": {
       "get": {
         "tags": [
@@ -1849,6 +2357,68 @@
       }
     },
     "/api/v1/schools/{school_id}/students/{student_id}": {
+      "patch": {
+        "tags": [
+          "Pessoas, alunos e responsáveis"
+        ],
+        "summary": "Update Student",
+        "operationId": "update_student_api_v1_schools__school_id__students__student_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "student_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Student Id"
+            }
+          },
+          {
+            "name": "school_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "School Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Edit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "get": {
         "tags": [
           "Pessoas, alunos e responsáveis"
@@ -6437,6 +7007,192 @@
           }
         }
       }
+    },
+    "/api/v1/profile/context": {
+      "get": {
+        "tags": [
+          "Perfis e espaços de trabalho"
+        ],
+        "summary": "Profile Context",
+        "operationId": "profile_context_api_v1_profile_context_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/schools/{school_id}/teacher-assignments": {
+      "get": {
+        "tags": [
+          "Perfis e espaços de trabalho"
+        ],
+        "summary": "List Teacher Assignments",
+        "operationId": "list_teacher_assignments_api_v1_schools__school_id__teacher_assignments_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "school_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "School Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Perfis e espaços de trabalho"
+        ],
+        "summary": "Create Teacher Assignment",
+        "operationId": "create_teacher_assignment_api_v1_schools__school_id__teacher_assignments_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "school_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "School Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeacherAssignmentInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/schools/{school_id}/teacher-assignments/{assignment_id}": {
+      "patch": {
+        "tags": [
+          "Perfis e espaços de trabalho"
+        ],
+        "summary": "Update Teacher Assignment",
+        "operationId": "update_teacher_assignment_api_v1_schools__school_id__teacher_assignments__assignment_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "assignment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Assignment Id"
+            }
+          },
+          {
+            "name": "school_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "School Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Edit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -6718,6 +7474,20 @@
           "file"
         ],
         "title": "Body_upload_api_v1_schools__school_id__students__student_id__documents_post"
+      },
+      "Body_upload_photo_api_v1_schools__school_id__persons__person_id__photo_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_photo_api_v1_schools__school_id__persons__person_id__photo_post"
       },
       "CampaignEdit": {
         "properties": {
@@ -7238,6 +8008,118 @@
         ],
         "title": "Edit"
       },
+      "EmployeeInput": {
+        "properties": {
+          "employment_type": {
+            "type": "string",
+            "enum": [
+              "clt",
+              "public",
+              "temporary",
+              "substitute",
+              "intern",
+              "outsourced",
+              "other"
+            ],
+            "title": "Employment Type",
+            "default": "other"
+          },
+          "employment_status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "leave",
+              "inactive"
+            ],
+            "title": "Employment Status",
+            "default": "active"
+          },
+          "admission_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admission Date"
+          },
+          "termination_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Termination Date"
+          },
+          "employee_number": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Employee Number",
+            "default": ""
+          },
+          "department": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Department",
+            "default": ""
+          },
+          "job_title": {
+            "type": "string",
+            "maxLength": 160,
+            "title": "Job Title",
+            "default": ""
+          },
+          "work_schedule": {
+            "type": "string",
+            "maxLength": 160,
+            "title": "Work Schedule",
+            "default": ""
+          },
+          "supervisor_name": {
+            "type": "string",
+            "maxLength": 180,
+            "title": "Supervisor Name",
+            "default": ""
+          },
+          "profile_notes": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Profile Notes",
+            "default": ""
+          },
+          "person": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersonInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "EmployeeInput"
+      },
       "EnrollmentInput": {
         "properties": {
           "student_id": {
@@ -7263,6 +8145,41 @@
               }
             ],
             "title": "Financial Person Id"
+          },
+          "enrollment_type": {
+            "type": "string",
+            "enum": [
+              "new",
+              "renewal",
+              "transfer_in",
+              "returning"
+            ],
+            "title": "Enrollment Type",
+            "default": "new"
+          },
+          "origin_school": {
+            "type": "string",
+            "maxLength": 180,
+            "title": "Origin School",
+            "default": ""
+          },
+          "origin_city": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Origin City",
+            "default": ""
+          },
+          "entry_reason": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Entry Reason",
+            "default": ""
+          },
+          "external_reference": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "External Reference",
+            "default": ""
           },
           "notes": {
             "type": "string",
@@ -7596,9 +8513,209 @@
             "default": ""
           },
           "is_guardian": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Guardian"
+          },
+          "rg": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Rg",
+            "default": ""
+          },
+          "rg_issuer": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Rg Issuer",
+            "default": ""
+          },
+          "rg_state": {
+            "type": "string",
+            "maxLength": 2,
+            "title": "Rg State",
+            "default": ""
+          },
+          "rg_issued_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rg Issued On"
+          },
+          "birth_certificate": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Birth Certificate",
+            "default": ""
+          },
+          "birth_city": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Birth City",
+            "default": ""
+          },
+          "birth_state": {
+            "type": "string",
+            "maxLength": 2,
+            "title": "Birth State",
+            "default": ""
+          },
+          "nationality": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Nationality",
+            "default": ""
+          },
+          "sex": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Sex",
+            "default": ""
+          },
+          "gender": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Gender",
+            "default": ""
+          },
+          "race_color": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Race Color",
+            "default": ""
+          },
+          "marital_status": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Marital Status",
+            "default": ""
+          },
+          "mother_name": {
+            "type": "string",
+            "maxLength": 180,
+            "title": "Mother Name",
+            "default": ""
+          },
+          "father_name": {
+            "type": "string",
+            "maxLength": 180,
+            "title": "Father Name",
+            "default": ""
+          },
+          "phone_secondary": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Phone Secondary",
+            "default": ""
+          },
+          "postal_code": {
+            "type": "string",
+            "maxLength": 16,
+            "title": "Postal Code",
+            "default": ""
+          },
+          "street": {
+            "type": "string",
+            "maxLength": 180,
+            "title": "Street",
+            "default": ""
+          },
+          "address_number": {
+            "type": "string",
+            "maxLength": 24,
+            "title": "Address Number",
+            "default": ""
+          },
+          "address_complement": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Address Complement",
+            "default": ""
+          },
+          "district": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "District",
+            "default": ""
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "City",
+            "default": ""
+          },
+          "state": {
+            "type": "string",
+            "maxLength": 2,
+            "title": "State",
+            "default": ""
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Country",
+            "default": "Brasil"
+          },
+          "occupation": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Occupation",
+            "default": ""
+          },
+          "employer": {
+            "type": "string",
+            "maxLength": 180,
+            "title": "Employer",
+            "default": ""
+          },
+          "education": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Education",
+            "default": ""
+          },
+          "emergency_contact_name": {
+            "type": "string",
+            "maxLength": 180,
+            "title": "Emergency Contact Name",
+            "default": ""
+          },
+          "emergency_contact_phone": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Emergency Contact Phone",
+            "default": ""
+          },
+          "active": {
             "type": "boolean",
-            "title": "Is Guardian",
-            "default": false
+            "title": "Active",
+            "default": true
+          },
+          "person_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Types"
           }
         },
         "additionalProperties": false,
@@ -8136,6 +9253,66 @@
             "maxLength": 180,
             "title": "Previous School",
             "default": ""
+          },
+          "nis": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Nis",
+            "default": ""
+          },
+          "sus_card": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Sus Card",
+            "default": ""
+          },
+          "inep_code": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Inep Code",
+            "default": ""
+          },
+          "health_plan": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Health Plan",
+            "default": ""
+          },
+          "allergies": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Allergies",
+            "default": ""
+          },
+          "medications": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Medications",
+            "default": ""
+          },
+          "health_notes": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Health Notes",
+            "default": ""
+          },
+          "special_needs": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Special Needs",
+            "default": ""
+          },
+          "authorized_transport": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Authorized Transport",
+            "default": ""
+          },
+          "student_notes": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Student Notes",
+            "default": ""
           }
         },
         "additionalProperties": false,
@@ -8175,6 +9352,184 @@
         ],
         "title": "SubmitAdmission"
       },
+      "TeacherAssignmentInput": {
+        "properties": {
+          "teacher_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teacher User Id"
+          },
+          "teacher_person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teacher Person Id"
+          },
+          "class_group_id": {
+            "type": "string",
+            "title": "Class Group Id"
+          },
+          "subject_name": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Subject Name",
+            "default": ""
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "class_group_id"
+        ],
+        "title": "TeacherAssignmentInput"
+      },
+      "TeacherInput": {
+        "properties": {
+          "employment_type": {
+            "type": "string",
+            "enum": [
+              "clt",
+              "public",
+              "temporary",
+              "substitute",
+              "intern",
+              "outsourced",
+              "other"
+            ],
+            "title": "Employment Type",
+            "default": "other"
+          },
+          "employment_status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "leave",
+              "inactive"
+            ],
+            "title": "Employment Status",
+            "default": "active"
+          },
+          "admission_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admission Date"
+          },
+          "termination_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Termination Date"
+          },
+          "registration_number": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Registration Number",
+            "default": ""
+          },
+          "professional_registration": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Professional Registration",
+            "default": ""
+          },
+          "inep_code": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Inep Code",
+            "default": ""
+          },
+          "education_institution": {
+            "type": "string",
+            "maxLength": 180,
+            "title": "Education Institution",
+            "default": ""
+          },
+          "degree_course": {
+            "type": "string",
+            "maxLength": 180,
+            "title": "Degree Course",
+            "default": ""
+          },
+          "specialization": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Specialization",
+            "default": ""
+          },
+          "teaching_areas": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Teaching Areas",
+            "default": ""
+          },
+          "workload_hours": {
+            "type": "integer",
+            "maximum": 80.0,
+            "minimum": 0.0,
+            "title": "Workload Hours",
+            "default": 0
+          },
+          "profile_notes": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Profile Notes",
+            "default": ""
+          },
+          "person": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersonInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "TeacherInput"
+      },
       "UnitInput": {
         "properties": {
           "name": {
@@ -8208,7 +9563,12 @@
             "type": "string",
             "enum": [
               "admin",
+              "direction",
+              "coordination",
               "secretary",
+              "teacher",
+              "student",
+              "guardian",
               "viewer"
             ],
             "title": "Role"
@@ -8224,6 +9584,17 @@
             "type": "array",
             "maxItems": 100,
             "title": "School Ids"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
           },
           "version": {
             "type": "integer",
@@ -8264,7 +9635,12 @@
             "type": "string",
             "enum": [
               "admin",
+              "direction",
+              "coordination",
               "secretary",
+              "teacher",
+              "student",
+              "guardian",
               "viewer"
             ],
             "title": "Role",
@@ -8277,6 +9653,17 @@
             "type": "array",
             "maxItems": 100,
             "title": "School Ids"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
           }
         },
         "additionalProperties": false,
