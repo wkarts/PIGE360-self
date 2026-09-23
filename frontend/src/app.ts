@@ -55,7 +55,7 @@ namespace PigeUI {
     financial_responsible:'Responsável financeiro', legal_responsible:'Responsável legal',
     staff:'Equipe / administrativo', other:'Outro'
   };
-  function personTypeLabel(value:unknown):string { const code=text(value);return personTypeLabels[code]||code.replaceAll('_',' ').replace(/^./,letter=>letter.toUpperCase()); }
+  function personTypeLabel(value:unknown):string { const code=text(value);return personTypeLabels[code]||code.replace(/_/g,' ').replace(/^./,letter=>letter.toUpperCase()); }
   function personTypeOptions(extra:string[]=[]):Option[] {
     const codes=Array.from(new Set([...Object.keys(personTypeLabels),...extra]));
     return codes.map(value=>({value,label:personTypeLabel(value)}));
