@@ -6,7 +6,6 @@ from .security import Actor, DB, Scope, check_version, fail, lock_school, requir
 from .registry import validate
 from .config import settings
 from .documents import validate_upload, write_file
-from .security import ROLE_LABELS
 
 router = APIRouter(prefix='/api/v1/schools/{school_id}', tags=['Pessoas, alunos e responsáveis'])
 
