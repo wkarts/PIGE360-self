@@ -29,7 +29,11 @@ cleanup() {
   # Secrets gerados nunca são publicados junto aos logs.
   if [[ "$PROJECT" == pige360-ci-* ]]; then
     compose down --remove-orphans >/dev/null 2>&1 || true
-    rm -rf "$STACK_DIR/data-postgres" "$STACK_DIR/data-documents"
+    if command -v sudo >/dev/null 2>&1; then
+      sudo rm -rf -- "$STACK_DIR/data-postgres" "$STACK_DIR/data-documents"
+    else
+      rm -rf -- "$STACK_DIR/data-postgres" "$STACK_DIR/data-documents" || true
+    fi
   fi
   rm -f "$ENVFILE"
   exit "$code"

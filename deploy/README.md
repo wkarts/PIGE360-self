@@ -15,6 +15,8 @@ Cada adaptador possui o mesmo contrato, com `compose.yaml`, `.env.develop.exampl
 
 Os bancos e arquivos usam bind mounts relativos ao diretório da própria stack: `data-postgres/` e `data-documents/`. Assim, cada adaptador e ambiente mantém seus dados no diretório que foi instalado. Não existem volumes nomeados ocultos para o operador.
 
+O serviço interno `storage-init` executa uma vez como root apenas para criar `data-documents/` e entregar sua posse ao UID 10001 da aplicação. O app e o worker continuam executando sem root; PostgreSQL mantém o próprio ajuste de permissões do diretório de dados.
+
 ## Preparar um ambiente
 
 Execute a partir da raiz do checkout. O configurador cria segredos uma única vez e nunca sobrescreve um `.env` existente:
