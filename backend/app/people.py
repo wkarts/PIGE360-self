@@ -89,16 +89,13 @@ def person_output(db, obj):
     ).limit(1))
     explicit_types = active_person_types(db, obj.id)
     type_codes = explicit_types | derived_person_types(db, obj.id)
-    access_role_keys = set(db.scalars(select(m.User.role).where(
-        m.User.person_id == obj.id,
-        m.User.active.is_(True),
-    )).all())
-    role_keys = set(access_role_keys) | type_codes
+    # Tipos de Pessoa são exclusivamente cadastrais. Usuário, login e perfil
+    # de acesso pertencem a outro domínio e nunca entram nesta classificação.
     return {
         **output(obj),
-        'role_keys': sorted(role_keys),
-        'roles': [ROLE_LABELS.get(key, key) for key in sorted(role_keys)],
-        'access_role_keys': sorted(access_role_keys),
+        # Alias legado: representa somente tipos funcionais da Pessoa.
+        'role_keys': sorted(type_codes),
+        'roles': [person_type_label(key) for key in sorted(type_codes)],
         'person_types': sorted(type_codes),
         'person_type_labels': [person_type_label(key) for key in sorted(type_codes)],
         'student_id': student_id,
