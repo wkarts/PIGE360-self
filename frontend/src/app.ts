@@ -49,7 +49,19 @@ namespace PigeUI {
   function options(list: string): Option[] { return (state.catalogs[list]||[]).map(x=>({value:x.id,label:text(x.name)+(list==='class-groups'?' · '+getName('academic-years',x.academic_year_id)+' · '+getName('shifts',x.shift_id):'')})); }
   function field(key:string,caption:string,type='text',required=false,opts?:Option[],wide=false):Field { return {key,label:caption,type,required,options:opts,wide}; }
   const studentFieldKeys=['previous_school','nis','sus_card','inep_code','health_plan','allergies','medications','health_notes','special_needs','authorized_transport','student_notes'];
-  function personFields():Field[] { return [
+  const personTypeLabels: Record<string,string> = {
+    student:'Aluno', teacher:'Professor', collaborator:'Colaborador', employee:'Funcionário',
+    parent:'Pai / mãe', mother:'Mãe', father:'Pai', guardian:'Responsável',
+    financial_responsible:'Responsável financeiro', legal_responsible:'Responsável legal',
+    staff:'Equipe / administrativo', other:'Outro'
+  };
+  function personTypeLabel(value:unknown):string { const code=text(value);return personTypeLabels[code]||code.replaceAll('_',' ').replace(/^./,letter=>letter.toUpperCase()); }
+  function personTypeOptions(extra:string[]=[]):Option[] {
+    const codes=Array.from(new Set([...Object.keys(personTypeLabels),...extra]));
+    return codes.map(value=>({value,label:personTypeLabel(value)}));
+  }
+  function personFields(extraTypes:string[]=[]):Field[] { return [
+    field('person_types','Tipos de pessoa','multiselect',false,personTypeOptions(extraTypes),true),
     field('name','Nome completo','text',true),field('social_name','Nome social'),field('cpf','CPF'),field('birth_date','Data de nascimento','date'),
     field('birth_certificate','Certidão / registro de nascimento'),field('birth_city','Cidade de nascimento'),field('birth_state','UF de nascimento'),
     field('nationality','Nacionalidade'),field('sex','Sexo','select',false,[{value:'female',label:'Feminino'},{value:'male',label:'Masculino'},{value:'intersex',label:'Intersexo'},{value:'not_informed',label:'Não informado'}]),
@@ -166,20 +178,24 @@ namespace PigeUI {
     }catch(error){notify(error);}finally{state.loading=false;}
   }
   function openModal(kind:string,title:string,fields:Field[],values:PigeAPI.FormDataMap={},target:Row|null=null):void{
-    const form:PigeAPI.FormDataMap={};for(const f of fields)form[f.key]=values[f.key]??(f.type==='checkbox'?(f.key==='active'):f.type==='number'?30:'');
+    const form:PigeAPI.FormDataMap={};for(const f of fields)form[f.key]=values[f.key]??(f.type==='checkbox'?(f.key==='active'):f.type==='number'?30:f.type==='multiselect'?[]:'');
     state.modal={kind,title,fields,form,target,action:'',error:''};selectedFile=null;state.error='';
   }
   function closeModal():void{if(!state.busy)state.modal=blankModal();}
-  function valuesFrom(row:Row|PigeAPI.Person,fields:Field[]):PigeAPI.FormDataMap {const map:PigeAPI.FormDataMap={};for(const f of fields)map[f.key]=(row as unknown as Record<string,Value>)[f.key]??'';return map;}
-  function newPerson():void{openModal('person','Cadastrar pessoa',personFields(),{active:true});}
-  function newStudent():void{const fields=[...personFields(),...studentFields()];const birth=fields.find(f=>f.key==='birth_date');if(birth)birth.required=true;openModal('student','Cadastrar aluno',fields,{active:true});}
+  function valuesFrom(row:Row|PigeAPI.Person,fields:Field[]):PigeAPI.FormDataMap {const map:PigeAPI.FormDataMap={};for(const f of fields)map[f.key]=(row as unknown as Record<string,Value>)[f.key]??(f.type==='multiselect'?[]:'');return map;}
+  function personTypesFrom(row:unknown):string[]{const value=(row as {person_types?:unknown})?.person_types;return Array.isArray(value)?value.map(text):[];}
+  function newPerson():void{openModal('person','Cadastrar pessoa',personFields(),{active:true,person_types:[]});}
+  function newStudent(existing:Row|null=null):void{
+    if(existing){openModal('student-existing','Adicionar aluno à pessoa',studentFields(),{},existing);return;}
+    const fields=[...personFields(),...studentFields()];const birth=fields.find(f=>f.key==='birth_date');if(birth)birth.required=true;openModal('student','Cadastrar aluno',fields,{active:true,person_types:['student']});
+  }
   function editStudent():void{
     const student=state.selectedStudent;if(!student)return;
-    const personFieldsList=personFields(),fields=[...personFieldsList,...studentFields()];
-    openModal('student-edit','Editar cadastro completo do aluno',fields,{...valuesFrom(student.person,personFieldsList),...valuesFrom(student,studentFields()),is_guardian:student.person.is_guardian},student as unknown as Row);
+    const types=personTypesFrom(student.person),personFieldsList=personFields(types),fields=[...personFieldsList,...studentFields()];
+    openModal('student-edit','Editar cadastro completo do aluno',fields,{...valuesFrom(student.person,personFieldsList),...valuesFrom(student,studentFields()),is_guardian:student.person.is_guardian,person_types:types},student as unknown as Row);
   }
-  function newGuardian():void{openModal('guardian','Cadastrar responsável',personFields(),{active:true});}
-  function editPerson(row:Row):void{openModal('person','Editar cadastro da pessoa',personFields(),valuesFrom(row,personFields()),row);}
+  function newGuardian():void{openModal('guardian','Cadastrar responsável',personFields(),{active:true,person_types:['guardian']});}
+  function editPerson(row:Row):void{const types=personTypesFrom(row);openModal('person','Editar cadastro da pessoa',personFields(types),valuesFrom(row,personFields(types)),row);}
   function newCatalog(row:Row|null=null):void{const fields=catalogFields(state.catalog);const defaults:PigeAPI.FormDataMap={active:true,capacity:30,status:'active',level:'Educação básica'};openModal('catalog',(row?'Editar ':'Cadastrar ')+catalogLabels[state.catalog],fields,row?valuesFrom(row,fields):defaults,row);state.modal.action=state.catalog;}
   async function searchStudents(value=''):Promise<void>{
     const data=await PigeAPI.request<PigeAPI.Page<Student>>(base()+'/students?page_size=100&q='+encodeURIComponent(value));state.studentChoices=data.items;
@@ -265,18 +281,27 @@ namespace PigeUI {
     const modal=state.modal,form={...modal.form},target=modal.target,studentId=state.selectedStudent?.id;let createdStudent:Student|null=null;let savedPersonId='';
     try{
       const photo=selectedFile;delete form.photo;
-      if(modal.kind==='student'){
+      if(modal.kind==='student-existing'){
+        const studentData:{[key:string]:Value}={};for(const key of studentFieldKeys){studentData[key]=form[key]??'';}
+        createdStudent=await PigeAPI.post<Student>(base()+'/students',{person_id:target!.id,...studentData});
+        savedPersonId=target!.id;
+      }else if(modal.kind==='student'){
         const studentData:{[key:string]:Value}={};for(const key of studentFieldKeys){studentData[key]=form[key]??'';delete form[key];}
-        const previous=text(studentData.previous_school);createdStudent=await PigeAPI.post<Student>(base()+'/students',{person:{...form,cpf:form.cpf||null,birth_date:form.birth_date||null,rg_issued_on:form.rg_issued_on||null,is_guardian:false},previous_school:previous,...studentData});
+        const types=Array.isArray(form.person_types)?form.person_types.map(text):[];
+        const person={...form,person_types:Array.from(new Set([...types,'student'])),cpf:form.cpf||null,birth_date:form.birth_date||null,rg_issued_on:form.rg_issued_on||null,is_guardian:false};
+        const previous=text(studentData.previous_school);createdStudent=await PigeAPI.post<Student>(base()+'/students',{person,previous_school:previous,...studentData});
         savedPersonId=createdStudent.person.id;
       }else if(modal.kind==='student-edit'){
         const studentData:{[key:string]:Value}={};for(const key of studentFieldKeys){studentData[key]=form[key]??'';delete form[key];}
         const personTarget=(target as unknown as Student).person;
-        await PigeAPI.patch(base()+'/persons/'+personTarget.id,{version:personTarget.version,data:{...form,cpf:form.cpf||null,birth_date:form.birth_date||null,rg_issued_on:form.rg_issued_on||null,is_guardian:Boolean(personTarget.is_guardian)}});
+        const types=Array.isArray(form.person_types)?form.person_types.map(text):[];
+        await PigeAPI.patch(base()+'/persons/'+personTarget.id,{version:personTarget.version,data:{...form,person_types:Array.from(new Set([...types,'student'])),cpf:form.cpf||null,birth_date:form.birth_date||null,rg_issued_on:form.rg_issued_on||null,is_guardian:Boolean(personTarget.is_guardian)}});
         await PigeAPI.patch(base()+'/students/'+target!.id,{version:target!.version,data:studentData});
         savedPersonId=personTarget.id;
       }else if(modal.kind==='guardian'||modal.kind==='person'){
-        const data={...form,cpf:form.cpf||null,birth_date:form.birth_date||null,rg_issued_on:form.rg_issued_on||null,is_guardian:modal.kind==='guardian'?true:Boolean(target?.is_guardian)};
+        const types=Array.isArray(form.person_types)?form.person_types.map(text):[];
+        if(modal.kind==='guardian')types.push('guardian');
+        const data={...form,person_types:Array.from(new Set(types)),cpf:form.cpf||null,birth_date:form.birth_date||null,rg_issued_on:form.rg_issued_on||null,is_guardian:modal.kind==='guardian'?true:Boolean(target?.is_guardian)};
         if(target){await PigeAPI.patch(base()+'/persons/'+target.id,{version:target.version,data});savedPersonId=target.id;}else{const created=await PigeAPI.post<PigeAPI.Person>(base()+'/persons',data);savedPersonId=created.id;}
       }
       if(photo&&savedPersonId){
