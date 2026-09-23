@@ -15,7 +15,7 @@ class PersonInput(Input):
     phone: str = Field(default='', max_length=32)
     address: str = Field(default='', max_length=400)
     notes: str = Field(default='', max_length=4000)
-    is_guardian: bool = False
+    is_guardian: bool | None = None
     rg: str = Field(default='', max_length=40)
     rg_issuer: str = Field(default='', max_length=80)
     rg_state: str = Field(default='', max_length=2)
