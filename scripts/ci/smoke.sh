@@ -2,6 +2,7 @@
 # Apenas um projeto descartável pige360-ci-*. Nunca usa os volumes da instalação.
 set -Eeuo pipefail
 cd "$(dirname "$0")/../.."
+STACK_DIR="deploy/docker"
 IMAGE="${1:?Informe a imagem}"
 MODE="${2:-remote}"
 [[ "$MODE" == remote || "$MODE" == local ]]
@@ -20,13 +21,16 @@ values={'APP_SECRET_KEY':secrets.token_urlsafe(48),'SETUP_TOKEN':secrets.token_u
 with open(sys.argv[1],'w') as f:f.writelines(f'{k}={v}\n' for k,v in values.items())
 os.chmod(sys.argv[1],0o600)
 PYCONF
-compose() { docker compose --env-file "$ENVFILE" -p "$PROJECT" -f deploy/compose.yaml "$@"; }
+compose() { docker compose --env-file "$ENVFILE" -p "$PROJECT" -f "$STACK_DIR/compose.yaml" "$@"; }
 cleanup() {
   code=$?
   compose ps --all > ci-evidence/docker-ps.txt 2>&1 || true
   compose logs --no-color --tail=150 > ci-evidence/docker-smoke.log 2>&1 || true
   # Secrets gerados nunca são publicados junto aos logs.
-  if [[ "$PROJECT" == pige360-ci-* ]]; then compose down --volumes --remove-orphans >/dev/null 2>&1 || true; fi
+  if [[ "$PROJECT" == pige360-ci-* ]]; then
+    compose down --remove-orphans >/dev/null 2>&1 || true
+    rm -rf "$STACK_DIR/data-postgres" "$STACK_DIR/data-documents"
+  fi
   rm -f "$ENVFILE"
   exit "$code"
 }

@@ -87,8 +87,8 @@ jobs:
           PYTHON_BASE_IMAGE: ${{ inputs.python_ref || 'ghcr.io/wkarts/pige360-self-base-python:3.13-slim' }}
           POSTGRES_IMAGE: ${{ inputs.postgres_ref || 'ghcr.io/wkarts/pige360-self-postgres:17-bookworm' }}
         run: |
-          python scripts/configure.py
-          docker compose config --quiet
+          python scripts/configure.py --env-file deploy/docker/.env.ci
+          docker compose --env-file deploy/docker/.env.ci -f deploy/docker/compose.yaml config --quiet
           docker build --build-arg SOURCE_REVISION="$GITHUB_SHA" \
             --build-arg NODE_BASE_IMAGE="$NODE_BASE_IMAGE" \
             --build-arg PYTHON_BASE_IMAGE="$PYTHON_BASE_IMAGE" \

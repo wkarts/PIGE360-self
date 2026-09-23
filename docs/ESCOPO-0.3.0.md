@@ -3,6 +3,9 @@
 | Área | Situação |
 |---|---|
 | Secretaria interna 0.2 | Preservada: cadastros, responsáveis, estrutura acadêmica, matrículas/rematrículas, movimentações, documentação, protocolos, relatórios e auditoria |
+| Cadastro único operacional | Expandido: Pessoa central com visões próprias de Aluno, Professor, Funcionário e Responsável; uma mesma pessoa pode acumular tipos e perfis profissionais |
+| Professor e funcionário | Formulários completos com dados pessoais, foto privada, matrícula funcional, vínculo, situação, datas e dados profissionais/funcionais |
+| Deploy self-hosted | Compose image-only separado em Docker, Dockge, Portainer e CloudPanel, cada um com exemplos develop/production, bind mounts relativos e uma única porta pública |
 | Template original | Removido da distribuição e da árvore da aplicação |
 | Portal dos responsáveis | Implementado: conta própria, acesso, recuperação, perfil e múltiplas inscrições |
 | Pré-matrícula online | Implementada: processo, ofertas, rascunho, documentos, termos e envio |

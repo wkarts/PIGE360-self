@@ -132,6 +132,68 @@ class StudentInput(Input):
             raise ValueError('Informe uma pessoa existente ou os dados pessoais.')
         return self
 
+
+class EmploymentData(Input):
+    employment_type: Literal['clt', 'public', 'temporary', 'substitute', 'intern', 'outsourced', 'other'] = 'other'
+    employment_status: Literal['active', 'leave', 'inactive'] = 'active'
+    admission_date: date | None = None
+    termination_date: date | None = None
+
+    @field_validator('admission_date', 'termination_date', mode='before')
+    @classmethod
+    def blank_employment_date(cls, value):
+        return None if value in ('', None) else value
+
+    @model_validator(mode='after')
+    def employment_dates_are_ordered(self):
+        if self.admission_date and self.termination_date and self.termination_date < self.admission_date:
+            raise ValueError('A data de desligamento não pode ser anterior à admissão.')
+        return self
+
+
+class TeacherData(EmploymentData):
+    registration_number: str = Field(default='', max_length=40)
+    professional_registration: str = Field(default='', max_length=80)
+    inep_code: str = Field(default='', max_length=32)
+    education_institution: str = Field(default='', max_length=180)
+    degree_course: str = Field(default='', max_length=180)
+    specialization: str = Field(default='', max_length=4000)
+    teaching_areas: str = Field(default='', max_length=4000)
+    workload_hours: int = Field(default=0, ge=0, le=80)
+    profile_notes: str = Field(default='', max_length=4000)
+
+
+class TeacherInput(TeacherData):
+    person: PersonInput | None = None
+    person_id: str | None = None
+
+    @model_validator(mode='after')
+    def one_person(self):
+        if bool(self.person) == bool(self.person_id):
+            raise ValueError('Informe uma pessoa existente ou os dados pessoais.')
+        return self
+
+
+class EmployeeData(EmploymentData):
+    employee_number: str = Field(default='', max_length=40)
+    department: str = Field(default='', max_length=120)
+    job_title: str = Field(default='', max_length=160)
+    work_schedule: str = Field(default='', max_length=160)
+    supervisor_name: str = Field(default='', max_length=180)
+    profile_notes: str = Field(default='', max_length=4000)
+
+
+class EmployeeInput(EmployeeData):
+    person: PersonInput | None = None
+    person_id: str | None = None
+
+    @model_validator(mode='after')
+    def one_person(self):
+        if bool(self.person) == bool(self.person_id):
+            raise ValueError('Informe uma pessoa existente ou os dados pessoais.')
+        return self
+
+
 class GuardianInput(Input):
     person_id: str
     relationship: str = Field(default='Responsável', min_length=2, max_length=60)
@@ -276,10 +338,17 @@ class PasswordChange(Input):
 
 
 class TeacherAssignmentInput(Input):
-    teacher_user_id: str
+    teacher_user_id: str | None = None
+    teacher_person_id: str | None = None
     class_group_id: str
     subject_name: str = Field(default='', max_length=120)
     active: bool = True
+
+    @model_validator(mode='after')
+    def one_teacher_reference(self):
+        if not self.teacher_user_id and not self.teacher_person_id:
+            raise ValueError('Informe o usuário de acesso ou a pessoa docente.')
+        return self
 
 
 class DraftEnrollmentEdit(Input):

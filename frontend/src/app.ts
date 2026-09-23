@@ -6,9 +6,9 @@ namespace PigeUI {
   interface Field { key: string; label: string; type: string; required?: boolean; options?: Option[]; wide?: boolean; help?: string }
   interface Modal { kind: string; title: string; fields: Field[]; form: PigeAPI.FormDataMap; target: Row | null; action: string; error: string }
   const text = (value: unknown): string => value === null || value === undefined ? '' : String(value);
-  const statusLabels: Record<string,string> = {active:'Ativo', archived:'Arquivado', draft:'Rascunho', suspended:'Suspenso', transferred:'Transferido', cancelled:'Cancelado', completed:'Concluído', pending:'Pendente', received:'Recebido', validated:'Validado', rejected:'Rejeitado', expired:'Vencido', waived:'Dispensado', open:'Aberto', in_progress:'Em atendimento', waiting:'Aguardando', closed:'Fechado', admin:'Administrador', direction:'Direção', coordination:'Coordenação', secretary:'Secretaria', teacher:'Professor', student:'Aluno', guardian:'Responsável', viewer:'Consulta'};
+  const statusLabels: Record<string,string> = {active:'Ativo', archived:'Arquivado', draft:'Rascunho', suspended:'Suspenso', transferred:'Transferido', cancelled:'Cancelado', completed:'Concluído', pending:'Pendente', received:'Recebido', validated:'Validado', rejected:'Rejeitado', expired:'Vencido', waived:'Dispensado', open:'Aberto', in_progress:'Em atendimento', waiting:'Aguardando', closed:'Fechado', admin:'Administrador', direction:'Direção', coordination:'Coordenação', secretary:'Secretaria', teacher:'Professor', student:'Aluno', guardian:'Responsável', viewer:'Consulta', leave:'Afastado', inactive:'Inativo', clt:'CLT', public:'Serviço público', temporary:'Temporário', substitute:'Substituto', intern:'Estágio', outsourced:'Terceirizado', other:'Outro'};
   const catalogLabels: Record<string,string> = {'units':'Unidades','academic-years':'Anos letivos','grades':'Séries e etapas','shifts':'Turnos','class-groups':'Turmas','document-types':'Tipos de documento'};
-  const pageLabels: Record<string,string> = {online:'Inscrições online',banking:'Cobranças',integrations:'Integrações',dashboard:'Visão geral',people:'Cadastro único',students:'Alunos',guardians:'Responsáveis',academic:'Estrutura acadêmica',enrollments:'Matrículas',documents:'Pendências documentais',protocols:'Protocolos',reports:'Relatórios',settings:'Instituição',users:'Usuários e acessos',audit:'Auditoria'};
+  const pageLabels: Record<string,string> = {online:'Inscrições online',banking:'Cobranças',integrations:'Integrações',dashboard:'Visão geral',people:'Cadastro único',students:'Alunos',teachers:'Professores',employees:'Funcionários',guardians:'Responsáveis',academic:'Estrutura acadêmica',enrollments:'Matrículas',documents:'Pendências documentais',protocols:'Protocolos',reports:'Relatórios',settings:'Instituição',users:'Usuários e acessos',audit:'Auditoria'};
   const blankModal = (): Modal => ({kind:'',title:'',fields:[],form:{},target:null,action:'',error:''});
   const state = Vue.reactive({
     ready:false, configured:true, online:navigator.onLine, loginBusy:false, busy:false, loading:false,
@@ -79,6 +79,24 @@ namespace PigeUI {
     field('health_plan','Plano de saúde'),field('allergies','Alergias','textarea',false,undefined,true),field('medications','Medicamentos de uso contínuo','textarea',false,undefined,true),
     field('health_notes','Informações de saúde','textarea',false,undefined,true),field('special_needs','Necessidades específicas','textarea',false,undefined,true),
     field('authorized_transport','Transporte autorizado'),field('student_notes','Observações pedagógicas / administrativas','textarea',false,undefined,true)
+  ]; }
+  const employmentTypes:Option[] = [{value:'clt',label:'CLT'},{value:'public',label:'Serviço público'},{value:'temporary',label:'Temporário'},{value:'substitute',label:'Substituto'},{value:'intern',label:'Estágio'},{value:'outsourced',label:'Terceirizado'},{value:'other',label:'Outro'}];
+  const employmentStatuses:Option[] = [{value:'active',label:'Ativo'},{value:'leave',label:'Afastado'},{value:'inactive',label:'Inativo'}];
+  const teacherProfileKeys=['registration_number','professional_registration','employment_type','employment_status','admission_date','termination_date','inep_code','education_institution','degree_course','specialization','teaching_areas','workload_hours','profile_notes'];
+  const employeeProfileKeys=['employee_number','employment_type','employment_status','admission_date','termination_date','department','job_title','work_schedule','supervisor_name','profile_notes'];
+  function teacherFields():Field[] { return [
+    field('registration_number','Matrícula funcional'),field('professional_registration','Registro profissional / conselho'),
+    field('employment_type','Vínculo de trabalho','select',true,employmentTypes),field('employment_status','Situação funcional','select',true,employmentStatuses),
+    field('admission_date','Data de admissão','date'),field('termination_date','Data de desligamento','date'),field('inep_code','Código INEP do docente'),
+    field('education_institution','Instituição de formação'),field('degree_course','Curso / licenciatura'),field('specialization','Especializações / pós-graduação','textarea',false,undefined,true),
+    field('teaching_areas','Áreas, componentes e etapas de atuação','textarea',false,undefined,true),field('workload_hours','Carga horária semanal','number'),
+    field('profile_notes','Observações funcionais','textarea',false,undefined,true)
+  ]; }
+  function employeeFields():Field[] { return [
+    field('employee_number','Matrícula funcional'),field('employment_type','Vínculo de trabalho','select',true,employmentTypes),
+    field('employment_status','Situação funcional','select',true,employmentStatuses),field('admission_date','Data de admissão','date'),field('termination_date','Data de desligamento','date'),
+    field('department','Setor / departamento'),field('job_title','Cargo / função'),field('work_schedule','Jornada / horário de trabalho'),field('supervisor_name','Gestor / responsável'),
+    field('profile_notes','Observações funcionais','textarea',false,undefined,true)
   ]; }
   function photoFileId(row:unknown):string { return text((row as {photo_file_id?:unknown})?.photo_file_id); }
   async function hydratePhoto(row:unknown):Promise<void> {
@@ -162,7 +180,7 @@ namespace PigeUI {
         const resource=['guardians','people'].includes(state.page)?'persons':state.page;
         const suffix=state.page==='guardians'?'&guardians_only=true':'';
         const data=await PigeAPI.request<PigeAPI.Page<Row>>(base()+'/'+resource+'?'+query+suffix);
-        if(current===sequence&&sid===state.schoolId){state.rows=data.items;state.total=data.total;void hydratePhotos(state.page==='students'?data.items.map(x=>(x as {person?:unknown}).person):data.items);}
+        if(current===sequence&&sid===state.schoolId){state.rows=data.items;state.total=data.total;const photoRows=['students','teachers','employees'].includes(state.page)?data.items.map(x=>(x as {person?:unknown}).person):data.items;void hydratePhotos(photoRows);}
       }
     }finally{if(current===sequence)state.loading=false;}
   }
@@ -195,6 +213,22 @@ namespace PigeUI {
     openModal('student-edit','Editar cadastro completo do aluno',fields,{...valuesFrom(student.person,personFieldsList),...valuesFrom(student,studentFields()),is_guardian:student.person.is_guardian,person_types:types},student as unknown as Row);
   }
   function newGuardian():void{openModal('guardian','Cadastrar responsável',personFields(),{active:true,person_types:['guardian']});}
+  function newTeacher(existing:Row|null=null):void{
+    if(existing){openModal('teacher-existing','Adicionar professor à pessoa',teacherFields(),{employment_type:'other',employment_status:'active',workload_hours:0},existing);return;}
+    openModal('teacher','Cadastrar professor',[...personFields(['teacher']),...teacherFields()],{active:true,person_types:['teacher'],employment_type:'other',employment_status:'active',workload_hours:0});
+  }
+  function editTeacher(row:Row):void{
+    const person=(row as unknown as {person:PigeAPI.Person}).person,personList=personFields(personTypesFrom(person)),profileFields=teacherFields();
+    openModal('teacher-edit','Editar cadastro do professor',profileFields.concat(personList),{...valuesFrom(person,personList),...valuesFrom(row,profileFields),person_types:personTypesFrom(person),is_guardian:person.is_guardian},row);
+  }
+  function newEmployee(existing:Row|null=null):void{
+    if(existing){openModal('employee-existing','Adicionar funcionário à pessoa',employeeFields(),{employment_type:'other',employment_status:'active'},existing);return;}
+    openModal('employee','Cadastrar funcionário',[...personFields(['employee']),...employeeFields()],{active:true,person_types:['employee'],employment_type:'other',employment_status:'active'});
+  }
+  function editEmployee(row:Row):void{
+    const person=(row as unknown as {person:PigeAPI.Person}).person,personList=personFields(personTypesFrom(person)),profileFields=employeeFields();
+    openModal('employee-edit','Editar cadastro do funcionário',profileFields.concat(personList),{...valuesFrom(person,personList),...valuesFrom(row,profileFields),person_types:personTypesFrom(person),is_guardian:person.is_guardian},row);
+  }
   function editPerson(row:Row):void{const types=personTypesFrom(row);openModal('person','Editar cadastro da pessoa',personFields(types),valuesFrom(row,personFields(types)),row);}
   function newCatalog(row:Row|null=null):void{const fields=catalogFields(state.catalog);const defaults:PigeAPI.FormDataMap={active:true,capacity:30,status:'active',level:'Educação básica'};openModal('catalog',(row?'Editar ':'Cadastrar ')+catalogLabels[state.catalog],fields,row?valuesFrom(row,fields):defaults,row);state.modal.action=state.catalog;}
   async function searchStudents(value=''):Promise<void>{
@@ -298,6 +332,24 @@ namespace PigeUI {
         await PigeAPI.patch(base()+'/persons/'+personTarget.id,{version:personTarget.version,data:{...form,person_types:Array.from(new Set([...types,'student'])),cpf:form.cpf||null,birth_date:form.birth_date||null,rg_issued_on:form.rg_issued_on||null,is_guardian:Boolean(personTarget.is_guardian)}});
         await PigeAPI.patch(base()+'/students/'+target!.id,{version:target!.version,data:studentData});
         savedPersonId=personTarget.id;
+      }else if(['teacher','teacher-existing','teacher-edit','employee','employee-existing','employee-edit'].includes(modal.kind)){
+        const isTeacher=modal.kind.startsWith('teacher'), profileKeys=isTeacher?teacherProfileKeys:employeeProfileKeys;
+        const profileData:{[key:string]:Value}={};for(const key of profileKeys){profileData[key]=form[key]??(key==='workload_hours'?0:'');delete form[key];}
+        if(modal.kind.endsWith('-existing')){
+          await PigeAPI.post<Row>(base()+'/'+(isTeacher?'teachers':'employees'),{person_id:target!.id,...profileData});
+          savedPersonId=target!.id;
+        }else if(modal.kind.endsWith('-edit')){
+          const personTarget=(target as unknown as {person:PigeAPI.Person}).person;
+          const types=Array.isArray(form.person_types)?form.person_types.map(text):[];
+          await PigeAPI.patch(base()+'/persons/'+personTarget.id,{version:personTarget.version,data:{...form,person_types:Array.from(new Set([...types,isTeacher?'teacher':'employee'])),cpf:form.cpf||null,birth_date:form.birth_date||null,rg_issued_on:form.rg_issued_on||null,is_guardian:Boolean(personTarget.is_guardian)}});
+          await PigeAPI.patch(base()+'/'+(isTeacher?'teachers':'employees')+'/'+target!.id,{version:target!.version,data:profileData});
+          savedPersonId=personTarget.id;
+        }else{
+          const types=Array.isArray(form.person_types)?form.person_types.map(text):[];
+          const person={...form,person_types:Array.from(new Set([...types,isTeacher?'teacher':'employee'])),cpf:form.cpf||null,birth_date:form.birth_date||null,rg_issued_on:form.rg_issued_on||null,is_guardian:false};
+          const created=await PigeAPI.post<Row>(base()+'/'+(isTeacher?'teachers':'employees'),{person,...profileData});
+          savedPersonId=text((created.person as {id?:unknown})?.id);
+        }
       }else if(modal.kind==='guardian'||modal.kind==='person'){
         const types=Array.isArray(form.person_types)?form.person_types.map(text):[];
         if(modal.kind==='guardian')types.push('guardian');
@@ -373,5 +425,5 @@ namespace PigeUI {
     }
     window.addEventListener('keydown',(event)=>{if(event.key==='Escape')closeModal();});
   }
-  Vue.createApp({components:{'expansion-panel':PigeExpansion.component},render:PigeRenders.app,setup(){Vue.onMounted(()=>{setupPWA();void initialize();});return{state,text,can,isProfileRole,school,label,date,cpf,initials,photoSrc,getName,options,pageLabels,catalogLabels,configure,login,logout,navigate,changeSchool,setCatalog,search,page,loadPage,viewStudent,newStudent,editStudent,newGuardian,editPerson,newCatalog,newEnrollment,viewEnrollment,startMovement,reenroll,newLink,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,newUser,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,protocolReceipt,exportPendencies,install,updateApp};}}).mount('#app');
+  Vue.createApp({components:{'expansion-panel':PigeExpansion.component},render:PigeRenders.app,setup(){Vue.onMounted(()=>{setupPWA();void initialize();});return{state,text,can,isProfileRole,school,label,date,cpf,initials,photoSrc,getName,options,pageLabels,catalogLabels,configure,login,logout,navigate,changeSchool,setCatalog,search,page,loadPage,viewStudent,newStudent,editStudent,newGuardian,newTeacher,editTeacher,newEmployee,editEmployee,editPerson,newCatalog,newEnrollment,viewEnrollment,startMovement,reenroll,newLink,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,newUser,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,protocolReceipt,exportPendencies,install,updateApp};}}).mount('#app');
 }

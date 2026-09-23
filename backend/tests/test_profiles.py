@@ -47,6 +47,24 @@ def test_teacher_context_is_limited_to_assigned_class(client, admin, api, school
     assert body['assignments'][0]['students'][0]['number'] == student['number']
 
 
+def test_teacher_assignment_can_target_person_without_login(client, admin, api, school):
+    catalog = api.catalogs()
+    teacher = api.post('/teachers', {
+        'person': {'name': 'Docente sem acesso', 'birth_date': '1980-01-01'},
+        'registration_number': 'DOC-SEM-LOGIN',
+        'employment_type': 'temporary',
+    })
+    assignment = client.post(
+        '/api/v1/schools/' + school['id'] + '/teacher-assignments',
+        headers=admin,
+        json={'teacher_person_id': teacher['person']['id'],
+              'class_group_id': catalog['group']['id'], 'subject_name': 'Artes'},
+    )
+    assert assignment.status_code == 201, assignment.text
+    assert assignment.json()['teacher_person_id'] == teacher['person']['id']
+    assert assignment.json()['teacher_user_id'] is None
+
+
 def test_student_and_guardian_context_do_not_expose_admin_dashboard(client, admin, api, school):
     catalog = api.catalogs()
     student = api.student(name='Aluno do Portal')

@@ -1,0 +1,105 @@
+name: ${COMPOSE_PROJECT_NAME:-pige360-self}
+services:
+  db:
+    image: ${POSTGRES_IMAGE:-ghcr.io/wkarts/pige360-self-postgres:17-bookworm}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pige360}
+      POSTGRES_USER: ${POSTGRES_USER:-pige360}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo de ambiente}
+    volumes:
+      - ./data-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  app:
+    image: ${APP_IMAGE:-ghcr.io/wkarts/pige360-self:latest}
+    pull_policy: ${APP_PULL_POLICY:-always}
+    init: true
+    environment: &application_environment
+      APP_ENV: ${APP_ENV:-production}
+      APP_URL: ${APP_URL:-http://localhost:58080}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:?Defina APP_SECRET_KEY no arquivo de ambiente}
+      SETUP_TOKEN: ${SETUP_TOKEN:?Defina SETUP_TOKEN no arquivo de ambiente}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-pige360}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-pige360}
+      STORAGE_PATH: /data/documents
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-pige360-documents}
+      STORAGE_ENDPOINT_URL: ${STORAGE_ENDPOINT_URL:-}
+      STORAGE_REGION: ${STORAGE_REGION:-us-east-1}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-}
+      STORAGE_USE_SSL: ${STORAGE_USE_SSL:-true}
+      STORAGE_AUTO_CREATE_BUCKET: ${STORAGE_AUTO_CREATE_BUCKET:-true}
+      STORAGE_FORCE_PATH_STYLE: ${STORAGE_FORCE_PATH_STYLE:-true}
+      FRONTEND_PATH: /app/frontend/dist
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
+      MAX_PHOTO_MB: ${MAX_PHOTO_MB:-5}
+      ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-15}
+      REFRESH_TOKEN_DAYS: ${REFRESH_TOKEN_DAYS:-7}
+      TZ: ${TZ:-America/Bahia}
+      INTEGRATION_ENCRYPTION_KEY: ${INTEGRATION_ENCRYPTION_KEY:-}
+      INTEGRATION_TIMEOUT_SECONDS: ${INTEGRATION_TIMEOUT_SECONDS:-15}
+      CONNECT_ALLOWED_HOSTS: ${CONNECT_ALLOWED_HOSTS:-}
+      CONNECT_ALLOW_PRIVATE: ${CONNECT_ALLOW_PRIVATE:-false}
+      PORTAL_SESSION_HOURS: ${PORTAL_SESSION_HOURS:-12}
+      PORTAL_MAX_FILES: ${PORTAL_MAX_FILES:-20}
+      PORTAL_MAX_STORAGE_MB: ${PORTAL_MAX_STORAGE_MB:-50}
+      WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-5}
+      BANK_RECONCILE_INTERVAL_SECONDS: ${BANK_RECONCILE_INTERVAL_SECONDS:-900}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+    ports:
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-58080}:8000"
+    volumes:
+      - ./data-documents:/data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)\""]
+      interval: 10s
+      timeout: 8s
+      start_period: 40s
+      retries: 12
+    depends_on:
+      db: {condition: service_healthy}
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  worker:
+    image: ${APP_IMAGE:-ghcr.io/wkarts/pige360-self:latest}
+    pull_policy: ${APP_PULL_POLICY:-always}
+    command: ["worker"]
+    init: true
+    environment: *application_environment
+    volumes:
+      - ./data-documents:/data
+    depends_on:
+      app: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.integration_worker", "--health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}

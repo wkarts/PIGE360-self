@@ -42,6 +42,14 @@ def derived_person_types(db, person_id):
         m.GuardianLink.active.is_(True),
     ).limit(1)):
         result.add('guardian')
+    if db.scalar(select(m.TeacherProfile.id).where(
+        m.TeacherProfile.person_id == person_id,
+    ).limit(1)):
+        result.add('teacher')
+    if db.scalar(select(m.EmployeeProfile.id).where(
+        m.EmployeeProfile.person_id == person_id,
+    ).limit(1)):
+        result.add('employee')
     return result
 
 
@@ -104,6 +112,46 @@ def person_output(db, obj):
 
 def student_output(db, obj):
     return {**output(obj), 'person': person_output(db, db.get(m.Person, obj.person_id))}
+
+
+def teacher_output(db, obj):
+    return {**output(obj), 'person': person_output(db, db.get(m.Person, obj.person_id))}
+
+
+def employee_output(db, obj):
+    return {**output(obj), 'person': person_output(db, db.get(m.Person, obj.person_id))}
+
+
+def _person_for_profile(db, school, person_id, person_data, type_code):
+    if person_id:
+        person = scoped(db, m.Person, person_id, school.id)
+    else:
+        values = person_data.model_dump(exclude={'person_types'})
+        values['is_guardian'] = bool(values.get('is_guardian'))
+        person = m.Person(school_id=school.id, **values)
+        db.add(person)
+        db.flush()
+    ensure_person_type(db, person, type_code)
+    return person
+
+
+def _profile_list(db, school, model, output_fn, q, page, page_size, search_fields):
+    stmt = select(model).join(m.Person, model.person_id == m.Person.id).where(
+        model.school_id == school.id,
+    )
+    if q:
+        like = '%' + q.replace('%', r'\%').replace('_', r'\_') + '%'
+        stmt = stmt.where(or_(*[
+            field.ilike(like, escape='\\') for field in search_fields
+        ]))
+    total = db.scalar(select(func.count()).select_from(stmt.subquery()))
+    rows = db.scalars(stmt.order_by(m.Person.name).offset((page - 1) * page_size).limit(page_size)).all()
+    return {
+        'items': [output_fn(db, row) for row in rows],
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+    }
 
 
 @router.get('/persons')
@@ -221,6 +269,102 @@ def remove_photo(person_id: str, db: DB, user: Actor, school: Scope, request: Re
     db.flush()
     audit(db, request, user, 'person.photo_removed', person, school.id, {'file_id': previous})
     return person_output(db, person)
+
+
+@router.get('/teachers')
+def list_teachers(
+    db: DB,
+    user: Actor,
+    school: Scope,
+    q: str = Query(default='', max_length=160),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(30, ge=1, le=100),
+):
+    return _profile_list(
+        db, school, m.TeacherProfile, teacher_output, q, page, page_size,
+        [m.Person.name, m.Person.social_name, m.Person.cpf, m.Person.phone,
+         m.Person.email, m.TeacherProfile.registration_number,
+         m.TeacherProfile.professional_registration],
+    )
+
+
+@router.post('/teachers', status_code=201)
+def create_teacher(data: s.TeacherInput, db: DB, user: Actor, school: Scope, request: Request):
+    require(user, 'people.write')
+    lock_school(db, school.id)
+    person = _person_for_profile(db, school, data.person_id, data.person, 'teacher')
+    if db.scalar(select(m.TeacherProfile.id).where(m.TeacherProfile.person_id == person.id).limit(1)):
+        fail(409, 'A pessoa já possui cadastro de Professor nesta escola.')
+    values = data.model_dump(exclude={'person', 'person_id'})
+    obj = m.TeacherProfile(school_id=school.id, person_id=person.id, **values)
+    db.add(obj)
+    db.flush()
+    audit(db, request, user, 'teacher.created', obj, school.id, {'person_id': person.id})
+    return teacher_output(db, obj)
+
+
+@router.patch('/teachers/{teacher_id}')
+def update_teacher(teacher_id: str, data: s.Edit, db: DB, user: Actor, school: Scope, request: Request):
+    require(user, 'people.write')
+    lock_school(db, school.id)
+    obj = scoped(db, m.TeacherProfile, teacher_id, school.id)
+    check_version(obj, data.version)
+    values = validate(s.TeacherData, data.data).model_dump()
+    before = teacher_output(db, obj)
+    for key, value in values.items():
+        setattr(obj, key, value)
+    obj.version += 1
+    db.flush()
+    audit(db, request, user, 'teacher.updated', obj, school.id, {'before': before, 'after': teacher_output(db, obj)})
+    return teacher_output(db, obj)
+
+
+@router.get('/employees')
+def list_employees(
+    db: DB,
+    user: Actor,
+    school: Scope,
+    q: str = Query(default='', max_length=160),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(30, ge=1, le=100),
+):
+    return _profile_list(
+        db, school, m.EmployeeProfile, employee_output, q, page, page_size,
+        [m.Person.name, m.Person.social_name, m.Person.cpf, m.Person.phone,
+         m.Person.email, m.EmployeeProfile.employee_number,
+         m.EmployeeProfile.department, m.EmployeeProfile.job_title],
+    )
+
+
+@router.post('/employees', status_code=201)
+def create_employee(data: s.EmployeeInput, db: DB, user: Actor, school: Scope, request: Request):
+    require(user, 'people.write')
+    lock_school(db, school.id)
+    person = _person_for_profile(db, school, data.person_id, data.person, 'employee')
+    if db.scalar(select(m.EmployeeProfile.id).where(m.EmployeeProfile.person_id == person.id).limit(1)):
+        fail(409, 'A pessoa já possui cadastro de Funcionário nesta escola.')
+    values = data.model_dump(exclude={'person', 'person_id'})
+    obj = m.EmployeeProfile(school_id=school.id, person_id=person.id, **values)
+    db.add(obj)
+    db.flush()
+    audit(db, request, user, 'employee.created', obj, school.id, {'person_id': person.id})
+    return employee_output(db, obj)
+
+
+@router.patch('/employees/{employee_id}')
+def update_employee(employee_id: str, data: s.Edit, db: DB, user: Actor, school: Scope, request: Request):
+    require(user, 'people.write')
+    lock_school(db, school.id)
+    obj = scoped(db, m.EmployeeProfile, employee_id, school.id)
+    check_version(obj, data.version)
+    values = validate(s.EmployeeData, data.data).model_dump()
+    before = employee_output(db, obj)
+    for key, value in values.items():
+        setattr(obj, key, value)
+    obj.version += 1
+    db.flush()
+    audit(db, request, user, 'employee.updated', obj, school.id, {'before': before, 'after': employee_output(db, obj)})
+    return employee_output(db, obj)
 
 
 @router.get('/students')

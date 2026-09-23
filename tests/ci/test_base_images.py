@@ -125,11 +125,12 @@ class CatalogAndRetentionTests(unittest.TestCase):
         self.assertIn('frontend/package-lock.json',items['node']['inputs'])
         self.assertIn('backend/requirements.txt',items['python']['inputs'])
     def test_all_runtime_composes_use_ghcr_postgres(self):
-        for name in ('compose.yaml','deploy/compose.yaml'):
+        for name in ('deploy/docker/compose.yaml','deploy/dockge/compose.yaml','deploy/portainer/compose.yaml','deploy/cloudpanel/compose.yaml'):
             self.assertIn('ghcr.io/wkarts/pige360-self-postgres',(ROOT/name).read_text())
     def test_external_services_not_added_without_consumers(self):
-        text=(ROOT/'deploy/compose.yaml').read_text()
-        self.assertNotIn('\n  redis:',text);self.assertNotIn('\n  rabbitmq:',text)
+        for name in ('docker','dockge','portainer','cloudpanel'):
+            text=(ROOT/'deploy'/name/'compose.yaml').read_text()
+            self.assertNotIn('\n  redis:',text);self.assertNotIn('\n  rabbitmq:',text)
     def test_bases_not_visited_by_cleanup_even_for_orphans(self):
         calls=[]
         def api(path,method='GET'):

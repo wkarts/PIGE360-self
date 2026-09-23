@@ -101,7 +101,10 @@ class ClassGroup(Record, Scoped, Base):
 
 class TeacherAssignment(Record, Scoped, Base):
     __tablename__ = 'teacher_assignments'
-    teacher_user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    teacher_user_id: Mapped[str | None] = mapped_column(ForeignKey('users.id'), index=True)
+    # A docente pode existir no cadastro de pessoas antes de receber acesso.
+    # teacher_user_id permanece para compatibilidade com instalações anteriores.
+    teacher_person_id: Mapped[str | None] = mapped_column(ForeignKey('persons.id'), index=True)
     class_group_id: Mapped[str] = mapped_column(ForeignKey('class_groups.id'), index=True)
     academic_year_id: Mapped[str] = mapped_column(ForeignKey('academic_years.id'), index=True)
     subject_name: Mapped[str] = mapped_column(String(120), default='')
@@ -153,6 +156,41 @@ class Person(Record, Scoped, Base):
     photo_file_id: Mapped[str | None] = mapped_column(ForeignKey('files.id'))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     __table_args__ = (UniqueConstraint('school_id', 'cpf'),)
+
+
+class TeacherProfile(Record, Scoped, Base):
+    """Dados profissionais do docente, separados de autenticação e usuário."""
+    __tablename__ = 'teacher_profiles'
+    person_id: Mapped[str] = mapped_column(ForeignKey('persons.id'), unique=True)
+    registration_number: Mapped[str] = mapped_column(String(40), default='')
+    professional_registration: Mapped[str] = mapped_column(String(80), default='')
+    employment_type: Mapped[str] = mapped_column(String(32), default='other')
+    employment_status: Mapped[str] = mapped_column(String(24), default='active')
+    admission_date: Mapped[date | None] = mapped_column(Date)
+    termination_date: Mapped[date | None] = mapped_column(Date)
+    inep_code: Mapped[str] = mapped_column(String(32), default='')
+    education_institution: Mapped[str] = mapped_column(String(180), default='')
+    degree_course: Mapped[str] = mapped_column(String(180), default='')
+    specialization: Mapped[str] = mapped_column(Text, default='')
+    teaching_areas: Mapped[str] = mapped_column(Text, default='')
+    workload_hours: Mapped[int] = mapped_column(Integer, default=0)
+    profile_notes: Mapped[str] = mapped_column(Text, default='')
+
+
+class EmployeeProfile(Record, Scoped, Base):
+    """Dados funcionais do colaborador, separados de autenticação e usuário."""
+    __tablename__ = 'employee_profiles'
+    person_id: Mapped[str] = mapped_column(ForeignKey('persons.id'), unique=True)
+    employee_number: Mapped[str] = mapped_column(String(40), default='')
+    employment_type: Mapped[str] = mapped_column(String(32), default='other')
+    employment_status: Mapped[str] = mapped_column(String(24), default='active')
+    admission_date: Mapped[date | None] = mapped_column(Date)
+    termination_date: Mapped[date | None] = mapped_column(Date)
+    department: Mapped[str] = mapped_column(String(120), default='')
+    job_title: Mapped[str] = mapped_column(String(160), default='')
+    work_schedule: Mapped[str] = mapped_column(String(160), default='')
+    supervisor_name: Mapped[str] = mapped_column(String(180), default='')
+    profile_notes: Mapped[str] = mapped_column(Text, default='')
 
 class PersonTypeLink(Record, Scoped, Base):
     __tablename__ = 'person_type_links'
