@@ -10,17 +10,98 @@ from .security import ROLE_LABELS
 
 router = APIRouter(prefix='/api/v1/schools/{school_id}', tags=['Pessoas, alunos e responsáveis'])
 
+PERSON_TYPE_LABELS = {
+    'student': 'Aluno',
+    'teacher': 'Professor',
+    'collaborator': 'Colaborador',
+    'employee': 'Funcionário',
+    'parent': 'Pai / mãe',
+    'mother': 'Mãe',
+    'father': 'Pai',
+    'guardian': 'Responsável',
+    'financial_responsible': 'Responsável financeiro',
+    'legal_responsible': 'Responsável legal',
+    'staff': 'Equipe / administrativo',
+    'other': 'Outro',
+}
+RESPONSIBLE_PERSON_TYPES = frozenset({
+    'parent', 'mother', 'father', 'guardian',
+    'financial_responsible', 'legal_responsible',
+})
+
+
+def person_type_label(code):
+    return PERSON_TYPE_LABELS.get(code, code.replace('_', ' ').capitalize())
+
+
+def derived_person_types(db, person_id):
+    result = set()
+    if db.scalar(select(m.Student.id).where(m.Student.person_id == person_id).limit(1)):
+        result.add('student')
+    if db.scalar(select(m.GuardianLink.id).where(
+        m.GuardianLink.person_id == person_id,
+        m.GuardianLink.active.is_(True),
+    ).limit(1)):
+        result.add('guardian')
+    return result
+
+
+def active_person_types(db, person_id):
+    return set(db.scalars(select(m.PersonTypeLink.type_code).where(
+        m.PersonTypeLink.person_id == person_id,
+        m.PersonTypeLink.active.is_(True),
+    )).all())
+
+
+def sync_person_types(db, person, requested, required=()):
+    if requested is None:
+        return
+    desired = set(requested) | set(required) | derived_person_types(db, person.id)
+    current = {
+        link.type_code: link
+        for link in db.scalars(select(m.PersonTypeLink).where(
+            m.PersonTypeLink.person_id == person.id,
+            m.PersonTypeLink.school_id == person.school_id,
+        )).all()
+    }
+    for code, link in current.items():
+        link.active = code in desired
+    for code in desired:
+        if code not in current:
+            db.add(m.PersonTypeLink(
+                school_id=person.school_id,
+                person_id=person.id,
+                type_code=code,
+                active=True,
+            ))
+    person.is_guardian = bool(desired & RESPONSIBLE_PERSON_TYPES)
+
+
+def ensure_person_type(db, person, code):
+    desired = active_person_types(db, person.id)
+    desired.add(code)
+    sync_person_types(db, person, desired, required=(code,))
+
+
 def person_output(db, obj):
-    role_keys = set()
-    if db.scalar(select(m.Student.id).where(m.Student.person_id == obj.id).limit(1)):
-        role_keys.add('student')
-    if db.scalar(select(m.GuardianLink.id).where(m.GuardianLink.person_id == obj.id, m.GuardianLink.active.is_(True)).limit(1)):
-        role_keys.add('guardian')
-    role_keys.update(db.scalars(select(m.User.role).where(m.User.person_id == obj.id, m.User.active.is_(True))).all())
+    student_id = db.scalar(select(m.Student.id).where(
+        m.Student.person_id == obj.id,
+    ).limit(1))
+    explicit_types = active_person_types(db, obj.id)
+    type_codes = explicit_types | derived_person_types(db, obj.id)
+    access_role_keys = set(db.scalars(select(m.User.role).where(
+        m.User.person_id == obj.id,
+        m.User.active.is_(True),
+    )).all())
+    role_keys = set(access_role_keys) | type_codes
     return {
         **output(obj),
         'role_keys': sorted(role_keys),
         'roles': [ROLE_LABELS.get(key, key) for key in sorted(role_keys)],
+        'access_role_keys': sorted(access_role_keys),
+        'person_types': sorted(type_codes),
+        'person_type_labels': [person_type_label(key) for key in sorted(type_codes)],
+        'student_id': student_id,
         'photo_file_id': obj.photo_file_id,
     }
 
@@ -33,7 +114,12 @@ def student_output(db, obj):
 def list_persons(db: DB, user: Actor, school: Scope, q: str = Query(default='', max_length=160), guardians_only: bool = False, page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100)):
     stmt = select(m.Person).where(m.Person.school_id == school.id)
     if guardians_only:
-        stmt = stmt.where(m.Person.is_guardian.is_(True))
+        responsible = select(m.PersonTypeLink.person_id).where(
+            m.PersonTypeLink.school_id == school.id,
+            m.PersonTypeLink.active.is_(True),
+            m.PersonTypeLink.type_code.in_(RESPONSIBLE_PERSON_TYPES),
+        )
+        stmt = stmt.where(or_(m.Person.is_guardian.is_(True), m.Person.id.in_(responsible)))
     if q:
         like = '%' + q.replace('%', r'\%').replace('_', r'\_') + '%'
         stmt = stmt.where(or_(
@@ -52,25 +138,60 @@ def list_persons(db: DB, user: Actor, school: Scope, q: str = Query(default='', 
 @router.post('/persons', status_code=201)
 def create_person(data: s.PersonInput, db: DB, user: Actor, school: Scope, request: Request):
     require(user, 'people.write')
-    obj = m.Person(school_id=school.id, **data.model_dump()); db.add(obj); db.flush()
+    values = data.model_dump(exclude={'person_types'})
+    requested = set(data.person_types or [])
+    if data.is_guardian:
+        requested.add('guardian')
+    values['is_guardian'] = bool(requested & RESPONSIBLE_PERSON_TYPES)
+    obj = m.Person(school_id=school.id, **values)
+    db.add(obj)
+    db.flush()
+    sync_person_types(db, obj, requested)
+    db.flush()
     audit(db, request, user, 'person.created', obj, school.id)
     return person_output(db, obj)
 
 @router.patch('/persons/{person_id}')
 def update_person(person_id: str, data: s.Edit, db: DB, user: Actor, school: Scope, request: Request):
-    require(user, 'people.write'); lock_school(db, school.id)
-    obj = scoped(db, m.Person, person_id, school.id); check_version(obj, data.version)
+    require(user, 'people.write')
+    lock_school(db, school.id)
+    obj = scoped(db, m.Person, person_id, school.id)
+    check_version(obj, data.version)
     values = validate(s.PersonInput, data.data).model_dump()
-    if not values['birth_date'] and db.scalar(select(m.Student.id).where(m.Student.person_id == obj.id).limit(1)):
+    requested_types = values.pop('person_types', None)
+    legacy_guardian = values.pop('is_guardian', None)
+    if not values['birth_date'] and db.scalar(select(m.Student.id).where(
+        m.Student.person_id == obj.id,
+    ).limit(1)):
         fail(422, 'A data de nascimento do aluno não pode ser removida.')
-    if not values['is_guardian'] and obj.is_guardian and db.scalar(select(m.GuardianLink.id).where(m.GuardianLink.person_id == obj.id, m.GuardianLink.active.is_(True)).limit(1)):
-        fail(409, 'A pessoa possui vínculos ativos como responsável.')
+
+    if requested_types is not None or legacy_guardian is not None:
+        desired = set(requested_types) if requested_types is not None else active_person_types(db, obj.id)
+        if requested_types is None:
+            if legacy_guardian:
+                desired.add('guardian')
+            else:
+                desired -= RESPONSIBLE_PERSON_TYPES
+        elif legacy_guardian:
+            desired.add('guardian')
+        active_guardian_link = db.scalar(select(m.GuardianLink.id).where(
+            m.GuardianLink.person_id == obj.id,
+            m.GuardianLink.active.is_(True),
+        ).limit(1))
+        if active_guardian_link and not desired.intersection(RESPONSIBLE_PERSON_TYPES):
+            fail(409, 'A pessoa possui vínculos ativos como responsável.')
+        sync_person_types(db, obj, desired)
+
     before = person_output(db, obj)
     for key, value in values.items():
         setattr(obj, key, value)
     obj.version += 1
-    audit(db, request, user, 'person.updated', obj, school.id, {'before': before, 'after': person_output(db, obj)})
-    db.flush(); return person_output(db, obj)
+    db.flush()
+    audit(db, request, user, 'person.updated', obj, school.id, {
+        'before': before,
+        'after': person_output(db, obj),
+    })
+    return person_output(db, obj)
 
 @router.post('/persons/{person_id}/photo')
 def upload_photo(person_id: str, db: DB, user: Actor, school: Scope, request: Request, file: UploadFile = File(...)):
@@ -126,7 +247,12 @@ def create_student(data: s.StudentInput, db: DB, user: Actor, school: Scope, req
     if data.person_id:
         person = scoped(db, m.Person, data.person_id, school.id)
     else:
-        person = m.Person(school_id=school.id, **data.person.model_dump()); db.add(person); db.flush()
+        person_values = data.person.model_dump(exclude={'person_types'})
+        person_values['is_guardian'] = bool(person_values.get('is_guardian'))
+        person = m.Person(school_id=school.id, **person_values)
+        db.add(person)
+        db.flush()
+    ensure_person_type(db, person, 'student')
     if not person.birth_date:
         fail(422, 'Informe a data de nascimento do aluno.')
     student_values = data.model_dump(exclude={'person', 'person_id'})
@@ -166,7 +292,7 @@ def add_guardian(student_id: str, data: s.GuardianInput, db: DB, user: Actor, sc
     person = scoped(db, m.Person, data.person_id, school.id)
     if obj.person_id == person.id:
         fail(422, 'O aluno não pode ser vinculado como seu próprio responsável.')
-    person.is_guardian = True
+    ensure_person_type(db, person, 'guardian')
     link = m.GuardianLink(school_id=school.id, student_id=obj.id, **data.model_dump())
     db.add(link); db.flush(); audit(db, request, user, 'guardian.linked', link, school.id)
     return {**output(link), 'person': person_output(db, person)}
