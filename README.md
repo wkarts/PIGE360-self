@@ -67,7 +67,7 @@ A verificação de contato vem habilitada por padrão no processo. Configure SMT
 
 ## Secretaria: cadastro único e arquivos
 
-A Secretaria opera uma tela de **Cadastro único** para Pessoa, Aluno, Responsável, Professor e usuários vinculados. Os perfis não criam aplicativos separados: permissões controlam o que cada usuário pode consultar e alterar. A ficha inclui dados civis, documentos, filiação, contatos, endereço, saúde escolar, matrícula, histórico e foto.
+A Secretaria opera uma tela de **Cadastro único** para uma Pessoa e seus tipos funcionais: Aluno, Professor, Responsável, Pai, Mãe, Colaborador, Funcionário e outros. Uma mesma Pessoa pode acumular vários tipos sem duplicação. Login, usuário e perfil de acesso pertencem ao domínio de autenticação e são administrados separadamente. A ficha inclui dados civis, documentos, filiação, contatos, endereço, saúde escolar, matrícula, histórico e foto.
 
 Arquivos e fotos ficam privados. Por padrão, o Compose usa o volume persistente `documents_data`; para um bucket S3/MinIO, configure `STORAGE_BACKEND=s3`, `STORAGE_BUCKET`, endpoint, região e credenciais nos arquivos `.env.develop` ou `.env.production`. A API não publica URL direta e verifica integridade SHA-256 no download.
 

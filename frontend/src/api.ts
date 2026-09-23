@@ -10,7 +10,7 @@ namespace PigeAPI {
     district: string; city: string; state: string; country: string;
     occupation: string; employer: string; education: string;
     emergency_contact_name: string; emergency_contact_phone: string;
-    photo_file_id?: string | null; role_keys?: string[]; roles?: string[]; active: boolean;
+    photo_file_id?: string | null; role_keys?: string[]; roles?: string[]; access_role_keys?: string[]; person_types?: string[]; person_type_labels?: string[]; student_id?: string | null; active: boolean;
   }
   export interface User { id: string; version: number; name: string; email: string; role: string; role_label?: string; active: boolean; person_id?: string | null; permissions: string[]; school_ids: string[] }
   export type Value = string | number | boolean | null | string[];
