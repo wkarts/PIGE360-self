@@ -45,6 +45,23 @@ class PersonInput(Input):
     emergency_contact_name: str = Field(default='', max_length=180)
     emergency_contact_phone: str = Field(default='', max_length=32)
     active: bool = True
+    # Uma pessoa pode acumular funções; None preserva os tipos existentes em PATCH.
+    person_types: list[str] | None = Field(default=None, max_length=20)
+
+
+    @field_validator('person_types')
+    @classmethod
+    def person_types_valid(cls, value):
+        if value is None:
+            return None
+        result = []
+        for item in value:
+            code = item.strip().lower()
+            if not re.fullmatch(r'[a-z][a-z0-9_]{1,39}', code):
+                raise ValueError('Tipo de pessoa inválido; use letras, números e underscore.')
+            if code not in result:
+                result.append(code)
+        return result
 
 
     @field_validator('cpf', mode='before')
