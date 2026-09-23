@@ -42,6 +42,34 @@ def test_cpf_validation_and_optional_unique_cpf(api):
     api.post('/persons',{'name':'Pessoa 2','cpf':'52998224725'},409)
     api.post('/persons',{'name':'Sem CPF 1'});api.post('/persons',{'name':'Sem CPF 2'})
 
+def test_person_types_are_business_data_and_independent_from_login(api):
+    person=api.post('/persons',{
+        'name':'Pessoa polivalente',
+        'birth_date':'1990-01-01',
+        'person_types':['teacher','employee','collaborator','parent'],
+    })
+    assert set(person['person_types'])=={'teacher','employee','collaborator','parent'}
+    assert 'Professor' in person['person_type_labels']
+    assert 'Funcionário' in person['person_type_labels']
+
+    student=api.post('/students',{'person_id':person['id']})
+    assert student['person']['id']==person['id']
+    assert set(student['person']['person_types'])=={'teacher','employee','collaborator','parent','student'}
+
+    access_person=api.post('/persons',{'name':'Pessoa somente acesso','birth_date':'1990-01-01'})
+    api.post('/users',{
+        'name':'Professor de acesso',
+        'email':f"access-{uuid.uuid4().hex[:10]}@example.com",
+        'password':PASSWORD,
+        'role':'teacher',
+        'school_ids':[api.school['id']],
+        'person_id':access_person['id'],
+    })
+    listed=next(item for item in api.get('/persons?q=Pessoa somente acesso')['items'] if item['id']==access_person['id'])
+    assert listed['person_types']==[]
+    assert listed['person_type_labels']==[]
+
+
 def test_student_existing_person_and_date_validation(api):
     person=api.post('/persons',{'name':'Pessoa existente','birth_date':'2017-06-10'})
     student=api.post('/students',{'person_id':person['id']})
