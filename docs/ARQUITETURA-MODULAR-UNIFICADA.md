@@ -52,7 +52,7 @@ Esses domínios devem entrar como módulos do mesmo produto, com seus próprios 
 
 ## Secretaria: cadastro único e matrícula
 
-A tela **Cadastro único** é a fonte administrativa da pessoa. O mesmo registro pode ser aluno, responsável, professor vinculado a um acesso ou usuário administrativo, sem duplicação por perfil. Os papéis são derivados dos vínculos persistidos e exibidos no cadastro.
+A tela **Cadastro único** é a fonte administrativa da Pessoa. O mesmo registro pode possuir simultaneamente vários tipos funcionais — aluno, professor, responsável, pai, mãe, colaborador, funcionário e outros — sem duplicação. Tipos são dados de negócio e vêm somente do cadastro e dos vínculos acadêmicos/familiares. Login, usuário e perfil de acesso são domínios separados e nunca definem o tipo da Pessoa.
 
 A ficha civil inclui identificação, nascimento, filiação, contatos, endereço estruturado, emergência, escolaridade, ocupação, observações e foto. A ficha do aluno acrescenta identificadores educacionais, saúde, transporte e observações escolares. A matrícula registra tipo de entrada, escola/cidade de origem, referência externa, responsável financeiro e histórico de movimentações.
 
