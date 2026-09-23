@@ -24,21 +24,6 @@ def _legacy_types(bind):
     )):
         rows.add((school_id, person_id, "guardian"))
 
-    for school_id, person_id, role in bind.execute(sa.text(
-        "SELECT sa.school_id, u.person_id, u.role "
-        "FROM users u "
-        "JOIN school_access sa ON sa.user_id = u.id "
-        "WHERE u.person_id IS NOT NULL"
-    )):
-        if role == "teacher":
-            rows.add((school_id, person_id, "teacher"))
-        elif role == "student":
-            rows.add((school_id, person_id, "student"))
-        elif role == "guardian":
-            rows.add((school_id, person_id, "guardian"))
-        elif role in ("admin", "direction", "coordination", "secretary", "viewer"):
-            rows.add((school_id, person_id, "staff"))
-
     return rows
 
 
