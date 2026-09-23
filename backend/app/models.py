@@ -154,6 +154,17 @@ class Person(Record, Scoped, Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     __table_args__ = (UniqueConstraint('school_id', 'cpf'),)
 
+class PersonTypeLink(Record, Scoped, Base):
+    __tablename__ = 'person_type_links'
+    person_id: Mapped[str] = mapped_column(ForeignKey('persons.id'), index=True)
+    type_code: Mapped[str] = mapped_column(String(40), index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    notes: Mapped[str] = mapped_column(Text, default='')
+    __table_args__ = (
+        UniqueConstraint('school_id', 'person_id', 'type_code'),
+    )
+
+
 class Student(Record, Scoped, Base):
     __tablename__ = 'students'
     person_id: Mapped[str] = mapped_column(ForeignKey('persons.id'), unique=True)
