@@ -57,7 +57,7 @@ def test_person_types_are_business_data_and_independent_from_login(api):
     assert set(student['person']['person_types'])=={'teacher','employee','collaborator','parent','student'}
 
     access_person=api.post('/persons',{'name':'Pessoa somente acesso','birth_date':'1990-01-01'})
-    api.post('/users',{
+    created_user=api.client.post('/api/v1/users',headers=api.headers,json={
         'name':'Professor de acesso',
         'email':f"access-{uuid.uuid4().hex[:10]}@example.com",
         'password':PASSWORD,
@@ -65,6 +65,7 @@ def test_person_types_are_business_data_and_independent_from_login(api):
         'school_ids':[api.school['id']],
         'person_id':access_person['id'],
     })
+    assert created_user.status_code==201,created_user.text
     listed=next(item for item in api.get('/persons?q=Pessoa somente acesso')['items'] if item['id']==access_person['id'])
     assert listed['person_types']==[]
     assert listed['person_type_labels']==[]
