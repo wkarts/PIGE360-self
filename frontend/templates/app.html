@@ -77,7 +77,7 @@
           <div class="actions">
             <button v-if="state.selectedStudent" class="btn btn-secondary" @click="navigate('students')">← Todos os alunos</button>
             <button v-if="state.page==='people' && can('people.write')" class="btn btn-primary" @click="newPerson">+ Nova pessoa</button>
-             <button v-if="state.page==='students' && !state.selectedStudent && can('people.write')" class="btn btn-primary" @click="newStudent">+ Novo aluno</button>
+             <button v-if="state.page==='students' && !state.selectedStudent && can('people.write')" class="btn btn-primary" @click="newStudent()">+ Novo aluno</button>
             <button v-if="state.page==='guardians' && can('people.write')" class="btn btn-primary" @click="newGuardian">+ Novo responsável</button>
             <button v-if="state.page==='enrollments' && can('enrollments.write')" class="btn btn-primary" @click="newEnrollment">+ Nova matrícula</button>
             <button v-if="state.page==='academic' && can('academic.write')" class="btn btn-primary" @click="newCatalog()">+ Cadastrar</button>
@@ -88,7 +88,7 @@
         <div v-if="state.loading" class="loading-strip" role="status">Carregando registros…</div>
         <expansion-panel v-if="['online','banking','integrations'].includes(state.page)" :key="state.schoolId+':'+state.page" :school-id="state.schoolId" :page="state.page" :permissions="state.user.permissions"></expansion-panel>
         <section v-if="state.page==='dashboard' && !isProfileRole()" class="dashboard">
-          <div class="welcome-card"><div><p class="eyebrow">ROTINA ESCOLAR EM DIA</p><h2>Uma visão completa.<br>Uma Secretaria mais próxima.</h2><p>Comece um cadastro, acompanhe matrículas ou consulte a documentação dos alunos.</p><div class="actions"><button v-if="can('people.write')" class="btn btn-primary" @click="newStudent">+ Cadastrar aluno</button><button v-if="can('enrollments.write')" class="btn btn-secondary" @click="newEnrollment">Nova matrícula →</button></div></div><div class="welcome-art" aria-hidden="true"><span>ALUNO</span><strong>Cadastro<br>Documentos<br>Matrícula</strong><i>✓</i></div></div>
+          <div class="welcome-card"><div><p class="eyebrow">ROTINA ESCOLAR EM DIA</p><h2>Uma visão completa.<br>Uma Secretaria mais próxima.</h2><p>Comece um cadastro, acompanhe matrículas ou consulte a documentação dos alunos.</p><div class="actions"><button v-if="can('people.write')" class="btn btn-primary" @click="newStudent()">+ Cadastrar aluno</button><button v-if="can('enrollments.write')" class="btn btn-secondary" @click="newEnrollment">Nova matrícula →</button></div></div><div class="welcome-art" aria-hidden="true"><span>ALUNO</span><strong>Cadastro<br>Documentos<br>Matrícula</strong><i>✓</i></div></div>
           <div class="stats-grid">
             <div class="stat-card"><span>Alunos cadastrados</span><strong>{{ state.dashboard.students ?? '—' }}</strong><small>Cadastros ativos na escola</small><i>◎</i></div>
             <div class="stat-card"><span>Matrículas ativas</span><strong>{{ state.dashboard.enrollments ?? '—' }}</strong><small>Vínculos confirmados</small><i>▤</i></div>
