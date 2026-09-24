@@ -17,6 +17,7 @@ namespace PigeUI {
     rows:[] as Row[], dashboard:{} as Row, catalogs:{} as Record<string,Row[]>, catalog:'class-groups',
     selectedStudent:null as Student|null, studentTab:'cadastro', profileContext:{} as Row, studentDocs:{items:[],checklist:[],issued:[]} as {items:Row[];checklist:Row[];issued:Row[]}, history:[] as Row[],
     studentChoices:[] as Student[], personChoices:[] as Row[], photoUrls:{} as Record<string,string>, companies:[] as Row[], reportClass:'', reportRows:[] as Row[],
+    supportHub:{company_id:'',enabled:false,base_url:'',position:'left',widget_type:'expanded_bubble',launcher_title:'Suporte',token_configured:false,version:1} as Row,
     modal:blankModal(), login:{email:'',password:''}, setup:{token:'',admin_name:'',admin_email:'',admin_password:'',company_name:'',company_document:'',school_name:'',unit_name:'Unidade principal',academic_year:new Date().getFullYear()},
     filters:{status:'',academic_year_id:'',class_group_id:'',document_type_id:'',document_status:'',overdue:false},
     pendencySummary:{truncated:false,total_documents:0,scanned_students:0,total_students:0},
@@ -116,7 +117,7 @@ namespace PigeUI {
   async function safe(action:()=>Promise<void>):Promise<void> { state.error='';try{await action();}catch(error){notify(error);} }
   async function initialize():Promise<void> {
     await safe(async()=>{
-      const info=await PigeAPI.request<{configured:boolean}>('/setup/status');state.configured=info.configured;
+      const info=await PigeAPI.request<{configured:boolean}>('/setup/status');state.configured=info.configured;void PigeSupport.load();
       if(info.configured){try{const session=await PigeAPI.refresh();state.user=session.user;await loadShell();}catch{state.user=null;}}
     });
     state.ready=true;
@@ -142,11 +143,18 @@ namespace PigeUI {
   async function changeSchool():Promise<void>{
     resetFilters();state.studentProtocols=[];state.studentProtocolTotal=0;state.photoUrls={};localStorage.setItem('pige-school',state.schoolId);state.selectedStudent=null;state.studentDocs={items:[],checklist:[],issued:[]};state.rows=[];state.catalogs={};state.reportRows=[];state.reportClass='';state.q='';state.pageNumber=1;
     await safe(async()=>{if(!isProfileRole()) await loadCatalogs();await loadPage();});
+     void PigeSupport.load(state.schoolId);
   }
   async function loadCatalogs():Promise<void>{
     const sid=state.schoolId;
     const entries=await Promise.all(Object.keys(catalogLabels).map(async key=>[key,await PigeAPI.request<Row[]>(`/schools/${sid}/${key}`)] as const));
     if(state.schoolId===sid) state.catalogs=Object.fromEntries(entries);
+  }
+  async function loadSupportHub():Promise<void>{
+    const companyId=text(state.schools.find(s=>s.id===state.schoolId)?.company_id);
+    state.supportHub=companyId
+      ? await PigeAPI.request<Row>('/companies/'+companyId+'/support-hub')
+      : {company_id:'',enabled:false,base_url:'',position:'left',widget_type:'expanded_bubble',launcher_title:'Suporte',token_configured:false,version:1};
   }
   async function navigate(page:string):Promise<void>{
     if(state.busy||state.modal.kind)return;
@@ -173,7 +181,10 @@ namespace PigeUI {
       }else if(state.page==='documents'){
         const data=await PigeAPI.request<PigeAPI.Page<Row>&typeof state.pendencySummary>(base()+'/document-pendencies?'+query);if(current===sequence){state.rows=data.items;state.total=data.total;state.pendencySummary=data;}
       }else if(state.page==='settings'){
-        if(can('schools.manage'))state.companies=await PigeAPI.request<Row[]>('/companies');
+        if(can('schools.manage')){
+          state.companies=await PigeAPI.request<Row[]>('/companies');
+          await loadSupportHub();
+        }
       }else if(state.page==='users'){
         const data=await PigeAPI.request<Row[]>('/users');if(current===sequence){state.rows=data;state.total=data.length;}
       }else if(state.page!=='reports'){
@@ -299,6 +310,19 @@ namespace PigeUI {
     const fields=[field('kind','Tipo de solicitação','text',true),field('student_id','Aluno (opcional)','student'),field('description','Descrição / observações','textarea',false,undefined,true),field('due_on','Prazo','date'),field('status','Situação','select',true,['open','in_progress','waiting','completed','cancelled'].map(v=>({value:v,label:label(v)})))];openModal('protocol',row?'Atualizar protocolo':'Abrir protocolo',fields,row?valuesFrom(row,fields):{status:'open',student_id:studentId||''},row);});}
   function newCompany():void{openModal('company','Cadastrar empresa / mantenedora',[field('name','Razão social','text',true),field('document','CPF / CNPJ')]);}
   function newSchool(row:Row|null=null):void{const fields=[field('company_id','Empresa / mantenedora','select',true,state.companies.map(c=>({value:c.id,label:text(c.name)}))),field('name','Nome da escola','text',true),field('address','Endereço','text',false,undefined,true),field('phone','Telefone'),field('email','E-mail','email'),field('document_policy','Pendências na ativação da matrícula','select',true,[{value:'warn',label:'Avisar sem bloquear'},{value:'block',label:'Exigir validação dos documentos obrigatórios'}]),field('active','Escola ativa','checkbox')];openModal('school',row?'Editar escola':'Cadastrar escola',fields,row?valuesFrom(row,fields):{document_policy:'warn',active:true},row);}
+   function editSupportHub():void{
+     const companyId=text(state.schools.find(s=>s.id===state.schoolId)?.company_id);
+     if(!companyId)return;
+     const fields=[
+       field('enabled','Exibir chat de suporte no site','checkbox'),
+       field('base_url','URL base do Hub','url',false,undefined,true),
+       field('token','Website token do Hub','password',false,undefined,true),
+       field('position','Posição do botão','select',true,[{value:'left',label:'Esquerda'},{value:'right',label:'Direita'}]),
+       field('widget_type','Tipo do botão','select',true,[{value:'expanded_bubble',label:'Bolha expandida'},{value:'standard',label:'Bolha padrão'}]),
+       field('launcher_title','Texto do botão','text',true),
+     ];
+     openModal('support-hub','Chat de suporte via site',fields,{...state.supportHub,token:''},state.supportHub);
+   }
   async function newUser(row:Row|null=null):Promise<void>{
     await searchPersons();
     const fields=[field('name','Nome completo','text',true)];
@@ -383,7 +407,21 @@ namespace PigeUI {
       }else if(modal.kind==='protocol'){
         form.student_id=form.student_id||null;form.due_on=form.due_on||null;
         if(target)await PigeAPI.patch(base()+'/protocols/'+target.id,{version:target.version,data:form});else await PigeAPI.post(base()+'/protocols',form);
-      }else if(modal.kind==='company')await PigeAPI.post('/companies',form);
+      }else if(modal.kind==='support-hub'){
+         const companyId=text((target as Row)?.company_id);
+         if(!companyId)throw new Error('Empresa da escola não encontrada.');
+         const saved=await PigeAPI.request<Row>('/companies/'+companyId+'/support-hub',{method:'PUT',body:JSON.stringify({
+           version:target?.version,
+           enabled:Boolean(form.enabled),
+           base_url:text(form.base_url),
+           token:text(form.token),
+           position:text(form.position)||'left',
+           widget_type:text(form.widget_type)||'expanded_bubble',
+           launcher_title:text(form.launcher_title)||'Suporte',
+         })});
+         state.supportHub=saved;
+         void PigeSupport.load(state.schoolId);
+       }else if(modal.kind==='company')await PigeAPI.post('/companies',form);
       else if(modal.kind==='school'){
         if(target)await PigeAPI.patch('/schools/'+target.id,{version:target.version,data:form});else await PigeAPI.post('/schools',form);
         state.schools=await PigeAPI.request<PigeAPI.School[]>('/schools');
@@ -425,5 +463,5 @@ namespace PigeUI {
     }
     window.addEventListener('keydown',(event)=>{if(event.key==='Escape')closeModal();});
   }
-  Vue.createApp({components:{'expansion-panel':PigeExpansion.component},render:PigeRenders.app,setup(){Vue.onMounted(()=>{setupPWA();void initialize();});return{state,text,can,isProfileRole,school,label,date,cpf,initials,photoSrc,getName,options,pageLabels,catalogLabels,configure,login,logout,navigate,changeSchool,setCatalog,search,page,loadPage,viewStudent,newStudent,editStudent,newGuardian,newTeacher,editTeacher,newEmployee,editEmployee,editPerson,newCatalog,newEnrollment,viewEnrollment,startMovement,reenroll,newLink,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,newUser,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,protocolReceipt,exportPendencies,install,updateApp};}}).mount('#app');
+  Vue.createApp({components:{'expansion-panel':PigeExpansion.component},render:PigeRenders.app,setup(){Vue.onMounted(()=>{setupPWA();void initialize();});return{state,text,can,isProfileRole,school,label,date,cpf,initials,photoSrc,getName,options,pageLabels,catalogLabels,configure,login,logout,navigate,changeSchool,setCatalog,search,page,loadPage,viewStudent,newStudent,editStudent,newGuardian,newTeacher,editTeacher,newEmployee,editEmployee,editPerson,newCatalog,newEnrollment,viewEnrollment,startMovement,reenroll,newLink,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,editSupportHub,newUser,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,protocolReceipt,exportPendencies,install,updateApp};}}).mount('#app');
 }
