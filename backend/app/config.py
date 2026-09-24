@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
     app_name: str = 'PIGE360 Self'
-    app_version: str = '0.3.0'
+    app_version: str = '0.4.0'
     app_env: str = 'production'
     app_url: str = 'http://localhost:58080'
     app_secret_key: str

@@ -43,7 +43,7 @@ def test_pwa_manifest_and_build(client):
     assert all(icon['purpose'] == 'any' for icon in manifest['icons'])
     assert '/#/protocols' in [s['url'] for s in manifest['shortcuts']]
     info = client.get('/build-info.json').json()
-    assert info['version'] == '0.3.0'
+    assert info['version'] == (ROOT/'VERSION').read_text().strip()
     sw = client.get('/sw.js').text
     assert '/branding/pige360/logo-horizontal.png' in sw
     assert "url.pathname.startsWith('/api/')" in sw
