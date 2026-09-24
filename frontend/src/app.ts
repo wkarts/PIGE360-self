@@ -8,7 +8,7 @@ namespace PigeUI {
   const text = (value: unknown): string => value === null || value === undefined ? '' : String(value);
   const statusLabels: Record<string,string> = {active:'Ativo', archived:'Arquivado', draft:'Rascunho', suspended:'Suspenso', transferred:'Transferido', cancelled:'Cancelado', completed:'Concluído', pending:'Pendente', received:'Recebido', validated:'Validado', rejected:'Rejeitado', expired:'Vencido', waived:'Dispensado', open:'Aberto', in_progress:'Em atendimento', waiting:'Aguardando', closed:'Fechado', admin:'Administrador', direction:'Direção', coordination:'Coordenação', secretary:'Secretaria', teacher:'Professor', student:'Aluno', guardian:'Responsável', viewer:'Consulta', leave:'Afastado', inactive:'Inativo', clt:'CLT', public:'Serviço público', temporary:'Temporário', substitute:'Substituto', intern:'Estágio', outsourced:'Terceirizado', other:'Outro'};
   const catalogLabels: Record<string,string> = {'units':'Unidades','academic-years':'Anos letivos','grades':'Séries e etapas','shifts':'Turnos','class-groups':'Turmas','document-types':'Tipos de documento'};
-  const pageLabels: Record<string,string> = {online:'Inscrições online',banking:'Cobranças',integrations:'Integrações',dashboard:'Visão geral',people:'Cadastro único',students:'Alunos',teachers:'Professores',employees:'Funcionários',guardians:'Responsáveis',academic:'Estrutura acadêmica',enrollments:'Matrículas',documents:'Pendências documentais',protocols:'Protocolos',reports:'Relatórios',settings:'Instituição',users:'Usuários e acessos',audit:'Auditoria'};
+  const pageLabels: Record<string,string> = {online:'Inscrições online',banking:'Cobranças',integrations:'Financeiro / ASAAS',connect:'Connect API',dashboard:'Visão geral',people:'Cadastro único',students:'Alunos',teachers:'Professores',employees:'Funcionários',guardians:'Responsáveis',academic:'Estrutura acadêmica',enrollments:'Matrículas',documents:'Pendências documentais',protocols:'Protocolos',reports:'Relatórios',settings:'Instituição',users:'Usuários e acessos',audit:'Auditoria'};
   const blankModal = (): Modal => ({kind:'',title:'',fields:[],form:{},target:null,action:'',error:''});
   const state = Vue.reactive({
     ready:false, configured:true, online:navigator.onLine, loginBusy:false, busy:false, loading:false,
@@ -167,7 +167,7 @@ namespace PigeUI {
     const current=++sequence,sid=state.schoolId;state.loading=true;state.rows=[];
     try{
       const query=`page=${state.pageNumber}&page_size=30&q=${encodeURIComponent(state.q)}&${filterQuery()}`;
-      if(['online','banking','integrations'].includes(state.page)){
+      if(['online','banking','integrations','connect'].includes(state.page)){
         state.total=0;
       }else if(state.page==='dashboard'){
         if(isProfileRole()){

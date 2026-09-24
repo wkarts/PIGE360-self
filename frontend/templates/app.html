@@ -56,7 +56,8 @@
       <nav v-if="!isProfileRole()" aria-label="Administração">
         <a v-if="can('admissions.read')" href="#/online" :class="{active:state.page==='online'}" @click.prevent="navigate('online')"><span class="nav-icon">↗</span>Inscrições online</a>
         <a v-if="can('banking.read')" href="#/banking" :class="{active:state.page==='banking'}" @click.prevent="navigate('banking')"><span class="nav-icon">＄</span>Cobranças</a>
-        <a v-if="can('integrations.manage')" href="#/integrations" :class="{active:state.page==='integrations'}" @click.prevent="navigate('integrations')"><span class="nav-icon">⇄</span>Integrações</a>
+        <a v-if="can('integrations.manage')" href="#/integrations" :class="{active:state.page==='integrations'}" @click.prevent="navigate('integrations')"><span class="nav-icon">⇄</span>Financeiro / ASAAS</a>
+        <a v-if="can('connect.manage')" href="#/connect" :class="{active:state.page==='connect'}" @click.prevent="navigate('connect')"><span class="nav-icon">◌</span>Connect API</a>
         <a v-if="can('schools.manage')" href="#/settings" :class="{active:state.page==='settings'}" @click.prevent="navigate('settings')"><span class="nav-icon">◇</span>Instituição</a>
         <a v-if="can('users.manage')" href="#/users" :class="{active:state.page==='users'}" @click.prevent="navigate('users')"><span class="nav-icon">♙</span>Usuários e acessos</a>
         <a v-if="can('audit.read')" href="#/audit" :class="{active:state.page==='audit'}" @click.prevent="navigate('audit')"><span class="nav-icon">◷</span>Auditoria</a>
@@ -90,7 +91,7 @@
           </div>
         </div>
         <div v-if="state.loading" class="loading-strip" role="status">Carregando registros…</div>
-        <expansion-panel v-if="['online','banking','integrations'].includes(state.page)" :key="state.schoolId+':'+state.page" :school-id="state.schoolId" :page="state.page" :permissions="state.user.permissions"></expansion-panel>
+        <expansion-panel v-if="['online','banking','integrations','connect'].includes(state.page)" :key="state.schoolId+':'+state.page" :school-id="state.schoolId" :page="state.page" :permissions="state.user.permissions"></expansion-panel>
         <section v-if="state.page==='dashboard' && !isProfileRole()" class="dashboard">
           <div class="welcome-card"><div><p class="eyebrow">ROTINA ESCOLAR EM DIA</p><h2>Uma visão completa.<br>Uma Secretaria mais próxima.</h2><p>Comece um cadastro, acompanhe matrículas ou consulte a documentação dos alunos.</p><div class="actions"><button v-if="can('people.write')" class="btn btn-primary" @click="newStudent()">+ Cadastrar aluno</button><button v-if="can('enrollments.write')" class="btn btn-secondary" @click="newEnrollment">Nova matrícula →</button></div></div><div class="welcome-art" aria-hidden="true"><span>ALUNO</span><strong>Cadastro<br>Documentos<br>Matrícula</strong><i>✓</i></div></div>
           <div class="stats-grid">
