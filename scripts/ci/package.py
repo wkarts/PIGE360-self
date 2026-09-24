@@ -4,6 +4,7 @@ import argparse
 from hashlib import sha256
 import json
 from pathlib import Path
+import re
 import subprocess
 import zipfile
 
@@ -13,13 +14,23 @@ def package(root, output, version, commit, image=''):
     for name in filter(None,names):
         p=Path(name)
         if any(part in ('.git','node_modules','.venv','__pycache__','reference','ci-evidence','checkpoints','release') for part in p.parts):continue
-        if p.name.startswith('.env') and p.name!='.env.example':continue
+        if p.name.startswith('.env') and not p.name.endswith('.example'):continue
         if p.suffix.lower() in ('.ttf','.otf','.woff','.woff2','.pem','.key','.p12','.pfx','.db'):continue
         if name in ('SHA256SUMS','TREE.txt','MANIFEST.json'):continue
         source=root/p
         if source.is_symlink():raise ValueError('Link simbólico não permitido no checkpoint: '+name)
         if not source.is_file():continue
         files[name]=source.read_bytes()
+    lock_path=root/'ci-evidence/base-images.lock.json'
+    if image and lock_path.is_file():
+        lock=json.loads(lock_path.read_text())
+        if lock.get('schema_version')!=1:raise ValueError('Versao de lock desconhecida')
+        for key in ('node','python','postgres'):
+            ref=lock['images'][key]['ref']
+            if not re.fullmatch(r'ghcr\.io/wkarts/pige360-self-[a-z-]+@sha256:[0-9a-f]{64}',ref):
+                raise ValueError('Referencia de base invalida no lock: '+key)
+        files['deploy/images.lock.json']=lock_path.read_bytes()
+        files['deploy/images.env']=(f'APP_IMAGE={image}\nPOSTGRES_IMAGE={lock["images"]["postgres"]["ref"]}\nAPP_PULL_POLICY=always\n').encode()
     manifest={'product':'PIGE360 Self','release_version':version,'repository':'wkarts/PIGE360-self',
               'source_commit':commit,'image':image,'contains_credentials':False,
               'original_template_included':False,'source_version':(root/'VERSION').read_text().strip()}

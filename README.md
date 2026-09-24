@@ -1,7 +1,7 @@
-> **Fluxo GitHub/GHCR:** veja [desenvolvimento, releases, limpeza e implantação self-hosted](docs/ci-cd/FLUXO-GITHUB-GHCR.md). O fluxo main/develop agora é versionado neste repositório. Os comandos abaixo de build local permanecem válidos; para imagens publicadas use `deploy/compose.yaml`. Nenhum deploy externo é executado automaticamente.
+> **Fluxo GitHub/GHCR:** veja [desenvolvimento, releases, limpeza e implantação self-hosted](docs/ci-cd/FLUXO-GITHUB-GHCR.md). Os deploys ficam em `deploy/`, separados por Docker, Dockge, Portainer e CloudPanel, com ambientes develop e produção. Nenhum deploy externo é executado automaticamente.
 
 # PIGE360 Self 0.3.0
-## Secretaria, pré-matrícula online, comunicação e cobrança
+## Gestão educacional modular, Secretaria e matrícula online
 
 Aplicação self-hosted em **FastAPI + Vue 3**, exclusivamente Web/PWA. O pacote contém a aplicação, o frontend compilado, migrations, testes, documentação e evidências. **Não contém mais o template original nem um ZIP de template de referência.** O branding oficial da entrega anterior foi preservado.
 
@@ -13,33 +13,30 @@ Pré-requisitos: Docker com Compose, Python 3 para gerar a configuração, armaz
 
 ```bash
 cd pige360-self
-python3 scripts/configure.py
-# Revise .env e configure o domínio HTTPS antes da exposição pública.
-docker compose up -d --build
-docker compose ps
-docker compose logs --tail=100 app worker
+python3 scripts/configure.py --channel stable \
+  --env-file deploy/docker/.env.production \
+  --url https://escola.seudominio.com.br
+cd deploy/docker
+docker compose --env-file .env.production -f compose.yaml pull
+docker compose --env-file .env.production -f compose.yaml up -d --wait
+docker compose --env-file .env.production -f compose.yaml ps
+docker compose --env-file .env.production -f compose.yaml logs --tail=100 app worker
 ```
 
 No Windows, o configurador pode ser executado com `py -3 scripts/configure.py`.
 
-Acesso local: `http://localhost:58080`. No primeiro acesso use `SETUP_TOKEN`, gerado em `.env`, para cadastrar o administrador e a instituição. Não há senha padrão. Banco de produção: PostgreSQL. SQLite é exclusivamente uma opção de testes explícita.
+Acesso local: `http://localhost:58080`. No primeiro acesso use `SETUP_TOKEN`, gerado no `.env.production`, para cadastrar o administrador e a instituição. Não há senha padrão. Banco de produção: PostgreSQL. SQLite é exclusivamente uma opção de testes explícita.
 
-Em domínio próprio:
-
-```bash
-python3 scripts/configure.py --url https://escola.seudominio.com.br
-```
-
-Esse comando é somente para instalação nova. Preserve `.env` existente nas atualizações.
+Para desenvolvimento, use `--channel develop --env-file deploy/docker/.env.develop --url https://dev.escola.seudominio.com.br`; a porta padrão é `58081`. O configurador é somente para instalação nova: preserve o `.env` do adaptador nas atualizações.
 
 ## Atualização da versão 0.1/0.2
 
 Leia `docs/ATUALIZACAO-0.3.0.md`. Faça backup do banco, dos documentos e da configuração antes de substituir o código. Mantenha o diretório de implantação, o projeto Compose e os volumes existentes.
 
 ```bash
-python3 scripts/prepare-upgrade.py
-docker compose up -d --build
-docker compose logs --tail=100 app worker
+python3 scripts/prepare-upgrade.py --env-file deploy/docker/.env.production
+docker compose --env-file deploy/docker/.env.production -f deploy/docker/compose.yaml up -d --wait
+docker compose --env-file deploy/docker/.env.production -f deploy/docker/compose.yaml logs --tail=100 app worker
 ```
 
 O preparador preserva as credenciais anteriores, cria cópia protegida de `.env`, acrescenta opções ausentes e gera a chave de criptografia das integrações somente quando ela não existe. Imagens de registry personalizado exigem revisão manual da tag. Nunca use `docker compose down -v` para atualizar.
@@ -51,6 +48,7 @@ O preparador preserva as credenciais anteriores, cria cópia protegida de `.env`
 | app | FastAPI + frontend compilado | `APP_BIND:APP_PORT`, padrão `127.0.0.1:58080` |
 | db | PostgreSQL persistente | Nenhuma |
 | worker | Fila persistente de mensagens, códigos e cobranças; conciliação | Nenhuma |
+| storage | Bind mount relativo ou bucket S3/MinIO privado para fotos e anexos | Nenhuma (quando externo, endpoint interno) |
 
 Não há Nginx, Traefik, Redis ou RabbitMQ internos. O worker compartilha a imagem da aplicação e usa fila persistente no PostgreSQL. O proxy HTTPS externo deve encaminhar para a porta da aplicação e preservar o hostname. `TRUSTED_PROXY_IPS` permite confiar somente em IP/CIDR conhecido do proxy, quando necessário. Não aceite qualquer remetente como proxy confiável.
 
@@ -63,6 +61,18 @@ O link é `/online.html?campaign=SLUG`. O responsável cria uma conta própria, 
 **A pré-matrícula não garante nem reserva vaga.** A efetivação exige conferência de identidade/vínculo, disponibilidade e documentação segundo as políticas configuradas. Cobrança obrigatória, quando definida, precisa estar recebida; `CONFIRMED` não basta.
 
 A verificação de contato vem habilitada por padrão no processo. Configure SMTP ou Connect API antes de publicar um processo que a exija. Não desative a verificação apenas para contornar uma integração mal configurada em produção.
+
+## Secretaria: cadastro único e arquivos
+
+A Secretaria opera uma tela de **Cadastro único** para uma Pessoa e seus tipos funcionais: Aluno, Professor, Responsável, Pai, Mãe, Colaborador, Funcionário e outros. Uma mesma Pessoa pode acumular vários tipos sem duplicação. Login, usuário e perfil de acesso pertencem ao domínio de autenticação e são administrados separadamente. A ficha inclui dados civis, documentos, filiação, contatos, endereço, saúde escolar, matrícula, histórico e foto.
+
+Arquivos e fotos ficam privados. Por padrão, cada stack usa o bind mount relativo `data-documents/`; para um bucket S3/MinIO, configure `STORAGE_BACKEND=s3`, `STORAGE_BUCKET`, endpoint, região e credenciais no arquivo do adaptador. A API não publica URL direta e verifica integridade SHA-256 no download.
+
+## Perfis e módulos
+
+A instalação continua sendo um único PIGE360 Self. O acesso é separado por permissões e perfis (\`Administrador\`, \`Direção\`, \`Coordenação\`, \`Secretaria\`, \`Professor\`, \`Aluno\`, \`Responsável\` e \`Consulta\`). Professor, Aluno e Responsável recebem somente o contexto vinculado ao próprio usuário; os endpoints administrativos não ficam disponíveis para esses perfis.
+
+A arquitetura e o estado dos módulos está em [docs/ARQUITETURA-MODULAR-UNIFICADA.md](docs/ARQUITETURA-MODULAR-UNIFICADA.md). Os comandos completos dos ambientes estão em [deploy/README.md](deploy/README.md), com modelos de ambiente separados por adaptador.
 
 ## Documentação
 

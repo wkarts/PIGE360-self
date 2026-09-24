@@ -11,8 +11,18 @@ node_modules/
 backups/
 data/
 
+deploy/**/.env
+deploy/**/.env.*
+!deploy/**/.env.*.example
+!deploy/**/.env.example
+deploy/**/data-postgres/
+deploy/**/data-documents/
+deploy/**/backups/
+
 .env*
 !.env.example
+!deploy/**/.env.*.example
+!deploy/**/.env.example
 release/
 checkpoints/
 ci-evidence/

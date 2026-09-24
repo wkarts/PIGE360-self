@@ -32,7 +32,12 @@ class User(Record, Base):
     password_hash: Mapped[str] = mapped_column(String(512))
     role: Mapped[str] = mapped_column(String(32), default='secretary')
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    __table_args__ = (CheckConstraint("role IN ('admin','secretary','viewer')", name='valid_role'),)
+    # Perfis de autoatendimento apontam para a pessoa correspondente.
+    person_id: Mapped[str | None] = mapped_column(ForeignKey('persons.id'), index=True)
+    __table_args__ = (CheckConstraint(
+        "role IN ('admin','direction','coordination','secretary','teacher','student','guardian','viewer')",
+        name='valid_role'
+    ),)
 
 class SchoolAccess(Base):
     __tablename__ = 'school_access'
@@ -94,6 +99,21 @@ class ClassGroup(Record, Scoped, Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     __table_args__ = (UniqueConstraint('school_id', 'academic_year_id', 'unit_id', 'name'), CheckConstraint('capacity > 0', name='positive_capacity'))
 
+class TeacherAssignment(Record, Scoped, Base):
+    __tablename__ = 'teacher_assignments'
+    teacher_user_id: Mapped[str | None] = mapped_column(ForeignKey('users.id'), index=True)
+    # A docente pode existir no cadastro de pessoas antes de receber acesso.
+    # teacher_user_id permanece para compatibilidade com instalações anteriores.
+    teacher_person_id: Mapped[str | None] = mapped_column(ForeignKey('persons.id'), index=True)
+    class_group_id: Mapped[str] = mapped_column(ForeignKey('class_groups.id'), index=True)
+    academic_year_id: Mapped[str] = mapped_column(ForeignKey('academic_years.id'), index=True)
+    subject_name: Mapped[str] = mapped_column(String(120), default='')
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    __table_args__ = (
+        UniqueConstraint('school_id', 'teacher_user_id', 'class_group_id', 'academic_year_id', 'subject_name'),
+    )
+
+
 class Person(Record, Scoped, Base):
     __tablename__ = 'persons'
     name: Mapped[str] = mapped_column(String(180), index=True)
@@ -105,13 +125,99 @@ class Person(Record, Scoped, Base):
     address: Mapped[str] = mapped_column(String(400), default='')
     notes: Mapped[str] = mapped_column(Text, default='')
     is_guardian: Mapped[bool] = mapped_column(Boolean, default=False)
+    rg: Mapped[str] = mapped_column(String(40), default='', index=True)
+    rg_issuer: Mapped[str] = mapped_column(String(80), default='')
+    rg_state: Mapped[str] = mapped_column(String(2), default='')
+    rg_issued_on: Mapped[date | None] = mapped_column(Date)
+    birth_certificate: Mapped[str] = mapped_column(String(80), default='')
+    birth_city: Mapped[str] = mapped_column(String(120), default='')
+    birth_state: Mapped[str] = mapped_column(String(2), default='')
+    nationality: Mapped[str] = mapped_column(String(80), default='')
+    sex: Mapped[str] = mapped_column(String(32), default='')
+    gender: Mapped[str] = mapped_column(String(80), default='')
+    race_color: Mapped[str] = mapped_column(String(80), default='')
+    marital_status: Mapped[str] = mapped_column(String(40), default='')
+    mother_name: Mapped[str] = mapped_column(String(180), default='')
+    father_name: Mapped[str] = mapped_column(String(180), default='')
+    phone_secondary: Mapped[str] = mapped_column(String(32), default='')
+    postal_code: Mapped[str] = mapped_column(String(16), default='')
+    street: Mapped[str] = mapped_column(String(180), default='')
+    address_number: Mapped[str] = mapped_column(String(24), default='')
+    address_complement: Mapped[str] = mapped_column(String(120), default='')
+    district: Mapped[str] = mapped_column(String(120), default='')
+    city: Mapped[str] = mapped_column(String(120), default='')
+    state: Mapped[str] = mapped_column(String(2), default='')
+    country: Mapped[str] = mapped_column(String(80), default='Brasil')
+    occupation: Mapped[str] = mapped_column(String(120), default='')
+    employer: Mapped[str] = mapped_column(String(180), default='')
+    education: Mapped[str] = mapped_column(String(100), default='')
+    emergency_contact_name: Mapped[str] = mapped_column(String(180), default='')
+    emergency_contact_phone: Mapped[str] = mapped_column(String(32), default='')
+    photo_file_id: Mapped[str | None] = mapped_column(ForeignKey('files.id'))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
     __table_args__ = (UniqueConstraint('school_id', 'cpf'),)
+
+
+class TeacherProfile(Record, Scoped, Base):
+    """Dados profissionais do docente, separados de autenticação e usuário."""
+    __tablename__ = 'teacher_profiles'
+    person_id: Mapped[str] = mapped_column(ForeignKey('persons.id'), unique=True)
+    registration_number: Mapped[str] = mapped_column(String(40), default='')
+    professional_registration: Mapped[str] = mapped_column(String(80), default='')
+    employment_type: Mapped[str] = mapped_column(String(32), default='other')
+    employment_status: Mapped[str] = mapped_column(String(24), default='active')
+    admission_date: Mapped[date | None] = mapped_column(Date)
+    termination_date: Mapped[date | None] = mapped_column(Date)
+    inep_code: Mapped[str] = mapped_column(String(32), default='')
+    education_institution: Mapped[str] = mapped_column(String(180), default='')
+    degree_course: Mapped[str] = mapped_column(String(180), default='')
+    specialization: Mapped[str] = mapped_column(Text, default='')
+    teaching_areas: Mapped[str] = mapped_column(Text, default='')
+    workload_hours: Mapped[int] = mapped_column(Integer, default=0)
+    profile_notes: Mapped[str] = mapped_column(Text, default='')
+
+
+class EmployeeProfile(Record, Scoped, Base):
+    """Dados funcionais do colaborador, separados de autenticação e usuário."""
+    __tablename__ = 'employee_profiles'
+    person_id: Mapped[str] = mapped_column(ForeignKey('persons.id'), unique=True)
+    employee_number: Mapped[str] = mapped_column(String(40), default='')
+    employment_type: Mapped[str] = mapped_column(String(32), default='other')
+    employment_status: Mapped[str] = mapped_column(String(24), default='active')
+    admission_date: Mapped[date | None] = mapped_column(Date)
+    termination_date: Mapped[date | None] = mapped_column(Date)
+    department: Mapped[str] = mapped_column(String(120), default='')
+    job_title: Mapped[str] = mapped_column(String(160), default='')
+    work_schedule: Mapped[str] = mapped_column(String(160), default='')
+    supervisor_name: Mapped[str] = mapped_column(String(180), default='')
+    profile_notes: Mapped[str] = mapped_column(Text, default='')
+
+class PersonTypeLink(Record, Scoped, Base):
+    __tablename__ = 'person_type_links'
+    person_id: Mapped[str] = mapped_column(ForeignKey('persons.id'), index=True)
+    type_code: Mapped[str] = mapped_column(String(40), index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    notes: Mapped[str] = mapped_column(Text, default='')
+    __table_args__ = (
+        UniqueConstraint('school_id', 'person_id', 'type_code'),
+    )
+
 
 class Student(Record, Scoped, Base):
     __tablename__ = 'students'
     person_id: Mapped[str] = mapped_column(ForeignKey('persons.id'), unique=True)
     number: Mapped[str] = mapped_column(String(32))
     previous_school: Mapped[str] = mapped_column(String(180), default='')
+    nis: Mapped[str] = mapped_column(String(32), default='')
+    sus_card: Mapped[str] = mapped_column(String(32), default='')
+    inep_code: Mapped[str] = mapped_column(String(32), default='')
+    health_plan: Mapped[str] = mapped_column(String(120), default='')
+    allergies: Mapped[str] = mapped_column(Text, default='')
+    medications: Mapped[str] = mapped_column(Text, default='')
+    health_notes: Mapped[str] = mapped_column(Text, default='')
+    special_needs: Mapped[str] = mapped_column(Text, default='')
+    authorized_transport: Mapped[str] = mapped_column(String(120), default='')
+    student_notes: Mapped[str] = mapped_column(Text, default='')
     status: Mapped[str] = mapped_column(String(20), default='active')
     __table_args__ = (UniqueConstraint('school_id', 'number'),)
 
@@ -138,6 +244,11 @@ class Enrollment(Record, Scoped, Base):
     financial_person_id: Mapped[str | None] = mapped_column(ForeignKey('persons.id'))
     previous_enrollment_id: Mapped[str | None] = mapped_column(ForeignKey('enrollments.id'))
     activation_key: Mapped[str | None] = mapped_column(String(160), unique=True)
+    enrollment_type: Mapped[str] = mapped_column(String(24), default='new')
+    origin_school: Mapped[str] = mapped_column(String(180), default='')
+    origin_city: Mapped[str] = mapped_column(String(120), default='')
+    entry_reason: Mapped[str] = mapped_column(String(1000), default='')
+    external_reference: Mapped[str] = mapped_column(String(120), default='')
     notes: Mapped[str] = mapped_column(Text, default='')
     __table_args__ = (UniqueConstraint('school_id', 'number'), CheckConstraint("status IN ('draft','active','suspended','transferred','cancelled','completed')", name='enrollment_status'))
 
@@ -165,6 +276,9 @@ class FileRecord(Record, Scoped, Base):
     mime_type: Mapped[str] = mapped_column(String(100))
     size: Mapped[int] = mapped_column(Integer)
     sha256: Mapped[str] = mapped_column(String(64))
+    storage_backend: Mapped[str] = mapped_column(String(16), default='local')
+    bucket_name: Mapped[str] = mapped_column(String(160), default='')
+    file_kind: Mapped[str] = mapped_column(String(24), default='document')
     created_by: Mapped[str] = mapped_column(ForeignKey('users.id'))
 
 class StudentDocument(Record, Scoped, Base):

@@ -57,15 +57,22 @@ var PigeAPI;
     PigeAPI.post = post;
     function patch(path, body) { return request(path, { method: 'PATCH', body: JSON.stringify(body) }); }
     PigeAPI.patch = patch;
-    async function download(path, filename) {
+    async function blob(path) {
         let response = await fetch('/api/v1' + path, { headers: { Authorization: `Bearer ${token}` }, credentials: 'same-origin', cache: 'no-store' });
-        if (response.status === 401) {
+        if (response.status === 401 && token) {
             await refresh();
             response = await fetch('/api/v1' + path, { headers: { Authorization: `Bearer ${token}` }, credentials: 'same-origin', cache: 'no-store' });
         }
         if (!response.ok)
             throw await error(response);
-        const url = URL.createObjectURL(await response.blob());
+        return response.blob();
+    }
+    async function objectUrl(path) {
+        return URL.createObjectURL(await blob(path));
+    }
+    PigeAPI.objectUrl = objectUrl;
+    async function download(path, filename) {
+        const url = URL.createObjectURL(await blob(path));
         const anchor = document.createElement('a');
         anchor.href = url;
         anchor.download = filename;
@@ -191,17 +198,17 @@ var PigeExpansion;
 var PigeUI;
 (function (PigeUI) {
     const text = (value) => value === null || value === undefined ? '' : String(value);
-    const statusLabels = { active: 'Ativo', archived: 'Arquivado', draft: 'Rascunho', suspended: 'Suspenso', transferred: 'Transferido', cancelled: 'Cancelado', completed: 'Concluído', pending: 'Pendente', received: 'Recebido', validated: 'Validado', rejected: 'Rejeitado', expired: 'Vencido', waived: 'Dispensado', open: 'Aberto', in_progress: 'Em atendimento', waiting: 'Aguardando', closed: 'Fechado', admin: 'Administrador', secretary: 'Secretaria', viewer: 'Consulta' };
+    const statusLabels = { active: 'Ativo', archived: 'Arquivado', draft: 'Rascunho', suspended: 'Suspenso', transferred: 'Transferido', cancelled: 'Cancelado', completed: 'Concluído', pending: 'Pendente', received: 'Recebido', validated: 'Validado', rejected: 'Rejeitado', expired: 'Vencido', waived: 'Dispensado', open: 'Aberto', in_progress: 'Em atendimento', waiting: 'Aguardando', closed: 'Fechado', admin: 'Administrador', direction: 'Direção', coordination: 'Coordenação', secretary: 'Secretaria', teacher: 'Professor', student: 'Aluno', guardian: 'Responsável', viewer: 'Consulta', leave: 'Afastado', inactive: 'Inativo', clt: 'CLT', public: 'Serviço público', temporary: 'Temporário', substitute: 'Substituto', intern: 'Estágio', outsourced: 'Terceirizado', other: 'Outro' };
     const catalogLabels = { 'units': 'Unidades', 'academic-years': 'Anos letivos', 'grades': 'Séries e etapas', 'shifts': 'Turnos', 'class-groups': 'Turmas', 'document-types': 'Tipos de documento' };
-    const pageLabels = { online: 'Inscrições online', banking: 'Cobranças', integrations: 'Integrações', dashboard: 'Visão da Secretaria', students: 'Alunos', guardians: 'Responsáveis', academic: 'Estrutura acadêmica', enrollments: 'Matrículas', documents: 'Pendências documentais', protocols: 'Protocolos', reports: 'Relatórios', settings: 'Instituição', users: 'Usuários e acessos', audit: 'Auditoria' };
+    const pageLabels = { online: 'Inscrições online', banking: 'Cobranças', integrations: 'Integrações', dashboard: 'Visão geral', people: 'Cadastro único', students: 'Alunos', teachers: 'Professores', employees: 'Funcionários', guardians: 'Responsáveis', academic: 'Estrutura acadêmica', enrollments: 'Matrículas', documents: 'Pendências documentais', protocols: 'Protocolos', reports: 'Relatórios', settings: 'Instituição', users: 'Usuários e acessos', audit: 'Auditoria' };
     const blankModal = () => ({ kind: '', title: '', fields: [], form: {}, target: null, action: '', error: '' });
     const state = Vue.reactive({
         ready: false, configured: true, online: navigator.onLine, loginBusy: false, busy: false, loading: false,
         error: '', success: '', menuOpen: false, user: null,
         schools: [], schoolId: '', page: 'dashboard', q: '', pageNumber: 1, total: 0,
         rows: [], dashboard: {}, catalogs: {}, catalog: 'class-groups',
-        selectedStudent: null, studentTab: 'cadastro', studentDocs: { items: [], checklist: [], issued: [] }, history: [],
-        studentChoices: [], personChoices: [], companies: [], reportClass: '', reportRows: [],
+        selectedStudent: null, studentTab: 'cadastro', profileContext: {}, studentDocs: { items: [], checklist: [], issued: [] }, history: [],
+        studentChoices: [], personChoices: [], photoUrls: {}, companies: [], reportClass: '', reportRows: [],
         modal: blankModal(), login: { email: '', password: '' }, setup: { token: '', admin_name: '', admin_email: '', admin_password: '', company_name: '', company_document: '', school_name: '', unit_name: 'Unidade principal', academic_year: new Date().getFullYear() },
         filters: { status: '', academic_year_id: '', class_group_id: '', document_type_id: '', document_status: '', overdue: false },
         pendencySummary: { truncated: false, total_documents: 0, scanned_students: 0, total_students: 0 },
@@ -228,6 +235,7 @@ var PigeUI;
     async function yearChanged() { state.filters.class_group_id = ''; await search(); }
     function base() { return '/schools/' + state.schoolId; }
     function can(permission) { return Boolean(state.user?.permissions.includes(permission)); }
+    function isProfileRole() { return ['teacher', 'student', 'guardian'].includes(text(state.user?.role)); }
     function school() { return state.schools.find(s => s.id === state.schoolId); }
     function label(value) { const key = text(value); return statusLabels[key] || key || '—'; }
     function date(value) { const v = text(value); return v ? new Intl.DateTimeFormat('pt-BR', { timeZone: v.length === 10 ? 'UTC' : 'America/Bahia' }).format(new Date(v.length === 10 ? v + 'T12:00:00Z' : v)) : '—'; }
@@ -236,7 +244,77 @@ var PigeUI;
     function getName(list, id) { return text(state.catalogs[list]?.find(x => x.id === id)?.name) || '—'; }
     function options(list) { return (state.catalogs[list] || []).map(x => ({ value: x.id, label: text(x.name) + (list === 'class-groups' ? ' · ' + getName('academic-years', x.academic_year_id) + ' · ' + getName('shifts', x.shift_id) : '') })); }
     function field(key, caption, type = 'text', required = false, opts, wide = false) { return { key, label: caption, type, required, options: opts, wide }; }
-    function personFields() { return [field('name', 'Nome completo', 'text', true), field('social_name', 'Nome social'), field('cpf', 'CPF (opcional)'), field('birth_date', 'Nascimento', 'date'), field('phone', 'Telefone / WhatsApp'), field('email', 'E-mail', 'email'), field('address', 'Endereço', 'text', false, undefined, true), field('notes', 'Observações administrativas', 'textarea', false, undefined, true)]; }
+    const studentFieldKeys = ['previous_school', 'nis', 'sus_card', 'inep_code', 'health_plan', 'allergies', 'medications', 'health_notes', 'special_needs', 'authorized_transport', 'student_notes'];
+    const personTypeLabels = {
+        student: 'Aluno', teacher: 'Professor', collaborator: 'Colaborador', employee: 'Funcionário',
+        parent: 'Pai / mãe', mother: 'Mãe', father: 'Pai', guardian: 'Responsável',
+        financial_responsible: 'Responsável financeiro', legal_responsible: 'Responsável legal',
+        staff: 'Equipe / administrativo', other: 'Outro'
+    };
+    function personTypeLabel(value) { const code = text(value); return personTypeLabels[code] || code.replace(/_/g, ' ').replace(/^./, letter => letter.toUpperCase()); }
+    function personTypeOptions(extra = []) {
+        const codes = Array.from(new Set([...Object.keys(personTypeLabels), ...extra]));
+        return codes.map(value => ({ value, label: personTypeLabel(value) }));
+    }
+    function personFields(extraTypes = []) {
+        return [
+            field('person_types', 'Tipos de pessoa', 'multiselect', false, personTypeOptions(extraTypes), true),
+            field('name', 'Nome completo', 'text', true), field('social_name', 'Nome social'), field('cpf', 'CPF'), field('birth_date', 'Data de nascimento', 'date'),
+            field('birth_certificate', 'Certidão / registro de nascimento'), field('birth_city', 'Cidade de nascimento'), field('birth_state', 'UF de nascimento'),
+            field('nationality', 'Nacionalidade'), field('sex', 'Sexo', 'select', false, [{ value: 'female', label: 'Feminino' }, { value: 'male', label: 'Masculino' }, { value: 'intersex', label: 'Intersexo' }, { value: 'not_informed', label: 'Não informado' }]),
+            field('gender', 'Identidade de gênero'), field('race_color', 'Raça / cor', 'select', false, [{ value: 'branca', label: 'Branca' }, { value: 'preta', label: 'Preta' }, { value: 'parda', label: 'Parda' }, { value: 'amarela', label: 'Amarela' }, { value: 'indigena', label: 'Indígena' }, { value: 'not_informed', label: 'Não informado' }]),
+            field('marital_status', 'Estado civil', 'select', false, [{ value: 'single', label: 'Solteiro(a)' }, { value: 'married', label: 'Casado(a)' }, { value: 'divorced', label: 'Divorciado(a)' }, { value: 'widowed', label: 'Viúvo(a)' }, { value: 'not_informed', label: 'Não informado' }]),
+            field('rg', 'RG / documento de identidade'), field('rg_issuer', 'Órgão expedidor'), field('rg_state', 'UF do RG'), field('rg_issued_on', 'Data de expedição', 'date'),
+            field('mother_name', 'Nome da mãe'), field('father_name', 'Nome do pai'), field('phone', 'Telefone / WhatsApp'), field('phone_secondary', 'Telefone secundário'), field('email', 'E-mail', 'email'),
+            field('postal_code', 'CEP'), field('street', 'Logradouro'), field('address_number', 'Número'), field('address_complement', 'Complemento'), field('district', 'Bairro'), field('city', 'Cidade'), field('state', 'UF'), field('country', 'País'),
+            field('address', 'Endereço livre / referência', 'text', false, undefined, true), field('occupation', 'Profissão'), field('employer', 'Empresa / empregador'), field('education', 'Escolaridade'),
+            field('emergency_contact_name', 'Contato de emergência'), field('emergency_contact_phone', 'Telefone de emergência'), field('active', 'Cadastro ativo', 'checkbox'),
+            field('photo', 'Foto da pessoa (PNG ou JPEG)', 'photo', false, undefined, true), field('notes', 'Observações administrativas', 'textarea', false, undefined, true)
+        ];
+    }
+    function studentFields() {
+        return [
+            field('previous_school', 'Escola anterior'), field('nis', 'NIS / PIS'), field('sus_card', 'Cartão SUS'), field('inep_code', 'Código INEP'),
+            field('health_plan', 'Plano de saúde'), field('allergies', 'Alergias', 'textarea', false, undefined, true), field('medications', 'Medicamentos de uso contínuo', 'textarea', false, undefined, true),
+            field('health_notes', 'Informações de saúde', 'textarea', false, undefined, true), field('special_needs', 'Necessidades específicas', 'textarea', false, undefined, true),
+            field('authorized_transport', 'Transporte autorizado'), field('student_notes', 'Observações pedagógicas / administrativas', 'textarea', false, undefined, true)
+        ];
+    }
+    const employmentTypes = [{ value: 'clt', label: 'CLT' }, { value: 'public', label: 'Serviço público' }, { value: 'temporary', label: 'Temporário' }, { value: 'substitute', label: 'Substituto' }, { value: 'intern', label: 'Estágio' }, { value: 'outsourced', label: 'Terceirizado' }, { value: 'other', label: 'Outro' }];
+    const employmentStatuses = [{ value: 'active', label: 'Ativo' }, { value: 'leave', label: 'Afastado' }, { value: 'inactive', label: 'Inativo' }];
+    const teacherProfileKeys = ['registration_number', 'professional_registration', 'employment_type', 'employment_status', 'admission_date', 'termination_date', 'inep_code', 'education_institution', 'degree_course', 'specialization', 'teaching_areas', 'workload_hours', 'profile_notes'];
+    const employeeProfileKeys = ['employee_number', 'employment_type', 'employment_status', 'admission_date', 'termination_date', 'department', 'job_title', 'work_schedule', 'supervisor_name', 'profile_notes'];
+    function teacherFields() {
+        return [
+            field('registration_number', 'Matrícula funcional'), field('professional_registration', 'Registro profissional / conselho'),
+            field('employment_type', 'Vínculo de trabalho', 'select', true, employmentTypes), field('employment_status', 'Situação funcional', 'select', true, employmentStatuses),
+            field('admission_date', 'Data de admissão', 'date'), field('termination_date', 'Data de desligamento', 'date'), field('inep_code', 'Código INEP do docente'),
+            field('education_institution', 'Instituição de formação'), field('degree_course', 'Curso / licenciatura'), field('specialization', 'Especializações / pós-graduação', 'textarea', false, undefined, true),
+            field('teaching_areas', 'Áreas, componentes e etapas de atuação', 'textarea', false, undefined, true), field('workload_hours', 'Carga horária semanal', 'number'),
+            field('profile_notes', 'Observações funcionais', 'textarea', false, undefined, true)
+        ];
+    }
+    function employeeFields() {
+        return [
+            field('employee_number', 'Matrícula funcional'), field('employment_type', 'Vínculo de trabalho', 'select', true, employmentTypes),
+            field('employment_status', 'Situação funcional', 'select', true, employmentStatuses), field('admission_date', 'Data de admissão', 'date'), field('termination_date', 'Data de desligamento', 'date'),
+            field('department', 'Setor / departamento'), field('job_title', 'Cargo / função'), field('work_schedule', 'Jornada / horário de trabalho'), field('supervisor_name', 'Gestor / responsável'),
+            field('profile_notes', 'Observações funcionais', 'textarea', false, undefined, true)
+        ];
+    }
+    function photoFileId(row) { return text(row?.photo_file_id); }
+    async function hydratePhoto(row) {
+        const id = photoFileId(row);
+        if (!id || state.photoUrls[id])
+            return;
+        try {
+            state.photoUrls[id] = await PigeAPI.objectUrl(base() + '/files/' + id + '/download');
+        }
+        catch { /* A listagem continua utilizável se a foto foi removida. */ }
+    }
+    function photoSrc(row) { const id = photoFileId(row); if (id && !state.photoUrls[id])
+        void hydratePhoto(row); return id ? state.photoUrls[id] || '' : ''; }
+    async function hydratePhotos(rows) { await Promise.all(rows.map(row => hydratePhoto(row))); }
     function catalogFields(kind) {
         if (kind === 'academic-years')
             return [field('name', 'Nome do ano letivo', 'text', true), field('starts_on', 'Data inicial', 'date', true), field('ends_on', 'Data final', 'date', true), field('status', 'Situação', 'select', true, [{ value: 'active', label: 'Ativo' }, { value: 'closed', label: 'Fechado' }])];
@@ -313,7 +391,7 @@ var PigeUI;
         const saved = localStorage.getItem('pige-school');
         state.schoolId = state.schools.some(s => s.id === saved) ? saved : state.schools[0]?.id || '';
         const hash = location.hash.replace(/^#\/?/, '');
-        state.page = pageLabels[hash] ? hash : 'dashboard';
+        state.page = isProfileRole() ? 'dashboard' : (pageLabels[hash] ? hash : 'dashboard');
         if (state.schoolId)
             await changeSchool();
         else
@@ -323,6 +401,7 @@ var PigeUI;
         resetFilters();
         state.studentProtocols = [];
         state.studentProtocolTotal = 0;
+        state.photoUrls = {};
         localStorage.setItem('pige-school', state.schoolId);
         state.selectedStudent = null;
         state.studentDocs = { items: [], checklist: [], issued: [] };
@@ -332,7 +411,8 @@ var PigeUI;
         state.reportClass = '';
         state.q = '';
         state.pageNumber = 1;
-        await safe(async () => { await loadCatalogs(); await loadPage(); });
+        await safe(async () => { if (!isProfileRole())
+            await loadCatalogs(); await loadPage(); });
     }
     async function loadCatalogs() {
         const sid = state.schoolId;
@@ -343,6 +423,11 @@ var PigeUI;
     async function navigate(page) {
         if (state.busy || state.modal.kind)
             return;
+        if (isProfileRole() && page !== 'dashboard') {
+            state.page = 'dashboard';
+            history.replaceState({}, '', '#/dashboard');
+            return;
+        }
         resetFilters();
         state.page = page;
         state.pageNumber = 1;
@@ -365,9 +450,16 @@ var PigeUI;
                 state.total = 0;
             }
             else if (state.page === 'dashboard') {
-                const data = await PigeAPI.request(base() + '/dashboard');
-                if (current === sequence)
-                    state.dashboard = data;
+                if (isProfileRole()) {
+                    const data = await PigeAPI.request('/profile/context');
+                    if (current === sequence)
+                        state.profileContext = data;
+                }
+                else {
+                    const data = await PigeAPI.request(base() + '/dashboard');
+                    if (current === sequence)
+                        state.dashboard = data;
+                }
             }
             else if (state.page === 'academic') {
                 await loadCatalogs();
@@ -396,11 +488,14 @@ var PigeUI;
                 }
             }
             else if (state.page !== 'reports') {
-                const resource = state.page === 'guardians' ? 'persons' : state.page;
-                const data = await PigeAPI.request(base() + '/' + resource + '?' + query + (state.page === 'guardians' ? '&guardians_only=true' : ''));
+                const resource = ['guardians', 'people'].includes(state.page) ? 'persons' : state.page;
+                const suffix = state.page === 'guardians' ? '&guardians_only=true' : '';
+                const data = await PigeAPI.request(base() + '/' + resource + '?' + query + suffix);
                 if (current === sequence && sid === state.schoolId) {
                     state.rows = data.items;
                     state.total = data.total;
+                    const photoRows = ['students', 'teachers', 'employees'].includes(state.page) ? data.items.map(x => x.person) : data.items;
+                    void hydratePhotos(photoRows);
                 }
             }
         }
@@ -425,6 +520,7 @@ var PigeUI;
             state.history = events;
             state.studentProtocols = protocols.items;
             state.studentProtocolTotal = protocols.total;
+            void hydratePhotos([student.person, ...(student.guardians || []).map(g => g.person)]);
             state.page = 'students';
             state.studentTab = 'cadastro';
         }
@@ -438,7 +534,7 @@ var PigeUI;
     function openModal(kind, title, fields, values = {}, target = null) {
         const form = {};
         for (const f of fields)
-            form[f.key] = values[f.key] ?? (f.type === 'checkbox' ? false : f.type === 'number' ? 30 : '');
+            form[f.key] = values[f.key] ?? (f.type === 'checkbox' ? (f.key === 'active') : f.type === 'number' ? 30 : f.type === 'multiselect' ? [] : '');
         state.modal = { kind, title, fields, form, target, action: '', error: '' };
         selectedFile = null;
         state.error = '';
@@ -446,12 +542,51 @@ var PigeUI;
     function closeModal() { if (!state.busy)
         state.modal = blankModal(); }
     function valuesFrom(row, fields) { const map = {}; for (const f of fields)
-        map[f.key] = row[f.key] ?? ''; return map; }
-    function newStudent() { const fields = personFields(); fields[3].required = true; fields.push(field('previous_school', 'Escola anterior')); openModal('student', 'Cadastrar aluno', fields); }
-    function editStudent() { const p = state.selectedStudent?.person; if (!p)
-        return; openModal('person', 'Editar dados do aluno', personFields(), { ...valuesFrom(p, personFields()), is_guardian: p.is_guardian }, p); }
-    function newGuardian() { openModal('guardian', 'Cadastrar responsável', personFields()); }
-    function editPerson(row) { openModal('person', 'Editar responsável', personFields(), valuesFrom(row, personFields()), row); }
+        map[f.key] = row[f.key] ?? (f.type === 'multiselect' ? [] : ''); return map; }
+    function personTypesFrom(row) { const value = row?.person_types; return Array.isArray(value) ? value.map(text) : []; }
+    function newPerson() { openModal('person', 'Cadastrar pessoa', personFields(), { active: true, person_types: [] }); }
+    function newStudent(existing = null) {
+        if (existing) {
+            openModal('student-existing', 'Adicionar aluno à pessoa', studentFields(), {}, existing);
+            return;
+        }
+        const fields = [...personFields(), ...studentFields()];
+        const birth = fields.find(f => f.key === 'birth_date');
+        if (birth)
+            birth.required = true;
+        openModal('student', 'Cadastrar aluno', fields, { active: true, person_types: ['student'] });
+    }
+    function editStudent() {
+        const student = state.selectedStudent;
+        if (!student)
+            return;
+        const types = personTypesFrom(student.person), personFieldsList = personFields(types), fields = [...personFieldsList, ...studentFields()];
+        openModal('student-edit', 'Editar cadastro completo do aluno', fields, { ...valuesFrom(student.person, personFieldsList), ...valuesFrom(student, studentFields()), is_guardian: student.person.is_guardian, person_types: types }, student);
+    }
+    function newGuardian() { openModal('guardian', 'Cadastrar responsável', personFields(), { active: true, person_types: ['guardian'] }); }
+    function newTeacher(existing = null) {
+        if (existing) {
+            openModal('teacher-existing', 'Adicionar professor à pessoa', teacherFields(), { employment_type: 'other', employment_status: 'active', workload_hours: 0 }, existing);
+            return;
+        }
+        openModal('teacher', 'Cadastrar professor', [...personFields(['teacher']), ...teacherFields()], { active: true, person_types: ['teacher'], employment_type: 'other', employment_status: 'active', workload_hours: 0 });
+    }
+    function editTeacher(row) {
+        const person = row.person, personList = personFields(personTypesFrom(person)), profileFields = teacherFields();
+        openModal('teacher-edit', 'Editar cadastro do professor', profileFields.concat(personList), { ...valuesFrom(person, personList), ...valuesFrom(row, profileFields), person_types: personTypesFrom(person), is_guardian: person.is_guardian }, row);
+    }
+    function newEmployee(existing = null) {
+        if (existing) {
+            openModal('employee-existing', 'Adicionar funcionário à pessoa', employeeFields(), { employment_type: 'other', employment_status: 'active' }, existing);
+            return;
+        }
+        openModal('employee', 'Cadastrar funcionário', [...personFields(['employee']), ...employeeFields()], { active: true, person_types: ['employee'], employment_type: 'other', employment_status: 'active' });
+    }
+    function editEmployee(row) {
+        const person = row.person, personList = personFields(personTypesFrom(person)), profileFields = employeeFields();
+        openModal('employee-edit', 'Editar cadastro do funcionário', profileFields.concat(personList), { ...valuesFrom(person, personList), ...valuesFrom(row, profileFields), person_types: personTypesFrom(person), is_guardian: person.is_guardian }, row);
+    }
+    function editPerson(row) { const types = personTypesFrom(row); openModal('person', 'Editar cadastro da pessoa', personFields(types), valuesFrom(row, personFields(types)), row); }
     function newCatalog(row = null) { const fields = catalogFields(state.catalog); const defaults = { active: true, capacity: 30, status: 'active', level: 'Educação básica' }; openModal('catalog', (row ? 'Editar ' : 'Cadastrar ') + catalogLabels[state.catalog], fields, row ? valuesFrom(row, fields) : defaults, row); state.modal.action = state.catalog; }
     async function searchStudents(value = '') {
         const data = await PigeAPI.request(base() + '/students?page_size=100&q=' + encodeURIComponent(value));
@@ -464,11 +599,18 @@ var PigeUI;
     async function newEnrollment() {
         await safe(async () => {
             await searchStudents();
+            await searchPersons();
             const selected = state.selectedStudent;
             if (selected && !state.studentChoices.some(s => s.id === selected.id))
                 state.studentChoices.unshift(selected);
-            const fields = [field('student_id', 'Aluno', 'student', true), field('class_group_id', 'Turma de destino', 'select', true, options('class-groups')), field('enrolled_on', 'Data da matrícula', 'date', true), field('notes', 'Observações', 'textarea', false, undefined, true)];
-            openModal('enrollment', 'Nova matrícula', fields, { student_id: selected?.id || '', enrolled_on: new Date().toISOString().slice(0, 10) });
+            const fields = [
+                field('student_id', 'Aluno', 'student', true), field('class_group_id', 'Turma de destino', 'select', true, options('class-groups')),
+                field('enrolled_on', 'Data da matrícula', 'date', true),
+                field('enrollment_type', 'Tipo de entrada', 'select', true, [{ value: 'new', label: 'Nova matrícula' }, { value: 'renewal', label: 'Rematrícula' }, { value: 'transfer_in', label: 'Transferência recebida' }, { value: 'returning', label: 'Retorno' }]),
+                field('financial_person_id', 'Responsável financeiro', 'person'), field('origin_school', 'Escola de origem'), field('origin_city', 'Cidade de origem'),
+                field('entry_reason', 'Motivo / observação de entrada', 'textarea', false, undefined, true), field('external_reference', 'Referência externa'), field('notes', 'Observações', 'textarea', false, undefined, true)
+            ];
+            openModal('enrollment', 'Nova matrícula', fields, { student_id: selected?.id || '', enrolled_on: new Date().toISOString().slice(0, 10), enrollment_type: 'new' });
         });
     }
     async function viewEnrollment(id) { await safe(async () => { const data = await PigeAPI.request(base() + '/enrollments/' + id); openModal('enrollment-detail', 'Matrícula ' + text(data.number), [], {}, data); }); }
@@ -545,14 +687,15 @@ var PigeUI;
     }
     function newCompany() { openModal('company', 'Cadastrar empresa / mantenedora', [field('name', 'Razão social', 'text', true), field('document', 'CPF / CNPJ')]); }
     function newSchool(row = null) { const fields = [field('company_id', 'Empresa / mantenedora', 'select', true, state.companies.map(c => ({ value: c.id, label: text(c.name) }))), field('name', 'Nome da escola', 'text', true), field('address', 'Endereço', 'text', false, undefined, true), field('phone', 'Telefone'), field('email', 'E-mail', 'email'), field('document_policy', 'Pendências na ativação da matrícula', 'select', true, [{ value: 'warn', label: 'Avisar sem bloquear' }, { value: 'block', label: 'Exigir validação dos documentos obrigatórios' }]), field('active', 'Escola ativa', 'checkbox')]; openModal('school', row ? 'Editar escola' : 'Cadastrar escola', fields, row ? valuesFrom(row, fields) : { document_policy: 'warn', active: true }, row); }
-    function newUser(row = null) {
+    async function newUser(row = null) {
+        await searchPersons();
         const fields = [field('name', 'Nome completo', 'text', true)];
         if (!row)
             fields.push(field('email', 'E-mail de acesso', 'email', true), field('password', 'Senha inicial (mínimo 12 caracteres)', 'password', true));
-        fields.push(field('role', 'Perfil', 'select', true, ['admin', 'secretary', 'viewer'].map(v => ({ value: v, label: label(v) }))), field('school_ids', 'Escolas autorizadas', 'multiselect', false, state.schools.map(s => ({ value: s.id, label: s.name })), true));
+        fields.push(field('role', 'Perfil', 'select', true, ['admin', 'direction', 'coordination', 'secretary', 'teacher', 'student', 'guardian', 'viewer'].map(v => ({ value: v, label: label(v) }))), field('person_id', 'Pessoa vinculada (Professor, Aluno ou Responsável)', 'person', false), field('school_ids', 'Escolas autorizadas', 'multiselect', false, state.schools.map(s => ({ value: s.id, label: s.name })), true));
         if (row)
             fields.push(field('active', 'Usuário ativo', 'checkbox'));
-        openModal('user', row ? 'Editar acesso' : 'Criar usuário', fields, row ? valuesFrom(row, fields) : { role: 'secretary', school_ids: [state.schoolId] }, row);
+        openModal('user', row ? 'Editar acesso' : 'Criar usuário', fields, row ? valuesFrom(row, fields) : { role: 'secretary', person_id: '', school_ids: [state.schoolId] }, row);
     }
     function password() { openModal('password', 'Alterar minha senha', [field('current_password', 'Senha atual', 'password', true), field('new_password', 'Nova senha (mínimo 12 caracteres)', 'password', true)]); }
     function archiveStudent() { if (state.selectedStudent)
@@ -565,20 +708,87 @@ var PigeUI;
         state.modal.error = '';
         const modal = state.modal, form = { ...modal.form }, target = modal.target, studentId = state.selectedStudent?.id;
         let createdStudent = null;
+        let savedPersonId = '';
         try {
-            if (modal.kind === 'student') {
-                const previous = text(form.previous_school);
-                delete form.previous_school;
-                createdStudent = await PigeAPI.post(base() + '/students', { person: { ...form, cpf: form.cpf || null, birth_date: form.birth_date || null, is_guardian: false }, previous_school: previous });
+            const photo = selectedFile;
+            delete form.photo;
+            if (modal.kind === 'student-existing') {
+                const studentData = {};
+                for (const key of studentFieldKeys) {
+                    studentData[key] = form[key] ?? '';
+                }
+                createdStudent = await PigeAPI.post(base() + '/students', { person_id: target.id, ...studentData });
+                savedPersonId = target.id;
+            }
+            else if (modal.kind === 'student') {
+                const studentData = {};
+                for (const key of studentFieldKeys) {
+                    studentData[key] = form[key] ?? '';
+                    delete form[key];
+                }
+                const types = Array.isArray(form.person_types) ? form.person_types.map(text) : [];
+                const person = { ...form, person_types: Array.from(new Set([...types, 'student'])), cpf: form.cpf || null, birth_date: form.birth_date || null, rg_issued_on: form.rg_issued_on || null, is_guardian: false };
+                const previous = text(studentData.previous_school);
+                createdStudent = await PigeAPI.post(base() + '/students', { person, previous_school: previous, ...studentData });
+                savedPersonId = createdStudent.person.id;
+            }
+            else if (modal.kind === 'student-edit') {
+                const studentData = {};
+                for (const key of studentFieldKeys) {
+                    studentData[key] = form[key] ?? '';
+                    delete form[key];
+                }
+                const personTarget = target.person;
+                const types = Array.isArray(form.person_types) ? form.person_types.map(text) : [];
+                await PigeAPI.patch(base() + '/persons/' + personTarget.id, { version: personTarget.version, data: { ...form, person_types: Array.from(new Set([...types, 'student'])), cpf: form.cpf || null, birth_date: form.birth_date || null, rg_issued_on: form.rg_issued_on || null, is_guardian: Boolean(personTarget.is_guardian) } });
+                await PigeAPI.patch(base() + '/students/' + target.id, { version: target.version, data: studentData });
+                savedPersonId = personTarget.id;
+            }
+            else if (['teacher', 'teacher-existing', 'teacher-edit', 'employee', 'employee-existing', 'employee-edit'].includes(modal.kind)) {
+                const isTeacher = modal.kind.startsWith('teacher'), profileKeys = isTeacher ? teacherProfileKeys : employeeProfileKeys;
+                const profileData = {};
+                for (const key of profileKeys) {
+                    profileData[key] = form[key] ?? (key === 'workload_hours' ? 0 : '');
+                    delete form[key];
+                }
+                if (modal.kind.endsWith('-existing')) {
+                    await PigeAPI.post(base() + '/' + (isTeacher ? 'teachers' : 'employees'), { person_id: target.id, ...profileData });
+                    savedPersonId = target.id;
+                }
+                else if (modal.kind.endsWith('-edit')) {
+                    const personTarget = target.person;
+                    const types = Array.isArray(form.person_types) ? form.person_types.map(text) : [];
+                    await PigeAPI.patch(base() + '/persons/' + personTarget.id, { version: personTarget.version, data: { ...form, person_types: Array.from(new Set([...types, isTeacher ? 'teacher' : 'employee'])), cpf: form.cpf || null, birth_date: form.birth_date || null, rg_issued_on: form.rg_issued_on || null, is_guardian: Boolean(personTarget.is_guardian) } });
+                    await PigeAPI.patch(base() + '/' + (isTeacher ? 'teachers' : 'employees') + '/' + target.id, { version: target.version, data: profileData });
+                    savedPersonId = personTarget.id;
+                }
+                else {
+                    const types = Array.isArray(form.person_types) ? form.person_types.map(text) : [];
+                    const person = { ...form, person_types: Array.from(new Set([...types, isTeacher ? 'teacher' : 'employee'])), cpf: form.cpf || null, birth_date: form.birth_date || null, rg_issued_on: form.rg_issued_on || null, is_guardian: false };
+                    const created = await PigeAPI.post(base() + '/' + (isTeacher ? 'teachers' : 'employees'), { person, ...profileData });
+                    savedPersonId = text(created.person?.id);
+                }
             }
             else if (modal.kind === 'guardian' || modal.kind === 'person') {
-                const data = { ...form, cpf: form.cpf || null, birth_date: form.birth_date || null, is_guardian: modal.kind === 'guardian' ? true : Boolean(target?.is_guardian) };
-                if (target)
+                const types = Array.isArray(form.person_types) ? form.person_types.map(text) : [];
+                if (modal.kind === 'guardian')
+                    types.push('guardian');
+                const data = { ...form, person_types: Array.from(new Set(types)), cpf: form.cpf || null, birth_date: form.birth_date || null, rg_issued_on: form.rg_issued_on || null, is_guardian: modal.kind === 'guardian' ? true : Boolean(target?.is_guardian) };
+                if (target) {
                     await PigeAPI.patch(base() + '/persons/' + target.id, { version: target.version, data });
-                else
-                    await PigeAPI.post(base() + '/persons', data);
+                    savedPersonId = target.id;
+                }
+                else {
+                    const created = await PigeAPI.post(base() + '/persons', data);
+                    savedPersonId = created.id;
+                }
             }
-            else if (modal.kind === 'catalog') {
+            if (photo && savedPersonId) {
+                const photoData = new FormData();
+                photoData.append('file', photo);
+                await PigeAPI.request(base() + '/persons/' + savedPersonId + '/photo', { method: 'POST', body: photoData });
+            }
+            if (modal.kind === 'catalog') {
                 if (modal.action === 'document-types')
                     form.grade_id = form.grade_id || null;
                 if (modal.action === 'class-groups')
@@ -594,8 +804,10 @@ var PigeUI;
                 else
                     await PigeAPI.post(base() + '/students/' + studentId + '/guardians', { ...form, active: true });
             }
-            else if (modal.kind === 'enrollment')
+            else if (modal.kind === 'enrollment') {
+                form.financial_person_id = form.financial_person_id || null;
                 await PigeAPI.post(base() + '/enrollments', form);
+            }
             else if (modal.kind === 'draft-edit')
                 await PigeAPI.patch(base() + '/enrollments/' + target.id, { ...form, version: target.version });
             else if (modal.kind === 'protocol-note')
@@ -641,6 +853,7 @@ var PigeUI;
                 state.schools = await PigeAPI.request('/schools');
             }
             else if (modal.kind === 'user') {
+                form.person_id = form.person_id || null;
                 if (target)
                     await PigeAPI.patch('/users/' + target.id, { ...form, version: target.version });
                 else
@@ -705,6 +918,7 @@ var PigeUI;
         resetFilters();
         state.personChoices = [];
         state.studentChoices = [];
+        state.photoUrls = {};
         state.catalogs = {};
         state.reportRows = [];
         state.companies = [];
@@ -744,5 +958,5 @@ var PigeUI;
         window.addEventListener('keydown', (event) => { if (event.key === 'Escape')
             closeModal(); });
     }
-    Vue.createApp({ components: { 'expansion-panel': PigeExpansion.component }, render: PigeRenders.app, setup() { Vue.onMounted(() => { setupPWA(); void initialize(); }); return { state, text, can, school, label, date, cpf, initials, getName, options, pageLabels, catalogLabels, configure, login, logout, navigate, changeSchool, setCatalog, search, page, loadPage, viewStudent, newStudent, editStudent, newGuardian, editPerson, newCatalog, newEnrollment, viewEnrollment, startMovement, reenroll, newLink, editLink, uploadDocument, fileChange, reviewDocument, waiveDocument, issueDocument, downloadFile, newProtocol, newCompany, newSchool, newUser, password, archiveStudent, closeModal, saveModal, loadReport, exportStudents, exportClass, searchStudents, searchPersons, filteredClasses, clearFilters, yearChanged, editDraft, viewProtocol, protocolNote, protocolReceipt, exportPendencies, install, updateApp }; } }).mount('#app');
+    Vue.createApp({ components: { 'expansion-panel': PigeExpansion.component }, render: PigeRenders.app, setup() { Vue.onMounted(() => { setupPWA(); void initialize(); }); return { state, text, can, isProfileRole, school, label, date, cpf, initials, photoSrc, getName, options, pageLabels, catalogLabels, configure, login, logout, navigate, changeSchool, setCatalog, search, page, loadPage, viewStudent, newStudent, editStudent, newGuardian, newTeacher, editTeacher, newEmployee, editEmployee, editPerson, newCatalog, newEnrollment, viewEnrollment, startMovement, reenroll, newLink, editLink, uploadDocument, fileChange, reviewDocument, waiveDocument, issueDocument, downloadFile, newProtocol, newCompany, newSchool, newUser, password, archiveStudent, closeModal, saveModal, loadReport, exportStudents, exportClass, searchStudents, searchPersons, filteredClasses, clearFilters, yearChanged, editDraft, viewProtocol, protocolNote, protocolReceipt, exportPendencies, install, updateApp }; } }).mount('#app');
 })(PigeUI || (PigeUI = {}));

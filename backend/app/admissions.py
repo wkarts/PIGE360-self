@@ -128,6 +128,8 @@ def approve(id:str,data:s.Approval,db:DB,user:Actor,school:Scope,request:Request
             fail(409,'CPF de responsável já cadastrado. Confira a identidade e informe o ID do responsável existente.')
         guardian=m.Person(school_id=school.id,is_guardian=True,**{k:guardian_data.get(k) or (None if k=='cpf' else '') for k in ('name','cpf','email','phone','address')})
         db.add(guardian);db.flush()
+    from .people import ensure_person_type
+    ensure_person_type(db, guardian, 'guardian')
     child=dict(obj.student_data);previous_school=child.pop('previous_school','')
     validated=schemas.PersonInput.model_validate(child)
     if data.existing_student_id:
@@ -139,9 +141,12 @@ def approve(id:str,data:s.Approval,db:DB,user:Actor,school:Scope,request:Request
     else:
         if validated.cpf and db.scalar(select(m.Person.id).where(m.Person.school_id==school.id,m.Person.cpf==validated.cpf)):
             fail(409,'CPF de aluno já cadastrado. Confira o cadastro e informe o ID do aluno existente.')
-        person=m.Person(school_id=school.id,**validated.model_dump());db.add(person);db.flush()
+        person_values=validated.model_dump(exclude={'person_types'})
+        person_values['is_guardian']=False
+        person=m.Person(school_id=school.id,**person_values);db.add(person);db.flush()
         student=m.Student(school_id=school.id,person_id=person.id,number=number(db,school.id,'student','ALU-'),previous_school=previous_school)
         db.add(student);db.flush()
+    ensure_person_type(db, person, 'student')
     if guardian.id==student.person_id:fail(422,'Responsável e aluno devem ser pessoas distintas neste fluxo.')
     link=db.scalar(select(m.GuardianLink).where(m.GuardianLink.student_id==student.id,m.GuardianLink.person_id==guardian.id))
     if not link:

@@ -74,10 +74,10 @@ Variáveis opcionais: `GHCR_MIN_AGE_DAYS=7`, `GHCR_KEEP_RECENT=10`. Execução m
 Somente depois de uma release estável publicada:
 
 ```bash
-python3 scripts/configure.py --channel stable --url https://escola.exemplo.com.br
+python3 scripts/configure.py --channel stable --env-file deploy/docker/.env.production --url https://escola.exemplo.com.br
 # Caso o pacote seja privado: docker login ghcr.io (token com leitura de packages).
-docker compose --env-file .env -f deploy/compose.yaml pull
-docker compose --env-file .env -f deploy/compose.yaml up -d --wait
+docker compose --env-file deploy/docker/.env.production -f deploy/docker/compose.yaml pull
+docker compose --env-file deploy/docker/.env.production -f deploy/docker/compose.yaml up -d --wait
 ```
 
 Configure seu proxy/CloudPanel para `127.0.0.1:58080`, com HTTPS e Host original. Defina `TRUSTED_PROXY_IPS` conforme a rede real do proxy. Não existe Nginx ou Traefik dentro da stack. Application/PWA: uma única porta. Banco e worker: sem portas publicadas.
@@ -85,27 +85,27 @@ Configure seu proxy/CloudPanel para `127.0.0.1:58080`, com HTTPS e Host original
 ## Instalação develop isolada
 
 ```bash
-python3 scripts/configure.py --channel develop --env-file .env.develop --url https://d.escola.exemplo.com.br
-# A configuração usa porta 58081 e projeto Compose pige360-self-develop.
-docker compose --env-file .env.develop -f deploy/compose.yaml pull
-docker compose --env-file .env.develop -f deploy/compose.yaml up -d --wait
+python3 scripts/configure.py --channel develop --env-file deploy/docker/.env.develop --url https://d.escola.exemplo.com.br
+# A configuração usa porta 58081 e projeto Compose isolado.
+docker compose --env-file deploy/docker/.env.develop -f deploy/docker/compose.yaml pull
+docker compose --env-file deploy/docker/.env.develop -f deploy/docker/compose.yaml up -d --wait
 ```
 
-O gerador não sobrescreve arquivo existente. Não reutilizar as credenciais ou volumes de produção. Para CloudPanel, Dockge ou Portainer, usar o mesmo `deploy/compose.yaml` image-only e suas variáveis; não há dependência de checkout/build no servidor. O PostgreSQL upstream continua padrão; selecionar o wrapper GHCR em `POSTGRES_IMAGE` é opcional, mantendo major 17.
+O gerador não sobrescreve arquivo existente. Não reutilize credenciais ou dados de produção. Para CloudPanel, Dockge ou Portainer, use o `compose.yaml` do diretório correspondente e o ambiente daquele adaptador; todos são image-only e não exigem checkout/build no servidor. O PostgreSQL upstream continua padrão; selecionar o wrapper GHCR em `POSTGRES_IMAGE` é opcional, mantendo major 17.
 
 ## Atualização de instalação 0.3.0 existente
 
-Faça backup de banco, arquivos e chaves antes de trocar o código. Preserve `.env`, `COMPOSE_PROJECT_NAME`, nomes dos volumes e `INTEGRATION_ENCRYPTION_KEY`. Não execute configurador novamente. Se os volumes originais são `pige360-self_postgres_data` e `pige360-self_documents_data`, mantenha projeto `pige360-self`; para instalações com outro nome, preserve o nome REAL observado em `docker compose ls`/`docker volume ls`.
+Faça backup de banco, arquivos e chaves antes de trocar o código. Preserve o `.env` do adaptador, `COMPOSE_PROJECT_NAME`, os diretórios `data-postgres/` e `data-documents/` e `INTEGRATION_ENCRYPTION_KEY`. Não execute configurador novamente.
 
 Depois de uma imagem publicada, altere APENAS `APP_IMAGE` para a tag desejada e configure `APP_PULL_POLICY=always`:
 
 ```bash
-docker compose --env-file .env -f deploy/compose.yaml pull
-docker compose --env-file .env -f deploy/compose.yaml up -d --wait
-docker compose --env-file .env -f deploy/compose.yaml logs --tail=100 app worker
+docker compose --env-file deploy/docker/.env.production -f deploy/docker/compose.yaml pull
+docker compose --env-file deploy/docker/.env.production -f deploy/docker/compose.yaml up -d --wait
+docker compose --env-file deploy/docker/.env.production -f deploy/docker/compose.yaml logs --tail=100 app worker
 ```
 
-Não usar `down -v`. O código não executa deploy remoto nem modifica servidores. Os scripts de backup/restauração existentes usam o Compose da raiz; execute-os na mesma pasta/projeto da instalação. Rollback de imagem não reverte migrations incompatíveis: restauração exige backup coerente e procedimento testado.
+Não usar `down -v`. O código não executa deploy remoto nem modifica servidores. Os scripts de backup/restauração usam `deploy/docker` por padrão e aceitam `PIGE_STACK_DIR`, `PIGE_ENV_FILE` e `PIGE_COMPOSE_FILE` para outro adaptador. Rollback de imagem não reverte migrations incompatíveis: restauração exige backup coerente e procedimento testado.
 
 ## Checkpoint local
 

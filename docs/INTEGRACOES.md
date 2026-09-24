@@ -13,8 +13,8 @@ O código HTTP, persistência, telas, criptografia, fila e tratamento de respost
 `app` e `worker` recebem as mesmas configurações. O worker realiza os envios e consultas; sem ele, as operações permanecem enfileiradas. O painel de Integrações mostra estado, tentativas e códigos de erro sem exibir segredos ou códigos de verificação.
 
 ```bash
-docker compose ps
-docker compose logs --tail=100 worker
+docker compose --env-file deploy/docker/.env.production -f deploy/docker/compose.yaml ps
+docker compose --env-file deploy/docker/.env.production -f deploy/docker/compose.yaml logs --tail=100 worker
 ```
 
 ## ASAAS
@@ -66,7 +66,7 @@ Uma conexão ASAAS que já possui cobranças não pode alternar sandbox/produç�
 
 ## ARGWS Connect API
 
-No `.env`, permita somente o hostname real:
+No arquivo de ambiente do adaptador (`deploy/docker/.env.production` no exemplo), permita somente o hostname real:
 
 ```dotenv
 CONNECT_ALLOWED_HOSTS=connect.seudominio.com.br

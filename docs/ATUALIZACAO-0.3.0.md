@@ -2,7 +2,7 @@
 
 ## Preparar
 
-Agende janela de manutenção. Preserve `.env`, os volumes `postgres_data`/`documents_data`, o nome do projeto Compose e o diretório de implantação. Guarde uma cópia do código/imagem anteriores. O pacote novo não contém credenciais nem banco.
+Agende janela de manutenção. Preserve o `.env` do adaptador, os diretórios `data-postgres/`/`data-documents/`, o nome do projeto Compose e o diretório de implantação. Guarde uma cópia do código/imagem anteriores. O pacote novo não contém credenciais nem banco.
 
 Execute o backup da instalação existente. Na versão nova, `scripts/backup.sh` interrompe app **e worker** durante o dump e a cópia dos documentos, retomando os serviços que estavam ativos ao final. Ele gera banco, arquivos e manifesto com hashes, mas não cifra os artefatos automaticamente. Proteja os arquivos e salve `.env` separadamente.
 
@@ -17,18 +17,18 @@ Não rode o script contra uma instalação ainda não configurada. Ele depende d
 Substitua o código pelos arquivos desta versão sem remover `.env` ou volumes. O diretório `reference` antigo pode ser removido da cópia de código: deixou de fazer parte do produto e não é usado em runtime.
 
 ```bash
-python3 scripts/prepare-upgrade.py
+python3 scripts/prepare-upgrade.py --env-file deploy/docker/.env.production
 # Confira as opções acrescentadas; configure SMTP e allowlist da Connect API.
-docker compose up -d --build
-docker compose ps
-docker compose logs --tail=100 app worker
+docker compose --env-file deploy/docker/.env.production -f deploy/docker/compose.yaml up -d --wait
+docker compose --env-file deploy/docker/.env.production -f deploy/docker/compose.yaml ps
+docker compose --env-file deploy/docker/.env.production -f deploy/docker/compose.yaml logs --tail=100 app worker
 ```
 
 O preparador faz backup de `.env` antes de editar, preserva `APP_SECRET_KEY`, `SETUP_TOKEN`, `POSTGRES_PASSWORD` e a chave de integração existente. Acrescenta `INTEGRATION_ENCRYPTION_KEY` apenas quando ausente/vazia. Não substitui silenciosamente chave inválida.
 
 Se `APP_IMAGE` é a imagem local da versão 0.1/0.2, atualiza para `pige360-self:0.3.0`. Para tags de registro próprio, escolha a tag pelo seu procedimento de distribuição; o script não publica imagens nem altera repositórios.
 
-O startup aplica Alembic até `0003_online_admissions`. Não reescreve `0001_secretary`/`0002_protocol_events`. A nova migration cria 12 tabelas: processos de inscrição, contas/sessões/códigos do portal, inscrições/mensagens/anexos, conexões/jobs/webhooks e cobranças/eventos. As migrations anteriores permanecem byte a byte iguais à base 0.2.0 fornecida.
+O startup aplica Alembic até a versão corrente. A migration `0007_secretaria_staff_profiles` acrescenta os perfis profissionais de Professor e Funcionário e a referência opcional de docente por Pessoa; não reescreve migrations anteriores.
 
 Agora existem três serviços: `app`, `db` e `worker`. Somente `app` publica porta; a porta e os volumes da instalação anterior são mantidos.
 

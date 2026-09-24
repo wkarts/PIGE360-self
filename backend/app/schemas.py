@@ -15,7 +15,54 @@ class PersonInput(Input):
     phone: str = Field(default='', max_length=32)
     address: str = Field(default='', max_length=400)
     notes: str = Field(default='', max_length=4000)
-    is_guardian: bool = False
+    is_guardian: bool | None = None
+    rg: str = Field(default='', max_length=40)
+    rg_issuer: str = Field(default='', max_length=80)
+    rg_state: str = Field(default='', max_length=2)
+    rg_issued_on: date | None = None
+    birth_certificate: str = Field(default='', max_length=80)
+    birth_city: str = Field(default='', max_length=120)
+    birth_state: str = Field(default='', max_length=2)
+    nationality: str = Field(default='', max_length=80)
+    sex: str = Field(default='', max_length=32)
+    gender: str = Field(default='', max_length=80)
+    race_color: str = Field(default='', max_length=80)
+    marital_status: str = Field(default='', max_length=40)
+    mother_name: str = Field(default='', max_length=180)
+    father_name: str = Field(default='', max_length=180)
+    phone_secondary: str = Field(default='', max_length=32)
+    postal_code: str = Field(default='', max_length=16)
+    street: str = Field(default='', max_length=180)
+    address_number: str = Field(default='', max_length=24)
+    address_complement: str = Field(default='', max_length=120)
+    district: str = Field(default='', max_length=120)
+    city: str = Field(default='', max_length=120)
+    state: str = Field(default='', max_length=2)
+    country: str = Field(default='Brasil', max_length=80)
+    occupation: str = Field(default='', max_length=120)
+    employer: str = Field(default='', max_length=180)
+    education: str = Field(default='', max_length=100)
+    emergency_contact_name: str = Field(default='', max_length=180)
+    emergency_contact_phone: str = Field(default='', max_length=32)
+    active: bool = True
+    # Uma pessoa pode acumular funções; None preserva os tipos existentes em PATCH.
+    person_types: list[str] | None = Field(default=None, max_length=20)
+
+
+    @field_validator('person_types')
+    @classmethod
+    def person_types_valid(cls, value):
+        if value is None:
+            return None
+        result = []
+        for item in value:
+            code = item.strip().lower()
+            if not re.fullmatch(r'[a-z][a-z0-9_]{1,39}', code):
+                raise ValueError('Tipo de pessoa inválido; use letras, números e underscore.')
+            if code not in result:
+                result.append(code)
+        return result
+
 
     @field_validator('cpf', mode='before')
     @classmethod
@@ -39,22 +86,113 @@ class PersonInput(Input):
             return str(TypeAdapter(EmailStr).validate_python(value)).lower()
         return value
 
-    @field_validator('birth_date')
+    @field_validator('birth_date', 'rg_issued_on', mode='before')
+    @classmethod
+    def blank_date(cls, value):
+        return None if value in ('', None) else value
+
+    @field_validator('birth_date', 'rg_issued_on')
     @classmethod
     def not_future(cls, value):
         if value and value > date.today():
-            raise ValueError('Data de nascimento não pode ser futura.')
+            raise ValueError('A data informada não pode ser futura.')
         return value
+
+class StudentData(Input):
+    previous_school: str = Field(default='', max_length=180)
+    nis: str = Field(default='', max_length=32)
+    sus_card: str = Field(default='', max_length=32)
+    inep_code: str = Field(default='', max_length=32)
+    health_plan: str = Field(default='', max_length=120)
+    allergies: str = Field(default='', max_length=4000)
+    medications: str = Field(default='', max_length=4000)
+    health_notes: str = Field(default='', max_length=4000)
+    special_needs: str = Field(default='', max_length=4000)
+    authorized_transport: str = Field(default='', max_length=120)
+    student_notes: str = Field(default='', max_length=4000)
+
 
 class StudentInput(Input):
     person: PersonInput | None = None
     person_id: str | None = None
     previous_school: str = Field(default='', max_length=180)
+    nis: str = Field(default='', max_length=32)
+    sus_card: str = Field(default='', max_length=32)
+    inep_code: str = Field(default='', max_length=32)
+    health_plan: str = Field(default='', max_length=120)
+    allergies: str = Field(default='', max_length=4000)
+    medications: str = Field(default='', max_length=4000)
+    health_notes: str = Field(default='', max_length=4000)
+    special_needs: str = Field(default='', max_length=4000)
+    authorized_transport: str = Field(default='', max_length=120)
+    student_notes: str = Field(default='', max_length=4000)
     @model_validator(mode='after')
     def one_person(self):
         if bool(self.person) == bool(self.person_id):
             raise ValueError('Informe uma pessoa existente ou os dados pessoais.')
         return self
+
+
+class EmploymentData(Input):
+    employment_type: Literal['clt', 'public', 'temporary', 'substitute', 'intern', 'outsourced', 'other'] = 'other'
+    employment_status: Literal['active', 'leave', 'inactive'] = 'active'
+    admission_date: date | None = None
+    termination_date: date | None = None
+
+    @field_validator('admission_date', 'termination_date', mode='before')
+    @classmethod
+    def blank_employment_date(cls, value):
+        return None if value in ('', None) else value
+
+    @model_validator(mode='after')
+    def employment_dates_are_ordered(self):
+        if self.admission_date and self.termination_date and self.termination_date < self.admission_date:
+            raise ValueError('A data de desligamento não pode ser anterior à admissão.')
+        return self
+
+
+class TeacherData(EmploymentData):
+    registration_number: str = Field(default='', max_length=40)
+    professional_registration: str = Field(default='', max_length=80)
+    inep_code: str = Field(default='', max_length=32)
+    education_institution: str = Field(default='', max_length=180)
+    degree_course: str = Field(default='', max_length=180)
+    specialization: str = Field(default='', max_length=4000)
+    teaching_areas: str = Field(default='', max_length=4000)
+    workload_hours: int = Field(default=0, ge=0, le=80)
+    profile_notes: str = Field(default='', max_length=4000)
+
+
+class TeacherInput(TeacherData):
+    person: PersonInput | None = None
+    person_id: str | None = None
+
+    @model_validator(mode='after')
+    def one_person(self):
+        if bool(self.person) == bool(self.person_id):
+            raise ValueError('Informe uma pessoa existente ou os dados pessoais.')
+        return self
+
+
+class EmployeeData(EmploymentData):
+    employee_number: str = Field(default='', max_length=40)
+    department: str = Field(default='', max_length=120)
+    job_title: str = Field(default='', max_length=160)
+    work_schedule: str = Field(default='', max_length=160)
+    supervisor_name: str = Field(default='', max_length=180)
+    profile_notes: str = Field(default='', max_length=4000)
+
+
+class EmployeeInput(EmployeeData):
+    person: PersonInput | None = None
+    person_id: str | None = None
+
+    @model_validator(mode='after')
+    def one_person(self):
+        if bool(self.person) == bool(self.person_id):
+            raise ValueError('Informe uma pessoa existente ou os dados pessoais.')
+        return self
+
 
 class GuardianInput(Input):
     person_id: str
@@ -113,6 +251,11 @@ class EnrollmentInput(Input):
     class_group_id: str
     enrolled_on: date
     financial_person_id: str | None = None
+    enrollment_type: Literal['new','renewal','transfer_in','returning'] = 'new'
+    origin_school: str = Field(default='', max_length=180)
+    origin_city: str = Field(default='', max_length=120)
+    entry_reason: str = Field(default='', max_length=1000)
+    external_reference: str = Field(default='', max_length=120)
     notes: str = Field(default='', max_length=4000)
 
 class MovementInput(Input):
@@ -177,19 +320,35 @@ class UserInput(Input):
     name: str = Field(min_length=2, max_length=160)
     email: EmailStr
     password: str = Field(min_length=12, max_length=128)
-    role: Literal['admin','secretary','viewer'] = 'secretary'
+    role: Literal['admin','direction','coordination','secretary','teacher','student','guardian','viewer'] = 'secretary'
     school_ids: list[str] = Field(default_factory=list, max_length=100)
+    person_id: str | None = None
 
 class UserEdit(Input):
     name: str = Field(min_length=2, max_length=160)
-    role: Literal['admin','secretary','viewer']
+    role: Literal['admin','direction','coordination','secretary','teacher','student','guardian','viewer']
     active: bool
     school_ids: list[str] = Field(default_factory=list, max_length=100)
+    person_id: str | None = None
     version: int = Field(ge=1)
 
 class PasswordChange(Input):
     current_password: str = Field(min_length=1, max_length=128)
     new_password: str = Field(min_length=12, max_length=128)
+
+
+class TeacherAssignmentInput(Input):
+    teacher_user_id: str | None = None
+    teacher_person_id: str | None = None
+    class_group_id: str
+    subject_name: str = Field(default='', max_length=120)
+    active: bool = True
+
+    @model_validator(mode='after')
+    def one_teacher_reference(self):
+        if not self.teacher_user_id and not self.teacher_person_id:
+            raise ValueError('Informe o usuário de acesso ou a pessoa docente.')
+        return self
 
 
 class DraftEnrollmentEdit(Input):

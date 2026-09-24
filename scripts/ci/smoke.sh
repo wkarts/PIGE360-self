@@ -2,6 +2,7 @@
 # Apenas um projeto descartável pige360-ci-*. Nunca usa os volumes da instalação.
 set -Eeuo pipefail
 cd "$(dirname "$0")/../.."
+STACK_DIR="deploy/docker"
 IMAGE="${1:?Informe a imagem}"
 MODE="${2:-remote}"
 [[ "$MODE" == remote || "$MODE" == local ]]
@@ -9,7 +10,8 @@ mkdir -p ci-evidence
 ENVFILE="$(mktemp)"
 PROJECT="pige360-ci-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-${RANDOM}"
 export APP_IMAGE="$IMAGE" APP_PULL_POLICY=never COMPOSE_PROJECT_NAME="$PROJECT"
-python - "$ENVFILE" <<'PY'
+export POSTGRES_IMAGE="${POSTGRES_IMAGE:-ghcr.io/wkarts/pige360-self-postgres:17-bookworm}"
+python - "$ENVFILE" <<'PYCONF'
 import base64, os, secrets, sys
 values={'APP_SECRET_KEY':secrets.token_urlsafe(48),'SETUP_TOKEN':secrets.token_urlsafe(32),
         'POSTGRES_PASSWORD':secrets.token_urlsafe(36), 'APP_ENV':'production',
@@ -18,24 +20,31 @@ values={'APP_SECRET_KEY':secrets.token_urlsafe(48),'SETUP_TOKEN':secrets.token_u
         'INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()}
 with open(sys.argv[1],'w') as f:f.writelines(f'{k}={v}\n' for k,v in values.items())
 os.chmod(sys.argv[1],0o600)
-PY
-compose() { docker compose --env-file "$ENVFILE" -p "$PROJECT" -f deploy/compose.yaml "$@"; }
+PYCONF
+compose() { docker compose --env-file "$ENVFILE" -p "$PROJECT" -f "$STACK_DIR/compose.yaml" "$@"; }
 cleanup() {
   code=$?
   compose ps --all > ci-evidence/docker-ps.txt 2>&1 || true
   compose logs --no-color --tail=150 > ci-evidence/docker-smoke.log 2>&1 || true
   # Secrets gerados nunca são publicados junto aos logs.
-  if [[ "$PROJECT" == pige360-ci-* ]]; then compose down --volumes --remove-orphans >/dev/null 2>&1 || true; fi
+  if [[ "$PROJECT" == pige360-ci-* ]]; then
+    compose down --remove-orphans >/dev/null 2>&1 || true
+    if command -v sudo >/dev/null 2>&1; then
+      sudo rm -rf -- "$STACK_DIR/data-postgres" "$STACK_DIR/data-documents"
+    else
+      rm -rf -- "$STACK_DIR/data-postgres" "$STACK_DIR/data-documents" || true
+    fi
+  fi
   rm -f "$ENVFILE"
   exit "$code"
 }
 trap cleanup EXIT
 if [[ "$MODE" == remote ]]; then docker pull "$IMAGE"; fi
-docker pull "${POSTGRES_IMAGE:-postgres:17-bookworm}"
+docker pull "$POSTGRES_IMAGE"
 compose config --quiet
 compose up -d --wait --wait-timeout 240
 ADDRESS="$(compose port app 8000)"
-python - "$ADDRESS" "$IMAGE" <<'PY'
+python - "$ADDRESS" "$IMAGE" <<'PYHTTP'
 import json,sys,urllib.request
 url='http://'+sys.argv[1]
 result={}
@@ -47,4 +56,4 @@ for path in ['/health/live','/health/ready','/','/online.html','/manifest.webman
 result['image']=sys.argv[2]
 with open('ci-evidence/docker-smoke.json','w') as f:json.dump(result,f,indent=2)
 print(json.dumps(result,indent=2))
-PY
+PYHTTP

@@ -1,27 +1,27 @@
 # Relatório de entrega — PIGE360 Self 0.3.0
 
-Data: 22/09/2026. Base: pacote PIGE360-Self-Secretaria-0.2.0-Branding.zip fornecido na conversa. Construção local; sem alteração de repositório, publicação, deploy remoto, mensagem real ou cobrança real.
+Data: 23/09/2026. Base: PIGE360 Self no repositório `wkarts/PIGE360-self`. Entrega em branch/PR; sem deploy remoto, mensagem real ou cobrança real.
 
 ## Resultado
 
-Aplicação FastAPI/Vue ampliada com portal dos responsáveis, pré-matrícula online, análise e efetivação pela Secretaria, integração de cobrança ASAAS, conector HTTP configurável para ARGWS Connect API e processamento persistente. Template original removido do pacote. Os 14 ativos mapeados do branding e as migrations 0001/0002 foram conferidos por hash e preservados.
+Aplicação FastAPI/Vue ampliada com cadastro único de pessoas, visões separadas de Aluno, Professor, Funcionário e Responsável, perfis profissionais independentes de login, portal dos responsáveis, pré-matrícula online, análise e efetivação pela Secretaria, integração de cobrança ASAAS, conector HTTP configurável para ARGWS Connect API e processamento persistente. A migration `0007_secretaria_staff_profiles` preserva a compatibilidade dos dados existentes.
 
 ## Verificações executadas
 
 | Verificação | Resultado |
 |---|---|
-| Backend, incluindo regressões | **70 aprovados; 1 ignorado** de 71 coletados |
-| Interface administrativa anterior | 20 verificações aprovadas |
+| Backend, incluindo regressões e perfis de equipe | **77 aprovados; 1 ignorado** de 78 coletados |
+| Interface administrativa anterior | Mantida; E2E desta execução não iniciou por ausência do Chromium local |
 | Novas telas de portal/inscrições/integrações/cobranças | 14 verificações aprovadas |
 | Total de verificações de interface | **34 aprovadas** |
 | JavaScript das telas exercitadas | Nenhuma exceção observada |
-| TypeScript + templates Vue/PWA | Compilação local concluída |
+| TypeScript + templates Vue/PWA | Typecheck e build local concluídos |
 | Alembic instalação vazia/upgrade/check/downgrade/reupgrade | Aprovados em SQLite descartável |
 | Migração de base anterior com registro existente | Aprovada em teste automatizado |
-| Schema resultante | 37 tabelas; 97 caminhos OpenAPI |
+| Schema resultante | 41 tabelas; 105 caminhos OpenAPI |
 | DDL PostgreSQL | Compilado estaticamente; não executado |
 | Configurador e preparador de upgrade | Geração, preservação de chaves, reexecução e backup 0600 testados |
-| Compose/shell | Análise YAML e sintaxe shell aprovadas; três serviços e uma porta publicada |
+| Compose/shell | YAML dos quatro adaptadores e sintaxe shell aprovados; três serviços e uma porta publicada por stack |
 | Documento escolar gerado | PDF gerado pela API, baixado pelo mecanismo de teste, texto conferido e página renderizada/inspecionada |
 
 O teste ignorado depende de PostgreSQL real para validar ativação concorrente na última vaga. Não foi convertido em teste SQLite nem declarado aprovado.
@@ -44,7 +44,7 @@ Nenhuma liquidação financeira ou entrega efetiva de WhatsApp foi realizada/ate
 
 ## Limitações de infraestrutura
 
-Docker, PostgreSQL, imagens OCI, migração em PostgreSQL, bloqueios concorrentes reais, backup/restauração em Docker e envio externo ainda precisam de homologação. `compose.yaml` e os scripts estão entregues, mas não há alegação de imagem Docker já construída ou de CI remoto aprovado.
+Docker, PostgreSQL runtime, imagens OCI, migração em PostgreSQL, bloqueios concorrentes reais, backup/restauração em Docker e envio externo ainda precisam de homologação. Docker não está instalado neste ambiente de execução; por isso o `docker compose config` e o smoke de container não foram executados localmente. Os quatro `compose.yaml` e os scripts estão entregues para execução no host de destino.
 
 O teste de restauração está descrito operacionalmente, mas não foi executado neste ambiente. A lógica de recuperação marca efeitos incertos para evitar reenvio cego depois de restaurar um snapshot.
 

@@ -42,6 +42,35 @@ def test_cpf_validation_and_optional_unique_cpf(api):
     api.post('/persons',{'name':'Pessoa 2','cpf':'52998224725'},409)
     api.post('/persons',{'name':'Sem CPF 1'});api.post('/persons',{'name':'Sem CPF 2'})
 
+def test_person_types_are_business_data_and_independent_from_login(api):
+    person=api.post('/persons',{
+        'name':'Pessoa polivalente',
+        'birth_date':'1990-01-01',
+        'person_types':['teacher','employee','collaborator','parent'],
+    })
+    assert set(person['person_types'])=={'teacher','employee','collaborator','parent'}
+    assert 'Professor' in person['person_type_labels']
+    assert 'Funcionário' in person['person_type_labels']
+
+    student=api.post('/students',{'person_id':person['id']})
+    assert student['person']['id']==person['id']
+    assert set(student['person']['person_types'])=={'teacher','employee','collaborator','parent','student'}
+
+    access_person=api.post('/persons',{'name':'Pessoa somente acesso','birth_date':'1990-01-01'})
+    created_user=api.client.post('/api/v1/users',headers=api.headers,json={
+        'name':'Professor de acesso',
+        'email':f"access-{uuid.uuid4().hex[:10]}@example.com",
+        'password':PASSWORD,
+        'role':'teacher',
+        'school_ids':[api.school['id']],
+        'person_id':access_person['id'],
+    })
+    assert created_user.status_code==201,created_user.text
+    listed=next(item for item in api.get('/persons?q=Pessoa somente acesso')['items'] if item['id']==access_person['id'])
+    assert listed['person_types']==[]
+    assert listed['person_type_labels']==[]
+
+
 def test_student_existing_person_and_date_validation(api):
     person=api.post('/persons',{'name':'Pessoa existente','birth_date':'2017-06-10'})
     student=api.post('/students',{'person_id':person['id']})
@@ -49,6 +78,50 @@ def test_student_existing_person_and_date_validation(api):
     api.post('/students',{'person_id':person['id']},409)
     api.patch('/persons/'+person['id'],{'version':person['version'],'data':{'name':person['name'],'birth_date':None}},422)
     api.post('/students',{'person':{'name':'Sem Nascimento'}},422)
+
+
+def test_teacher_and_employee_views_share_the_same_person_registry(api):
+    teacher=api.post('/teachers',{
+        'person':{
+            'name':'Docente e funcionário',
+            'birth_date':'1985-03-20',
+            'cpf':'529.982.247-25',
+            'phone':'5571999990000',
+            'person_types':['teacher'],
+        },
+        'registration_number':'DOC-001',
+        'professional_registration':'CREF-BA 123',
+        'employment_type':'public',
+        'employment_status':'active',
+        'admission_date':'2020-02-03',
+        'education_institution':'Universidade Exemplo',
+        'degree_course':'Pedagogia',
+        'teaching_areas':'Educação infantil; anos iniciais',
+        'workload_hours':40,
+    })
+    assert teacher['person']['person_types']==['teacher']
+    assert teacher['registration_number']=='DOC-001'
+    employee=api.post('/employees',{
+        'person_id':teacher['person']['id'],
+        'employee_number':'FUNC-001',
+        'employment_type':'public',
+        'department':'Secretaria escolar',
+        'job_title':'Apoio pedagógico',
+        'work_schedule':'08:00 às 17:00',
+    })
+    assert employee['person']['id']==teacher['person']['id']
+    assert set(employee['person']['person_types'])=={'teacher','employee'}
+    assert api.get('/teachers?q=DOC-001')['total']==1
+    assert api.get('/employees?q=FUNC-001')['total']==1
+    person=api.get('/persons?q=Docente e funcionário')['items'][0]
+    assert set(person['person_types'])=={'teacher','employee'}
+    api.post('/teachers',{'person_id':teacher['person']['id']},409)
+    api.post('/employees',{'person_id':teacher['person']['id']},409)
+    api.post('/employees',{
+        'person':{'name':'Datas inválidas','birth_date':'1990-01-01'},
+        'admission_date':'2025-01-02',
+        'termination_date':'2025-01-01',
+    },422)
 
 def test_guardian_search_and_duplicate_links(api):
     student=api.student();guardian=api.guardian(student,'Maria Responsável')
@@ -207,3 +280,81 @@ def test_postgresql_concurrent_activation_one_vacancy(api):
         return api.client.post(api.base+'/enrollments/'+e['id']+'/movements',headers=api.headers,json={'version':e['version'],'action':'activate','reason':'Concorrência PostgreSQL'}).status_code
     with ThreadPoolExecutor(max_workers=2) as pool:results=list(pool.map(activate,[first,second]))
     assert sorted(results)==[200,409]
+
+def test_unified_person_registry_complete_fields_and_private_photo(api):
+    person=api.post('/persons',{
+        'name':'João da Silva',
+        'social_name':'João',
+        'cpf':'529.982.247-25',
+        'birth_date':'2012-04-10',
+        'birth_certificate':'REG-123',
+        'birth_city':'Salvador',
+        'birth_state':'BA',
+        'nationality':'Brasileira',
+        'sex':'male',
+        'race_color':'parda',
+        'rg':'1234567',
+        'rg_issuer':'SSP',
+        'rg_state':'BA',
+        'rg_issued_on':'2020-01-10',
+        'mother_name':'Maria da Silva',
+        'phone':'5571999999999',
+        'phone_secondary':'5571988888888',
+        'postal_code':'40000000',
+        'street':'Rua Central',
+        'address_number':'10',
+        'district':'Centro',
+        'city':'Salvador',
+        'state':'BA',
+        'country':'Brasil',
+        'emergency_contact_name':'Maria da Silva',
+        'emergency_contact_phone':'5571999999999',
+    })
+    assert person['country']=='Brasil'
+    student=api.post('/students',{'person_id':person['id'],'previous_school':'Escola anterior','nis':'123'})
+    assert student['nis']=='123'
+    listed=api.get('/persons?q=1234567')['items'][0]
+    assert 'Aluno' in listed['roles']
+    from PIL import Image
+    image=io.BytesIO()
+    Image.new('RGB',(20,20),(0,109,119)).save(image,format='PNG')
+    photo=api.call('POST','/persons/'+person['id']+'/photo',expect=200,files={'file':('joao.png',image.getvalue(),'image/png')})
+    assert photo['photo_file_id']
+    downloaded=api.get('/files/'+photo['photo_file_id']+'/download')
+    assert downloaded.content.startswith(b'\x89PNG')
+    assert api.call('DELETE','/persons/'+person['id']+'/photo',expect=200)['photo_file_id'] is None
+
+
+def test_complete_student_and_enrollment_fields_are_persisted(api):
+    catalogs=api.catalogs(capacity=5)
+    student=api.student('Aluno Completo',adult=True)
+    edited=api.patch('/students/'+student['id'],{
+        'version':student['version'],
+        'data':{
+            'previous_school':'Colégio de Origem',
+            'nis':'NIS-99',
+            'sus_card':'SUS-99',
+            'inep_code':'INEP-99',
+            'health_plan':'Plano Escola',
+            'allergies':'Amendoim',
+            'medications':'Nenhum',
+            'health_notes':'Acompanhamento',
+            'special_needs':'Nenhuma',
+            'authorized_transport':'Van 1',
+            'student_notes':'Observação integral',
+        }
+    })
+    assert edited['previous_school']=='Colégio de Origem'
+    assert edited['special_needs']=='Nenhuma'
+    enrollment=api.post('/enrollments',{
+        'student_id':student['id'],
+        'class_group_id':catalogs['group']['id'],
+        'enrolled_on':'2026-09-21',
+        'enrollment_type':'transfer_in',
+        'origin_school':'Escola de Origem',
+        'origin_city':'Salvador',
+        'entry_reason':'Transferência regular',
+        'external_reference':'DOC-2026-01',
+    })
+    assert enrollment['enrollment_type']=='transfer_in'
+    assert enrollment['origin_school']=='Escola de Origem'
