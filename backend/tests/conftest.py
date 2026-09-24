@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TEST_ROOT = Path(tempfile.mkdtemp(prefix='pige360-tests-'))
 os.environ.update({
+    'CONNECT_API_BASE_URL':'https://connect.example.test', 'CONNECT_API_KEY':'test-only-connect-key',
     'INTEGRATION_ENCRYPTION_KEY':'MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=', 'CONNECT_ALLOWED_HOSTS':'connect.example.test', 'APP_ENV':'test', 'APP_SECRET_KEY':'test-only-secret-key-not-a-production-credential-001',
     'SETUP_TOKEN':'test-only-setup-token-0123456789', 'ALLOW_SQLITE':'true',
     'DATABASE_URL':os.getenv('PIGE_TEST_DATABASE_URL', 'sqlite:///' + str(TEST_ROOT/'test.db')),

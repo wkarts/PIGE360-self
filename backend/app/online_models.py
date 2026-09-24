@@ -111,7 +111,7 @@ class ConnectInstance(Record, Base):
     last_error: Mapped[str] = mapped_column(String(240), default='')
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
-        UniqueConstraint('company_id', 'name'),
+        UniqueConstraint('company_id', 'name', name='uq_connect_instances_company_name'),
         CheckConstraint("status IN ('creating','created','connecting','open','close','error','deleted')", name='connect_instance_status'),
     )
 

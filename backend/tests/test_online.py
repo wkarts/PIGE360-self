@@ -160,16 +160,104 @@ def test_installments_idempotency(online):
     rows=o['api'].post('/bank-charges',data)['items'];again=o['api'].post('/bank-charges',data)['items'];assert [x['due_on'] for x in rows]==['2027-01-31','2027-02-28','2027-03-31'];assert [x['id'] for x in rows]==[x['id'] for x in again]
     data['amount']='301.00';o['api'].post('/bank-charges',data,409)
 
-def connect(o):return o['api'].post('/integrations/connect_api',{'enabled':True,'api_key':'connect-test-only','webhook_token':'connect-webhook-test-only-00000000000','config':{'base_url':'https://connect.example.test','instance':'school-test','send_text_path':'/messages/{instance}/text','connection_state_path':'/sessions/{instance}/status','api_key_header':'apikey','number_field':'number','text_field':'text','message_id_path':'key.id','auth_scheme':'','contract_confirmed':True}},200)
+def connect(o, monkeypatch, label=''):
+    class FakeConnect:
+        calls=[]
 
-def test_connect_optin_and_payload(online,monkeypatch):
-    o=online;connect(o);a=submit(o,draft(o));data={'admission_id':a['id'],'text':'Uma atualização está disponível no portal.','client_key':str(uuid.uuid4())};o['api'].post('/connect/messages',data,409)
-    with SessionLocal() as db:acc=db.get(m.PortalAccount,o['account']['id']);acc.phone_verified=True;db.commit()
-    calls,_=provider_mock(monkeypatch);r=o['api'].post('/connect/messages',data,202);process_one(r['job_id']);sent=[x for x in calls if x[0]=='connect_api'];assert sent[0][3]['number']=='5575999990000'
-    with SessionLocal() as db:assert db.get(m.IntegrationJob,r['job_id']).remote_id=='msg-test-only'
+        def __init__(self):
+            pass
 
-@pytest.mark.parametrize('url',['http://connect.example.test','https://evil.example','https://user:pass@connect.example.test','https://connect.example.test/../evil'])
-def test_connect_url_validation(online,url):online['api'].post('/integrations/connect_api',{'config':{'base_url':url,'instance':'test','send_text_path':'/send/{instance}','connection_state_path':'/state/{instance}'}},422)
+        def create_instance(self, name):
+            self.calls.append(('create_instance', name))
+            return {'instance': {'instanceName': name, 'instanceId': 'remote-'+name, 'integration': 'WHATSAPP-BAILEYS', 'state': 'created'}, 'qrcode': {'base64': 'data:image/png;base64,TEST', 'code': 'qr-code'}}
+
+        def connection_state(self, name):
+            self.calls.append(('connection_state', name))
+            return {'instance': {'instanceName': name, 'state': 'open'}}
+
+        def connect(self, name, number=''):
+            self.calls.append(('connect', name, number))
+            return {'qrcode': {'pairingCode': '12345678'} if number else {'base64': 'data:image/png;base64,TEST', 'code': 'qr-code'}}
+
+        def logout(self, name):
+            self.calls.append(('logout', name))
+            return {'status': 'ok'}
+
+        def delete(self, name):
+            self.calls.append(('delete', name))
+            return {'status': 'ok'}
+
+        def health(self):
+            self.calls.append(('health',))
+            return {'status': 'ok'}
+
+        def send_text(self, name, number, text, request_key=''):
+            self.calls.append(('send_text', name, number, text, request_key))
+            return 'msg-test-only'
+
+    monkeypatch.setattr('app.connect.ConnectApiClient', FakeConnect)
+    monkeypatch.setattr('app.integration_worker.ConnectApiClient', FakeConnect)
+    with SessionLocal() as db:
+        school = db.get(m.School, o['api'].school['id'])
+        company = db.get(m.Company, school.company_id)
+        company.document = '11222333000181'
+        db.commit()
+    result = o['api'].post('/connect/instances', {'label': label, 'primary': not bool(label)}, 201)
+    return result['instance'], FakeConnect
+
+def test_connect_optin_and_payload(online, monkeypatch):
+    o=online;instance,fake=connect(o,monkeypatch);a=submit(o,draft(o))
+    data={'admission_id':a['id'],'text':'Uma atualização está disponível no portal.','client_key':str(uuid.uuid4())}
+    o['api'].post('/connect/messages',data,409)
+    with SessionLocal() as db:
+        acc=db.get(m.PortalAccount,o['account']['id']);acc.phone_verified=True;db.commit()
+    r=o['api'].post('/connect/messages',data,202)
+    from app.integration_worker import process_connect_one
+    assert process_connect_one()
+    sent=[x for x in fake.calls if x[0]=='send_text']
+    assert sent[0][2]=='5575999990000' and sent[0][3]==data['text']
+    with SessionLocal() as db:
+        job=db.get(m.ConnectMessageJob,r['job_id'])
+        assert job.remote_id=='msg-test-only' and job.status=='completed' and job.instance_id==instance['id']
+
+def test_connect_instance_name_and_additional_instance(online, monkeypatch):
+    o=online;first,_=connect(o,monkeypatch);second,_=connect(o,monkeypatch,'Atendimento 2')
+    assert first['name'].startswith('PG360-MANTENEDORA-DE-TESTE-11222333000181')
+    assert second['name'].endswith('-ATENDIMENTO-2')
+    assert first['primary'] is True and second['primary'] is False
+    overview=o['api'].get('/connect')
+    assert overview['config']['configured'] is True and overview['config']['api_key_configured'] is True
+    assert {item['id'] for item in overview['items']}=={first['id'],second['id']}
+
+def test_connect_requires_company_cnpj(online):
+    o=online
+    with SessionLocal() as db:
+        school=db.get(m.School,o['api'].school['id']);company=db.get(m.Company,school.company_id);company.document='';db.commit()
+    o['api'].post('/connect/instances',{},422)
+
+def test_connect_is_not_mixed_with_finance(online):
+    online['api'].post('/integrations/connect_api',{},404)
+
+def test_connect_timeout_not_automatically_retried(online,monkeypatch):
+    o=online;_,fake=connect(o,monkeypatch);a=submit(o,draft(o))
+    with SessionLocal() as db:
+        acc=db.get(m.PortalAccount,o['account']['id']);acc.phone_verified=True;db.commit()
+    def ambiguous(self,*args,**kwargs):
+        raise IntegrationFailure('PROVIDER_NETWORK_ERROR',uncertain=True)
+    monkeypatch.setattr(fake,'send_text',ambiguous)
+    r=o['api'].post('/connect/messages',{'admission_id':a['id'],'text':'Atualização de teste','client_key':str(uuid.uuid4())},202)
+    from app.integration_worker import process_connect_one
+    assert process_connect_one()
+    with SessionLocal() as db:assert db.get(m.ConnectMessageJob,r['job_id']).status=='uncertain'
+    assert not process_connect_one()
+
+def test_manual_message_idempotency_rejects_different_content(online,monkeypatch):
+    o=online;connect(o,monkeypatch);a=submit(o,draft(o))
+    with SessionLocal() as db:db.get(m.PortalAccount,o['account']['id']).phone_verified=True;db.commit()
+    data={'admission_id':a['id'],'text':'Aviso original','client_key':str(uuid.uuid4())}
+    first=o['api'].post('/connect/messages',data,202)
+    assert o['api'].post('/connect/messages',data,202)['job_id']==first['job_id']
+    o['api'].post('/connect/messages',{**data,'text':'Aviso diferente'},409)
 
 def test_no_automatic_cpf_link(online):
     o=online;p=o['api'].post('/persons',{'name':'Responsável existente','cpf':CPF,'is_guardian':True});a=submit(o,draft(o));data={'version':a['version'],'reason':'Identidade conferida explicitamente.','identity_confirmed':True}
@@ -212,26 +300,6 @@ def test_bank_amount_mismatch_does_not_mark_paid(online,monkeypatch):
     with SessionLocal() as db:
         assert db.get(m.BankCharge,c['id']).status!='received'
         assert db.get(m.IntegrationJob,j['job_id']).status=='failed'
-
-def test_connect_callback_instance_and_monotonic_status(online,monkeypatch):
-    o=online;conn=connect(o);a=submit(o,draft(o))
-    with SessionLocal() as db:acc=db.get(m.PortalAccount,o['account']['id']);acc.phone_verified=True;db.commit()
-    provider_mock(monkeypatch);r=o['api'].post('/connect/messages',{'admission_id':a['id'],'text':'Atualização de teste','client_key':str(uuid.uuid4())},202);process_one(r['job_id'])
-    url='/api/v1/hooks/connect_api/'+conn['id'];h={'x-connect-webhook-token':'connect-webhook-test-only-00000000000'}
-    payload={'id':'evt-c1','instance':'other-instance','event':'delivery','data':{'messageId':'msg-test-only','status':'read'}}
-    assert o['parent'].post(url,headers=h,json=payload).status_code==403
-    payload['instance']='school-test';assert o['parent'].post(url,headers=h,json=payload).status_code==200
-    payload['id']='evt-c2';payload['data']['status']='delivered';assert o['parent'].post(url,headers=h,json=payload).status_code==200
-    with SessionLocal() as db:assert db.get(m.IntegrationJob,r['job_id']).delivery_status=='read'
-
-def test_connect_timeout_not_automatically_retried(online,monkeypatch):
-    o=online;connect(o);a=submit(o,draft(o))
-    with SessionLocal() as db:acc=db.get(m.PortalAccount,o['account']['id']);acc.phone_verified=True;db.commit()
-    def ambiguous(*args,**kw):raise IntegrationFailure('PROVIDER_NETWORK_ERROR',uncertain=True)
-    monkeypatch.setattr('app.integration_core.call_json',ambiguous)
-    r=o['api'].post('/connect/messages',{'admission_id':a['id'],'text':'Atualização de teste','client_key':str(uuid.uuid4())},202);process_one(r['job_id'])
-    with SessionLocal() as db:assert db.get(m.IntegrationJob,r['job_id']).status=='uncertain'
-    assert not process_one(r['job_id'])
 
 def test_periodic_reconciliation_is_idempotent(online,monkeypatch):
     from app.integration_worker import schedule_reconciliations
@@ -277,10 +345,3 @@ def test_http_transport_error_safety(monkeypatch,status):
     assert error.value.uncertain is (status>=500)
 
 
-def test_manual_message_idempotency_rejects_different_content(online):
-    o=online;connect(o);a=submit(o,draft(o))
-    with SessionLocal() as db:db.get(m.PortalAccount,o['account']['id']).phone_verified=True;db.commit()
-    data={'admission_id':a['id'],'text':'Aviso original','client_key':str(uuid.uuid4())}
-    first=o['api'].post('/connect/messages',data,202)
-    assert o['api'].post('/connect/messages',data,202)['job_id']==first['job_id']
-    o['api'].post('/connect/messages',{**data,'text':'Aviso diferente'},409)
