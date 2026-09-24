@@ -38,9 +38,10 @@ namespace PigeSupport {
     if (!config?.enabled || !config.base_url || !config.website_token) return;
 
     const baseUrl = normalizedBase(config.base_url);
+    const sourceKey = [baseUrl, config.website_token, config.position, config.type, config.launcherTitle].join('|');
     const current = loadedSource;
-    if (current === baseUrl && script) return;
-    if (script && current !== baseUrl) {
+    if (current === sourceKey && script) return;
+    if (script && current !== sourceKey) {
       script.remove();
       script = null;
       loadedSource = '';
@@ -68,7 +69,7 @@ namespace PigeSupport {
       script = null;
       loadedSource = '';
     };
-    loadedSource = baseUrl;
+    loadedSource = sourceKey;
     document.head.appendChild(script);
   }
 }
