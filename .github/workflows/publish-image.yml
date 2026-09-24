@@ -68,7 +68,8 @@ jobs:
             PYTHON_BASE_IMAGE=${{ inputs.python_ref }}
             POSTGRES_IMAGE=${{ inputs.postgres_ref }}
           cache-from: type=gha,scope=pige360-${{ inputs.channel }},version=2
-          cache-to: type=gha,scope=pige360-${{ inputs.channel }},mode=max,version=2
+          # Cache is opportunistic; an unavailable cache must not cancel a valid image publication.
+          cache-to: type=gha,scope=pige360-${{ inputs.channel }},mode=max,version=2,ignore-error=true
           provenance: false
           sbom: false
       - name: Testar a imagem publicada por digest
