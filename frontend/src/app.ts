@@ -445,7 +445,7 @@ namespace PigeUI {
   async function exportClass():Promise<void>{if(state.reportClass)await safe(()=>PigeAPI.download(base()+'/reports/class/'+state.reportClass+'/pdf','alunos-da-turma.pdf'));}
   async function logout():Promise<void>{
     try{await PigeAPI.post('/auth/logout',{});}catch{/* Limpar a interface mesmo sem rede. */}
-    PigeAPI.clear();state.user=null;state.selectedStudent=null;state.rows=[];state.dashboard={} as Row;state.studentDocs={items:[],checklist:[],issued:[]};state.history=[];state.studentProtocols=[];state.studentProtocolTotal=0;resetFilters();state.personChoices=[];state.studentChoices=[];state.photoUrls={};state.catalogs={};state.reportRows=[];state.companies=[];state.schools=[];state.modal=blankModal();state.error='';state.login.password='';
+    PigeAPI.clear();state.user=null;state.selectedStudent=null;state.rows=[];state.dashboard={} as Row;state.studentDocs={items:[],checklist:[],issued:[]};state.history=[];state.studentProtocols=[];state.studentProtocolTotal=0;resetFilters();state.personChoices=[];state.studentChoices=[];state.photoUrls={};state.catalogs={};state.reportRows=[];state.companies=[];state.schools=[];state.supportHub={company_id:'',enabled:false,base_url:'',position:'left',widget_type:'expanded_bubble',launcher_title:'Suporte',token_configured:false,version:1};state.modal=blankModal();state.error='';state.login.password='';
   }
   async function install():Promise<void>{if(installEvent){await installEvent.prompt();installEvent=null;state.canInstall=false;}}
   function updateApp():void{if(waitingWorker&&!state.modal.kind)waitingWorker.postMessage({type:'SKIP_WAITING'});}
