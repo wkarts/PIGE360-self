@@ -133,13 +133,11 @@ def public_support_widget(db: DB):
 
 
 @router.get('/schools/{school_id}/support-widget')
-def school_support_widget(school_id: str, db: DB, user: Actor):
+def school_support_widget(school_id: str, db: DB):
     """Configuração pública do Hub da empresa da escola ativa."""
     school = db.get(m.School, school_id)
     if not school or not school.active:
         fail(404, 'Escola não encontrada.')
-    if user.role != 'admin' and not db.get(m.SchoolAccess, (user.id, school_id)):
-        fail(403, 'Acesso não autorizado a esta escola.')
     obj = db.scalar(
         select(m.CompanySupportSettings)
         .where(m.CompanySupportSettings.company_id == school.company_id)
