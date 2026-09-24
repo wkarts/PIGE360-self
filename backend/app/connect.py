@@ -175,7 +175,7 @@ def sync_connect_instance(instance_id: str, db: DB, user: Actor, school: Scope, 
 @router.post("/connect/instances/{instance_id}/connect")
 def connect_instance(
     instance_id: str,
-    data: s.ConnectPairInput | None,
+    data: s.ConnectPairInput | None = None,
     db: DB,
     user: Actor,
     school: Scope,
