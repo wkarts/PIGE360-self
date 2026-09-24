@@ -56,6 +56,7 @@ def _validate_base_url(value: str, enabled: bool) -> str:
 
 def _empty(company_id: str) -> dict:
     return {
+        'id': '',
         'company_id': company_id,
         'enabled': False,
         'base_url': '',
