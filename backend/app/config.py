@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     allow_sqlite: bool = False
     integration_encryption_key: str = ''
     integration_timeout_seconds: int = 15
+    connect_api_base_url: str = ''
+    connect_api_key: str = ''
     connect_allowed_hosts: str = ''
     connect_allow_private: bool = False
     portal_session_hours: int = 12

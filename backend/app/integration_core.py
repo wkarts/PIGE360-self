@@ -177,7 +177,16 @@ def enqueue(db,school_id,kind,payload,key,connection_id=None):
 
 def admission_notification(db,admission,text,code):
     account=db.get(m.PortalAccount,admission.account_id)
-    conn=connection(db,admission.school_id,'connect_api',False)
-    if not conn or not conn.enabled or not account.whatsapp_opt_in or not account.phone_verified: return None
-    return enqueue(db,admission.school_id,'connect_text',{'number':account.phone,'text':text+' Acompanhe no portal: '+settings().app_url+'/online.html'},
-        f'admission:{admission.id}:{code}:{admission.version}',conn.id)
+    if not account.whatsapp_opt_in or not account.phone_verified:
+        return None
+    from .connect_core import connect_instance_for_school, enqueue_connect_message
+    instance = connect_instance_for_school(db, admission.school_id, False)
+    if not instance:
+        return None
+    return enqueue_connect_message(
+        db,
+        admission.school_id,
+        instance.id,
+        {'number': account.phone, 'text': text + ' Acompanhe no portal: ' + settings().app_url + '/online.html'},
+        f'admission:{admission.id}:{code}:{admission.version}',
+    )

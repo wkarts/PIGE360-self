@@ -358,5 +358,5 @@ class ProtocolEvent(Record, Scoped, Base):
 
 # Registro das tabelas aditivas; os modelos anteriores permanecem inalterados.
 from .online_models import (AdmissionCampaign, PortalAccount, PortalSession, PortalChallenge,
-    Admission, AdmissionMessage, AdmissionAttachment, IntegrationConnection,
+    Admission, AdmissionMessage, AdmissionAttachment, ConnectInstance, ConnectMessageJob, IntegrationConnection,
     IntegrationJob, BankCharge, BankEvent, IntegrationWebhook)

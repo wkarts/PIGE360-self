@@ -24,6 +24,7 @@ from .db import engine, now
 from .config import settings
 from .security import utc
 from .integration_core import AsaasProvider, ConnectProvider, IntegrationFailure, unseal, enqueue
+from .connect_core import ConnectApiClient
 from .banking import apply_remote
 
 LOG = logging.getLogger('pige360.worker')
@@ -221,6 +222,78 @@ def process_one(job_id=None):
             if locked:
                 db.execute(text('SELECT pg_advisory_unlock(:key)'), {'key': lock_key}); db.commit()
 
+
+def process_connect_one():
+    """Processa uma mensagem Connect API sem compartilhar a fila financeira."""
+    with engine.connect() as sql_conn, Session(bind=sql_conn, expire_on_commit=False) as db:
+        rows = db.scalars(select(m.ConnectMessageJob).where(
+            m.ConnectMessageJob.status == 'processing',
+            m.ConnectMessageJob.lease_until < now(),
+        ).with_for_update(skip_locked=True))
+        for row in rows:
+            row.status = 'uncertain'
+            row.error_code = 'WORKER_LEASE_EXPIRED'
+            row.available_at = now() + timedelta(seconds=30)
+            row.lease_until = None
+        db.commit()
+        job = db.scalar(select(m.ConnectMessageJob).where(
+            m.ConnectMessageJob.status.in_(['pending', 'retry']),
+            m.ConnectMessageJob.available_at <= now(),
+        ).order_by(m.ConnectMessageJob.created_at).with_for_update(skip_locked=True).limit(1))
+        if not job:
+            return False
+        lock_key = int.from_bytes(hashlib.sha256(job.instance_id.encode()).digest()[:8], 'big', signed=True)
+        locked = False
+        try:
+            if engine.dialect.name == 'postgresql':
+                locked = bool(db.scalar(text('SELECT pg_try_advisory_lock(:key)'), {'key': lock_key}))
+                if not locked:
+                    db.rollback()
+                    return False
+            job.status = 'processing'
+            job.attempts += 1
+            job.lease_until = now() + timedelta(minutes=5)
+            job.error_code = ''
+            db.commit()
+            try:
+                payload = unseal(job.encrypted_payload)
+                instance = db.get(m.ConnectInstance, job.instance_id)
+                if not instance or not instance.enabled or instance.status == 'deleted':
+                    raise IntegrationFailure('CONNECT_INSTANCE_DISABLED')
+                remote_id = ConnectApiClient().send_text(
+                    instance.name,
+                    payload['number'],
+                    payload['text'],
+                    job.dedupe_key,
+                )
+                job.remote_id = remote_id
+                job.delivery_status = 'sent'
+                job.status = 'completed'
+                job.completed_at = now()
+            except IntegrationFailure as error:
+                db.rollback()
+                db.refresh(job)
+                job.error_code = error.code
+                job.status = 'uncertain' if error.uncertain else (
+                    'retry' if error.retryable and job.attempts < 5 else 'failed'
+                )
+                if job.status == 'retry':
+                    job.available_at = now() + timedelta(seconds=min(900, 15 * 2 ** job.attempts))
+                LOG.warning('connect_job=%s code=%s', job.id, job.error_code)
+            except Exception:
+                db.rollback()
+                db.refresh(job)
+                job.status = 'uncertain'
+                job.error_code = 'UNEXPECTED_CONNECT_WORKER_ERROR'
+                LOG.error('connect_job=%s code=%s', job.id, job.error_code)
+            job.lease_until = None
+            db.commit()
+            return True
+        finally:
+            if locked:
+                db.execute(text('SELECT pg_advisory_unlock(:key)'), {'key': lock_key})
+                db.commit()
+
 def schedule_reconciliations():
     """Recupera webhooks perdidos sem repetir POST de cobrança; volume limitado."""
     interval=settings().bank_reconcile_interval_seconds
@@ -252,7 +325,7 @@ def main():
         try:
             if time.monotonic() >= next_reconcile:
                 schedule_reconciliations(); next_reconcile=time.monotonic()+60
-            worked = process_one()
+            worked = process_one() or process_connect_one()
         except Exception:
             LOG.error('code=WORKER_DATABASE_OR_CONFIGURATION_ERROR'); worked = False
         done += int(worked)

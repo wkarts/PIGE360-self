@@ -122,6 +122,15 @@ class MessageInput(Input):
     text: str = Field(min_length=1,max_length=3000)
     internal: bool = False
 
+class ConnectInstanceInput(Input):
+    label: str = Field(default='', max_length=40)
+    primary: bool = False
+
+
+class ConnectPairInput(Input):
+    number: str = Field(default='', max_length=24)
+
+
 class ConnectionInput(Input):
     version: int | None = Field(default=None,ge=1)
     enabled: bool = False
