@@ -1,7 +1,7 @@
 {
   "product": "PIGE360 Self",
-  "version": "0.3.0",
-  "date": "2026-09-22",
+  "version": "0.4.0",
+  "date": "2026-09-24",
   "base": "0.2.0-Branding",
   "distribution": "self-hosted-web-pwa",
   "original_template_included": false,
@@ -27,7 +27,12 @@
   "schema_migrations": [
     "0001_secretary",
     "0002_protocol_events",
-    "0003_online_admissions"
+    "0003_online_admissions",
+    "0004_billing_and_connect",
+    "0005_secretary_extensions",
+    "0006_people_roles",
+    "0007_secretaria_staff_profiles",
+    "0008_company_support_hub"
   ],
   "artifact": "source-and-precompiled-web"
 }

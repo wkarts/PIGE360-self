@@ -1,5 +1,15 @@
 # Histórico de versões
 
+## 0.4.0 — 24/09/2026
+
+- Integrado o chat de suporte Hub ao Web/PWA por empresa/tenant.
+- Adicionadas configurações de URL base, website token, posição, tipo do widget e título do launcher na Instituição.
+- Mantida a separação entre cadastro de Pessoa e autenticação de usuário/login/perfil.
+- Token cifrado em repouso, sem retorno pela API administrativa, com auditoria sem segredo.
+- Adicionado carregamento contextual por escola ativa e CSP dinâmica restritiva.
+- Adicionada migration `0008_company_support_hub`.
+- CI aprovado com PostgreSQL real, E2E Chromium e Docker Compose.
+
 ## 0.3.0 — 22–23/09/2026
 
 - Removido template original da distribuição.
@@ -21,3 +31,4 @@ Branding oficial, expansão de protocolos, edição da pré-matrícula interna e
 ## 0.1.0 — Base inicial
 
 Cadastros, estrutura acadêmica, matrícula, documentos, Secretaria Web/PWA e Docker self-hosted.
+
