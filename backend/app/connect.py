@@ -1,5 +1,6 @@
 """Administração da instância global da ARGWS Connect API."""
 import re
+from datetime import UTC, datetime
 from fastapi import APIRouter, Query, Request
 from sqlalchemy import func, select
 
@@ -64,7 +65,7 @@ def _state_from_response(obj, response):
     status, state = _remote_status(response)
     obj.status = status
     obj.connection_state = state
-    obj.last_synced_at = __import__("datetime").datetime.now(__import__("datetime").UTC)
+    obj.last_synced_at = datetime.now(UTC)
     obj.last_error = ""
     obj.version += 1
 
@@ -147,7 +148,7 @@ def create_connect_instance(
         status=status,
         connection_state=state,
         external_id=str((response.get("instance") or {}).get("instanceId", ""))[:160] if isinstance(response, dict) else "",
-        last_synced_at=__import__("datetime").datetime.now(__import__("datetime").UTC),
+        last_synced_at=datetime.now(UTC),
     )
     if primary:
         for other in existing:
@@ -175,11 +176,11 @@ def sync_connect_instance(instance_id: str, db: DB, user: Actor, school: Scope, 
 @router.post("/connect/instances/{instance_id}/connect")
 def connect_instance(
     instance_id: str,
-    data: s.ConnectPairInput | None = None,
     db: DB,
     user: Actor,
     school: Scope,
     request: Request,
+    data: s.ConnectPairInput | None = None,
 ):
     require(user, "connect.manage")
     obj = _instance(db, school, instance_id)
@@ -189,7 +190,7 @@ def connect_instance(
     response = _remote_call(lambda: ConnectApiClient().connect(obj.name, number))
     status, state = _remote_status(response)
     obj.status, obj.connection_state, obj.last_error = status, state, ""
-    obj.last_synced_at = __import__("datetime").datetime.now(__import__("datetime").UTC)
+    obj.last_synced_at = datetime.now(UTC)
     obj.version += 1
     audit(db, request, user, "connect.instance.connected", obj, school.id, {"state": state, "pairing": bool(number)})
     return {"instance": _instance_output(obj), **connect_response(response)}
@@ -201,7 +202,7 @@ def logout_connect_instance(instance_id: str, db: DB, user: Actor, school: Scope
     obj = _instance(db, school, instance_id)
     response = _remote_call(lambda: ConnectApiClient().logout(obj.name))
     obj.status, obj.connection_state, obj.last_error = "close", "close", ""
-    obj.last_synced_at = __import__("datetime").datetime.now(__import__("datetime").UTC)
+    obj.last_synced_at = datetime.now(UTC)
     obj.version += 1
     audit(db, request, user, "connect.instance.logout", obj, school.id)
     return {"instance": _instance_output(obj), **connect_response(response)}
@@ -262,6 +263,6 @@ def retry_connect_job(job_id: str, data: s.Reason, db: DB, user: Actor, school: 
     if job.status not in ("failed", "retry"):
         fail(409, "Resultado incerto não é reenviado automaticamente. Confira a Connect API antes de tentar novamente.")
     job.status, job.attempts, job.error_code, job.lease_until = "pending", 0, "", None
-    job.available_at = __import__("datetime").datetime.now(__import__("datetime").UTC)
+    job.available_at = datetime.now(UTC)
     audit(db, request, user, "connect.job.retry", job, school.id, {"reason": data.reason})
     return output(job, ("encrypted_payload",))
