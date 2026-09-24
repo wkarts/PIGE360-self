@@ -14,6 +14,7 @@
   "files": [
     "src/vue-globals.d.ts",
     "src/api.ts",
+    "src/support-widget.ts",
     "src/online-types.ts",
     "src/expansion.ts",
     "src/app.ts"

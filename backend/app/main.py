@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from .config import settings
 from .db import engine
 from .storage import ensure_storage
-from . import auth, people, registry, enrollments, documents, reports, portal, admissions, integrations, banking, profiles
+from . import auth, people, registry, enrollments, documents, reports, portal, admissions, integrations, banking, profiles, support
 
 cfg = settings()
 logger = logging.getLogger('pige360')
@@ -23,7 +23,7 @@ async def lifespan(app):
     engine.dispose()
 
 app = FastAPI(title='PIGE360 Self — Gestão Educacional', version=cfg.app_version, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url='/api/v1/openapi.json')
-for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, banking.router, profiles.router]:
+for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, banking.router, profiles.router, support.router]:
     app.include_router(router)
 
 @app.exception_handler(HTTPException)
@@ -57,7 +57,19 @@ async def security_headers(request: Request, call_next):
     response.headers['Referrer-Policy'] = 'same-origin'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
-    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    hub_origins, hub_sockets = support.csp_sources()
+    hub_script_sources = ' '.join(hub_origins)
+    hub_connect_sources = ' '.join(hub_origins + hub_sockets)
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; "
+        f"script-src 'self' {hub_script_sources}; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self'; "
+        f"connect-src 'self' {hub_connect_sources}; "
+        f"frame-src 'self' {hub_script_sources}; "
+        "object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    )
     if request.url.path.startswith('/api') or request.url.path in ('/','/index.html','/online.html','/sw.js','/manifest.webmanifest'):
         response.headers['Cache-Control'] = 'no-store'
     if cfg.cookie_secure:
