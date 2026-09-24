@@ -39,6 +39,7 @@ def test_support_hub_is_company_scoped_and_token_is_not_echoed(client, admin, sc
 
 def test_support_hub_reuses_token_and_validates_url(client, admin, school):
     base = '/api/v1/companies/' + school['company_id'] + '/support-hub'
+    current = client.get(base, headers=admin).json()
     payload = {
         'enabled': True,
         'base_url': 'http://hub.example.com',
@@ -47,6 +48,8 @@ def test_support_hub_reuses_token_and_validates_url(client, admin, school):
         'widget_type': 'expanded_bubble',
         'launcher_title': 'Ajuda',
     }
+    if current.get('version'):
+        payload['version'] = current['version']
     saved = client.put(base, headers=admin, json=payload)
     assert saved.status_code == 200, saved.text
     version = saved.json()['version']
