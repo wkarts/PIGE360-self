@@ -302,6 +302,16 @@ class CompanyInput(Input):
     name: str = Field(min_length=2, max_length=160)
     document: str | None = Field(default=None, max_length=24)
 
+class SupportHubInput(Input):
+    version: int | None = Field(default=None, ge=1)
+    enabled: bool = False
+    base_url: str = Field(default='', max_length=500)
+    position: Literal['left', 'right'] = 'left'
+    widget_type: Literal['expanded_bubble', 'standard'] = 'expanded_bubble'
+    launcher_title: str = Field(default='Suporte', min_length=1, max_length=80)
+    token: str = Field(default='', max_length=512)
+
+
 class Login(Input):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)

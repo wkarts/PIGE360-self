@@ -185,6 +185,14 @@
         <section v-if="state.page==='settings'">
           <div class="section-actions"><h2>Empresas e escolas desta instalação</h2><div class="actions"><button class="btn btn-secondary" @click="newCompany">+ Empresa</button><button class="btn btn-primary" @click="newSchool()">+ Escola</button></div></div>
           <div class="school-grid"><article v-for="s in state.schools" :key="s.id" class="panel school-card"><p class="eyebrow">INSTITUIÇÃO DE ENSINO</p><h2>{{ s.name }}</h2><p>{{ state.companies.find(c=>c.id===s.company_id)?.name }}</p><p class="muted">{{ s.address || 'Endereço não informado' }}</p><div class="divider"></div><p class="small">Documentação: <strong>{{ s.document_policy==='block'?'obrigatória antes de ativar':'aviso sem bloqueio' }}</strong></p><button class="btn btn-secondary" @click="newSchool(s)">Editar instituição</button></article></div>
+          <article class="panel support-hub-card">
+             <div class="panel-header"><div><p class="eyebrow">ATENDIMENTO</p><h2>Chat de suporte via site</h2><p class="muted">Configuração do Hub para a empresa/tenant da escola ativa.</p></div><span class="badge" :class="state.supportHub.enabled?'active':'archived'">{{ state.supportHub.enabled?'Ativo':'Desativado' }}</span></div>
+             <p v-if="state.supportHub.enabled">O botão <strong>{{ state.supportHub.launcher_title }}</strong> será carregado em {{ state.supportHub.position==='right'?'à direita':'à esquerda' }} para os usuários do site.</p>
+             <p v-else class="muted">Nenhum widget de suporte será carregado enquanto a integração estiver desativada.</p>
+             <p class="small muted" v-if="state.supportHub.token_configured">Website token configurado · {{ state.supportHub.base_url }}</p>
+             <p class="small muted" v-else>URL e website token ainda não configurados.</p>
+             <div class="actions"><button v-if="can('schools.manage')" class="btn btn-secondary" @click="editSupportHub">Configurar chat</button></div>
+           </article>
           <div class="alert info spaced">Cada cliente utiliza sua própria instalação. Empresas, escolas e unidades são cadastros internos, sem contratação SaaS nem provisionamento remoto.</div>
         </section>
         <footer class="content-footer"><span>PIGE360 Self · Gestão educacional</span><span>Acesso controlado · Histórico preservado</span></footer>
@@ -216,6 +224,7 @@
           <p v-if="state.modal.kind==='enrollment'" class="alert info">A matrícula será salva como rascunho. A confirmação da vaga acontece na ativação.</p>
           <p v-if="state.modal.kind==='draft-edit'" class="alert info">Aluno e ano letivo são preservados. A alteração exige justificativa e permanece no histórico. Rascunhos não reservam vaga.</p><p v-if="state.modal.kind==='protocol-note'" class="alert info">O registro será acrescentado ao histórico sem substituir os atendimentos anteriores.</p><p v-if="state.modal.kind==='reenroll'" class="alert info">Será criada outra matrícula em um período posterior. A matrícula anterior não será sobrescrita.</p>
           <p v-if="state.modal.kind==='upload'" class="alert info">Limite padrão de 10 MB. O recebimento não substitui a validação documental pela Secretaria.</p>
+          <p v-if="state.modal.kind==='support-hub'" class="alert info">A configuração pertence à empresa/tenant da escola ativa. O token é armazenado criptografado e nunca é devolvido na tela; o navegador recebe somente o website token necessário para inicializar o widget.</p>
           <div class="form-grid">
             <label v-for="(f,index) in state.modal.fields" :key="index+'-'+f.key" :for="'modal-field-'+index" class="field" :class="{wide:f.wide, 'checkbox-field':f.type==='checkbox'}">
               <template v-if="f.type==='checkbox'"><input :id="'modal-field-'+index" v-model="state.modal.form[f.key]" type="checkbox">{{ f.label }}</template>

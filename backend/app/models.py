@@ -14,6 +14,22 @@ class Company(Record, Base):
     name: Mapped[str] = mapped_column(String(160))
     document: Mapped[str | None] = mapped_column(String(24))
 
+class CompanySupportSettings(Record, Base):
+    """Configuração do widget de suporte por empresa/tenant."""
+    __tablename__ = 'company_support_settings'
+    company_id: Mapped[str] = mapped_column(ForeignKey('companies.id'), index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    base_url: Mapped[str] = mapped_column(String(500), default='')
+    position: Mapped[str] = mapped_column(String(16), default='left')
+    widget_type: Mapped[str] = mapped_column(String(40), default='expanded_bubble')
+    launcher_title: Mapped[str] = mapped_column(String(80), default='Suporte')
+    encrypted_token: Mapped[str] = mapped_column(Text, default='')
+    __table_args__ = (
+        UniqueConstraint('company_id', name='uq_company_support_settings_company_id'),
+        CheckConstraint("position IN ('left','right')", name='support_hub_position'),
+    )
+
+
 class School(Record, Base):
     __tablename__ = 'schools'
     company_id: Mapped[str] = mapped_column(ForeignKey('companies.id'))
