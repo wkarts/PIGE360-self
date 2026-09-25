@@ -37,6 +37,8 @@ for adapter in adapters:
     assert 'service_completed_successfully' not in compose_text,compose
     assert 'app.storage_guard' in compose_text and '"--health"' in compose_text,compose
     assert 'restart: "no"' not in compose_text,compose
+    storage_block=compose_text.split('  storage-init:\n',1)[1].split('\n  app:\n',1)[0]
+    assert 'init: false' in storage_block,compose
     assert 'health/ready' in compose_text,compose
     for channel in ('develop','production'):
         env=root/'deploy'/adapter/f'.env.{channel}.example'

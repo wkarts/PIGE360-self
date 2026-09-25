@@ -23,7 +23,8 @@ services:
     image: ${APP_IMAGE:-ghcr.io/wkarts/pige360-self:latest}
     pull_policy: ${APP_PULL_POLICY:-always}
     user: "0:0"
-    init: true
+    # O monitor trata SIGTERM/SIGINT diretamente como PID 1.
+    init: false
     entrypoint: ["python", "-m", "app.storage_guard"]
     volumes:
       - ./data-documents:/data

@@ -70,11 +70,15 @@ assert healthy(), 'Heartbeat do monitor deve estar saudável'
 probe()
 print('storage-init: running/healthy, UID/GID 10001, sem capabilities; escrita/leitura OK')
 PYSTORAGE
-# Restart precisa executar novamente o preparo e recuperar um heartbeat novo.
-compose restart storage-init
+# Parada deve ser normal (exit 0), não morte forçada de um init sem CAP_KILL.
+STORAGE_CONTAINER="$(compose ps -q storage-init)"
+compose stop --timeout 10 storage-init
+[[ "$(docker inspect --format '{{.State.ExitCode}}' "$STORAGE_CONTAINER")" == 0 ]]
+# Novo start executa novamente o preparo e produz um heartbeat novo.
+compose start storage-init
 compose up -d --wait --wait-timeout 240
 assert_healthy_services
-printf '{"services":["db","storage-init","app","worker"],"all_running_healthy":true,"storage_restart":true,"monitor_uid":10001,"monitor_capabilities":0}\n' > ci-evidence/docker-storage-health.json
+printf '{"services":["db","storage-init","app","worker"],"all_running_healthy":true,"storage_restart":true,"storage_stop_exit_code":0,"monitor_uid":10001,"monitor_capabilities":0}\n' > ci-evidence/docker-storage-health.json
 ADDRESS="$(compose port app 8000)"
 python - "$ADDRESS" "$IMAGE" <<'PYHTTP'
 import json,sys,urllib.request
