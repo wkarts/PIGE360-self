@@ -5,6 +5,7 @@ Usa localhost (escola) e 127.0.0.1 (HUB sintético). Sem bypass CSP, sem dados r
 Certificado descartável existe apenas no diretório temporário do teste.
 """
 import io
+import base64, hashlib, hmac, struct
 import ipaddress
 import json
 import os
@@ -115,6 +116,35 @@ try:
         def login(scope):
             scope.get_by_label('E-mail',exact=True).fill('branding@example.com');scope.get_by_label('Senha',exact=True).fill(PASSWORD);scope.get_by_role('button',name='Entrar na aplicação').click();expect(scope.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible()
         login(page)
+        # Preferência real da escola, alterada pela interface e vista sem sessão.
+        page.locator('aside').get_by_role('link',name='Instituição',exact=True).click()
+        page.get_by_role('button',name='Personalizar identidade visual',exact=True).click()
+        setting=page.get_by_role('dialog').get_by_label('Exibir botão de pré-matrícula na tela de login',exact=False)
+        expect(setting).to_be_checked();setting.uncheck()
+        page.get_by_role('dialog').get_by_role('button',name='Salvar',exact=True).click()
+        expect(page.get_by_role('dialog')).to_have_count(0)
+        guest=browser.new_context(ignore_https_errors=True,viewport={'width':1440,'height':980},locale='pt-BR')
+        public=guest.new_page();public.on('pageerror',lambda e:errors.append(str(e)))
+        public.goto(URL);expect(public.get_by_role('heading',name='Acesse sua instituição')).to_be_visible()
+        expect(public.locator('a[href="/online.html"]')).to_have_count(0)
+        assert public.locator('#institution-bootstrap').text_content().find('"show_preenrollment_button": false')>=0
+        expect(public.locator('.auth-intro h1')).to_contain_text('A gestão educacional.')
+        expect(public.locator('.auth-intro h1')).to_contain_text('Organizada, de verdade.')
+        expect(public.locator('.auth-intro .eyebrow')).to_have_text('GESTÃO EDUCACIONAL')
+        expect(public.locator('.auth-features,.auth-intro .self-label')).to_have_count(0)
+        public.screenshot(path=str(OUT/'06-login-sem-atalho.png'))
+        public.set_viewport_size({'width':390,'height':844})
+        assert public.locator('body').evaluate('e=>e.scrollWidth<=innerWidth+1')
+        public.screenshot(path=str(OUT/'07-login-mobile.png'))
+        page.get_by_role('button',name='Personalizar identidade visual',exact=True).click()
+        setting=page.get_by_role('dialog').get_by_label('Exibir botão de pré-matrícula na tela de login',exact=False)
+        expect(setting).not_to_be_checked();setting.check()
+        page.get_by_role('dialog').get_by_role('button',name='Salvar',exact=True).click()
+        expect(page.get_by_role('dialog')).to_have_count(0)
+        public.set_viewport_size({'width':1440,'height':980});public.reload()
+        expect(public.get_by_role('link',name='Sou responsável · Pré-matrícula online')).to_be_visible()
+        public.screenshot(path=str(OUT/'08-login-com-atalho.png'));guest.close()
+        record('Login preservado, somente textos marcados removidos; botão de pré-matrícula liga/desliga pela interface e persiste para visitas sem sessão')
         expect(page.locator('.sidebar-footer')).to_have_text('PIGE360 · '+json.loads((ROOT/'frontend/dist/build-info.json').read_text())['version'])
         page.get_by_role('button',name='Meu perfil',exact=True).click()
         dialog=page.get_by_role('dialog');expect(dialog.get_by_role('heading',name='Meu perfil',exact=True)).to_be_visible()
@@ -140,6 +170,9 @@ try:
         page.screenshot(path=str(OUT/'04-origens-autorizadas.png'))
         dialog.get_by_role('button',name='Salvar',exact=True).click();expect(page.get_by_role('heading',name='Acesse sua instituição')).to_be_visible()
         response=client.get('/');assert 'x-frame-options' not in response.headers and HUB in response.headers['content-security-policy']
+        head=client.head('/');assert head.status_code==200 and head.content==b'' and head.headers['content-security-policy']==response.headers['content-security-policy']
+        assert 'x-frame-options' not in head.headers
+        record('Probe anônimo HEAD 200 usa a mesma autorização de iframe do GET, sem depender de Origin ou Referer')
         assert client.get('/api/v1/auth/me',headers=headers).status_code==401
         record('Administrador autoriza origem pela interface sem reiniciar Docker; alteração revoga sessões existentes')
         host_page=ctx.new_page();host_page.set_default_timeout(15000);host_page.on('pageerror',lambda e:errors.append(str(e)));host_page.goto(HUB)
@@ -149,6 +182,22 @@ try:
         assert any(c['name']=='pige_refresh' and c.get('partitionKey')=='https://127.0.0.1' and c['secure'] and c['httpOnly'] and c['sameSite']=='None' for c in cookies),[(c['name'],c.get('partitionKey')) for c in cookies]
         host_page.screenshot(path=str(OUT/'05-escola-no-iframe.png'))
         record('Iframe cross-site HTTPS autorizado: login, cookie CHIPS, foto e sessão persistida após recarregar')
+        frame.get_by_role('button',name='Meu perfil',exact=True).click();frame.get_by_role('button',name='Segurança · 2FA',exact=True).click()
+        frame.get_by_label('Senha atual',exact=True).fill(PASSWORD);frame.get_by_role('button',name='Configurar 2FA',exact=True).click()
+        expect(frame.locator('.mfa-qr')).to_be_visible();frame.locator('summary').click()
+        seed=frame.locator('.mfa-secret').inner_text()
+        raw=hmac.new(base64.b32decode(seed),struct.pack('>Q',int(time.time())//30),hashlib.sha1).digest();offset=raw[-1]&15
+        code=str((struct.unpack('>I',raw[offset:offset+4])[0]&0x7fffffff)%1000000).zfill(6)
+        frame.get_by_label('Código de 6 dígitos').fill(code);frame.get_by_role('button',name='Confirmar',exact=True).click()
+        expect(frame.locator('.mfa-codes code')).to_have_count(10);recovery=frame.locator('.mfa-codes code').first.inner_text()
+        frame.get_by_role('button',name='Guardei os códigos · Continuar',exact=True).click();expect(frame.locator('.workspace')).to_be_visible()
+        frame.get_by_role('button',name='Sair',exact=True).click()
+        frame.get_by_label('E-mail',exact=True).fill('branding@example.com');frame.get_by_label('Senha',exact=True).fill(PASSWORD);frame.get_by_role('button',name='Entrar na aplicação').click()
+        expect(frame.get_by_role('heading',name='Confirme seu acesso')).to_be_visible();expect(frame.locator('.workspace')).to_have_count(0)
+        frame.get_by_label('Código do autenticador ou de recuperação').fill(recovery);frame.get_by_role('button',name='Confirmar',exact=True).click()
+        expect(frame.locator('.workspace')).to_be_visible();host_page.reload();expect(frame.locator('.workspace')).to_be_visible()
+        record('2FA configurado e validado dentro do iframe HTTPS: sessão com segundo fator persiste na partição do HUB')
+
         denied=ctx.new_page();violations=[];denied.on('console',lambda msg:violations.append(msg.text));denied.goto(DENIED)
         for _ in range(100):
             if any('frame-ancestors' in x for x in violations):break

@@ -45,9 +45,9 @@ def get_campaign(db,slug=None,id=None,open_required=False):
 def account_output(account):
     return output(account,('password_hash','registration_consent'))
 
-def new_session(db,account,response):
+def new_session(db,account,response,mfa_verified=False):
     secret=secrets.token_urlsafe(48)
-    session=m.PortalSession(account_id=account.id,token_hash=digest(secret),expires_at=now()+timedelta(hours=settings().portal_session_hours))
+    session=m.PortalSession(mfa_verified=mfa_verified,account_id=account.id,token_hash=digest(secret),expires_at=now()+timedelta(hours=settings().portal_session_hours))
     db.add(session);db.flush()
     from .embedding import cookie
     cookie(response,'pige_portal',session.id+'.'+secret,path='/api/v1/portal',max_age=settings().portal_session_hours*3600,db=db)
@@ -62,6 +62,8 @@ def portal_account(request:Request,db:DB):
     account=db.get(m.PortalAccount,session.account_id)
     school=db.get(m.School,account.school_id) if account else None
     if not account or not account.active or not school or not school.active:fail(401,'Acesso ao portal indisponível.')
+    from .mfa import enforce_session
+    enforce_session(db,'portal',account,session)
     request.state.portal_account_id=account.id
     request.state.portal_session_id=session.id
     return account
@@ -136,7 +138,9 @@ def register(data:s.Registration,request:Request,response:Response,db:DB):
     if data.terms_version!=campaign.terms_version:fail(409,'Leia e aceite a versão atual do aviso de privacidade.')
     account=m.PortalAccount(registration_consent={'terms_version':campaign.terms_version,'privacy_notice':campaign.privacy_notice,'accepted_at':now().isoformat()},school_id=campaign.school_id,email=email,password_hash=hash_password(data.password),**data.model_dump(exclude={'campaign_slug','email','password','accept_privacy','terms_version'}))
     db.add(account);db.flush();parent_audit(db,request,account,'account.created',account)
-    return new_session(db,account,response)
+    from .mfa import before_login
+    challenge=before_login(db,request,'portal',account)
+    return challenge or new_session(db,account,response)
 
 @router.post('/login')
 def login(data:s.PortalLogin,request:Request,response:Response,db:DB):
@@ -147,7 +151,9 @@ def login(data:s.PortalLogin,request:Request,response:Response,db:DB):
     valid=verify(data.password,account.password_hash if account else DUMMY_PASSWORD_HASH)
     if not account or not account.active or not valid:fail(401,'E-mail ou senha inválidos.')
     parent_audit(db,request,account,'login',account)
-    return new_session(db,account,response)
+    from .mfa import before_login
+    challenge=before_login(db,request,'portal',account)
+    return challenge or new_session(db,account,response)
 
 @router.get('/me')
 def me(account:Parent):return account_output(account)

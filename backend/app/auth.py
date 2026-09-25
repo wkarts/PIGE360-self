@@ -27,9 +27,9 @@ def set_refresh(response, session, secret, db):
     from .embedding import cookie
     cookie(response, 'pige_refresh', f'{session.id}.{secret}', path='/api/v1/auth', max_age=cfg.refresh_token_days * 86400, db=db)
 
-def new_session(db, user, response):
+def new_session(db, user, response, mfa_verified=False):
     secret = secrets.token_urlsafe(48)
-    session = AuthSession(user_id=user.id, token_hash=digest(secret), expires_at=now() + timedelta(days=settings().refresh_token_days))
+    session = AuthSession(mfa_verified=mfa_verified, user_id=user.id, token_hash=digest(secret), expires_at=now() + timedelta(days=settings().refresh_token_days))
     db.add(session)
     db.flush()
     set_refresh(response, session, secret, db)
@@ -87,6 +87,10 @@ def login(data: Login, request: Request, response: Response, db: DB):
         db.commit()  # Persistir limite mesmo quando a resposta é 401.
         fail(401, 'E-mail ou senha inválidos.')
     counters[0].count = 0
+    from .mfa import before_login
+    challenge = before_login(db, request, 'user', user)
+    if challenge:
+        return challenge
     result = new_session(db, user, response)
     audit(db, request, user, 'auth.login', user)
     return result
@@ -109,6 +113,8 @@ def refresh(request: Request, response: Response, db: DB):
     user = db.get(User, session.user_id)
     if not user or not user.active:
         fail(401, 'Usuário inativo.')
+    from .mfa import enforce_session
+    enforce_session(db, 'user', user, session)
     secret = secrets.token_urlsafe(48)
     session.previous_hash = session.token_hash
     session.token_hash = digest(secret)
