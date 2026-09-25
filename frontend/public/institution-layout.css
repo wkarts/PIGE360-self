@@ -1,0 +1,5 @@
+/* Personalização institucional sem substituir os componentes existentes. */
+.institution-name{font-size:clamp(17px,2vw,28px);line-height:1.3;overflow-wrap:anywhere}.sidebar .institution-name{font-size:20px}.official-brand img{object-fit:contain;max-height:140px}.sidebar-logo{object-fit:contain}.portal-header img{object-fit:contain}
+
+/* Títulos seguem a mesma tipografia configurada para a escola. */
+h1,h2,h3{font-family:var(--institution-font,inherit)}

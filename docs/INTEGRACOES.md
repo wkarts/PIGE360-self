@@ -66,64 +66,48 @@ Uma conexão ASAAS que já possui cobranças não pode alternar sandbox/produç�
 
 ## ARGWS Connect API
 
-No arquivo de ambiente do adaptador (`deploy/docker/.env.production` no exemplo), permita somente o hostname real:
+A Connect API é um módulo independente do financeiro. ASAAS continua sendo configurado por escola em Integrações e usa a fila bancária; a Connect API usa uma chave global da instalação, uma instância principal por empresa e uma fila própria de mensagens.
 
-```dotenv
-CONNECT_ALLOWED_HOSTS=connect.seudominio.com.br
-CONNECT_ALLOW_PRIVATE=false
-INTEGRATION_TIMEOUT_SECONDS=15
-```
+Configure no arquivo de ambiente da instalação, em cada stack de deploy:
 
-No painel configure base URL HTTPS, instância exclusiva da escola, caminho de consulta do estado, caminho de envio, header da chave, esquema de autenticação, nomes dos campos e caminho do ID de retorno. Não se listam/administram instâncias de outros aplicativos.
+    CONNECT_API_BASE_URL=https://connect.seudominio.com.br
+    CONNECT_API_KEY=chave-global-da-connect-api
+    CONNECT_ALLOWED_HOSTS=connect.seudominio.com.br
+    CONNECT_ALLOW_PRIVATE=false
 
-Ambos os caminhos são relativos e contêm `{instance}` exatamente uma vez. O envio utiliza POST JSON com dois campos configuráveis, para número e texto. O estado utiliza GET. Exemplo **somente de formato, não de endpoints oficiais da Connect API**:
+Os segredos nunca são enviados ao navegador. O servidor exige HTTPS, allowlist do hostname e bloqueia endereços privados por padrão.
 
-```json
-{
-  "number": "5575999990000",
-  "text": "Há uma atualização da sua inscrição. Acesse o portal."
-}
-```
+### Ciclo de vida da instância
 
-Configurações aceitas:
+Na tela **Connect API**, a aplicação:
 
-| Chave | Uso |
-|---|---|
-| base_url | HTTPS sem senha, query ou fragmento |
-| instance | Instância previamente configurada para esta escola |
-| send_text_path | Caminho POST real, com `{instance}` |
-| connection_state_path | Caminho GET real, com `{instance}` |
-| api_key_header | Header real da API key; headers reservados são recusados |
-| auth_scheme | Vazio ou `Bearer` |
-| number_field / text_field | Nomes reais dos dois campos JSON de saída |
-| message_id_path | Caminho do identificador na resposta, como `data.id`, conforme a API real |
-| contract_confirmed | Confirmação explícita após revisar o contrato |
+- gera o nome no formato `PG360-NOME-DA-EMPRESA-CNPJ`;
+- cria a instância na ARGWS Connect API com o provider `WHATSAPP-BAILEYS`;
+- exibe QR Code ou gera pairing code pelo telefone internacional;
+- consulta o estado, desloga e descadastra a instância remota;
+- mantém o registro local para auditoria, marcando-o como descadastrado;
+- permite uma instância adicional identificada por um rótulo, sem substituir a principal.
 
-Se sua API exigir body aninhado, outros campos obrigatórios, autenticação diferente, IDs distintos, QR Code/pareamento ou eventos com outra estrutura, este adaptador exige ajuste conforme o contrato oficial. **Não se deve marcar contrato conferido apenas para liberar a tela.** Nenhum caminho de exemplo é distribuído como integração homologada.
+A instância é vinculada à empresa/tenant e pode ser usada pelas escolas da empresa. O login, os usuários, os perfis de acesso, o cadastro de pessoas e o financeiro não são transformados em instâncias Connect.
 
-O backend verifica allowlist, HTTPS e endereços privados (bloqueados por padrão), não segue redirects nem utiliza proxy herdado do ambiente. `CONNECT_ALLOW_PRIVATE=true` é exceção para redes administradas; restrinja saída de rede e DNS também na infraestrutura. Tokens não são enviados ao navegador.
+### Contrato nativo utilizado
 
-Avisos automáticos são genéricos e vinculados a mudanças de inscrição e recebimento/estorno/disputa. Envio manual fica no atendimento. Ambos exigem telefone verificado e opção de receber avisos; códigos solicitados para verificar o próprio telefone usam a finalidade de verificação. Resultado HTTP de envio não é tratado como entrega/lida sem callback.
+| Operação | Método | Rota |
+|---|---:|---|
+| Criar | POST | `/instance/create` |
+| Estado | GET | `/instance/connectionState/{instanceName}` |
+| Conectar / QR / pairing | GET | `/instance/connect/{instanceName}` |
+| Deslogar | DELETE | `/instance/logout/{instanceName}` |
+| Descadastrar | DELETE | `/instance/delete/{instanceName}` |
+| Mensagem de texto | POST | `/message/sendText/{instanceName}` |
 
-### Callback implementado no PIGE360
+Todas as chamadas usam o header `apikey` com `CONNECT_API_KEY`. A mensagem é enviada com JSON `{number,text}`. A aplicação só marca o envio como concluído quando identifica um ID retornado pela API; timeout ou resposta sem ID ficam em conferência, sem reenvio automático.
 
-```text
-POST /api/v1/hooks/connect_api/{connection_id}
-x-connect-webhook-token: TOKEN_EXCLUSIVO
-```
+### Fila e permissões
 
-```json
-{
-  "id": "identificador-unico-do-evento",
-  "instance": "instancia-configurada",
-  "event": "delivery",
-  "data": {"messageId": "id-de-envio-retornado-pela-api", "status": "delivered"}
-}
-```
+A fila `connect_message_jobs` é exclusiva da Connect API. A fila `integration_jobs`, `integration_connections` e `bank_charges` continuam reservadas para ASAAS, e não são usadas para criar ou administrar instâncias Connect.
 
-`data.key.id` também é aceito para o identificador. Situações tratadas: sent, delivered, read e failed. Eventos de outra instância são recusados; estado de leitura não regride a entregue. O formato acima é **o receptor desta aplicação**, não uma afirmação sobre o payload nativo da ARGWS Connect API. Se o provedor não envia esse contrato/header, é necessário adaptar com seu contrato real.
-
-Falha de resultado incerto não provoca reenvio automático de texto. Confira no provedor antes de novo envio manual. O módulo não é um hub de conversas, não sincroniza agenda e não cria instâncias por conta própria.
+Administrar instâncias exige `connect.manage`. Enviar comunicação exige `communications.send`. Uma falha da Connect API não altera cobrança, matrícula ou cadastro de pessoa.
 
 ## E-mail de verificação / recuperação
 

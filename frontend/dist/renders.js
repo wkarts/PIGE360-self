@@ -1,7 +1,7 @@
 /* Vue pré-compilado; sem eval em runtime. */
 var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
   with (_ctx) {
-    const { createElementVNode: _createElementVNode, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createTextVNode: _createTextVNode, toDisplayString: _toDisplayString, vModelText: _vModelText, withDirectives: _withDirectives, withModifiers: _withModifiers, normalizeClass: _normalizeClass, renderList: _renderList, Fragment: _Fragment, vModelSelect: _vModelSelect, resolveComponent: _resolveComponent, createBlock: _createBlock, vModelCheckbox: _vModelCheckbox, vModelDynamic: _vModelDynamic } = _Vue
+    const { openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, toDisplayString: _toDisplayString, createElementVNode: _createElementVNode, createTextVNode: _createTextVNode, vModelText: _vModelText, withDirectives: _withDirectives, withModifiers: _withModifiers, normalizeClass: _normalizeClass, renderList: _renderList, Fragment: _Fragment, vModelSelect: _vModelSelect, resolveComponent: _resolveComponent, createBlock: _createBlock, vModelCheckbox: _vModelCheckbox, vModelDynamic: _vModelDynamic } = _Vue
 
     const _component_expansion_panel = _resolveComponent("expansion-panel")
 
@@ -12,19 +12,28 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
       ? (_openBlock(), _createElementBlock("div", {
           key: 0,
           class: "loading-screen"
-        }, [_createElementVNode("img", {
-          class: "brand-symbol official-symbol",
-          src: "/branding/pige360/symbol.png",
-          alt: "PIGE360"
-        }), _createElementVNode("h1", null, "PIGE360 Self"), _createElementVNode("p", null, "Preparando a aplicação…")]))
+        }, [(identity.logo_url)
+          ? (_openBlock(), _createElementBlock("img", {
+              key: 0,
+              class: "brand-symbol official-symbol",
+              src: identity.logo_url,
+              alt: identity.display_name
+            }, null, 8, ["src", "alt"]))
+          : _createCommentVNode("", true), _createElementVNode("h1", null, _toDisplayString(identity.display_name), 1), _createElementVNode("p", null, "Preparando a aplicação…")]))
       : (!state.user)
         ? (_openBlock(), _createElementBlock("div", {
             key: 1,
             class: "auth-layout"
-          }, [_createElementVNode("section", { class: "auth-intro" }, [_createElementVNode("div", { class: "official-brand" }, [_createElementVNode("img", {
-            src: "/branding/pige360/logo-horizontal.png",
-            alt: "PIGE360 School Platform"
-          }), _createElementVNode("span", { class: "self-label" }, "SELF · APLICAÇÃO WEB/PWA")]), _createElementVNode("div", { class: "auth-copy" }, [
+          }, [_createElementVNode("section", { class: "auth-intro" }, [_createElementVNode("div", { class: "official-brand" }, [(identity.logo_url)
+            ? (_openBlock(), _createElementBlock("img", {
+                key: 0,
+                src: identity.logo_url,
+                alt: identity.display_name
+              }, null, 8, ["src", "alt"]))
+            : (_openBlock(), _createElementBlock("strong", {
+                key: 1,
+                class: "institution-name"
+              }, _toDisplayString(identity.display_name), 1)), _createElementVNode("span", { class: "self-label" }, "GESTÃO ESCOLAR")]), _createElementVNode("div", { class: "auth-copy" }, [
             _createElementVNode("p", { class: "eyebrow" }, "GESTÃO EDUCACIONAL • WEB / PWA"),
             _createElementVNode("h1", null, [_createTextVNode("A gestão educacional."), _createElementVNode("br"), _createTextVNode("Organizada, de verdade.")]),
             _createElementVNode("p", null, "Alunos, famílias, matrículas e documentos reunidos em uma aplicação da sua instituição."),
@@ -116,7 +125,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                 class: "auth-form",
                 onSubmit: _withModifiers(login, ["prevent"])
               }, [
-                _createElementVNode("p", { class: "eyebrow" }, "BEM-VINDO AO PIGE360 SELF"),
+                _createElementVNode("p", { class: "eyebrow" }, _toDisplayString(identity.display_name), 1),
                 _createElementVNode("h2", null, "Acesse sua instituição"),
                 _createElementVNode("p", { class: "muted" }, "Informe suas credenciais para continuar."),
                 (state.error)
@@ -173,11 +182,17 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
               href: "#/dashboard",
               class: "brand-line",
               onClick: _withModifiers($event => (navigate('dashboard')), ["prevent"])
-            }, [_createElementVNode("img", {
-              class: "sidebar-logo",
-              src: "/branding/pige360/logo-horizontal.png",
-              alt: "PIGE360"
-            }), _createElementVNode("span", { class: "self-label" }, "SELF")], 8, ["onClick"]),
+            }, [(identity.logo_url)
+              ? (_openBlock(), _createElementBlock("img", {
+                  key: 0,
+                  class: "sidebar-logo",
+                  src: identity.logo_url,
+                  alt: identity.display_name
+                }, null, 8, ["src", "alt"]))
+              : (_openBlock(), _createElementBlock("strong", {
+                  key: 1,
+                  class: "institution-name"
+                }, _toDisplayString(identity.short_name), 1))], 8, ["onClick"]),
             _createElementVNode("div", { class: "sidebar-label" }, "OPERAÇÃO ESCOLAR"),
             (!isProfileRole())
               ? (_openBlock(), _createElementBlock("nav", {
@@ -272,11 +287,19 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                         href: "#/integrations",
                         class: _normalizeClass({active:state.page==='integrations'}),
                         onClick: _withModifiers($event => (navigate('integrations')), ["prevent"])
-                      }, [_createElementVNode("span", { class: "nav-icon" }, "⇄"), _createTextVNode("Integrações")], 10, ["onClick"]))
+                      }, [_createElementVNode("span", { class: "nav-icon" }, "⇄"), _createTextVNode("Financeiro / ASAAS")], 10, ["onClick"]))
+                    : _createCommentVNode("", true),
+                  (can('connect.manage'))
+                    ? (_openBlock(), _createElementBlock("a", {
+                        key: 3,
+                        href: "#/connect",
+                        class: _normalizeClass({active:state.page==='connect'}),
+                        onClick: _withModifiers($event => (navigate('connect')), ["prevent"])
+                      }, [_createElementVNode("span", { class: "nav-icon" }, "◌"), _createTextVNode("Connect API")], 10, ["onClick"]))
                     : _createCommentVNode("", true),
                   (can('schools.manage'))
                     ? (_openBlock(), _createElementBlock("a", {
-                        key: 3,
+                        key: 4,
                         href: "#/settings",
                         class: _normalizeClass({active:state.page==='settings'}),
                         onClick: _withModifiers($event => (navigate('settings')), ["prevent"])
@@ -284,7 +307,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                     : _createCommentVNode("", true),
                   (can('users.manage'))
                     ? (_openBlock(), _createElementBlock("a", {
-                        key: 4,
+                        key: 5,
                         href: "#/users",
                         class: _normalizeClass({active:state.page==='users'}),
                         onClick: _withModifiers($event => (navigate('users')), ["prevent"])
@@ -292,7 +315,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                     : _createCommentVNode("", true),
                   (can('audit.read'))
                     ? (_openBlock(), _createElementBlock("a", {
-                        key: 5,
+                        key: 6,
                         href: "#/audit",
                         class: _normalizeClass({active:state.page==='audit'}),
                         onClick: _withModifiers($event => (navigate('audit')), ["prevent"])
@@ -454,7 +477,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                   role: "status"
                 }, "Carregando registros…"))
               : _createCommentVNode("", true),
-            (['online','banking','integrations'].includes(state.page))
+            (['online','banking','integrations','connect'].includes(state.page))
               ? (_openBlock(), _createBlock(_component_expansion_panel, {
                   key: state.schoolId+':'+state.page,
                   "school-id": state.schoolId,
@@ -1523,29 +1546,81 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                   : _createCommentVNode("", true)])]))
               : _createCommentVNode("", true),
             (state.page==='settings')
-              ? (_openBlock(), _createElementBlock("section", { key: 11 }, [_createElementVNode("div", { class: "section-actions" }, [_createElementVNode("h2", null, "Empresas e escolas desta instalação"), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
-                  class: "btn btn-secondary",
-                  onClick: newCompany
-                }, "+ Empresa", 8, ["onClick"]), _createElementVNode("button", {
-                  class: "btn btn-primary",
-                  onClick: $event => (newSchool())
-                }, "+ Escola", 8, ["onClick"])])]), _createElementVNode("div", { class: "school-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.schools, (s) => {
-                  return (_openBlock(), _createElementBlock("article", {
-                    key: s.id,
-                    class: "panel school-card"
-                  }, [
-                    _createElementVNode("p", { class: "eyebrow" }, "INSTITUIÇÃO DE ENSINO"),
-                    _createElementVNode("h2", null, _toDisplayString(s.name), 1),
-                    _createElementVNode("p", null, _toDisplayString(state.companies.find(c=>c.id===s.company_id)?.name), 1),
-                    _createElementVNode("p", { class: "muted" }, _toDisplayString(s.address || 'Endereço não informado'), 1),
-                    _createElementVNode("div", { class: "divider" }),
-                    _createElementVNode("p", { class: "small" }, [_createTextVNode("Documentação: "), _createElementVNode("strong", null, _toDisplayString(s.document_policy==='block'?'obrigatória antes de ativar':'aviso sem bloqueio'), 1)]),
-                    _createElementVNode("button", {
-                      class: "btn btn-secondary",
-                      onClick: $event => (newSchool(s))
-                    }, "Editar instituição", 8, ["onClick"])
-                  ]))
-                }), 128))]), _createElementVNode("div", { class: "alert info spaced" }, "Cada cliente utiliza sua própria instalação. Empresas, escolas e unidades são cadastros internos, sem contratação SaaS nem provisionamento remoto.")]))
+              ? (_openBlock(), _createElementBlock("section", { key: 11 }, [
+                  _createElementVNode("div", { class: "section-actions" }, [_createElementVNode("h2", null, "Minha escola e suas unidades"), _createElementVNode("div", { class: "actions" }, [(state.user.role==='admin')
+                    ? (_openBlock(), _createElementBlock("button", {
+                        key: 0,
+                        class: "btn btn-secondary",
+                        onClick: editMaintainer
+                      }, "Dados da mantenedora", 8, ["onClick"]))
+                    : _createCommentVNode("", true), _createElementVNode("button", {
+                    class: "btn btn-primary",
+                    onClick: manageUnits
+                  }, "Gerenciar unidades", 8, ["onClick"])])]),
+                  _createElementVNode("article", { class: "panel school-card" }, [
+                    _createElementVNode("p", { class: "eyebrow" }, "IDENTIDADE DA ESCOLA"),
+                    _createElementVNode("h2", null, _toDisplayString(identity.display_name), 1),
+                    _createElementVNode("p", { class: "muted" }, "Nome, logotipo, cores, tipografia e aplicativo desta instituição. A personalização é preservada nas atualizações."),
+                    (state.user.role==='admin')
+                      ? (_openBlock(), _createElementBlock("button", {
+                          key: 0,
+                          class: "btn btn-secondary",
+                          onClick: editIdentity
+                        }, "Personalizar identidade visual", 8, ["onClick"]))
+                      : _createCommentVNode("", true)
+                  ]),
+                  _createElementVNode("div", { class: "school-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.schools, (s) => {
+                    return (_openBlock(), _createElementBlock("article", {
+                      key: s.id,
+                      class: "panel school-card"
+                    }, [
+                      _createElementVNode("p", { class: "eyebrow" }, "INSTITUIÇÃO DE ENSINO"),
+                      _createElementVNode("h2", null, _toDisplayString(s.name), 1),
+                      _createElementVNode("p", null, _toDisplayString(state.companies.find(c=>c.id===s.company_id)?.name), 1),
+                      _createElementVNode("p", { class: "muted" }, _toDisplayString(s.address || 'Endereço não informado'), 1),
+                      _createElementVNode("div", { class: "divider" }),
+                      _createElementVNode("p", { class: "small" }, [_createTextVNode("Documentação: "), _createElementVNode("strong", null, _toDisplayString(s.document_policy==='block'?'obrigatória antes de ativar':'aviso sem bloqueio'), 1)]),
+                      _createElementVNode("button", {
+                        class: "btn btn-secondary",
+                        onClick: $event => (newSchool(s))
+                      }, "Editar instituição", 8, ["onClick"])
+                    ]))
+                  }), 128))]),
+                  _createElementVNode("article", { class: "panel support-hub-card" }, [
+                    (supportStatus.error)
+                      ? (_openBlock(), _createElementBlock("p", {
+                          key: 0,
+                          class: "alert warning",
+                          role: "status"
+                        }, _toDisplayString(supportStatus.error), 1))
+                      : _createCommentVNode("", true),
+                    _createElementVNode("div", { class: "panel-header" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "ATENDIMENTO"), _createElementVNode("h2", null, "Chat de suporte via site"), _createElementVNode("p", { class: "muted" }, "Configuração do Hub para a mantenedora da escola ativa.")]), _createElementVNode("span", { class: _normalizeClass(["badge", state.supportHub.enabled?'active':'archived']) }, _toDisplayString(state.supportHub.enabled?'Ativo':'Desativado'), 3)]),
+                    (state.supportHub.enabled)
+                      ? (_openBlock(), _createElementBlock("p", { key: 1 }, [_createTextVNode("O botão "), _createElementVNode("strong", null, _toDisplayString(state.supportHub.launcher_title), 1), _createTextVNode(" será carregado em " + _toDisplayString(state.supportHub.position==='right'?'à direita':'à esquerda') + " para os usuários do site.", 1)]))
+                      : (_openBlock(), _createElementBlock("p", {
+                          key: 2,
+                          class: "muted"
+                        }, "Nenhum widget de suporte será carregado enquanto a integração estiver desativada.")),
+                    (state.supportHub.token_configured)
+                      ? (_openBlock(), _createElementBlock("p", {
+                          key: 3,
+                          class: "small muted"
+                        }, "Website token configurado · " + _toDisplayString(state.supportHub.base_url), 1))
+                      : (_openBlock(), _createElementBlock("p", {
+                          key: 4,
+                          class: "small muted"
+                        }, "URL e website token ainda não configurados.")),
+                    _createElementVNode("div", { class: "actions" }, [(can('schools.manage'))
+                      ? (_openBlock(), _createElementBlock("button", {
+                          key: 0,
+                          class: "btn btn-secondary",
+                          onClick: editSupportHub
+                        }, "Configurar chat", 8, ["onClick"]))
+                      : _createCommentVNode("", true)]),
+                    _createElementVNode("p", { class: "small muted" }, "Se o navegador informar X-Frame-Options SAMEORIGIN, a rota do widget no servidor HUB precisa autorizar a origem desta escola. As demais telas funcionam independentemente do atendimento.")
+                  ]),
+                  _createElementVNode("div", { class: "alert info spaced" }, "Esta instalação pertence à sua escola. As unidades, os dados e as integrações são administrados pela própria instituição.")
+                ]))
               : _createCommentVNode("", true),
             _createElementVNode("footer", { class: "content-footer" }, [_createElementVNode("span", null, "PIGE360 Self · Gestão educacional"), _createElementVNode("span", null, "Acesso controlado · Histórico preservado")])
           ])])])), (state.modal.kind)
@@ -1558,7 +1633,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
           role: "dialog",
           "aria-modal": "true",
           "aria-labelledby": "modal-title"
-        }, [_createElementVNode("header", { class: "modal-header" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "PIGE360 SELF"), _createElementVNode("h2", { id: "modal-title" }, _toDisplayString(state.modal.title), 1)]), _createElementVNode("button", {
+        }, [_createElementVNode("header", { class: "modal-header" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, _toDisplayString(identity.display_name), 1), _createElementVNode("h2", { id: "modal-title" }, _toDisplayString(state.modal.title), 1)]), _createElementVNode("button", {
           class: "icon-button",
           disabled: state.busy,
           onClick: closeModal,
@@ -1711,11 +1786,23 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       class: "alert info"
                     }, "Será criada outra matrícula em um período posterior. A matrícula anterior não será sobrescrita."))
                   : _createCommentVNode("", true),
-                (state.modal.kind==='upload')
+                (state.modal.kind==='identity')
                   ? (_openBlock(), _createElementBlock("p", {
                       key: 5,
                       class: "alert info"
+                    }, "O nome deve ter até 160 caracteres e o nome curto até 30. Logotipo e fonte: até 2 MB cada. Nenhuma fonte externa é necessária. A tipografia própria requer um arquivo WOFF2 licenciado."))
+                  : _createCommentVNode("", true),
+                (state.modal.kind==='upload')
+                  ? (_openBlock(), _createElementBlock("p", {
+                      key: 6,
+                      class: "alert info"
                     }, "Limite padrão de 10 MB. O recebimento não substitui a validação documental pela Secretaria."))
+                  : _createCommentVNode("", true),
+                (state.modal.kind==='support-hub')
+                  ? (_openBlock(), _createElementBlock("p", {
+                      key: 7,
+                      class: "alert info"
+                    }, "A configuração pertence à mantenedora da escola ativa. O token é armazenado criptografado e nunca é devolvido na tela; o navegador recebe somente o website token necessário para inicializar o widget."))
                   : _createCommentVNode("", true),
                 _createElementVNode("div", { class: "form-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.modal.fields, (f, index) => {
                   return (_openBlock(), _createElementBlock("label", {
@@ -1792,35 +1879,43 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                                     value: p.id
                                   }, _toDisplayString(p.name) + " · " + _toDisplayString(cpf(p.cpf)), 9, ["value"]))
                                 }), 128))], 8, ["id", "aria-label", "onUpdate:modelValue", "required"]), [[_vModelSelect, state.modal.form[f.key]]]), _createElementVNode("small", null, "Cadastre a pessoa em Responsáveis caso ainda não exista.")], 64))
-                              : (f.type==='photo')
+                              : (f.type==='identity-logo' || f.type==='identity-font')
                                 ? (_openBlock(), _createElementBlock("input", {
                                     key: 4,
                                     id: 'modal-field-'+index,
                                     type: "file",
-                                    accept: ".png,.jpg,.jpeg",
-                                    required: f.required,
-                                    onChange: fileChange
-                                  }, null, 40, ["id", "required", "onChange"]))
-                                : (f.type==='file')
+                                    accept: f.type==='identity-font'?'.woff2':'.png,.jpg,.jpeg,.webp',
+                                    onChange: $event => (identityFileChange($event,f.key))
+                                  }, null, 40, ["id", "accept", "onChange"]))
+                                : (f.type==='photo')
                                   ? (_openBlock(), _createElementBlock("input", {
                                       key: 5,
                                       id: 'modal-field-'+index,
                                       type: "file",
-                                      accept: ".pdf,.png,.jpg,.jpeg",
+                                      accept: ".png,.jpg,.jpeg",
                                       required: f.required,
                                       onChange: fileChange
                                     }, null, 40, ["id", "required", "onChange"]))
-                                  : _withDirectives((_openBlock(), _createElementBlock("input", {
-                                      key: 6,
-                                      id: 'modal-field-'+index,
-                                      "onUpdate:modelValue": $event => ((state.modal.form[f.key]) = $event),
-                                      type: f.type,
-                                      required: f.required,
-                                      min: f.type==='number'?1:undefined,
-                                      minlength: f.type==='password' && f.key!=='current_password'?12:undefined,
-                                      maxlength: f.type==='password'?128:400,
-                                      autocomplete: f.type==='password'?'new-password':'off'
-                                    }, null, 8, ["id", "onUpdate:modelValue", "type", "required", "min", "minlength", "maxlength", "autocomplete"])), [[_vModelDynamic, state.modal.form[f.key]]])], 64))], 10, ["for"]))
+                                  : (f.type==='file')
+                                    ? (_openBlock(), _createElementBlock("input", {
+                                        key: 6,
+                                        id: 'modal-field-'+index,
+                                        type: "file",
+                                        accept: ".pdf,.png,.jpg,.jpeg",
+                                        required: f.required,
+                                        onChange: fileChange
+                                      }, null, 40, ["id", "required", "onChange"]))
+                                    : _withDirectives((_openBlock(), _createElementBlock("input", {
+                                        key: 7,
+                                        id: 'modal-field-'+index,
+                                        "onUpdate:modelValue": $event => ((state.modal.form[f.key]) = $event),
+                                        type: f.type,
+                                        required: f.required,
+                                        min: f.type==='number'?1:undefined,
+                                        minlength: f.type==='password' && f.key!=='current_password'?12:undefined,
+                                        maxlength: f.type==='password'?128:400,
+                                        autocomplete: f.type==='password'?'new-password':'off'
+                                      }, null, 8, ["id", "onUpdate:modelValue", "type", "required", "min", "minlength", "maxlength", "autocomplete"])), [[_vModelDynamic, state.modal.form[f.key]]])], 64))], 10, ["for"]))
                 }), 128))])
               ]), _createElementVNode("footer", { class: "modal-footer" }, [_createElementVNode("span", { class: "small muted" }, "Alterações registradas com seu usuário."), _createElementVNode("button", {
                 type: "button",
@@ -1835,15 +1930,18 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
   }
 },portal:function render(_ctx, _cache) {
   with (_ctx) {
-    const { createElementVNode: _createElementVNode, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, toDisplayString: _toDisplayString, createTextVNode: _createTextVNode, renderList: _renderList, Fragment: _Fragment, vModelSelect: _vModelSelect, withDirectives: _withDirectives, normalizeClass: _normalizeClass, vModelText: _vModelText, withModifiers: _withModifiers, vModelCheckbox: _vModelCheckbox } = _Vue
+    const { openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, toDisplayString: _toDisplayString, createElementVNode: _createElementVNode, createTextVNode: _createTextVNode, renderList: _renderList, Fragment: _Fragment, vModelSelect: _vModelSelect, withDirectives: _withDirectives, normalizeClass: _normalizeClass, vModelText: _vModelText, withModifiers: _withModifiers, vModelCheckbox: _vModelCheckbox } = _Vue
 
     return (_openBlock(), _createElementBlock("div", { class: "portal-shell" }, [_createElementVNode("header", { class: "portal-header" }, [_createElementVNode("a", {
       href: "/online.html",
       "aria-label": "Página inicial do portal"
-    }, [_createElementVNode("img", {
-      src: "/branding/pige360/logo-horizontal.png",
-      alt: "PIGE360"
-    })]), _createElementVNode("div", null, [_createElementVNode("strong", null, "Portal dos responsáveis"), _createElementVNode("small", null, "Pré-matrícula e acompanhamento")]), _createElementVNode("a", {
+    }, [(identity.logo_url)
+      ? (_openBlock(), _createElementBlock("img", {
+          key: 0,
+          src: identity.logo_url,
+          alt: identity.display_name
+        }, null, 8, ["src", "alt"]))
+      : (_openBlock(), _createElementBlock("strong", { key: 1 }, _toDisplayString(identity.display_name), 1))]), _createElementVNode("div", null, [_createElementVNode("strong", null, "Portal dos responsáveis"), _createElementVNode("small", null, "Pré-matrícula e acompanhamento")]), _createElementVNode("a", {
       class: "btn btn-secondary small-button",
       href: "/"
     }, "Área da escola")]), _createElementVNode("main", { class: "portal-main" }, [
@@ -2940,11 +3038,155 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
               }), 128))])
             ]))
           : _createCommentVNode("", true),
-        (props.page==='integrations')
-          ? (_openBlock(), _createElementBlock(_Fragment, { key: 4 }, [_createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Conexões desta escola"), _createElementVNode("p", null, "Credenciais criptografadas no servidor. Nenhuma integração está ativa até ser configurada e habilitada.")]), _createElementVNode("button", {
+        (props.page==='connect')
+          ? (_openBlock(), _createElementBlock(_Fragment, { key: 4 }, [_createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Connect API"), _createElementVNode("p", null, "Instância de comunicação da empresa, independente de ASAAS, matrículas e cadastro de pessoas.")]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+              class: "btn btn-secondary",
+              onClick: connectTest
+            }, "Testar API", 8, ["onClick"]), _createElementVNode("button", {
               class: "btn btn-secondary",
               onClick: $event => (run(load))
-            }, "Atualizar", 8, ["onClick"])]), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(['connect_api','asaas'], (provider) => {
+            }, "Atualizar", 8, ["onClick"])])]), (!s.connect.configured)
+              ? (_openBlock(), _createElementBlock("div", {
+                  key: 0,
+                  class: "alert warning"
+                }, [
+                  _createTextVNode("Configure no ambiente da instalação: "),
+                  _createElementVNode("code", null, "CONNECT_API_BASE_URL"),
+                  _createTextVNode(", "),
+                  _createElementVNode("code", null, "CONNECT_API_KEY"),
+                  _createTextVNode(" e "),
+                  _createElementVNode("code", null, "CONNECT_ALLOWED_HOSTS"),
+                  _createTextVNode(". A chave nunca é digitada nesta tela.")
+                ]))
+              : (_openBlock(), _createElementBlock("div", {
+                  key: 1,
+                  class: "alert info"
+                }, "API configurada em " + _toDisplayString(s.connect.base_url) + " · chave global presente · prefixo de instância " + _toDisplayString(s.connect.instance_prefix), 1)), _createElementVNode("form", {
+              class: "x-form",
+              onSubmit: _withModifiers(connectCreate, ["prevent"])
+            }, [_createElementVNode("div", { class: "x-grid" }, [_createElementVNode("label", null, [_createTextVNode("Rótulo da instância adicional (opcional)"), _withDirectives(_createElementVNode("input", {
+              "onUpdate:modelValue": $event => ((s.connectLabel) = $event),
+              maxlength: "40",
+              placeholder: "Ex.: Atendimento 2"
+            }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.connectLabel]])]), _createElementVNode("label", { class: "x-check" }, [_withDirectives(_createElementVNode("input", {
+              type: "checkbox",
+              "onUpdate:modelValue": $event => ((s.connectPrimary) = $event)
+            }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, s.connectPrimary]]), _createTextVNode("Tornar esta a instância principal")])]), _createElementVNode("p", { class: "muted" }, "O primeiro nome é gerado com empresa e CNPJ: PG360-NOME-DA-EMPRESA-CNPJ."), _createElementVNode("button", {
+              class: "btn btn-primary",
+              disabled: !s.connect.configured
+            }, "Cadastrar instância", 8, ["disabled"])], 40, ["onSubmit"])]), _createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("h2", null, "Instâncias cadastradas"), _createElementVNode("span", null, _toDisplayString(s.connectInstances.length) + " ativa(s)", 1)]), (!s.connectInstances.length)
+              ? (_openBlock(), _createElementBlock("p", {
+                  key: 0,
+                  class: "empty"
+                }, "Nenhuma instância foi cadastrada para esta empresa."))
+              : _createCommentVNode("", true), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.connectInstances, (i) => {
+              return (_openBlock(), _createElementBlock("article", {
+                key: i.id,
+                class: "x-charge"
+              }, [
+                _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [
+                  _createElementVNode("p", { class: "eyebrow" }, _toDisplayString(i.primary?'PRINCIPAL':'ADICIONAL'), 1),
+                  _createElementVNode("h3", null, _toDisplayString(i.display_name), 1),
+                  _createElementVNode("code", { class: "x-url" }, _toDisplayString(i.name), 1),
+                  _createElementVNode("p", null, [_createTextVNode("Estado local: "), _createElementVNode("span", { class: "badge" }, _toDisplayString(label(i.connection_state||i.status)), 1), _createTextVNode(" · " + _toDisplayString(i.remote_configured?'API pronta':'API não configurada'), 1)]),
+                  (i.last_synced_at)
+                    ? (_openBlock(), _createElementBlock("small", { key: 0 }, "Última consulta: " + _toDisplayString(date(i.last_synced_at)), 1))
+                    : _createCommentVNode("", true)
+                ]), _createElementVNode("div", { class: "actions" }, [
+                  _createElementVNode("button", {
+                    class: "btn btn-secondary",
+                    onClick: $event => (connectSync(i))
+                  }, "Consultar estado", 8, ["onClick"]),
+                  _createElementVNode("button", {
+                    class: "btn btn-primary",
+                    onClick: $event => (connectPair(i))
+                  }, "Gerar QR / conectar", 8, ["onClick"]),
+                  _createElementVNode("button", {
+                    class: "btn btn-secondary",
+                    onClick: $event => (connectLogout(i))
+                  }, "Deslogar", 8, ["onClick"]),
+                  _createElementVNode("button", {
+                    class: "btn btn-secondary",
+                    onClick: $event => (connectDelete(i))
+                  }, "Descadastrar", 8, ["onClick"])
+                ])]),
+                (i.last_error)
+                  ? (_openBlock(), _createElementBlock("p", {
+                      key: 0,
+                      class: "alert error"
+                    }, _toDisplayString(i.last_error), 1))
+                  : _createCommentVNode("", true),
+                (s.connectQr.base64)
+                  ? (_openBlock(), _createElementBlock("div", {
+                      key: 1,
+                      class: "x-pix"
+                    }, [_createElementVNode("img", {
+                      src: s.connectQr.base64,
+                      alt: "QR Code da Connect API"
+                    }, null, 8, ["src"]), _createElementVNode("button", {
+                      class: "btn btn-secondary",
+                      onClick: clearConnectQr
+                    }, "Fechar QR", 8, ["onClick"])]))
+                  : _createCommentVNode("", true),
+                (s.connectQr.pairingCode||s.connectQr.code)
+                  ? (_openBlock(), _createElementBlock("div", {
+                      key: 2,
+                      class: "alert info"
+                    }, [_createElementVNode("strong", null, _toDisplayString(s.connectQr.pairingCode?'Pairing code':'Código QR'), 1), _createElementVNode("code", { class: "x-url" }, _toDisplayString(s.connectQr.pairingCode||s.connectQr.code), 1)]))
+                  : _createCommentVNode("", true),
+                _createElementVNode("label", null, [_createTextVNode("Telefone para pairing code (opcional)"), _withDirectives(_createElementVNode("input", {
+                  "onUpdate:modelValue": $event => ((s.connectNumber) = $event),
+                  inputmode: "tel",
+                  placeholder: "+5575999990000"
+                }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.connectNumber]])])
+              ]))
+            }), 128))]), _createElementVNode("section", { class: "panel x-card" }, [
+              _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("h2", null, "Fila de mensagens Connect API"), _createElementVNode("button", {
+                class: "btn btn-secondary",
+                onClick: connectJobs
+              }, "Atualizar fila", 8, ["onClick"])]),
+              (!s.connectJobs.length)
+                ? (_openBlock(), _createElementBlock("p", {
+                    key: 0,
+                    class: "empty"
+                  }, "Nenhuma mensagem enfileirada."))
+                : _createCommentVNode("", true),
+              _createElementVNode("div", { class: "table-wrap" }, [_createElementVNode("table", null, [_createElementVNode("thead", null, [_createElementVNode("tr", null, [
+                _createElementVNode("th", null, "Operação"),
+                _createElementVNode("th", null, "Situação"),
+                _createElementVNode("th", null, "Tentativas"),
+                _createElementVNode("th", null, "Retorno"),
+                _createElementVNode("th", null, "Ação")
+              ])]), _createElementVNode("tbody", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.connectJobs, (j) => {
+                return (_openBlock(), _createElementBlock("tr", { key: j.id }, [
+                  _createElementVNode("td", null, [_createTextVNode(_toDisplayString(j.kind), 1), _createElementVNode("small", { class: "block" }, _toDisplayString(date(j.created_at)), 1)]),
+                  _createElementVNode("td", null, _toDisplayString(label(j.status)), 1),
+                  _createElementVNode("td", null, _toDisplayString(j.attempts), 1),
+                  _createElementVNode("td", null, _toDisplayString(j.error_code||label(j.delivery_status)||'—'), 1),
+                  _createElementVNode("td", null, [(['failed','retry'].includes(j.status))
+                    ? (_openBlock(), _createElementBlock("button", {
+                        key: 0,
+                        class: "btn btn-secondary small-button",
+                        onClick: $event => (connectRetry(j)),
+                        disabled: s.reason.length<5
+                      }, "Reprocessar", 8, ["onClick", "disabled"]))
+                    : (j.status==='uncertain')
+                      ? (_openBlock(), _createElementBlock("small", { key: 1 }, "Conferência remota necessária"))
+                      : _createCommentVNode("", true)])
+                ]))
+              }), 128))])])]),
+              _createElementVNode("label", null, [_createTextVNode("Justificativa para reprocessar"), _withDirectives(_createElementVNode("textarea", {
+                "onUpdate:modelValue": $event => ((s.reason) = $event),
+                maxlength: "1000",
+                rows: "2"
+              }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.reason]])])
+            ])], 64))
+          : _createCommentVNode("", true),
+        (props.page==='integrations')
+          ? (_openBlock(), _createElementBlock(_Fragment, { key: 5 }, [_createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Conexões desta escola"), _createElementVNode("p", null, "Credenciais criptografadas no servidor. Nenhuma integração está ativa até ser configurada e habilitada.")]), _createElementVNode("button", {
+              class: "btn btn-secondary",
+              onClick: $event => (run(load))
+            }, "Atualizar", 8, ["onClick"])]), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(['asaas'], (provider) => {
               return (_openBlock(), _createElementBlock("article", {
                 key: provider,
                 class: "x-charge"

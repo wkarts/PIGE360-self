@@ -96,6 +96,43 @@ class AdmissionAttachment(Record, Scoped, Base):
     review_note: Mapped[str] = mapped_column(Text, default='')
     student_document_id: Mapped[str | None] = mapped_column(ForeignKey('student_documents.id'))
 
+class ConnectInstance(Record, Base):
+    """Instância global da Connect API vinculada à empresa/tenant."""
+    __tablename__ = 'connect_instances'
+    company_id: Mapped[str] = mapped_column(ForeignKey('companies.id'), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    display_name: Mapped[str] = mapped_column(String(160), default='')
+    document: Mapped[str] = mapped_column(String(14), default='')
+    primary: Mapped[bool] = mapped_column(Boolean, default=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(24), default='created')
+    connection_state: Mapped[str] = mapped_column(String(24), default='')
+    external_id: Mapped[str] = mapped_column(String(160), default='')
+    last_error: Mapped[str] = mapped_column(String(240), default='')
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        UniqueConstraint('company_id', 'name', name='uq_connect_instances_company_name'),
+        CheckConstraint("status IN ('creating','created','connecting','open','close','error','deleted')", name='connect_instance_status'),
+    )
+
+
+class ConnectMessageJob(Record, Scoped, Base):
+    """Fila de mensagens da Connect API; não compartilha a fila financeira."""
+    __tablename__ = 'connect_message_jobs'
+    instance_id: Mapped[str] = mapped_column(ForeignKey('connect_instances.id'), index=True)
+    kind: Mapped[str] = mapped_column(String(24), default='text')
+    dedupe_key: Mapped[str] = mapped_column(String(180), unique=True)
+    encrypted_payload: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(24), default='pending', index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_code: Mapped[str] = mapped_column(String(80), default='')
+    remote_id: Mapped[str] = mapped_column(String(160), default='')
+    delivery_status: Mapped[str] = mapped_column(String(32), default='')
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class IntegrationConnection(Record, Scoped, Base):
     __tablename__ = 'integration_connections'
     provider: Mapped[str] = mapped_column(String(24))

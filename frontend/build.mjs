@@ -48,10 +48,14 @@ self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=
 self.addEventListener('message',event=>{if(event.data?.type==='SKIP_WAITING')self.skipWaiting();});
 self.addEventListener('fetch',event=>{
  const url=new URL(event.request.url);
- if(event.request.method!=='GET'||url.origin!==location.origin||url.pathname.startsWith('/api/')||url.pathname.startsWith('/health/'))return;
+ if(event.request.method!=='GET'||url.origin!==location.origin)return;
+ const publicIdentity=url.pathname==='/manifest.webmanifest'||url.pathname==='/api/v1/institution/identity'||url.pathname==='/api/v1/institution/theme.css'||url.pathname==='/api/v1/institution/icon.png'||url.pathname.startsWith('/api/v1/institution/assets/');
+ if(publicIdentity){event.respondWith(caches.open('pige360-public-identity').then(async cache=>{try{const response=await fetch(event.request);if(response.ok){await cache.put(event.request,response.clone());const keys=await cache.keys();await Promise.all(keys.slice(0,Math.max(0,keys.length-24)).map(key=>cache.delete(key)));}return response;}catch(error){const cached=await cache.match(event.request);if(cached)return cached;throw error;}}));return;}
+ if(url.pathname.startsWith('/api/')||url.pathname.startsWith('/health/'))return;
  if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).catch(()=>caches.match(url.pathname==='/online.html'?'/online.html':'/index.html')));return;}
  if(ASSETS.includes(url.pathname))event.respondWith(caches.match(event.request).then(cached=>cached||fetch(event.request)));
 });\n`;
 fs.writeFileSync(path.join(dist,'sw.js'),sw);
 fs.writeFileSync(path.join(dist,'build-info.json'),JSON.stringify({product:'PIGE360 Self',version,vue:'3.5.13',build_id:hash,pipeline:'typescript-vue-precompiled',external_cdn:false},null,2)+'\n');
+execFileSync(process.execPath,[path.join(root,'tests/render-smoke.mjs')],{stdio:'inherit'});
 console.log('PWA compilada:',hash);
