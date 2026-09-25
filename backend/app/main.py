@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from .config import settings
 from .db import engine
 from .storage import ensure_storage
-from . import auth, people, registry, enrollments, documents, reports, portal, admissions, integrations, connect, banking, profiles, support
+from . import auth, people, registry, enrollments, documents, reports, portal, admissions, integrations, connect, banking, profiles, support, institution
 
 cfg = settings()
 logger = logging.getLogger('pige360')
@@ -23,7 +23,7 @@ async def lifespan(app):
     engine.dispose()
 
 app = FastAPI(title='PIGE360 Self — Gestão Educacional', version=cfg.app_version, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url='/api/v1/openapi.json')
-for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router]:
+for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router]:
     app.include_router(router)
 
 @app.exception_handler(HTTPException)
@@ -59,13 +59,18 @@ async def security_headers(request: Request, call_next):
     response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
     hub_origins, hub_sockets = support.csp_sources()
     hub_script_sources = ' '.join(hub_origins)
+    # O SDK opcional do HUB injeta estilos Inter. Permissão restrita aos dois
+    # hosts de fontes somente quando há um HUB ativo; a identidade da escola é local.
+    hub_style_sources = 'https://fonts.googleapis.com' if hub_origins else ''
+    hub_font_sources = 'https://fonts.gstatic.com' if hub_origins else ''
     hub_connect_sources = ' '.join(hub_origins + hub_sockets)
     response.headers['Content-Security-Policy'] = (
         "default-src 'self'; "
         f"script-src 'self' {hub_script_sources}; "
-        "style-src 'self' 'unsafe-inline'; "
+        f"style-src 'self' 'unsafe-inline' {hub_style_sources}; "
+        f"style-src-elem 'self' 'unsafe-inline' {hub_style_sources}; "
         "img-src 'self' data: blob:; "
-        "font-src 'self'; "
+        f"font-src 'self' {hub_font_sources}; "
         f"connect-src 'self' {hub_connect_sources}; "
         f"frame-src 'self' {hub_script_sources}; "
         "object-src 'none'; base-uri 'self'; frame-ancestors 'none'"

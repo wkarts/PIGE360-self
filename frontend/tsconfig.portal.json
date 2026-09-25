@@ -13,6 +13,7 @@
   },
   "files": [
     "src/vue-globals.d.ts",
+    "src/institution.ts",
     "src/online-types.ts",
     "src/portal.ts"
   ]

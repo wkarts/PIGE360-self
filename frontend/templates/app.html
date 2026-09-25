@@ -1,8 +1,8 @@
 <div class="app-root" :aria-busy="state.busy || state.loading">
-  <div v-if="!state.ready" class="loading-screen"><img class="brand-symbol official-symbol" src="/branding/pige360/symbol.png" alt="PIGE360"><h1>PIGE360 Self</h1><p>Preparando a aplicação…</p></div>
+  <div v-if="!state.ready" class="loading-screen"><img v-if="identity.logo_url" class="brand-symbol official-symbol" :src="identity.logo_url" :alt="identity.display_name"><h1>{{ identity.display_name }}</h1><p>Preparando a aplicação…</p></div>
   <div v-else-if="!state.user" class="auth-layout">
     <section class="auth-intro">
-      <div class="official-brand"><img src="/branding/pige360/logo-horizontal.png" alt="PIGE360 School Platform"><span class="self-label">SELF · APLICAÇÃO WEB/PWA</span></div>
+      <div class="official-brand"><img v-if="identity.logo_url" :src="identity.logo_url" :alt="identity.display_name"><strong v-else class="institution-name">{{ identity.display_name }}</strong><span class="self-label">GESTÃO ESCOLAR</span></div>
       <div class="auth-copy"><p class="eyebrow">GESTÃO EDUCACIONAL • WEB / PWA</p><h1>A gestão educacional.<br>Organizada, de verdade.</h1><p>Alunos, famílias, matrículas e documentos reunidos em uma aplicação da sua instituição.</p><div class="auth-features"><span>01 &nbsp; Cadastro único</span><span>02 &nbsp; Matrículas e turmas</span><span>03 &nbsp; Documentação e histórico</span></div></div>
       <div><a class="btn btn-secondary" href="/online.html">Sou responsável · Pré-matrícula online →</a><p class="small muted">Instalação própria · Dados sob gestão da instituição</p></div>
     </section>
@@ -24,7 +24,7 @@
         <button class="btn btn-primary full" :disabled="state.loginBusy || !state.online">{{ state.loginBusy ? 'Configurando…' : 'Concluir instalação' }}</button>
       </form>
       <form v-else class="auth-form" @submit.prevent="login">
-        <p class="eyebrow">BEM-VINDO AO PIGE360 SELF</p><h2>Acesse sua instituição</h2><p class="muted">Informe suas credenciais para continuar.</p>
+        <p class="eyebrow">{{ identity.display_name }}</p><h2>Acesse sua instituição</h2><p class="muted">Informe suas credenciais para continuar.</p>
         <div v-if="state.error" class="alert error" role="alert">{{ state.error }}</div><div v-if="state.success" class="alert success">{{ state.success }}</div>
         <label class="field">E-mail<input v-model="state.login.email" type="email" required autocomplete="username" autofocus placeholder="seu.nome@escola.com.br"></label>
         <label class="field">Senha<input v-model="state.login.password" type="password" required maxlength="128" autocomplete="current-password" placeholder="Sua senha de acesso"></label>
@@ -37,7 +37,7 @@
   <div v-else class="workspace">
     <div v-if="state.menuOpen" class="sidebar-shade" @click="state.menuOpen=false"></div>
     <aside class="sidebar" :class="{visible:state.menuOpen}">
-      <a href="#/dashboard" class="brand-line" @click.prevent="navigate('dashboard')"><img class="sidebar-logo" src="/branding/pige360/logo-horizontal.png" alt="PIGE360"><span class="self-label">SELF</span></a>
+      <a href="#/dashboard" class="brand-line" @click.prevent="navigate('dashboard')"><img v-if="identity.logo_url" class="sidebar-logo" :src="identity.logo_url" :alt="identity.display_name"><strong v-else class="institution-name">{{ identity.short_name }}</strong></a>
       <div class="sidebar-label">OPERAÇÃO ESCOLAR</div>
       <nav v-if="!isProfileRole()" aria-label="Menu principal">
         <a href="#/dashboard" :class="{active:state.page==='dashboard'}" @click.prevent="navigate('dashboard')"><span class="nav-icon">▦</span>Visão geral</a>
@@ -184,17 +184,20 @@
         </section>
         <section v-if="state.page==='reports'" class="panel"><div class="panel-header"><h2>Relação de alunos por turma</h2><button class="btn btn-secondary" @click="exportStudents">Exportar cadastro CSV</button></div><div class="filter-bar"><select v-model="state.reportClass" @change="loadReport" aria-label="Turma do relatório"><option value="">Selecione a turma…</option><option v-for="c in options('class-groups')" :key="c.value" :value="c.value">{{ c.label }}</option></select><button class="btn btn-primary" :disabled="!state.reportClass" @click="exportClass">Gerar PDF da turma</button></div><div class="table-scroll"><table><thead><tr><th>Matrícula</th><th>Aluno</th><th>Nascimento</th><th>Situação</th></tr></thead><tbody><tr v-for="r in state.reportRows" :key="r.number"><td>{{ r.number }}</td><td><strong>{{ r.name }}</strong></td><td>{{ date(r.birth_date) }}</td><td>{{ label(r.status) }}</td></tr></tbody></table><div v-if="!state.reportRows.length" class="empty-state"><p>Selecione uma turma com matrículas ativas ou suspensas.</p></div></div></section>
         <section v-if="state.page==='settings'">
-          <div class="section-actions"><h2>Empresas e escolas desta instalação</h2><div class="actions"><button class="btn btn-secondary" @click="newCompany">+ Empresa</button><button class="btn btn-primary" @click="newSchool()">+ Escola</button></div></div>
+          <div class="section-actions"><h2>Minha escola e suas unidades</h2><div class="actions"><button v-if="state.user.role==='admin'" class="btn btn-secondary" @click="editMaintainer">Dados da mantenedora</button><button class="btn btn-primary" @click="manageUnits">Gerenciar unidades</button></div></div>
+          <article class="panel school-card"><p class="eyebrow">IDENTIDADE DA ESCOLA</p><h2>{{ identity.display_name }}</h2><p class="muted">Nome, logotipo, cores, tipografia e aplicativo desta instituição. A personalização é preservada nas atualizações.</p><button v-if="state.user.role==='admin'" class="btn btn-secondary" @click="editIdentity">Personalizar identidade visual</button></article>
           <div class="school-grid"><article v-for="s in state.schools" :key="s.id" class="panel school-card"><p class="eyebrow">INSTITUIÇÃO DE ENSINO</p><h2>{{ s.name }}</h2><p>{{ state.companies.find(c=>c.id===s.company_id)?.name }}</p><p class="muted">{{ s.address || 'Endereço não informado' }}</p><div class="divider"></div><p class="small">Documentação: <strong>{{ s.document_policy==='block'?'obrigatória antes de ativar':'aviso sem bloqueio' }}</strong></p><button class="btn btn-secondary" @click="newSchool(s)">Editar instituição</button></article></div>
           <article class="panel support-hub-card">
-             <div class="panel-header"><div><p class="eyebrow">ATENDIMENTO</p><h2>Chat de suporte via site</h2><p class="muted">Configuração do Hub para a empresa/tenant da escola ativa.</p></div><span class="badge" :class="state.supportHub.enabled?'active':'archived'">{{ state.supportHub.enabled?'Ativo':'Desativado' }}</span></div>
+             <p v-if="supportStatus.error" class="alert warning" role="status">{{ supportStatus.error }}</p>
+             <div class="panel-header"><div><p class="eyebrow">ATENDIMENTO</p><h2>Chat de suporte via site</h2><p class="muted">Configuração do Hub para a mantenedora da escola ativa.</p></div><span class="badge" :class="state.supportHub.enabled?'active':'archived'">{{ state.supportHub.enabled?'Ativo':'Desativado' }}</span></div>
              <p v-if="state.supportHub.enabled">O botão <strong>{{ state.supportHub.launcher_title }}</strong> será carregado em {{ state.supportHub.position==='right'?'à direita':'à esquerda' }} para os usuários do site.</p>
              <p v-else class="muted">Nenhum widget de suporte será carregado enquanto a integração estiver desativada.</p>
              <p class="small muted" v-if="state.supportHub.token_configured">Website token configurado · {{ state.supportHub.base_url }}</p>
              <p class="small muted" v-else>URL e website token ainda não configurados.</p>
              <div class="actions"><button v-if="can('schools.manage')" class="btn btn-secondary" @click="editSupportHub">Configurar chat</button></div>
+             <p class="small muted">Se o navegador informar X-Frame-Options SAMEORIGIN, a rota do widget no servidor HUB precisa autorizar a origem desta escola. As demais telas funcionam independentemente do atendimento.</p>
            </article>
-          <div class="alert info spaced">Cada cliente utiliza sua própria instalação. Empresas, escolas e unidades são cadastros internos, sem contratação SaaS nem provisionamento remoto.</div>
+          <div class="alert info spaced">Esta instalação pertence à sua escola. As unidades, os dados e as integrações são administrados pela própria instituição.</div>
         </section>
         <footer class="content-footer"><span>PIGE360 Self · Gestão educacional</span><span>Acesso controlado · Histórico preservado</span></footer>
       </main>
@@ -202,7 +205,7 @@
   </div>
   <div v-if="state.modal.kind" class="modal-backdrop" @click.self="closeModal">
     <section class="modal" :class="{'modal-wide':['enrollment-detail','protocol-detail'].includes(state.modal.kind)}" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <header class="modal-header"><div><p class="eyebrow">PIGE360 SELF</p><h2 id="modal-title">{{ state.modal.title }}</h2></div><button class="icon-button" :disabled="state.busy" @click="closeModal" aria-label="Fechar janela">×</button></header>
+      <header class="modal-header"><div><p class="eyebrow">{{ identity.display_name }}</p><h2 id="modal-title">{{ state.modal.title }}</h2></div><button class="icon-button" :disabled="state.busy" @click="closeModal" aria-label="Fechar janela">×</button></header>
       <div v-if="state.modal.kind==='enrollment-detail' && state.modal.target" class="modal-body">
         <div class="enrollment-summary"><h3>{{ state.modal.target.student_name }}</h3><span class="badge" :class="state.modal.target.status">{{ label(state.modal.target.status) }}</span><p>{{ state.modal.target.class_name }} · {{ state.modal.target.grade_name }} · {{ state.modal.target.shift_name }} · {{ state.modal.target.year_name }}</p></div>
         <p class="small preserve">{{ state.modal.target.notes || 'Sem observações.' }}</p><div class="actions spaced"><button v-if="state.modal.target.status==='draft' && can('enrollments.write')" class="btn btn-primary" @click="editDraft">Editar pré-matrícula</button><button v-if="can('documents.write')" class="btn btn-secondary" @click="issueDocument('enrollment_form',state.modal.target)">Ficha de matrícula PDF</button></div><h3 class="spaced">Checklist documental</h3><div class="checklist-grid"><div v-for="c in state.modal.target.checklist" :key="c.document_type_id" class="checklist-item"><span :class="c.complete?'check-ok':'check-pending'">{{ c.complete?'✓':'!' }}</span><div><strong>{{ c.name }}</strong><small>{{ label(c.status) }} · {{ c.required?'Obrigatório':'Opcional' }}</small></div></div></div>
@@ -224,8 +227,9 @@
           <div v-if="state.modal.error" class="alert error preserve" role="alert">{{ state.modal.error }}</div>
           <p v-if="state.modal.kind==='enrollment'" class="alert info">A matrícula será salva como rascunho. A confirmação da vaga acontece na ativação.</p>
           <p v-if="state.modal.kind==='draft-edit'" class="alert info">Aluno e ano letivo são preservados. A alteração exige justificativa e permanece no histórico. Rascunhos não reservam vaga.</p><p v-if="state.modal.kind==='protocol-note'" class="alert info">O registro será acrescentado ao histórico sem substituir os atendimentos anteriores.</p><p v-if="state.modal.kind==='reenroll'" class="alert info">Será criada outra matrícula em um período posterior. A matrícula anterior não será sobrescrita.</p>
+          <p v-if="state.modal.kind==='identity'" class="alert info">O nome deve ter até 160 caracteres e o nome curto até 30. Logotipo e fonte: até 2 MB cada. Nenhuma fonte externa é necessária. A tipografia própria requer um arquivo WOFF2 licenciado.</p>
           <p v-if="state.modal.kind==='upload'" class="alert info">Limite padrão de 10 MB. O recebimento não substitui a validação documental pela Secretaria.</p>
-          <p v-if="state.modal.kind==='support-hub'" class="alert info">A configuração pertence à empresa/tenant da escola ativa. O token é armazenado criptografado e nunca é devolvido na tela; o navegador recebe somente o website token necessário para inicializar o widget.</p>
+          <p v-if="state.modal.kind==='support-hub'" class="alert info">A configuração pertence à mantenedora da escola ativa. O token é armazenado criptografado e nunca é devolvido na tela; o navegador recebe somente o website token necessário para inicializar o widget.</p>
           <div class="form-grid">
             <label v-for="(f,index) in state.modal.fields" :key="index+'-'+f.key" :for="'modal-field-'+index" class="field" :class="{wide:f.wide, 'checkbox-field':f.type==='checkbox'}">
               <template v-if="f.type==='checkbox'"><input :id="'modal-field-'+index" v-model="state.modal.form[f.key]" type="checkbox">{{ f.label }}</template>
@@ -234,7 +238,7 @@
                 <select v-else-if="f.type==='select' || f.type==='multiselect'" :id="'modal-field-'+index" v-model="state.modal.form[f.key]" :required="f.required" :multiple="f.type==='multiselect'"><option v-if="f.type!=='multiselect'" value="">Selecione…</option><option v-for="o in f.options" :key="o.value" :value="o.value">{{ o.label }}</option></select>
                 <template v-else-if="f.type==='student'"><input placeholder="Filtrar alunos pelo nome…" aria-label="Filtrar alunos" @input="searchStudents($event.target.value)"><select :id="'modal-field-'+index" :aria-label="f.label" v-model="state.modal.form[f.key]" :required="f.required"><option value="">Selecione o aluno…</option><option v-for="s in state.studentChoices" :key="s.id" :value="s.id">{{ s.person.name }} · {{ s.number }}</option></select></template>
                 <template v-else-if="f.type==='person'"><input placeholder="Filtrar pessoas pelo nome…" aria-label="Filtrar pessoas" @input="searchPersons($event.target.value)"><select :id="'modal-field-'+index" :aria-label="f.label" v-model="state.modal.form[f.key]" :required="f.required"><option value="">Selecione a pessoa…</option><option v-for="p in state.personChoices" :key="p.id" :value="p.id">{{ p.name }} · {{ cpf(p.cpf) }}</option></select><small>Cadastre a pessoa em Responsáveis caso ainda não exista.</small></template>
-                <input v-else-if="f.type==='photo'" :id="'modal-field-'+index" type="file" accept=".png,.jpg,.jpeg" :required="f.required" @change="fileChange"><input v-else-if="f.type==='file'" :id="'modal-field-'+index" type="file" accept=".pdf,.png,.jpg,.jpeg" :required="f.required" @change="fileChange">
+                <input v-else-if="f.type==='identity-logo' || f.type==='identity-font'" :id="'modal-field-'+index" type="file" :accept="f.type==='identity-font'?'.woff2':'.png,.jpg,.jpeg,.webp'" @change="identityFileChange($event,f.key)"><input v-else-if="f.type==='photo'" :id="'modal-field-'+index" type="file" accept=".png,.jpg,.jpeg" :required="f.required" @change="fileChange"><input v-else-if="f.type==='file'" :id="'modal-field-'+index" type="file" accept=".pdf,.png,.jpg,.jpeg" :required="f.required" @change="fileChange">
                 <input v-else :id="'modal-field-'+index" v-model="state.modal.form[f.key]" :type="f.type" :required="f.required" :min="f.type==='number'?1:undefined" :minlength="f.type==='password' && f.key!=='current_password'?12:undefined" :maxlength="f.type==='password'?128:400" :autocomplete="f.type==='password'?'new-password':'off'">
               </template>
             </label>

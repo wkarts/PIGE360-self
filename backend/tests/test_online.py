@@ -221,13 +221,16 @@ def test_connect_optin_and_payload(online, monkeypatch):
         assert job.remote_id=='msg-test-only' and job.status=='completed' and job.instance_id==instance['id']
 
 def test_connect_instance_name_and_additional_instance(online, monkeypatch):
-    o=online;first,_=connect(o,monkeypatch);second,_=connect(o,monkeypatch,'Atendimento 2')
+    o=online
+    previous={item['id'] for item in o['api'].get('/connect')['items']}
+    first,_=connect(o,monkeypatch);second,_=connect(o,monkeypatch,'Atendimento 2')
     assert first['name'].startswith('PG360-MANTENEDORA-DE-TESTE-11222333000181')
     assert second['name'].endswith('-ATENDIMENTO-2')
     assert first['primary'] is True and second['primary'] is False
     overview=o['api'].get('/connect')
     assert overview['config']['configured'] is True and overview['config']['api_key_configured'] is True
-    assert {item['id'] for item in overview['items']}=={first['id'],second['id']}
+    assert {item['id'] for item in overview['items']}==previous|{first['id'],second['id']}
+    assert {item['id'] for item in overview['items'] if item['primary']}=={first['id']}
 
 def test_connect_requires_company_cnpj(online):
     o=online

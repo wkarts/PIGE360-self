@@ -1,4 +1,33 @@
 "use strict";
+/** Identidade pública da escola. Sem segredos, rotas bancárias ou seleção de cliente. */
+var PigeInstitution;
+(function (PigeInstitution) {
+    PigeInstitution.state = Vue.reactive({ display_name: 'Sua escola', short_name: 'Escola', primary_color: '#006D77', secondary_color: '#0D1B2A', font_family: 'system', logo_url: '', font_configured: false, version: 1 });
+    function apply(value) {
+        Object.assign(PigeInstitution.state, value);
+        document.title = value.display_name + ' · ' + (location.pathname === '/online.html' ? 'Portal dos responsáveis' : 'Gestão escolar');
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', value.primary_color);
+        const theme = document.querySelector('link[data-institution-theme]');
+        if (theme)
+            theme.href = '/api/v1/institution/theme.css?v=' + value.version;
+        document.querySelectorAll('link[rel="icon"],link[rel="apple-touch-icon"]').forEach(link => {
+            link.href = '/api/v1/institution/icon.png?size=' + (link.rel === 'apple-touch-icon' ? '180' : '32') + '&v=' + value.version;
+        });
+        const manifest = document.querySelector('link[rel="manifest"]');
+        if (manifest)
+            manifest.href = '/manifest.webmanifest?v=' + value.version;
+    }
+    PigeInstitution.apply = apply;
+    async function load() {
+        try {
+            const response = await fetch('/api/v1/institution/identity', { credentials: 'same-origin', cache: 'no-store' });
+            if (response.ok)
+                apply(await response.json());
+        }
+        catch { /* Falha de identidade não bloqueia autenticação nem operação escolar. */ }
+    }
+    PigeInstitution.load = load;
+})(PigeInstitution || (PigeInstitution = {}));
 var PigeOnline;
 (function (PigeOnline) {
     PigeOnline.statuses = { draft: 'Rascunho', submitted: 'Enviada', under_review: 'Em análise', changes_requested: 'Correção solicitada', waitlisted: 'Lista de espera', approved: 'Aprovada / em preparação', enrolled: 'Matriculada', rejected: 'Indeferida', withdrawn: 'Desistência', queued: 'Na fila', pending: 'Aguardando', processing: 'Processando', completed: 'Concluído', confirmed: 'Confirmado / aguardando recebimento', received: 'Recebido', received_external: 'Baixa externa (não bancária)', overdue: 'Vencido', cancelled: 'Cancelado', refunded: 'Estornado', refund_requested: 'Estorno em análise', partially_refunded: 'Estorno parcial', disputed: 'Em disputa', awaiting_review: 'Conferência necessária', failed: 'Falhou', uncertain: 'Resultado incerto', retry: 'Nova tentativa programada', validated: 'Validado', sent: 'Enviada ao provedor', delivered: 'Entregue', read: 'Lida', active: 'Ativa' };
@@ -122,5 +151,5 @@ var PigePortal;
         return; const a = state.account; state.account = await request('/me', { method: 'PATCH', body: JSON.stringify({ version: a.version, name: a.name, cpf: a.cpf || null, phone: a.phone, address: a.address, whatsapp_opt_in: a.whatsapp_opt_in }) }); state.notice = 'Conta atualizada. Inscrições já enviadas e cadastros oficiais não foram alterados; solicite correção à Secretaria.'; }); }
     const editable = () => !state.selected || ['draft', 'changes_requested'].includes(state.selected.status);
     Vue.createApp({ render: PigeRenders.portal, setup() { Vue.onMounted(() => { window.addEventListener('online', () => { state.online = true; }); window.addEventListener('offline', () => { state.online = false; }); if ('serviceWorker' in navigator && window.isSecureContext)
-            void navigator.serviceWorker.register('/sw.js').catch(() => { }); void start(); }); return { state, run, selectCampaign, login, register, logout, verifyRequest, verifyConfirm, resetRequest, resetConfirm, newAdmission, edit, view, save, fileChange, upload, submit, sendMessage, withdraw, download, paginate, refresh, copy, saveProfile, editable, label: PigeOnline.label, date: PigeOnline.date, money: PigeOnline.money, safeLink: PigeOnline.safeLink }; } }).mount('#portal');
+            void navigator.serviceWorker.register('/sw.js').catch(() => { }); void PigeInstitution.load(); void start(); }); return { state, identity: PigeInstitution.state, run, selectCampaign, login, register, logout, verifyRequest, verifyConfirm, resetRequest, resetConfirm, newAdmission, edit, view, save, fileChange, upload, submit, sendMessage, withdraw, download, paginate, refresh, copy, saveProfile, editable, label: PigeOnline.label, date: PigeOnline.date, money: PigeOnline.money, safeLink: PigeOnline.safeLink }; } }).mount('#portal');
 })(PigePortal || (PigePortal = {}));

@@ -39,7 +39,11 @@ def test_official_assets_preserved_and_original_template_removed(client):
 
 def test_pwa_manifest_and_build(client):
     manifest = client.get('/manifest.webmanifest').json()
-    assert manifest['short_name'] == 'PIGE360'
+    identity=client.get('/api/v1/institution/identity').json()
+    assert manifest['short_name'] == identity['short_name']
+    assert manifest['name'] == identity['display_name']
+    for icon in manifest['icons']:
+        assert client.get(icon['src']).headers['content-type']=='image/png'
     assert all(icon['purpose'] == 'any' for icon in manifest['icons'])
     assert '/#/protocols' in [s['url'] for s in manifest['shortcuts']]
     info = client.get('/build-info.json').json()
