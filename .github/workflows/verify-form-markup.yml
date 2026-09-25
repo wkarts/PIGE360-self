@@ -1,0 +1,53 @@
+name: Conferir marcação dos formulários
+on:
+  push:
+    branches: [feature/acesso-seguranca-cadastro]
+    paths: ['.github/workflows/verify-form-markup.yml']
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Preservar fechamento dos painéis e verificar regressão
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          p=Path('frontend/templates/app.html')
+          assert hashlib.sha256(p.read_bytes()).hexdigest() == 'f1a37f532f77ff215eca472022aba5722b64cbe3202163a68f6a1cfbe77c30d7'
+          s=p.read_text();start=s.index('<fieldset class="dossier-fieldset"')
+          assert s[:start].count('</fieldset>')==7
+          p.write_text(s[:start].replace('</fieldset>','</div>')+s[start:])
+          assert hashlib.sha256(p.read_bytes()).hexdigest() == '1ec74ce570638efb341440e4ccb4fa58d105960fff50e130ec6c397071d0dac2'
+          p=Path('frontend/tests/render-smoke.mjs');s=p.read_text();anchor='const applications=[];'
+          assert s.count(anchor)==1
+          snippet=r'''// Não aceitar fechamento de fieldset fora do formulário (compilador de produção pode tolerar HTML inválido).
+          for(const filename of fs.readdirSync(path.join(root,'templates')).filter(name=>name.endsWith('.html'))) {
+            let openFieldsets=0;
+            for(const tag of fs.readFileSync(path.join(root,'templates',filename),'utf8').matchAll(/<\/?fieldset\b[^>]*>/g)) {
+              if(tag[0].startsWith('</')) {assert.ok(openFieldsets>0,filename+': fechamento de fieldset sem abertura');openFieldsets--;}
+              else openFieldsets++;
+            }
+            assert.equal(openFieldsets,0,filename+': fieldset não fechado');
+          }
+          '''
+          p.write_text(s.replace(anchor,snippet+anchor))
+          PY
+          npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
+          npm run typecheck --prefix frontend
+          npm run build --prefix frontend
+      - name: Registrar somente fontes revisados e compilados
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add frontend/templates/app.html frontend/tests/render-smoke.mjs frontend/dist
+          git commit -m 'fix(ui): preservar painéis e rejeitar fechamentos de fieldset fora do formulário'
+          git push origin HEAD:feature/acesso-seguranca-cadastro
