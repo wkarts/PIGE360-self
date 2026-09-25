@@ -91,11 +91,19 @@ jobs:
         run: |
           python scripts/configure.py --env-file deploy/docker/.env.ci
           docker compose --env-file deploy/docker/.env.ci -f deploy/docker/compose.yaml config --quiet
-          docker build --build-arg SOURCE_REVISION="$GITHUB_SHA" \
+          docker build --build-arg SOURCE_REVISION="$GITHUB_SHA" --build-arg APP_VERSION="$(cat VERSION)" \
             --build-arg NODE_BASE_IMAGE="$NODE_BASE_IMAGE" \
             --build-arg PYTHON_BASE_IMAGE="$PYTHON_BASE_IMAGE" \
             --build-arg POSTGRES_IMAGE="$POSTGRES_IMAGE" -t pige360-self:ci .
           bash scripts/ci/smoke.sh pige360-self:ci local
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          tested = json.loads(Path('frontend/dist/build-info.json').read_text())
+          packaged = json.loads(Path('ci-evidence/docker-smoke.json').read_text())['frontend']
+          assert packaged['version'] == Path('VERSION').read_text().strip(), packaged
+          assert packaged['build_id'] == tested['build_id'], (packaged, tested)
+          PY
       - name: Evidências desta execução
         if: always()
         uses: actions/upload-artifact@v4
