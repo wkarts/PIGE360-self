@@ -8,7 +8,9 @@ namespace PigeUI {
   const text = (value: unknown): string => value === null || value === undefined ? '' : String(value);
   const statusLabels: Record<string,string> = {active:'Ativo', archived:'Arquivado', draft:'Rascunho', suspended:'Suspenso', transferred:'Transferido', cancelled:'Cancelado', completed:'Concluído', pending:'Pendente', received:'Recebido', validated:'Validado', rejected:'Rejeitado', expired:'Vencido', waived:'Dispensado', open:'Aberto', in_progress:'Em atendimento', waiting:'Aguardando', closed:'Fechado', admin:'Administrador', direction:'Direção', coordination:'Coordenação', secretary:'Secretaria', teacher:'Professor', student:'Aluno', guardian:'Responsável', viewer:'Consulta', leave:'Afastado', inactive:'Inativo', clt:'CLT', public:'Serviço público', temporary:'Temporário', substitute:'Substituto', intern:'Estágio', outsourced:'Terceirizado', other:'Outro'};
   const catalogLabels: Record<string,string> = {'units':'Unidades','academic-years':'Anos letivos','grades':'Séries e etapas','shifts':'Turnos','class-groups':'Turmas','document-types':'Tipos de documento'};
-  const pageLabels: Record<string,string> = {online:'Inscrições online',banking:'Cobranças',integrations:'Financeiro / ASAAS',connect:'Connect API',dashboard:'Visão geral',people:'Cadastro único',students:'Alunos',teachers:'Professores',employees:'Funcionários',guardians:'Responsáveis',academic:'Estrutura acadêmica',enrollments:'Matrículas',documents:'Pendências documentais',protocols:'Protocolos',reports:'Relatórios',settings:'Instituição',users:'Usuários e acessos',audit:'Auditoria'};
+  const registryPages=['people','students','teachers','employees','guardians','suppliers','providers','customers','partners'];
+  const businessTypes:Record<string,{code:string;singular:string;category:string}>={suppliers:{code:'supplier',singular:'fornecedor',category:'Categoria de fornecimento'},providers:{code:'service_provider',singular:'prestador de serviços',category:'Especialidade / serviço'},customers:{code:'customer',singular:'cliente',category:'Categoria do cliente'},partners:{code:'partner',singular:'sócio',category:'Vínculo societário'}};
+  const pageLabels: Record<string,string> = {online:'Inscrições online',banking:'Cobranças',integrations:'Financeiro / ASAAS',connect:'Connect API',dashboard:'Visão geral',people:'Cadastro único',students:'Alunos',teachers:'Professores',employees:'Funcionários',guardians:'Pais e responsáveis',suppliers:'Fornecedores',providers:'Prestadores de serviços',customers:'Clientes',partners:'Sócios',academic:'Estrutura acadêmica',enrollments:'Matrículas',documents:'Pendências documentais',protocols:'Protocolos',reports:'Relatórios',settings:'Instituição',users:'Usuários e acessos',audit:'Auditoria'};
   const blankModal = (): Modal => ({kind:'',title:'',fields:[],form:{},target:null,action:'',error:''});
   const state = Vue.reactive({
     ready:false, configured:true, online:navigator.onLine, loginBusy:false, busy:false, loading:false,
@@ -18,6 +20,7 @@ namespace PigeUI {
     selectedStudent:null as Student|null, studentTab:'cadastro', profileContext:{} as Row, studentDocs:{items:[],checklist:[],issued:[]} as {items:Row[];checklist:Row[];issued:Row[]}, history:[] as Row[],
     studentChoices:[] as Student[], personChoices:[] as Row[], photoUrls:{} as Record<string,string>, companies:[] as Row[], reportClass:'', reportRows:[] as Row[],
     supportHub:{id:'',company_id:'',enabled:false,base_url:'',position:'left',widget_type:'expanded_bubble',launcher_title:'Suporte',token_configured:false,version:1} as Row,
+    cadastresOpen:true, registryFilter:{type_code:'',entity_kind:'',active:''}, modalSection:'identification', discardChanges:false, modalInitial:'', reuseTarget:'',
     modal:blankModal(), login:{email:'',password:''}, setup:{token:'',admin_name:'',admin_email:'',admin_password:'',company_name:'',company_document:'',school_name:'',unit_name:'Unidade principal',academic_year:new Date().getFullYear()},
     filters:{status:'',academic_year_id:'',class_group_id:'',document_type_id:'',document_status:'',overdue:false},
     pendencySummary:{truncated:false,total_documents:0,scanned_students:0,total_students:0},
@@ -55,7 +58,7 @@ namespace PigeUI {
     student:'Aluno', teacher:'Professor', collaborator:'Colaborador', employee:'Funcionário',
     parent:'Pai / mãe', mother:'Mãe', father:'Pai', guardian:'Responsável',
     financial_responsible:'Responsável financeiro', legal_responsible:'Responsável legal',
-    staff:'Equipe / administrativo', other:'Outro'
+    staff:'Equipe / administrativo', supplier:'Fornecedor',service_provider:'Prestador de serviços',customer:'Cliente',partner:'Sócio',other:'Outro'
   };
   function personTypeLabel(value:unknown):string { const code=text(value);return personTypeLabels[code]||code.replace(/_/g,' ').replace(/^./,letter=>letter.toUpperCase()); }
   function personTypeOptions(extra:string[]=[]):Option[] {
@@ -63,6 +66,8 @@ namespace PigeUI {
     return codes.map(value=>({value,label:personTypeLabel(value)}));
   }
   function personFields(extraTypes:string[]=[]):Field[] { return [
+    field('entity_kind','Natureza da pessoa','select',true,[{value:'individual',label:'Pessoa física'},{value:'organization',label:'Pessoa jurídica'}]),
+    field('cnpj','CNPJ'),field('trade_name','Nome fantasia'),field('state_registration','Inscrição estadual'),field('municipal_registration','Inscrição municipal'),
     field('person_types','Tipos de pessoa','multiselect',false,personTypeOptions(extraTypes),true),
     field('name','Nome completo','text',true),field('social_name','Nome social'),field('cpf','CPF'),field('birth_date','Data de nascimento','date'),
     field('birth_certificate','Certidão / registro de nascimento'),field('birth_city','Cidade de nascimento'),field('birth_state','UF de nascimento'),
@@ -159,9 +164,9 @@ namespace PigeUI {
       : {id:'',company_id:'',enabled:false,base_url:'',position:'left',widget_type:'expanded_bubble',launcher_title:'Suporte',token_configured:false,version:1};
   }
   async function navigate(page:string):Promise<void>{
-    if(state.busy||state.modal.kind)return;
+    if(state.busy||state.modal.kind||document.querySelector('.modal-backdrop'))return;
     if(isProfileRole() && page!=='dashboard'){state.page='dashboard';history.replaceState({},'', '#/dashboard');return;}
-    resetFilters();state.page=page;state.pageNumber=1;state.q='';state.selectedStudent=null;state.error='';state.menuOpen=false;
+    resetFilters();state.registryFilter={type_code:'',entity_kind:'',active:''};if(registryPages.includes(page))state.cadastresOpen=true;state.page=page;state.pageNumber=1;state.q='';state.selectedStudent=null;state.error='';state.menuOpen=false;
     history.replaceState({},'',`#/${page}`);await safe(loadPage);
   }
   async function loadPage():Promise<void>{
@@ -190,8 +195,11 @@ namespace PigeUI {
       }else if(state.page==='users'){
         const data=await PigeAPI.request<Row[]>('/users');if(current===sequence){state.rows=data;state.total=data.length;}
       }else if(state.page!=='reports'){
-        const resource=['guardians','people'].includes(state.page)?'persons':state.page;
-        const suffix=state.page==='guardians'?'&guardians_only=true':'';
+        const resource=['guardians','people',...Object.keys(businessTypes)].includes(state.page)?'persons':state.page;
+        const rf=state.registryFilter,business=businessTypes[state.page];
+        const suffix=(state.page==='guardians'?'&guardians_only=true':'')
+          +((business?.code||rf.type_code)?'&type_code='+encodeURIComponent(business?.code||rf.type_code):'')
+          +(rf.entity_kind?'&entity_kind='+rf.entity_kind:'')+(rf.active!==''?'&active='+rf.active:'');
         const data=await PigeAPI.request<PigeAPI.Page<Row>>(base()+'/'+resource+'?'+query+suffix);
         if(current===sequence&&sid===state.schoolId){state.rows=data.items;state.total=data.total;const photoRows=['students','teachers','employees'].includes(state.page)?data.items.map(x=>(x as {person?:unknown}).person):data.items;void hydratePhotos(photoRows);}
       }
@@ -209,12 +217,104 @@ namespace PigeUI {
     }catch(error){notify(error);}finally{state.loading=false;}
   }
   function openModal(kind:string,title:string,fields:Field[],values:PigeAPI.FormDataMap={},target:Row|null=null):void{
-    const form:PigeAPI.FormDataMap={};for(const f of fields)form[f.key]=values[f.key]??(f.type==='checkbox'?(f.key==='active'):f.type==='number'?30:f.type==='multiselect'?[]:'');
-    state.modal={kind,title,fields,form,target,action:'',error:''};selectedFile=null;identityFiles={};state.error='';
+    const form:PigeAPI.FormDataMap={};for(const f of fields)form[f.key]=values[f.key]??(f.key==='entity_kind'?'individual':f.type==='checkbox'?(f.key==='active'):f.type==='number'?30:f.type==='multiselect'?[]:'');
+    state.modal={kind,title,fields,form,target,action:'',error:''};selectedFile=null;identityFiles={};state.error='';state.discardChanges=false;state.reuseTarget='';
+    state.modalInitial=JSON.stringify(form);state.modalSection=modalSections()[0]?.id||'identification';
   }
-  function closeModal():void{if(!state.busy)state.modal=blankModal();}
+  function modalDirty():boolean{return JSON.stringify(state.modal.form)!==state.modalInitial||Boolean(selectedFile)||Boolean(identityFiles.logo)||Boolean(identityFiles.font);}
+  function closeModal(discard=false):void{
+    if(state.busy)return;
+    if(discard!==true&&state.modal.fields.length&&modalDirty()){state.discardChanges=true;return;}
+    state.modal=blankModal();state.discardChanges=false;
+  }
   function valuesFrom(row:Row|PigeAPI.Person,fields:Field[]):PigeAPI.FormDataMap {const map:PigeAPI.FormDataMap={};for(const f of fields)map[f.key]=(row as unknown as Record<string,Value>)[f.key]??(f.type==='multiselect'?[]:'');return map;}
   function personTypesFrom(row:unknown):string[]{const value=(row as {person_types?:unknown})?.person_types;return Array.isArray(value)?value.map(text):[];}
+  function isBusiness():boolean{return Boolean(businessTypes[state.page]);}
+  function isPersonModal():boolean{return ['person','guardian','student','student-edit','teacher','teacher-edit','employee','employee-edit','business'].includes(state.modal.kind);}
+  const personalKeys=new Set(['social_name','cpf','birth_date','rg','rg_issuer','rg_state','rg_issued_on','birth_certificate','birth_city','birth_state','nationality','sex','gender','race_color','marital_status','mother_name','father_name','occupation','employer','education','emergency_contact_name','emergency_contact_phone']);
+  function modalFieldRelevant(f:Field):boolean{
+    const kind=state.modal.kind,legal=state.modal.form.entity_kind==='organization';
+    if(!isPersonModal())return true;
+    if(f.key==='person_types'&&kind!=='person')return false;
+    if(f.key==='entity_kind'&&kind!=='person'&&kind!=='business')return false;
+    if(['cnpj','trade_name','state_registration','municipal_registration'].includes(f.key))return legal;
+    return !(legal&&personalKeys.has(f.key));
+  }
+  function modalFieldLabel(f:Field):string{if(f.key==='photo'&&state.modal.form.entity_kind==='organization')return 'Imagem / logotipo (PNG ou JPEG)';return f.key==='name'&&state.modal.form.entity_kind==='organization'?'Razão social':f.label;}
+  function fieldSection(f:Field):string{
+    const k=f.key;
+    if(!isPersonModal()&&!state.modal.kind.endsWith('-existing'))return 'details';
+    if(k.startsWith('business_'))return 'business';
+    if(k==='person_types')return 'types';
+    if(studentFieldKeys.includes(k))return ['allergies','medications','health_notes','health_plan','special_needs','sus_card'].includes(k)?'health':'student';
+    if(teacherProfileKeys.includes(k)||employeeProfileKeys.includes(k))return 'professional';
+    if(['postal_code','street','address_number','address_complement','district','city','state','country','address'].includes(k))return 'address';
+    if(['phone','phone_secondary','email','emergency_contact_name','emergency_contact_phone'].includes(k))return 'contact';
+    if(['mother_name','father_name'].includes(k))return 'family';
+    if(['rg','rg_issuer','rg_state','rg_issued_on','birth_certificate','state_registration','municipal_registration'].includes(k))return 'documents';
+    if(['occupation','employer','education'].includes(k))return 'professional';
+    if(k==='notes')return 'notes';
+    return 'identification';
+  }
+  const sectionLabels:Record<string,{title:string;hint:string}>={
+    identification:{title:'Identificação',hint:'Os dados principais identificam este cadastro em toda a instituição.'},
+    types:{title:'Tipos e vínculos',hint:'Classificações cadastrais não criam login nem concedem permissões. Fichas de aluno, professor e funcionário são completadas nos respectivos cadastros.'},
+    documents:{title:'Documentos',hint:'Informe os documentos pertinentes à pessoa.'},
+    contact:{title:'Contatos',hint:'Canais de comunicação e contatos de emergência.'},
+    address:{title:'Endereço',hint:'Endereço compartilhado entre os vínculos desta pessoa.'},
+    family:{title:'Filiação',hint:'Os nomes da filiação não substituem os vínculos legais e financeiros com cada aluno.'},
+    professional:{title:'Dados profissionais',hint:'Informações profissionais e funcionais pertinentes a este cadastro.'},
+    student:{title:'Dados do aluno',hint:'Informações acadêmicas complementares. Matrícula e turma são gerenciadas separadamente.'},
+    health:{title:'Saúde e cuidados',hint:'Preencha somente informações necessárias ao atendimento do aluno.'},
+    business:{title:'Dados do vínculo',hint:'Informações exclusivas deste fornecedor, prestador, cliente ou sócio.'},
+    notes:{title:'Observações',hint:'Registros administrativos complementares.'},
+    details:{title:'Dados do lançamento',hint:'Revise as informações antes de confirmar. Campos com * são obrigatórios.'}
+  };
+  function modalSections():{id:string;title:string;hint:string;fields:Field[]}[]{
+    return Object.entries(sectionLabels).map(([id,value])=>({id,...value,fields:state.modal.fields.filter(f=>modalFieldRelevant(f)&&fieldSection(f)===id)})).filter(s=>s.fields.length>0);
+  }
+  function modalTab(id:string):void{state.modalSection=id;void Vue.nextTick(()=>document.querySelector('.modal-form .modal-body')?.scrollTo({top:0}));}
+  function visibleSection(id:string):boolean{const all=modalSections();return (all.some(s=>s.id===state.modalSection)?state.modalSection:all[0]?.id)===id;}
+  async function validateModal():Promise<boolean>{
+    const form=document.querySelector<HTMLFormElement>('.modal-form');if(!form)return true;
+    const invalid=Array.from(form.querySelectorAll<HTMLInputElement>('input,select,textarea')).find(el=>!el.disabled&&!el.checkValidity());
+    if(!invalid)return true;
+    const group=invalid.closest<HTMLElement>('[data-form-section]');if(group)state.modalSection=group.dataset.formSection||'';
+    state.modal.error='Revise o campo: '+(invalid.closest('label')?.querySelector('span')?.textContent?.trim()||'informação obrigatória')+'.';
+    await Vue.nextTick();invalid.focus();invalid.reportValidity();return false;
+  }
+  function businessFields():Field[]{
+    const common=personFields().filter(f=>!['person_types','birth_date','birth_certificate','birth_city','birth_state','nationality','sex','gender','race_color','marital_status','mother_name','father_name','occupation','employer','education','emergency_contact_name','emergency_contact_phone','rg','rg_issuer','rg_state','rg_issued_on'].includes(f.key));
+    const config=businessTypes[state.page];
+    return [...common,field('business_contact_name','Pessoa de contato'),field('business_category',config?.category||'Categoria'),field('business_reference','Referência interna'),field('business_notes','Observações deste vínculo','textarea',false,undefined,true)];
+  }
+  function newBusiness(existing:Row|null=null):void{
+    const config=businessTypes[state.page];if(!config)return;
+    const profile=(existing?.business_profiles as Record<string,PigeAPI.FormDataMap>|undefined)?.[config.code]||{};
+    const fields=existing&&state.reuseTarget?businessFields().filter(f=>f.key.startsWith('business_')):businessFields();
+    const values:PigeAPI.FormDataMap=existing?valuesFrom(existing,fields):{active:true,entity_kind:'individual'};
+    for(const key of ['contact_name','category','reference','notes'])values['business_'+key]=profile[key]||'';
+    openModal('business',(existing?'Editar ':'Cadastrar ')+config.singular,fields,values,existing);
+    state.modal.action=config.code;
+  }
+  async function reusePerson():Promise<void>{await safe(async()=>{
+    const target=state.page;await searchPersons();openModal('reuse','Vincular pessoa existente',[field('person_id','Pessoa cadastrada','person',true)]);state.reuseTarget=target;
+  });}
+  async function useExisting():Promise<void>{
+    const row=state.personChoices.find(p=>p.id===state.modal.form.person_id);if(!row)throw new Error('Selecione a pessoa cadastrada.');
+    const context=state.reuseTarget;
+    if(context==='students')newStudent(row);
+    else if(context==='teachers')newTeacher(row);
+    else if(context==='employees')newEmployee(row);
+    else if(context==='guardians'){
+      await PigeAPI.post(base()+'/persons/'+row.id+'/responsible',{version:row.version,data:{}});
+      state.modal=blankModal();await loadPage();state.success='Pessoa vinculada como responsável, sem duplicar seu cadastro.';
+    }else if(businessTypes[context]){
+      const config=businessTypes[context];
+      openModal('business-existing','Adicionar vínculo de '+config.singular,businessFields().filter(f=>f.key.startsWith('business_')),{},row);state.modal.action=config.code;
+    }
+  }
+  function personDocument(row:Row):string{return text(row.cnpj)||cpf(row.cpf);}
   function newPerson():void{openModal('person','Cadastrar pessoa',personFields(),{active:true,person_types:[]});}
   function newStudent(existing:Row|null=null):void{
     if(existing){openModal('student-existing','Adicionar aluno à pessoa',studentFields(),{},existing);return;}
@@ -242,7 +342,7 @@ namespace PigeUI {
     const person=(row as unknown as {person:PigeAPI.Person}).person,personList=personFields(personTypesFrom(person)),profileFields=employeeFields();
     openModal('employee-edit','Editar cadastro do funcionário',profileFields.concat(personList),{...valuesFrom(person,personList),...valuesFrom(row,profileFields),person_types:personTypesFrom(person),is_guardian:person.is_guardian},row);
   }
-  function editPerson(row:Row):void{const types=personTypesFrom(row);openModal('person','Editar cadastro da pessoa',personFields(types),valuesFrom(row,personFields(types)),row);}
+  function editPerson(row:Row):void{const types=personTypesFrom(row);openModal(state.page==='guardians'?'guardian':'person',state.page==='guardians'?'Editar responsável':'Editar cadastro da pessoa',personFields(types),valuesFrom(row,personFields(types)),row);}
   function newCatalog(row:Row|null=null):void{const fields=catalogFields(state.catalog);const defaults:PigeAPI.FormDataMap={active:true,capacity:30,status:'active',level:'Educação básica'};openModal('catalog',(row?'Editar ':'Cadastrar ')+catalogLabels[state.catalog],fields,row?valuesFrom(row,fields):defaults,row);state.modal.action=state.catalog;}
   async function searchStudents(value=''):Promise<void>{
     const data=await PigeAPI.request<PigeAPI.Page<Student>>(base()+'/students?page_size=100&q='+encodeURIComponent(value));state.studentChoices=data.items;
@@ -350,11 +450,22 @@ namespace PigeUI {
   function archiveStudent():void{if(state.selectedStudent)openModal('archive','Arquivar cadastro do aluno',[field('reason','Justificativa','textarea',true,undefined,true)],{},state.selectedStudent);}
   async function downloadFile(id:string,name='documento.pdf'):Promise<void>{await safe(()=>PigeAPI.download(base()+'/files/'+id+'/download',name));}
   async function saveModal():Promise<void>{
-    if(state.busy)return;state.busy=true;state.modal.error='';
+    if(state.busy||!await validateModal())return;state.busy=true;state.modal.error='';
     const modal=state.modal,form={...modal.form},target=modal.target,studentId=state.selectedStudent?.id;let createdStudent:Student|null=null;let savedPersonId='';
     try{
       const photo=selectedFile;delete form.photo;
-      if(modal.kind==='student-existing'){
+      if(modal.kind==='reuse'){await useExisting();return;}
+      if(modal.kind==='business'||modal.kind==='business-existing'){
+        const details:Record<string,Value>={};for(const key of ['contact_name','category','reference','notes']){details[key]=form['business_'+key]||'';delete form['business_'+key];}
+        const endpoint=base()+'/business-persons/'+modal.action;
+        if(modal.kind==='business-existing'){
+          await PigeAPI.post(endpoint,{person_id:target!.id,version:target!.version,details});savedPersonId=target!.id;
+        }else if(target){
+          await PigeAPI.patch(endpoint+'/'+target.id,{version:target.version,person:form,details});savedPersonId=target.id;
+        }else{
+          const created=await PigeAPI.post<Row>(endpoint,{person:form,details});savedPersonId=created.id;
+        }
+      }else if(modal.kind==='student-existing'){
         const studentData:{[key:string]:Value}={};for(const key of studentFieldKeys){studentData[key]=form[key]??'';}
         createdStudent=await PigeAPI.post<Student>(base()+'/students',{person_id:target!.id,...studentData});
         savedPersonId=target!.id;
@@ -461,7 +572,12 @@ namespace PigeUI {
       else await loadPage();
       if(modal.kind==='protocol-note')await viewProtocol(target!.id);
       if(modal.kind==='draft-edit')await viewEnrollment(target!.id);
-    }catch(error){modal.error=error instanceof Error?error.message:String(error);if(state.modal!==modal)notify(error);}
+    }catch(error){modal.error=error instanceof Error?error.message:String(error);
+      const errors=(error as {fields?:{field:string}[]})?.fields||[];
+      const key=errors[0]?.field.split('.').at(-1);const field=modal.fields.find(f=>f.key===key||f.key==='business_'+key);
+      if(field)state.modalSection=fieldSection(field);
+      if(state.modal!==modal)notify(error);
+    }
     finally{state.busy=false;}
   }
   async function loadReport():Promise<void>{await safe(async()=>{if(!state.reportClass){state.reportRows=[];return;}const result=await PigeAPI.request<{items:Row[]}>(base()+'/reports/class/'+state.reportClass);state.reportRows=result.items;});}
@@ -485,7 +601,7 @@ namespace PigeUI {
       }).catch(()=>{/* A aplicação online continua disponível sem SW. */});
       navigator.serviceWorker.addEventListener('controllerchange',()=>{if(state.updateAvailable)location.reload();});
     }
-    window.addEventListener('keydown',(event)=>{if(event.key==='Escape')closeModal();});
+    window.addEventListener('beforeunload',event=>{if(state.modal.kind&&modalDirty()){event.preventDefault();event.returnValue='';}});
   }
-  Vue.createApp({components:{'expansion-panel':PigeExpansion.component},render:PigeRenders.app,setup(){Vue.onMounted(()=>{setupPWA();void initialize();});return{state,identity:PigeInstitution.state,supportStatus:PigeSupport.status,editIdentity,identityFileChange,manageUnits,editMaintainer,text,can,isProfileRole,school,label,date,cpf,initials,photoSrc,getName,options,pageLabels,catalogLabels,configure,login,logout,navigate,changeSchool,setCatalog,search,page,loadPage,viewStudent,newPerson,newStudent,editStudent,newGuardian,newTeacher,editTeacher,newEmployee,editEmployee,editPerson,newCatalog,newEnrollment,viewEnrollment,startMovement,reenroll,newLink,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,editSupportHub,newUser,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,protocolReceipt,exportPendencies,install,updateApp};}}).mount('#app');
+  Vue.createApp({components:{'expansion-panel':PigeExpansion.component},render:PigeRenders.app,setup(){Vue.onMounted(()=>{PigeDialogs.install();setupPWA();void initialize();});return{state,registryPages,businessTypes,isBusiness,newBusiness,reusePerson,personDocument,modalSections,modalTab,visibleSection,modalFieldLabel,modalFieldRelevant,isPersonModal,personTypeOptions,personTypeLabel,modalDirty,identity:PigeInstitution.state,supportStatus:PigeSupport.status,editIdentity,identityFileChange,manageUnits,editMaintainer,text,can,isProfileRole,school,label,date,cpf,initials,photoSrc,getName,options,pageLabels,catalogLabels,configure,login,logout,navigate,changeSchool,setCatalog,search,page,loadPage,viewStudent,newPerson,newStudent,editStudent,newGuardian,newTeacher,editTeacher,newEmployee,editEmployee,editPerson,newCatalog,newEnrollment,viewEnrollment,startMovement,reenroll,newLink,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,editSupportHub,newUser,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,protocolReceipt,exportPendencies,install,updateApp};}}).mount('#app');
 }

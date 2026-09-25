@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, JSON, UniqueConstraint, CheckConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, JSON, UniqueConstraint, CheckConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from .db import Base, Record, now
 
@@ -171,7 +171,13 @@ class Person(Record, Scoped, Base):
     emergency_contact_phone: Mapped[str] = mapped_column(String(32), default='')
     photo_file_id: Mapped[str | None] = mapped_column(ForeignKey('files.id'))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    __table_args__ = (UniqueConstraint('school_id', 'cpf'),)
+    entity_kind: Mapped[str] = mapped_column(String(16), default='individual', server_default='individual')
+    cnpj: Mapped[str | None] = mapped_column(String(14))
+    trade_name: Mapped[str] = mapped_column(String(180), default='', server_default='')
+    state_registration: Mapped[str] = mapped_column(String(40), default='', server_default='')
+    municipal_registration: Mapped[str] = mapped_column(String(40), default='', server_default='')
+    __table_args__ = (UniqueConstraint('school_id', 'cpf'),
+                      Index('uq_persons_school_cnpj', 'school_id', 'cnpj', unique=True))
 
 
 class TeacherProfile(Record, Scoped, Base):
@@ -214,6 +220,7 @@ class PersonTypeLink(Record, Scoped, Base):
     type_code: Mapped[str] = mapped_column(String(40), index=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     notes: Mapped[str] = mapped_column(Text, default='')
+    details: Mapped[dict] = mapped_column(JSON, default=dict, server_default='{}')
     __table_args__ = (
         UniqueConstraint('school_id', 'person_id', 'type_code'),
     )

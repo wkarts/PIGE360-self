@@ -32,7 +32,7 @@ namespace PigeAPI {
     try { data = await response.json(); } catch { /* A origem pode estar indisponível. */ }
     const fields = data.errors?.map(e => `${e.field.replace(/^body\./, '')}: ${e.message}`).join('\n');
     const failure = new Error(fields || data.detail || `Falha de comunicação (${response.status}).`);
-    Object.assign(failure, { status: response.status });
+    Object.assign(failure, { status: response.status, fields: data.errors || [] });
     return failure;
   }
   export async function refresh(): Promise<SessionResponse> {
