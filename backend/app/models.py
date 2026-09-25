@@ -1,3 +1,4 @@
+from sqlalchemy import LargeBinary
 from datetime import date, datetime
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, JSON, UniqueConstraint, CheckConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column
@@ -8,6 +9,15 @@ class Installation(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     configured: Mapped[bool] = mapped_column(Boolean, default=False)
     configured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+class EmbeddingSettings(Base):
+    __tablename__ = 'installation_embedding'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    configured: Mapped[bool] = mapped_column(Boolean, default=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    allowed_origins: Mapped[list] = mapped_column(JSON, default=list)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
 
 class Company(Record, Base):
     __tablename__ = 'companies'
@@ -54,6 +64,17 @@ class User(Record, Base):
         "role IN ('admin','direction','coordination','secretary','teacher','student','guardian','viewer')",
         name='valid_role'
     ),)
+
+class UserProfile(Base):
+    __tablename__ = 'user_profiles'
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), primary_key=True)
+    phone: Mapped[str] = mapped_column(String(32), default='')
+    job_title: Mapped[str] = mapped_column(String(120), default='')
+    department: Mapped[str] = mapped_column(String(120), default='')
+    bio: Mapped[str] = mapped_column(String(1000), default='')
+    photo: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    photo_hash: Mapped[str] = mapped_column(String(64), default='')
+
 
 class SchoolAccess(Base):
     __tablename__ = 'school_access'

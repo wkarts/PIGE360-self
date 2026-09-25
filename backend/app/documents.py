@@ -169,43 +169,20 @@ def download(file_id: str, db: DB, user: Actor, school: Scope, request: Request)
 
 PDF_TITLES = {'student_record':'Ficha cadastral do aluno', 'enrollment_receipt':'Comprovante de matrícula', 'enrollment_declaration':'Declaração de matrícula', 'enrollment_form':'Ficha de matrícula'}
 
-def render_pdf(school_name, title, rows, note='', issuer=''):
-    stream = io.BytesIO(); styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name='School', fontName='Helvetica-Bold', fontSize=16, leading=21, spaceAfter=8, textColor=colors.HexColor('#006D77')))
-    styles.add(ParagraphStyle(name='Caption', fontName='Helvetica', fontSize=9, leading=13, textColor=colors.HexColor('#475569')))
-    styles['BodyText'].leading = 14
-    doc = SimpleDocTemplate(stream, pagesize=A4, rightMargin=20*mm, leftMargin=20*mm, topMargin=38*mm, bottomMargin=24*mm, title=title, author=school_name)
-    parts = [Paragraph(escape(school_name), styles['School']), Paragraph(escape(title), styles['Heading1']), Spacer(1, 5*mm)]
-    table_rows = [[Paragraph(escape(str(k)), styles['Caption']), Paragraph(escape(str(v or '-')), styles['BodyText'])] for k,v in rows]
-    if table_rows:
-        table = Table(table_rows, colWidths=[49*mm, 121*mm], hAlign='LEFT', splitInRow=1)
-        table.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP'),('LINEBELOW',(0,0),(-1,-1),0.4,colors.HexColor('#e2e8f0')),('TOPPADDING',(0,0),(-1,-1),7),('BOTTOMPADDING',(0,0),(-1,-1),7)]))
-        parts.append(table)
-    if note: parts.extend([Spacer(1, 6*mm), Paragraph(escape(note), styles['BodyText'])])
-    if issuer: parts.extend([Spacer(1, 5*mm), Paragraph('Operador responsável: '+escape(issuer), styles['Caption'])])
-    parts.append(KeepTogether([Spacer(1, 8*mm), Paragraph('________________________________________', styles['BodyText']), Paragraph('Secretaria / representante da instituição', styles['Caption']), Spacer(1, 5*mm), Paragraph('Documento gerado eletronicamente. Não contém assinatura digital.', styles['Caption'])]))
-    def footer(canvas, document):
-        canvas.saveState()
-        logo = settings().frontend_path / 'branding/pige360/logo-horizontal.png'
-        if logo.is_file():
-            canvas.drawImage(str(logo), 20*mm, A4[1]-27*mm, width=55*mm, height=17*mm, preserveAspectRatio=True, mask='auto')
-        canvas.setFont('Helvetica-Bold', 8)
-        canvas.setFillColor(colors.HexColor('#006D77'))
-        canvas.drawRightString(A4[0]-20*mm, A4[1]-18*mm, 'SECRETARIA ESCOLAR')
-        canvas.setStrokeColor(colors.HexColor('#14B8A6'))
-        canvas.line(20*mm, A4[1]-31*mm, A4[0]-20*mm, A4[1]-31*mm)
-        canvas.setFont('Helvetica', 8); canvas.setFillColor(colors.HexColor('#6B7280'))
-        canvas.drawString(20*mm, 15*mm, f'Emitido em {now().strftime("%d/%m/%Y %H:%M UTC")} | Página {document.page}')
-        canvas.restoreState()
-    doc.build(parts, onFirstPage=footer, onLaterPages=footer)
-    return stream.getvalue()
+def render_pdf(school_name, title, rows, note='', issuer='', db=None):
+    """Somente identidade da escola em texto, logotipo, cores e tipografia.
+
+    A renderização não regrava PDFs históricos emitidos, seus hashes ou snapshots.
+    """
+    from .school_reports import render
+    return render(school_name, title, rows, note, issuer, db)
 
 @router.post('/students/{student_id}/issued-documents', status_code=201)
 def issue(student_id: str, data: s.IssueInput, db: DB, user: Actor, school: Scope, request: Request):
     require(user, 'documents.write')
     student = scoped(db, m.Student, student_id, school.id); person = db.get(m.Person, student.person_id)
     rows = [('Aluno', person.name), ('Número do aluno', student.number), ('Data de nascimento', person.birth_date.strftime('%d/%m/%Y'))]
-    snapshot = {'school': output(school), 'person': output(person), 'student': output(student), 'issuer': user.name, 'template_version':'2', 'brand':'PIGE360'}
+    snapshot = {'school': output(school), 'person': output(person), 'student': output(student), 'issuer': user.name, 'template_version':'3', 'brand':school.name}
     if data.enrollment_id:
         selected_enrollment = scoped(db, m.Enrollment, data.enrollment_id, school.id)
         if selected_enrollment.student_id != student.id: fail(422, 'A matrícula pertence a outro aluno.')
@@ -228,8 +205,11 @@ def issue(student_id: str, data: s.IssueInput, db: DB, user: Actor, school: Scop
             note = f'Declaramos que {person.name} possui matrícula ativa nesta instituição no período letivo {year.name}, conforme os dados acima registrados.'
     else:
         rows += [('CPF', ('***.' + person.cpf[3:6] + '.' + person.cpf[6:9] + '-**') if person.cpf else 'Não informado'), ('Contato', person.phone), ('Endereço', person.address), ('Escola anterior', student.previous_school)]
-    content = render_pdf(school.name, PDF_TITLES[data.kind], rows, note, user.name)
+    from .institution import public_identity
+    snapshot['institution_identity'] = public_identity(db)
+    snapshot['brand'] = snapshot['institution_identity']['display_name']
+    content = render_pdf(school.name, PDF_TITLES[data.kind], rows, note, user.name, db=db)
     stored = write_file(db, school.id, user.id, f'{data.kind}-{student.number}.pdf', 'application/pdf', content)
-    obj = m.IssuedDocument(school_id=school.id, student_id=student.id, enrollment_id=data.enrollment_id, kind=data.kind, file_id=stored.id, snapshot=snapshot, created_by=user.id, template_version='2')
+    obj = m.IssuedDocument(school_id=school.id, student_id=student.id, enrollment_id=data.enrollment_id, kind=data.kind, file_id=stored.id, snapshot=snapshot, created_by=user.id, template_version='3')
     db.add(obj); db.flush(); audit(db, request, user, 'document.issued', obj, school.id, {'sha256': stored.sha256, 'kind': data.kind})
     return {**output(obj, ('snapshot',)), 'file': output(stored, ('storage_key',))}

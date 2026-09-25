@@ -2,13 +2,22 @@
 /** Identidade pública da escola. Sem segredos, rotas bancárias ou seleção de cliente. */
 var PigeInstitution;
 (function (PigeInstitution) {
-    PigeInstitution.state = Vue.reactive({ display_name: 'Sua escola', short_name: 'Escola', primary_color: '#006D77', secondary_color: '#0D1B2A', font_family: 'system', logo_url: '', font_configured: false, version: 1 });
+    const initial = (() => {
+        try {
+            return JSON.parse(document.querySelector('#institution-bootstrap')?.textContent || 'null');
+        }
+        catch {
+            return null;
+        }
+    })();
+    let hydrated = Boolean(initial);
+    PigeInstitution.state = Vue.reactive({ display_name: 'Sua escola', short_name: 'Escola', primary_color: '#006D77', secondary_color: '#0D1B2A', font_family: 'system', logo_url: '', font_configured: false, version: 1, ...(initial || {}) });
     function apply(value) {
         Object.assign(PigeInstitution.state, value);
         document.title = value.display_name + ' · ' + (location.pathname === '/online.html' ? 'Portal dos responsáveis' : 'Gestão escolar');
         document.querySelector('meta[name="theme-color"]')?.setAttribute('content', value.primary_color);
         const theme = document.querySelector('link[data-institution-theme]');
-        if (theme)
+        if (theme && !theme.href.endsWith('/api/v1/institution/theme.css?v=' + value.version))
             theme.href = '/api/v1/institution/theme.css?v=' + value.version;
         document.querySelectorAll('link[rel="icon"],link[rel="apple-touch-icon"]').forEach(link => {
             link.href = '/api/v1/institution/icon.png?size=' + (link.rel === 'apple-touch-icon' ? '180' : '32') + '&v=' + value.version;
@@ -19,12 +28,21 @@ var PigeInstitution;
     }
     PigeInstitution.apply = apply;
     async function load() {
+        if (hydrated) {
+            hydrated = false;
+            apply(PigeInstitution.state);
+            return;
+        }
+        const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 5000);
         try {
-            const response = await fetch('/api/v1/institution/identity', { credentials: 'same-origin', cache: 'no-store' });
+            const response = await fetch('/api/v1/institution/identity', { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
             if (response.ok)
                 apply(await response.json());
         }
-        catch { /* Falha de identidade não bloqueia autenticação nem operação escolar. */ }
+        catch { /* Mantém a última identidade pública; não exibe marca do fornecedor. */ }
+        finally {
+            clearTimeout(timer);
+        }
     }
     PigeInstitution.load = load;
 })(PigeInstitution || (PigeInstitution = {}));
@@ -67,7 +85,7 @@ var PigeAPI;
         if (options.body && !(options.body instanceof FormData))
             headers.set('Content-Type', 'application/json');
         const response = await fetch('/api/v1' + path, { ...options, headers, credentials: 'same-origin', cache: 'no-store' });
-        if (response.status === 401 && retry && token && !path.startsWith('/auth/')) {
+        if (response.status === 401 && retry && token && (!path.startsWith('/auth/') || path.startsWith('/auth/profile'))) {
             try {
                 await refresh();
                 return await request(path, options, false);
@@ -569,8 +587,8 @@ var PigeUI;
     const pageLabels = { online: 'Inscrições online', banking: 'Cobranças', integrations: 'Financeiro / ASAAS', connect: 'Connect API', dashboard: 'Visão geral', people: 'Cadastro único', students: 'Alunos', teachers: 'Professores', employees: 'Funcionários', guardians: 'Pais e responsáveis', suppliers: 'Fornecedores', providers: 'Prestadores de serviços', customers: 'Clientes', partners: 'Sócios', academic: 'Estrutura acadêmica', enrollments: 'Matrículas', documents: 'Pendências documentais', protocols: 'Protocolos', reports: 'Relatórios', settings: 'Instituição', users: 'Usuários e acessos', audit: 'Auditoria' };
     const blankModal = () => ({ kind: '', title: '', fields: [], form: {}, target: null, action: '', error: '' });
     const state = Vue.reactive({
-        ready: false, configured: true, online: navigator.onLine, loginBusy: false, busy: false, loading: false,
-        error: '', success: '', menuOpen: false, user: null,
+        ready: false, configured: true, embedded: window.self !== window.top, online: navigator.onLine, loginBusy: false, busy: false, loading: false,
+        error: '', success: '', menuOpen: false, user: null, userPhotoUrl: '', profilePhotoPreview: '',
         schools: [], schoolId: '', page: 'dashboard', q: '', pageNumber: 1, total: 0,
         rows: [], dashboard: {}, catalogs: {}, catalog: 'class-groups',
         selectedStudent: null, studentTab: 'cadastro', profileContext: {}, studentDocs: { items: [], checklist: [], issued: [] }, history: [],
@@ -707,13 +725,17 @@ var PigeUI;
     async function initialize() {
         await PigeInstitution.load();
         await safe(async () => {
-            const info = await PigeAPI.request('/setup/status');
+            const info = typeof PigeInstitution.state.configured === 'boolean' ? { configured: PigeInstitution.state.configured } : await PigeAPI.request('/setup/status');
             state.configured = info.configured;
+            if ('version' in info)
+                PigeInstitution.state.app_version = String(info.version);
             void PigeSupport.load();
             if (info.configured) {
                 try {
                     const session = await PigeAPI.refresh();
                     state.user = session.user;
+                    state.ready = true;
+                    void loadMyPhoto();
                     await loadShell();
                 }
                 catch {
@@ -730,6 +752,7 @@ var PigeUI;
             const session = await PigeAPI.post('/auth/login', state.login);
             PigeAPI.useSession(session);
             state.user = session.user;
+            void loadMyPhoto();
             state.login.password = '';
             await loadShell();
         }
@@ -762,7 +785,11 @@ var PigeUI;
     }
     async function loadShell() {
         state.schools = await PigeAPI.request('/schools');
-        const saved = localStorage.getItem('pige-school');
+        let saved = null;
+        try {
+            saved = localStorage.getItem('pige-school');
+        }
+        catch { /* Navegador pode restringir armazenamento no iframe. */ }
         state.schoolId = state.schools.some(s => s.id === saved) ? saved : state.schools[0]?.id || '';
         const hash = location.hash.replace(/^#\/?/, '');
         state.page = isProfileRole() ? 'dashboard' : (pageLabels[hash] ? hash : 'dashboard');
@@ -776,7 +803,10 @@ var PigeUI;
         state.studentProtocols = [];
         state.studentProtocolTotal = 0;
         state.photoUrls = {};
-        localStorage.setItem('pige-school', state.schoolId);
+        try {
+            localStorage.setItem('pige-school', state.schoolId);
+        }
+        catch { /* Contexto incorporado sem localStorage. */ }
         state.selectedStudent = null;
         state.studentDocs = { items: [], checklist: [], issued: [] };
         state.rows = [];
@@ -785,8 +815,10 @@ var PigeUI;
         state.reportClass = '';
         state.q = '';
         state.pageNumber = 1;
-        await safe(async () => { if (!isProfileRole())
-            await loadCatalogs(); await loadPage(); });
+        await safe(async () => { if (!isProfileRole() && state.page !== 'academic')
+            await Promise.all([loadCatalogs(), loadPage()]);
+        else
+            await loadPage(); });
         void PigeSupport.load(state.schoolId);
     }
     async function loadCatalogs() {
@@ -941,6 +973,7 @@ var PigeUI;
             state.discardChanges = true;
             return;
         }
+        clearProfilePreview();
         state.modal = blankModal();
         state.discardChanges = false;
     }
@@ -1218,9 +1251,16 @@ var PigeUI;
     async function editIdentity() {
         await safe(async () => {
             await PigeInstitution.load();
-            const fields = [field('display_name', 'Nome de apresentação da escola', 'text', true), field('short_name', 'Nome curto no aplicativo', 'text', true), field('primary_color', 'Cor principal', 'color', true), field('secondary_color', 'Cor dos títulos', 'color', true), field('font_family', 'Tipografia', 'select', true, [{ value: 'system', label: 'Padrão do dispositivo' }, { value: 'arial', label: 'Arial' }, { value: 'verdana', label: 'Verdana' }, { value: 'georgia', label: 'Georgia' }, { value: 'times', label: 'Times New Roman' }, { value: 'custom', label: 'Fonte própria da escola (WOFF2)' }]), field('logo', 'Logotipo da escola (PNG, JPEG ou WebP)', 'identity-logo', false, undefined, true), field('font', 'Fonte local licenciada (WOFF2)', 'identity-font', false, undefined, true), field('font_license_confirmed', 'Confirmo que possuo licença de uso web da fonte enviada', 'checkbox'), field('remove_logo', 'Remover o logotipo atual', 'checkbox'), field('remove_font', 'Remover a fonte enviada anteriormente', 'checkbox')];
+            const fields = [field('display_name', 'Nome de apresentação da escola', 'text', true), field('short_name', 'Nome curto no aplicativo', 'text', true), field('primary_color', 'Cor principal', 'color', true), field('secondary_color', 'Cor dos títulos', 'color', true), field('font_family', 'Tipografia', 'select', true, [{ value: 'system', label: 'Padrão do dispositivo' }, { value: 'arial', label: 'Arial' }, { value: 'verdana', label: 'Verdana' }, { value: 'georgia', label: 'Georgia' }, { value: 'times', label: 'Times New Roman' }, { value: 'custom', label: 'Fonte própria da escola (tela e PDF)' }]), field('logo', 'Logotipo da escola (PNG, JPEG ou WebP)', 'identity-logo', false, undefined, true), field('font', 'Fonte da escola para tela e PDF (TTF ou WOFF2)', 'identity-font', false, undefined, true), field('font_license_confirmed', 'Confirmo a licença de uso web e incorporação em PDF da fonte enviada', 'checkbox'), field('remove_logo', 'Remover o logotipo atual', 'checkbox'), field('remove_font', 'Remover a fonte enviada anteriormente', 'checkbox')];
             const identity = PigeInstitution.state;
             openModal('identity', 'Identidade visual da escola', fields, { display_name: identity.display_name, short_name: identity.short_name, primary_color: identity.primary_color, secondary_color: identity.secondary_color, font_family: identity.font_family }, { id: '1', version: identity.version });
+        });
+    }
+    async function editEmbedding() {
+        await safe(async () => {
+            const row = await PigeAPI.request('/institution/embedding');
+            const fields = [field('enabled', 'Permitir abertura dentro dos sites autorizados', 'checkbox'), field('allowed_origins', 'Origens autorizadas — uma por linha', 'textarea', false, undefined, true), field('current_password', 'Sua senha atual para confirmar a alteração', 'password', true)];
+            openModal('embedding-security', 'Incorporação no HUB', fields, { enabled: Boolean(row.enabled), allowed_origins: row.allowed_origins.join('\n'), current_password: '' }, row);
         });
     }
     function identityFileChange(event, key) { if (key === 'logo' || key === 'font')
@@ -1259,6 +1299,49 @@ var PigeUI;
             fields.push(field('active', 'Usuário ativo', 'checkbox'));
         openModal('user', row ? 'Editar acesso' : 'Criar usuário', fields, row ? valuesFrom(row, fields) : { role: 'secretary', person_id: '', school_ids: [state.schoolId] }, row);
     }
+    async function loadMyPhoto() {
+        const id = state.user?.id;
+        if (state.userPhotoUrl)
+            URL.revokeObjectURL(state.userPhotoUrl);
+        state.userPhotoUrl = '';
+        if (!id || !state.user?.has_photo)
+            return;
+        try {
+            const url = await PigeAPI.objectUrl('/auth/profile/photo');
+            if (state.user?.id === id)
+                state.userPhotoUrl = url;
+            else
+                URL.revokeObjectURL(url);
+        }
+        catch { /* Foto não bloqueia a sessão. */ }
+    }
+    function clearProfilePreview() { if (state.profilePhotoPreview)
+        URL.revokeObjectURL(state.profilePhotoPreview); state.profilePhotoPreview = ''; }
+    function myPhotoChange(event) {
+        clearProfilePreview();
+        selectedFile = event.target.files?.[0] || null;
+        if (selectedFile && selectedFile.size > 2 * 1024 * 1024) {
+            state.modal.error = 'A foto deve ter no máximo 2 MB.';
+            selectedFile = null;
+            return;
+        }
+        if (selectedFile) {
+            state.profilePhotoPreview = URL.createObjectURL(selectedFile);
+            state.modal.form.remove_photo = false;
+        }
+    }
+    async function editMyProfile() {
+        await safe(async () => {
+            const row = await PigeAPI.request('/auth/profile');
+            const fields = [field('name', 'Nome de exibição', 'text', true), field('email', 'E-mail de acesso', 'email', true), field('phone', 'Telefone / WhatsApp', 'tel'), field('job_title', 'Cargo / função'), field('department', 'Setor / departamento'), field('photo', 'Foto do usuário (PNG, JPEG ou WebP, até 2 MB)', 'user-photo', false, undefined, true), field('remove_photo', 'Remover minha foto', 'checkbox'), field('bio', 'Sobre mim', 'textarea', false, undefined, true), field('current_password', 'Senha atual (somente para trocar o e-mail)', 'password')];
+            clearProfilePreview();
+            openModal('my-profile', 'Meu perfil', fields, { ...valuesFrom(row, fields), remove_photo: false }, row);
+        });
+    }
+    function profilePassword() { if (modalDirty()) {
+        state.modal.error = 'Salve ou cancele as alterações antes de trocar a senha.';
+        return;
+    } password(); }
     function password() { openModal('password', 'Alterar minha senha', [field('current_password', 'Senha atual', 'password', true), field('new_password', 'Nova senha (mínimo 12 caracteres)', 'password', true)]); }
     function archiveStudent() { if (state.selectedStudent)
         openModal('archive', 'Arquivar cadastro do aluno', [field('reason', 'Justificativa', 'textarea', true, undefined, true)], {}, state.selectedStudent); }
@@ -1457,6 +1540,17 @@ var PigeUI;
                 const identity = await PigeAPI.request('/institution/identity', { method: 'PUT', body });
                 PigeInstitution.apply(identity);
             }
+            else if (modal.kind === 'embedding-security') {
+                const updated = await PigeAPI.request('/institution/embedding', { method: 'PUT', body: JSON.stringify({ version: target.version, enabled: Boolean(form.enabled), allowed_origins: text(form.allowed_origins).split(/\r?\n/).map(v => v.trim()).filter(Boolean), current_password: form.current_password }) });
+                state.modal = blankModal();
+                if (updated.requires_login) {
+                    await logout();
+                    state.success = 'Origens atualizadas. Entre novamente; os demais acessos também precisarão se autenticar.';
+                    return;
+                }
+                state.success = 'Segurança de incorporação atualizada.';
+                return;
+            }
             else if (modal.kind === 'company-edit')
                 await PigeAPI.patch('/companies/' + target.id, { version: target.version, data: form });
             else if (modal.kind === 'company')
@@ -1474,6 +1568,26 @@ var PigeUI;
                     await PigeAPI.patch('/users/' + target.id, { ...form, version: target.version });
                 else
                     await PigeAPI.post('/users', form);
+            }
+            else if (modal.kind === 'my-profile') {
+                const body = new FormData();
+                const { photo, ...payload } = form;
+                body.set('payload', JSON.stringify({ ...payload, version: target.version }));
+                if (selectedFile)
+                    body.set('photo', selectedFile);
+                const updated = await PigeAPI.request('/auth/profile', { method: 'PUT', body });
+                state.modal = blankModal();
+                clearProfilePreview();
+                if (updated.requires_login) {
+                    await logout();
+                    state.login.email = updated.email;
+                    state.success = 'E-mail atualizado. Entre novamente.';
+                    return;
+                }
+                state.user = updated;
+                await loadMyPhoto();
+                state.success = 'Perfil atualizado.';
+                return;
             }
             else if (modal.kind === 'password') {
                 await PigeAPI.post('/auth/change-password', form);
@@ -1527,6 +1641,10 @@ var PigeUI;
             await PigeAPI.post('/auth/logout', {});
         }
         catch { /* Limpar a interface mesmo sem rede. */ }
+        if (state.userPhotoUrl)
+            URL.revokeObjectURL(state.userPhotoUrl);
+        state.userPhotoUrl = '';
+        clearProfilePreview();
         PigeAPI.clear();
         state.user = null;
         state.selectedStudent = null;
@@ -1582,5 +1700,5 @@ var PigeUI;
             event.returnValue = '';
         } });
     }
-    Vue.createApp({ components: { 'expansion-panel': PigeExpansion.component }, render: PigeRenders.app, setup() { Vue.onMounted(() => { PigeDialogs.install(); setupPWA(); void initialize(); }); return { state, registryPages, businessTypes, isBusiness, newBusiness, reusePerson, personDocument, modalSections, modalTab, visibleSection, modalFieldLabel, modalFieldRelevant, isPersonModal, personTypeOptions, personTypeLabel, modalDirty, identity: PigeInstitution.state, supportStatus: PigeSupport.status, editIdentity, identityFileChange, manageUnits, editMaintainer, text, can, isProfileRole, school, label, date, cpf, initials, photoSrc, getName, options, pageLabels, catalogLabels, configure, login, logout, navigate, changeSchool, setCatalog, search, page, loadPage, viewStudent, newPerson, newStudent, editStudent, newGuardian, newTeacher, editTeacher, newEmployee, editEmployee, editPerson, newCatalog, newEnrollment, viewEnrollment, startMovement, reenroll, newLink, editLink, uploadDocument, fileChange, reviewDocument, waiveDocument, issueDocument, downloadFile, newProtocol, newCompany, newSchool, editSupportHub, newUser, password, archiveStudent, closeModal, saveModal, loadReport, exportStudents, exportClass, searchStudents, searchPersons, filteredClasses, clearFilters, yearChanged, editDraft, viewProtocol, protocolNote, protocolReceipt, exportPendencies, install, updateApp }; } }).mount('#app');
+    Vue.createApp({ components: { 'expansion-panel': PigeExpansion.component }, render: PigeRenders.app, setup() { Vue.onMounted(() => { PigeDialogs.install(); setupPWA(); void initialize(); }); return { state, editEmbedding, editMyProfile, myPhotoChange, profilePassword, registryPages, businessTypes, isBusiness, newBusiness, reusePerson, personDocument, modalSections, modalTab, visibleSection, modalFieldLabel, modalFieldRelevant, isPersonModal, personTypeOptions, personTypeLabel, modalDirty, identity: PigeInstitution.state, supportStatus: PigeSupport.status, editIdentity, identityFileChange, manageUnits, editMaintainer, text, can, isProfileRole, school, label, date, cpf, initials, photoSrc, getName, options, pageLabels, catalogLabels, configure, login, logout, navigate, changeSchool, setCatalog, search, page, loadPage, viewStudent, newPerson, newStudent, editStudent, newGuardian, newTeacher, editTeacher, newEmployee, editEmployee, editPerson, newCatalog, newEnrollment, viewEnrollment, startMovement, reenroll, newLink, editLink, uploadDocument, fileChange, reviewDocument, waiveDocument, issueDocument, downloadFile, newProtocol, newCompany, newSchool, editSupportHub, newUser, password, archiveStudent, closeModal, saveModal, loadReport, exportStudents, exportClass, searchStudents, searchPersons, filteredClasses, clearFilters, yearChanged, editDraft, viewProtocol, protocolNote, protocolReceipt, exportPendencies, install, updateApp }; } }).mount('#app');
 })(PigeUI || (PigeUI = {}));

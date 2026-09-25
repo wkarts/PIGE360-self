@@ -49,7 +49,8 @@ def new_session(db,account,response):
     secret=secrets.token_urlsafe(48)
     session=m.PortalSession(account_id=account.id,token_hash=digest(secret),expires_at=now()+timedelta(hours=settings().portal_session_hours))
     db.add(session);db.flush()
-    response.set_cookie('pige_portal',session.id+'.'+secret,httponly=True,secure=settings().cookie_secure,samesite='strict',path='/api/v1/portal',max_age=settings().portal_session_hours*3600)
+    from .embedding import cookie
+    cookie(response,'pige_portal',session.id+'.'+secret,path='/api/v1/portal',max_age=settings().portal_session_hours*3600,db=db)
     return account_output(account)
 
 def portal_account(request:Request,db:DB):
@@ -154,7 +155,8 @@ def me(account:Parent):return account_output(account)
 @router.post('/logout')
 def logout(account:Parent,request:Request,response:Response,db:DB):
     db.get(m.PortalSession,request.state.portal_session_id).revoked=True
-    response.delete_cookie('pige_portal',path='/api/v1/portal')
+    from .embedding import cookie
+    cookie(response,'pige_portal',path='/api/v1/portal',delete=True,db=db)
     return {'ok':True}
 
 def code_hash(account_id,purpose,code):
@@ -173,8 +175,10 @@ def challenge(db,account,purpose,channel):
     code=f'{secrets.randbelow(1_000_000):06d}'
     item=m.PortalChallenge(account_id=account.id,purpose=purpose,channel=channel,code_hash=code_hash(account.id,purpose,code),expires_at=now()+timedelta(minutes=10))
     db.add(item);db.flush()
-    text=f'Seu código PIGE360 é {code}. Válido por 10 minutos. Não compartilhe este código. Ignore esta mensagem se não solicitou.'
-    payload={'number':target,'text':text} if kind=='connect_text' else {'to':target,'subject':'Código de acesso — PIGE360','text':text}
+    from .institution import identity_data
+    school_name=identity_data(db)['display_name']
+    text=f'Seu código de acesso — {school_name} — é {code}. Válido por 10 minutos. Não compartilhe este código. Ignore esta mensagem se não solicitou.'
+    payload={'number':target,'text':text} if kind=='connect_text' else {'to':target,'subject':'Código de acesso — '+school_name,'text':text}
     payload['expires_at']=item.expires_at.isoformat()
     enqueue(db,account.school_id,kind,payload,'otp:'+item.id,conn.id if conn else None)
     return {'ok':True,'message':'Código solicitado. Consulte o canal escolhido.','expires_in_seconds':600}
@@ -222,7 +226,8 @@ def reset_confirm(data:s.ResetConfirm,request:Request,db:DB,response:Response):
     account.password_hash=hash_password(data.password)
     db.execute(update(m.PortalSession).where(m.PortalSession.account_id==account.id).values(revoked=True))
     parent_audit(db,request,account,'password.reset',account)
-    response.delete_cookie('pige_portal',path='/api/v1/portal')
+    from .embedding import cookie
+    cookie(response,'pige_portal',path='/api/v1/portal',delete=True,db=db)
     return {'ok':True}
 
 @router.get('/admissions')

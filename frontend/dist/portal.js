@@ -2,13 +2,22 @@
 /** Identidade pública da escola. Sem segredos, rotas bancárias ou seleção de cliente. */
 var PigeInstitution;
 (function (PigeInstitution) {
-    PigeInstitution.state = Vue.reactive({ display_name: 'Sua escola', short_name: 'Escola', primary_color: '#006D77', secondary_color: '#0D1B2A', font_family: 'system', logo_url: '', font_configured: false, version: 1 });
+    const initial = (() => {
+        try {
+            return JSON.parse(document.querySelector('#institution-bootstrap')?.textContent || 'null');
+        }
+        catch {
+            return null;
+        }
+    })();
+    let hydrated = Boolean(initial);
+    PigeInstitution.state = Vue.reactive({ display_name: 'Sua escola', short_name: 'Escola', primary_color: '#006D77', secondary_color: '#0D1B2A', font_family: 'system', logo_url: '', font_configured: false, version: 1, ...(initial || {}) });
     function apply(value) {
         Object.assign(PigeInstitution.state, value);
         document.title = value.display_name + ' · ' + (location.pathname === '/online.html' ? 'Portal dos responsáveis' : 'Gestão escolar');
         document.querySelector('meta[name="theme-color"]')?.setAttribute('content', value.primary_color);
         const theme = document.querySelector('link[data-institution-theme]');
-        if (theme)
+        if (theme && !theme.href.endsWith('/api/v1/institution/theme.css?v=' + value.version))
             theme.href = '/api/v1/institution/theme.css?v=' + value.version;
         document.querySelectorAll('link[rel="icon"],link[rel="apple-touch-icon"]').forEach(link => {
             link.href = '/api/v1/institution/icon.png?size=' + (link.rel === 'apple-touch-icon' ? '180' : '32') + '&v=' + value.version;
@@ -19,12 +28,21 @@ var PigeInstitution;
     }
     PigeInstitution.apply = apply;
     async function load() {
+        if (hydrated) {
+            hydrated = false;
+            apply(PigeInstitution.state);
+            return;
+        }
+        const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 5000);
         try {
-            const response = await fetch('/api/v1/institution/identity', { credentials: 'same-origin', cache: 'no-store' });
+            const response = await fetch('/api/v1/institution/identity', { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
             if (response.ok)
                 apply(await response.json());
         }
-        catch { /* Falha de identidade não bloqueia autenticação nem operação escolar. */ }
+        catch { /* Mantém a última identidade pública; não exibe marca do fornecedor. */ }
+        finally {
+            clearTimeout(timer);
+        }
     }
     PigeInstitution.load = load;
 })(PigeInstitution || (PigeInstitution = {}));
