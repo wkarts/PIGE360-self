@@ -2,6 +2,7 @@ from alembic import context
 from sqlalchemy import create_engine, pool
 from app.config import settings
 from app.models import Base
+from app.institution import InstitutionAsset, InstitutionIdentity  # noqa: F401 — metadados dos ativos públicos
 
 config = context.config
 url = settings().database_url

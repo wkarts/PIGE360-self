@@ -41,7 +41,7 @@ ALL_PERMISSIONS = {
     'reports.read', 'audit.read',
     'users.manage', 'schools.manage',
     'admissions.read', 'admissions.write', 'admissions.manage',
-    'banking.read', 'banking.write', 'integrations.manage', 'communications.send',
+    'banking.read', 'banking.write', 'integrations.manage', 'connect.manage', 'communications.send',
     'profile.read', 'profile.self',
     'teacher.classes.read', 'teacher.students.read',
     'student.self.read', 'guardian.self.read',

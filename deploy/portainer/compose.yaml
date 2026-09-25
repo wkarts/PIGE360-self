@@ -18,15 +18,29 @@ services:
       driver: json-file
       options: {max-size: "10m", max-file: "3"}
 
+  # Mantém o nome legado, mas prepara e monitora o volume continuamente.
   storage-init:
     image: ${APP_IMAGE:-ghcr.io/wkarts/pige360-self:latest}
+    pull_policy: ${APP_PULL_POLICY:-always}
     user: "0:0"
-    entrypoint: ["/bin/sh", "-c"]
-    command: ["mkdir -p /data/documents && chown -R 10001:10001 /data"]
+    # O monitor trata SIGTERM/SIGINT diretamente como PID 1.
+    init: false
+    entrypoint: ["python", "-m", "app.storage_guard"]
     volumes:
       - ./data-documents:/data
-    restart: "no"
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.storage_guard", "--health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
+    restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
 
   app:
     image: ${APP_IMAGE:-ghcr.io/wkarts/pige360-self:latest}
@@ -59,6 +73,8 @@ services:
       TZ: ${TZ:-America/Bahia}
       INTEGRATION_ENCRYPTION_KEY: ${INTEGRATION_ENCRYPTION_KEY:-}
       INTEGRATION_TIMEOUT_SECONDS: ${INTEGRATION_TIMEOUT_SECONDS:-15}
+      CONNECT_API_BASE_URL: ${CONNECT_API_BASE_URL:-}
+      CONNECT_API_KEY: ${CONNECT_API_KEY:-}
       CONNECT_ALLOWED_HOSTS: ${CONNECT_ALLOWED_HOSTS:-}
       CONNECT_ALLOW_PRIVATE: ${CONNECT_ALLOW_PRIVATE:-false}
       PORTAL_SESSION_HOURS: ${PORTAL_SESSION_HOURS:-12}
@@ -84,7 +100,7 @@ services:
       retries: 12
     depends_on:
       db: {condition: service_healthy}
-      storage-init: {condition: service_completed_successfully}
+      storage-init: {condition: service_healthy}
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]

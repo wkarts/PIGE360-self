@@ -33,7 +33,12 @@ for adapter in adapters:
     assert './data-postgres:/var/lib/postgresql/data' in compose_text,compose
     assert './data-documents:/data' in compose_text,compose
     assert 'postgres_data:' not in compose_text and 'documents_data:' not in compose_text,compose
-    assert 'storage-init:' in compose_text and 'service_completed_successfully' in compose_text,compose
+    assert 'storage-init: {condition: service_healthy}' in compose_text,compose
+    assert 'service_completed_successfully' not in compose_text,compose
+    assert 'app.storage_guard' in compose_text and '"--health"' in compose_text,compose
+    assert 'restart: "no"' not in compose_text,compose
+    storage_block=compose_text.split('  storage-init:\n',1)[1].split('\n  app:\n',1)[0]
+    assert 'init: false' in storage_block,compose
     assert 'health/ready' in compose_text,compose
     for channel in ('develop','production'):
         env=root/'deploy'/adapter/f'.env.{channel}.example'

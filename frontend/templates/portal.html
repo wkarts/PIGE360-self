@@ -1,5 +1,5 @@
 <div class="portal-shell">
-  <header class="portal-header"><a href="/online.html" aria-label="Página inicial do portal"><img src="/branding/pige360/logo-horizontal.png" alt="PIGE360"></a><div><strong>Portal dos responsáveis</strong><small>Pré-matrícula e acompanhamento</small></div><a class="btn btn-secondary small-button" href="/">Área da escola</a></header>
+  <header class="portal-header"><a href="/online.html" aria-label="Página inicial do portal"><img v-if="identity.logo_url" :src="identity.logo_url" :alt="identity.display_name"><strong v-else>{{ identity.display_name }}</strong></a><div><strong>Portal dos responsáveis</strong><small>Pré-matrícula e acompanhamento</small></div><a class="btn btn-secondary small-button" href="/">Área da escola</a></header>
   <main class="portal-main">
     <div v-if="!state.ready" class="alert info">Carregando portal…</div>
     <div v-if="!state.online" class="alert warning">Sem conexão. Reconecte-se antes de salvar, enviar documentos ou confirmar a inscrição.</div>
