@@ -7,6 +7,15 @@ import vm from 'node:vm';
 import {webcrypto as crypto} from "node:crypto";
 import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+// Não aceitar fechamento de fieldset fora do formulário (compilador de produção pode tolerar HTML inválido).
+for(const filename of fs.readdirSync(path.join(root,'templates')).filter(name=>name.endsWith('.html'))) {
+  let openFieldsets=0;
+  for(const tag of fs.readFileSync(path.join(root,'templates',filename),'utf8').matchAll(/<\/?fieldset\b[^>]*>/g)) {
+    if(tag[0].startsWith('</')) {assert.ok(openFieldsets>0,filename+': fechamento de fieldset sem abertura');openFieldsets--;}
+    else openFieldsets++;
+  }
+  assert.equal(openFieldsets,0,filename+': fieldset não fechado');
+}
 const applications=[];
 const document={createElement:()=>({}),querySelector:()=>null,querySelectorAll:()=>[],title:''};
 const sandbox={crypto,console,document,navigator:{onLine:true},location:{hash:'',pathname:'/',origin:'http://test'},localStorage:{getItem:()=>null,setItem:()=>{}},URLSearchParams,URL,Intl,Headers,FormData,Blob,File,Event,CustomEvent,setTimeout,clearTimeout};
