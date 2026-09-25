@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """E2E real em Chromium. Usa banco e documentos descartáveis; nunca usa a instalação real."""
 from pathlib import Path
-import json, os, shutil, socket, subprocess, sys, tempfile, time
+import json, os, re, shutil, socket, subprocess, sys, tempfile, time
+from urllib.parse import urlsplit
 import httpx
 from playwright.sync_api import sync_playwright, expect
 
@@ -218,9 +219,34 @@ try:
         page.screenshot(path=str(OUT/'09-documentos-mobile.png'),full_page=True)
         checks.append('Novos filtros documentais responsivos em 390px')
         if not BRIDGE:
-            page.evaluate('navigator.serviceWorker.ready');page.wait_for_timeout(200)
-            cached=page.evaluate('caches.keys().then(async keys=>(await Promise.all(keys.map(k=>caches.open(k).then(c=>c.keys()).then(rs=>rs.map(r=>r.url))))).flat())')
-            assert cached and not any('/api/' in u for u in cached);checks.append('Service worker ativo; cache somente de arquivos estáticos')
+            page.evaluate('navigator.serviceWorker.ready')
+            page.wait_for_function('Boolean(navigator.serviceWorker.controller)')
+            # A marca pública pode ficar offline; cadastros, sessão e financeiro não.
+            identity=page.evaluate("fetch('/api/v1/institution/identity').then(r=>r.json())")
+            assert identity['display_name']=='Colégio Exemplo — Identidade Local',identity
+            cached=page.evaluate('''async () => {
+                const entries=[];
+                for(const name of await caches.keys()){
+                    const cache=await caches.open(name);
+                    for(const request of await cache.keys())entries.push({name,url:request.url,method:request.method});
+                }
+                return entries;
+            }''')
+            public_paths={'/manifest.webmanifest','/api/v1/institution/identity','/api/v1/institution/theme.css','/api/v1/institution/icon.png'}
+            public_asset=re.compile(r'^/api/v1/institution/assets/[0-9a-f]{64}\.(png|woff2)$')
+            assert any(entry['name'].startswith('pige360-shell-') for entry in cached),cached
+            public_entries=[entry for entry in cached if entry['name']=='pige360-public-identity']
+            assert 0<len(public_entries)<=24,public_entries
+            for entry in cached:
+                parsed=urlsplit(entry['url'])
+                assert parsed.scheme==urlsplit(URL).scheme and parsed.netloc==urlsplit(URL).netloc,entry
+                assert entry['method']=='GET',entry
+                is_public=parsed.path in public_paths or bool(public_asset.fullmatch(parsed.path))
+                assert not parsed.path.startswith(('/api/','/health/')) or is_public,entry
+                if entry['name']=='pige360-public-identity':assert is_public,entry
+            assert any(urlsplit(entry['url']).path=='/api/v1/institution/identity' for entry in public_entries),cached
+            (OUT/'pwa-cache-results.json').write_text(json.dumps({'status':'passed','entries':cached,'private_api_cached':False},ensure_ascii=False,indent=2))
+            checks.append('Service worker ativo; cache limitado a arquivos estáticos e identidade pública, sem sessão, cadastros ou financeiro')
         context.set_offline(True);expect(page.get_by_text('Sem conexão.',exact=False).first).to_be_visible();checks.append('Queda de rede sinalizada sem confirmar operações offline')
         context.set_offline(False)
         assert not errors,errors
