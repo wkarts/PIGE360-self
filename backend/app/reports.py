@@ -203,7 +203,7 @@ def protocol_pdf(protocol_id: str, db: DB, user: Actor, school: Scope, request: 
     content = render_pdf(school.name, 'Comprovante de protocolo', [
         ('Protocolo', obj.number), ('Solicitação', obj.kind), ('Aluno', data['student_name'] or 'Não vinculado'),
         ('Situação', STATE_LABELS[obj.status]), ('Prazo', obj.due_on.strftime('%d/%m/%Y') if obj.due_on else 'Não definido'),
-        ('Descrição', obj.description)], note='Comprovante de registro de solicitação. Não comprova conclusão ou deferimento.', issuer=user.name)
+        ('Descrição', obj.description)], note='Comprovante de registro de solicitação. Não comprova conclusão ou deferimento.', issuer=user.name, db=db)
     audit(db, request, user, 'protocol.receipt_exported', obj, school.id)
     return Response(content, media_type='application/pdf', headers={'Content-Disposition':'attachment; filename="protocolo.pdf"', 'Cache-Control':'no-store'})
 
@@ -238,7 +238,7 @@ def export_students(db: DB, user: Actor, school: Scope, request: Request):
 @router.get('/reports/class/{class_id}/pdf')
 def class_pdf(class_id: str, db: DB, user: Actor, school: Scope, request: Request):
     data = class_report(class_id, db, user, school)
-    payload = render_pdf(school.name, 'Relação de alunos - ' + data['class_group']['name'], [(str(i+1).zfill(2), r['name'] + ' | ' + r['number']) for i,r in enumerate(data['items'])], note=f'Total de alunos: {len(data["items"])}. Matrículas ativas e suspensas.')
+    payload = render_pdf(school.name, 'Relação de alunos - ' + data['class_group']['name'], [(str(i+1).zfill(2), r['name'] + ' | ' + r['number']) for i,r in enumerate(data['items'])], note=f'Total de alunos: {len(data["items"])}. Matrículas ativas e suspensas.', db=db)
     audit(db, request, user, 'report.class_exported', school, school.id, {'class_group_id':class_id})
     return Response(payload, media_type='application/pdf', headers={'Content-Disposition':'attachment; filename="alunos-da-turma.pdf"', 'Cache-Control':'no-store'})
 
@@ -270,6 +270,6 @@ def pending_pdf(db: DB, user: Actor, school: Scope, request: Request, filters: P
     if data['total_documents'] > 1000:
         fail(422, 'Este relatório contém mais de 1.000 pendências. Refine o filtro ou exporte em CSV.')
     rows = [(row['student_name']+' | '+row['student_number'], row['class_name']+' / '+row['year_name']+' — '+ '; '.join(d['name']+' ('+STATE_LABELS[d['status']]+')' for d in row['documents'])) for row in data['items']]
-    content = render_pdf(school.name, 'Pendências documentais', rows, note=f"{data['total']} aluno(s) com pendências; {data['total_documents']} documento(s). Respeita os filtros selecionados na emissão.", issuer=user.name)
+    content = render_pdf(school.name, 'Pendências documentais', rows, note=f"{data['total']} aluno(s) com pendências; {data['total_documents']} documento(s). Respeita os filtros selecionados na emissão.", issuer=user.name, db=db)
     audit(db, request, user, 'report.document_pendencies_exported', school, school.id, {'format':'pdf','count':data['total_documents']})
     return Response(content, media_type='application/pdf', headers={'Content-Disposition':'attachment; filename="pendencias-documentais.pdf"', 'Cache-Control':'no-store'})

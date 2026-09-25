@@ -130,7 +130,7 @@ def send_email(payload):
     message = EmailMessage()
     message['From'] = cfg.smtp_from
     message['To'] = payload['to']
-    message['Subject'] = payload.get('subject', 'PIGE360 — confirmação de acesso')
+    message['Subject'] = payload.get('subject', 'Confirmação de acesso')
     message.set_content(payload['text'])
     sending = False
     try:

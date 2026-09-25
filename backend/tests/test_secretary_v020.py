@@ -49,7 +49,8 @@ def test_pwa_manifest_and_build(client):
     info = client.get('/build-info.json').json()
     assert info['version'] == (ROOT/'VERSION').read_text().strip()
     sw = client.get('/sw.js').text
-    assert '/branding/pige360/logo-horizontal.png' in sw
+    assert '/branding/pige360/logo-horizontal.png' not in sw
+    assert '/institution-layout.css' in sw
     assert "url.pathname.startsWith('/api/')" in sw
     assert client.get('/favicon.ico').content[:4] == b'\x00\x00\x01\x00'
 
@@ -100,15 +101,17 @@ def test_enrollment_search_filters(api):
 
 
 def test_enrollment_form_allowed_draft_but_not_declaration(api):
+    from test_institution import image, save
+    assert save(api.client, api.headers, {'display_name':api.school['name']}, files={'logo':('school.png',image(),'image/png')}).status_code == 200
     cats=api.catalogs();student=api.student(adult=True);e=api.enroll(student,cats['group'])
     issued=api.post('/students/'+student['id']+'/issued-documents',{'kind':'enrollment_form','enrollment_id':e['id']})
-    assert issued['template_version']=='2'
+    assert issued['template_version']=='3'
     response=api.get('/files/'+issued['file_id']+'/download')
     content=pdf_text(response)
     assert 'Ficha de matrícula' in content and 'rascunho' in content
     assert 'Não contém assinatura digital' in content
     reader=PdfReader(io.BytesIO(response.content))
-    assert reader.pages[0]['/Resources'].get('/XObject'), 'Logo oficial precisa estar incorporada no PDF'
+    assert reader.pages[0]['/Resources'].get('/XObject'), 'O logotipo configurado pela escola precisa estar incorporado no PDF'
     api.post('/students/'+student['id']+'/issued-documents',{'kind':'enrollment_declaration','enrollment_id':e['id']},expect=409)
     other=api.student('Outro aluno de Teste',adult=True)
     api.post('/students/'+other['id']+'/issued-documents',{'kind':'enrollment_form','enrollment_id':e['id']},expect=422)

@@ -41,7 +41,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
           ]), _createElementVNode("div", null, [_createElementVNode("a", {
             class: "btn btn-secondary",
             href: "/online.html"
-          }, "Sou responsável · Pré-matrícula online →"), _createElementVNode("p", { class: "small muted" }, "Instalação própria · Dados sob gestão da instituição")])]), _createElementVNode("section", { class: "auth-panel" }, [(!state.configured)
+          }, "Sou responsável · Pré-matrícula online →"), _createElementVNode("p", { class: "small muted" }, "Dados sob gestão da instituição")])]), _createElementVNode("section", { class: "auth-panel" }, [(!state.configured)
             ? (_openBlock(), _createElementBlock("form", {
                 key: 0,
                 class: "auth-form setup-form",
@@ -161,6 +161,16 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                   class: "btn btn-primary full",
                   disabled: state.loginBusy || !state.online
                 }, [_createTextVNode(_toDisplayString(state.loginBusy ? 'Autenticando…' : 'Entrar na aplicação') + " ", 1), _createElementVNode("span", null, "→")], 8, ["disabled"]),
+                (state.embedded)
+                  ? (_openBlock(), _createElementBlock("p", {
+                      key: 2,
+                      class: "small muted"
+                    }, [_createTextVNode("Acesso dentro do HUB: sua sessão é independente da janela externa. Se o navegador restringir o login, "), _createElementVNode("a", {
+                      href: "/",
+                      target: "_blank",
+                      rel: "noopener"
+                    }, "abra a escola no navegador"), _createTextVNode(".")]))
+                  : _createCommentVNode("", true),
                 _createElementVNode("p", { class: "small muted" }, "Problemas de acesso? Solicite a recuperação ao administrador desta instalação.")
               ], 40, ["onSubmit"])), (!state.online)
             ? (_openBlock(), _createElementBlock("p", {
@@ -423,7 +433,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       : _createCommentVNode("", true)
                   ]))
                 : _createCommentVNode("", true)
-            ]), _createElementVNode("div", { class: "sidebar-footer" }, [_createElementVNode("span", null, "Gestão escolar"), _createElementVNode("small", null, "PIGE360 Self · Instalação própria")])], 2),
+            ]), _createElementVNode("div", { class: "sidebar-footer" }, [_createElementVNode("small", null, "PIGE360 · " + _toDisplayString(identity.app_version || '—'), 1)])], 2),
             _createElementVNode("div", { class: "main-column" }, [_createElementVNode("header", { class: "topbar" }, [_createElementVNode("button", {
               type: "button",
               class: "icon-button menu-button",
@@ -457,9 +467,16 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
               _createElementVNode("div", { class: "user-caption" }, [_createElementVNode("strong", null, _toDisplayString(state.user.name), 1), _createElementVNode("small", null, _toDisplayString(label(state.user.role)), 1)]),
               _createElementVNode("button", {
                 class: "avatar user-avatar",
-                onClick: password,
-                title: "Alterar minha senha"
-              }, _toDisplayString(initials(state.user.name)), 9, ["onClick"]),
+                onClick: editMyProfile,
+                title: "Meu perfil",
+                "aria-label": "Meu perfil"
+              }, [(state.userPhotoUrl)
+                ? (_openBlock(), _createElementBlock("img", {
+                    key: 0,
+                    src: state.userPhotoUrl,
+                    alt: "Minha foto"
+                  }, null, 8, ["src"]))
+                : (_openBlock(), _createElementBlock("span", { key: 1 }, _toDisplayString(initials(state.user.name)), 1))], 8, ["onClick"]),
               _createElementVNode("button", {
                 type: "button",
                 class: "icon-button",
@@ -1768,6 +1785,20 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                           }, "Personalizar identidade visual", 8, ["onClick"]))
                         : _createCommentVNode("", true)
                     ]),
+                    (state.user.role==='admin')
+                      ? (_openBlock(), _createElementBlock("article", {
+                          key: 0,
+                          class: "panel school-card"
+                        }, [
+                          _createElementVNode("p", { class: "eyebrow" }, "SEGURANÇA"),
+                          _createElementVNode("h2", null, "Incorporação no HUB"),
+                          _createElementVNode("p", { class: "muted" }, "Autorize os endereços que podem abrir esta aplicação em um iframe. A liberação não compartilha senhas nem concede acesso aos dados."),
+                          _createElementVNode("button", {
+                            class: "btn btn-secondary",
+                            onClick: editEmbedding
+                          }, "Autorizar origens de iframe", 8, ["onClick"])
+                        ]))
+                      : _createCommentVNode("", true),
                     _createElementVNode("div", { class: "school-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.schools, (s) => {
                       return (_openBlock(), _createElementBlock("article", {
                         key: s.id,
@@ -1821,7 +1852,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                     _createElementVNode("div", { class: "alert info spaced" }, "Esta instalação pertence à sua escola. As unidades, os dados e as integrações são administrados pela própria instituição.")
                   ]))
                 : _createCommentVNode("", true),
-              _createElementVNode("footer", { class: "content-footer" }, [_createElementVNode("span", null, "PIGE360 Self · Gestão educacional"), _createElementVNode("span", null, "Acesso controlado · Histórico preservado")])
+              _createElementVNode("footer", { class: "content-footer" }, [_createElementVNode("span", null, _toDisplayString(identity.display_name), 1), _createElementVNode("span", null, "Acesso controlado · Histórico preservado")])
             ])])
           ])), (state.modal.kind)
       ? (_openBlock(), _createElementBlock("div", {
@@ -1830,7 +1861,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
           onClick: _withModifiers(closeModal, ["self"])
         }, [_createElementVNode("section", {
           id: "main-dialog",
-          class: _normalizeClass(["modal", {'modal-wide':isPersonModal() || state.modal.fields.length>10 || ['enrollment-detail','protocol-detail'].includes(state.modal.kind)}]),
+          class: _normalizeClass(["modal", {'modal-account':state.modal.kind==='my-profile','modal-wide':isPersonModal() || state.modal.fields.length>10 || ['enrollment-detail','protocol-detail'].includes(state.modal.kind)}]),
           role: "dialog",
           "aria-modal": "true",
           "aria-labelledby": "modal-title"
@@ -2034,21 +2065,59 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       class: "alert info"
                     }, "Será criada outra matrícula em um período posterior. A matrícula anterior não será sobrescrita."))
                   : _createCommentVNode("", true),
+                (state.modal.kind==='my-profile')
+                  ? (_openBlock(), _createElementBlock("section", {
+                      key: 5,
+                      class: "account-summary"
+                    }, [_createElementVNode("div", { class: "account-photo" }, [(!state.modal.form.remove_photo && (state.profilePhotoPreview || state.userPhotoUrl))
+                      ? (_openBlock(), _createElementBlock("img", {
+                          key: 0,
+                          src: state.profilePhotoPreview || state.userPhotoUrl,
+                          alt: "Prévia da foto"
+                        }, null, 8, ["src"]))
+                      : (_openBlock(), _createElementBlock("span", { key: 1 }, _toDisplayString(initials(state.modal.form.name)), 1))]), _createElementVNode("div", null, [
+                      _createElementVNode("h3", null, _toDisplayString(state.modal.form.name || 'Meu perfil'), 1),
+                      _createElementVNode("p", null, _toDisplayString(label(state.user.role)) + " · " + _toDisplayString(identity.display_name), 1),
+                      _createElementVNode("small", null, "O perfil de acesso e as unidades são definidos pela administração."),
+                      _createElementVNode("br"),
+                      _createElementVNode("button", {
+                        class: "link-button",
+                        type: "button",
+                        onClick: profilePassword
+                      }, "Alterar minha senha", 8, ["onClick"])
+                    ])]))
+                  : _createCommentVNode("", true),
+                (state.modal.kind==='embedding-security')
+                  ? (_openBlock(), _createElementBlock("div", {
+                      key: 6,
+                      class: "embedding-notice"
+                    }, [
+                      _createElementVNode("p", { class: "alert info" }, [_createTextVNode("Informe a origem completa: "), _createElementVNode("strong", null, "https://hub-dev.argws.com.br"), _createTextVNode(". Sem caminhos, curingas ou credenciais. Cada subdomínio e porta precisam de autorização própria.")]),
+                      (!state.modal.target.https_ready)
+                        ? (_openBlock(), _createElementBlock("p", {
+                            key: 0,
+                            class: "alert warning"
+                          }, "Antes de ativar: configure APP_URL com HTTPS e COOKIE_SECURE=true no ambiente da aplicação."))
+                        : _createCommentVNode("", true),
+                      _createElementVNode("p", { class: "small muted" }, "Origem da aplicação: " + _toDisplayString(state.modal.target.app_origin) + ". Configuração atual: " + _toDisplayString(state.modal.target.source==='environment'?'padrão do ambiente':'salva na instituição') + ".", 1),
+                      _createElementVNode("p", { class: "small muted" }, "Ao mudar a lista ou a ativação, as sessões abertas serão encerradas. A nova autorização vale no próximo carregamento; o navegador continuará exigindo login. Um proxy com bloqueio próprio de iframe também precisa ser ajustado.")
+                    ]))
+                  : _createCommentVNode("", true),
                 (state.modal.kind==='identity')
                   ? (_openBlock(), _createElementBlock("p", {
-                      key: 5,
+                      key: 7,
                       class: "alert info"
-                    }, "O nome deve ter até 160 caracteres e o nome curto até 30. Logotipo e fonte: até 2 MB cada. Nenhuma fonte externa é necessária. A tipografia própria requer um arquivo WOFF2 licenciado."))
+                    }, "O nome deve ter até 160 caracteres e o nome curto até 30. Logotipo e fonte: até 2 MB cada. Nenhuma fonte externa é necessária. Use uma fonte TTF ou WOFF2 estática licenciada para tela e incorporação em PDF. Sem arquivo próprio, o PDF usa uma fonte equivalente serifada ou sem serifa."))
                   : _createCommentVNode("", true),
                 (state.modal.kind==='upload')
                   ? (_openBlock(), _createElementBlock("p", {
-                      key: 6,
+                      key: 8,
                       class: "alert info"
                     }, "Limite padrão de 10 MB. O recebimento não substitui a validação documental pela Secretaria."))
                   : _createCommentVNode("", true),
                 (state.modal.kind==='support-hub')
                   ? (_openBlock(), _createElementBlock("p", {
-                      key: 7,
+                      key: 9,
                       class: "alert info"
                     }, "A configuração pertence à mantenedora da escola ativa. O token é armazenado criptografado e nunca é devolvido na tela; o navegador recebe somente o website token necessário para inicializar o widget."))
                   : _createCommentVNode("", true),
@@ -2057,7 +2126,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                     key: section.id,
                     "data-form-section": section.id,
                     class: "form-section"
-                  }, [_createElementVNode("div", { class: "form-section-heading" }, [_createElementVNode("p", { class: "eyebrow" }, _toDisplayString(isPersonModal()?'FICHA CADASTRAL':'LANÇAMENTO'), 1), _createElementVNode("h3", null, _toDisplayString(section.title), 1), _createElementVNode("p", null, _toDisplayString(section.hint), 1)]), _createElementVNode("div", { class: "form-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(section.fields, (f, index) => {
+                  }, [_createElementVNode("div", { class: "form-section-heading" }, [_createElementVNode("p", { class: "eyebrow" }, _toDisplayString(state.modal.kind==='my-profile'?'CONTA':isPersonModal()?'FICHA CADASTRAL':'LANÇAMENTO'), 1), _createElementVNode("h3", null, _toDisplayString(section.title), 1), _createElementVNode("p", null, _toDisplayString(section.hint), 1)]), _createElementVNode("div", { class: "form-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(section.fields, (f, index) => {
                     return (_openBlock(), _createElementBlock("label", {
                       key: index+'-'+f.key,
                       for: 'modal-field-'+f.key,
@@ -2137,38 +2206,46 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                                       key: 4,
                                       id: 'modal-field-'+f.key,
                                       type: "file",
-                                      accept: f.type==='identity-font'?'.woff2':'.png,.jpg,.jpeg,.webp',
+                                      accept: f.type==='identity-font'?'.ttf,.woff2':'.png,.jpg,.jpeg,.webp',
                                       onChange: $event => (identityFileChange($event,f.key))
                                     }, null, 40, ["id", "accept", "onChange"]))
-                                  : (f.type==='photo')
+                                  : (f.type==='user-photo')
                                     ? (_openBlock(), _createElementBlock("input", {
                                         key: 5,
                                         id: 'modal-field-'+f.key,
                                         type: "file",
-                                        accept: ".png,.jpg,.jpeg",
-                                        required: f.required,
-                                        onChange: fileChange
-                                      }, null, 40, ["id", "required", "onChange"]))
-                                    : (f.type==='file')
+                                        accept: ".png,.jpg,.jpeg,.webp",
+                                        onChange: myPhotoChange
+                                      }, null, 40, ["id", "onChange"]))
+                                    : (f.type==='photo')
                                       ? (_openBlock(), _createElementBlock("input", {
                                           key: 6,
                                           id: 'modal-field-'+f.key,
                                           type: "file",
-                                          accept: ".pdf,.png,.jpg,.jpeg",
+                                          accept: ".png,.jpg,.jpeg",
                                           required: f.required,
                                           onChange: fileChange
                                         }, null, 40, ["id", "required", "onChange"]))
-                                      : _withDirectives((_openBlock(), _createElementBlock("input", {
-                                          key: 7,
-                                          id: 'modal-field-'+f.key,
-                                          "onUpdate:modelValue": $event => ((state.modal.form[f.key]) = $event),
-                                          type: f.type,
-                                          required: f.required,
-                                          min: f.type==='number'?(f.key==='workload_hours'?0:1):undefined,
-                                          minlength: f.type==='password' && f.key!=='current_password'?12:undefined,
-                                          maxlength: f.type==='password'?128:400,
-                                          autocomplete: f.type==='password'?'new-password':'off'
-                                        }, null, 8, ["id", "onUpdate:modelValue", "type", "required", "min", "minlength", "maxlength", "autocomplete"])), [[_vModelDynamic, state.modal.form[f.key]]])], 64))], 10, ["for"]))
+                                      : (f.type==='file')
+                                        ? (_openBlock(), _createElementBlock("input", {
+                                            key: 7,
+                                            id: 'modal-field-'+f.key,
+                                            type: "file",
+                                            accept: ".pdf,.png,.jpg,.jpeg",
+                                            required: f.required,
+                                            onChange: fileChange
+                                          }, null, 40, ["id", "required", "onChange"]))
+                                        : _withDirectives((_openBlock(), _createElementBlock("input", {
+                                            key: 8,
+                                            id: 'modal-field-'+f.key,
+                                            "onUpdate:modelValue": $event => ((state.modal.form[f.key]) = $event),
+                                            type: f.type,
+                                            required: f.required,
+                                            min: f.type==='number'?(f.key==='workload_hours'?0:1):undefined,
+                                            minlength: f.type==='password' && f.key!=='current_password'?12:undefined,
+                                            maxlength: f.type==='password'?128:400,
+                                            autocomplete: f.type==='password'?'new-password':'off'
+                                          }, null, 8, ["id", "onUpdate:modelValue", "type", "required", "min", "minlength", "maxlength", "autocomplete"])), [[_vModelDynamic, state.modal.form[f.key]]])], 64))], 10, ["for"]))
                   }), 128))])], 8, ["data-form-section"])), [[_vShow, visibleSection(section.id)]])
                 }), 128))
               ])], 2), _createElementVNode("footer", { class: "modal-footer" }, [_createElementVNode("span", { class: "small muted" }, [_createTextVNode(_toDisplayString(modalDirty()?'Alterações ainda não salvas':'Preencha os campos e confirme ao salvar'), 1), _createElementVNode("small", { class: "block" }, "Registro com seu usuário · * obrigatório")]), _createElementVNode("button", {
@@ -2685,7 +2762,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
             role: "status"
           }, "Processando sua solicitação…"))
         : _createCommentVNode("", true)
-    ]), _createElementVNode("footer", { class: "portal-footer" }, "PIGE360 Self · Atendimento escolar Web/PWA · Dados privados não são armazenados no cache offline.")]))
+    ]), _createElementVNode("footer", { class: "portal-footer" }, _toDisplayString(identity.display_name) + " · Atendimento escolar", 1)]))
   }
 },expansion:function render(_ctx, _cache) {
   with (_ctx) {
