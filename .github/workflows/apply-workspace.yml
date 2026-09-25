@@ -28,7 +28,7 @@ jobs:
           from pathlib import Path
           assert os.environ['GITHUB_REF_NAME'] == os.environ['EXPECTED_BRANCH']
           parent = subprocess.check_output(['git', 'rev-parse', 'HEAD^'], text=True).strip()
-          assert parent == '340cd16cfc106164e23bf8578e8144363caad956', parent
+          assert parent == '24b3711187e540ae401eb2ff03d77e30c69280fb', parent
           compressed = b''.join(Path(f'scripts/ci/workspace-patch.{i}').read_bytes() for i in range(6))
           assert len(compressed) == 15985
           patch = gzip.decompress(compressed)
@@ -43,11 +43,13 @@ jobs:
           npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
           npm run typecheck --prefix frontend
           npm run build --prefix frontend
-      - name: Registrar fontes e compilados somente na branch de correção
+      - name: Registrar apenas código com a permissão de contents
         run: |
+          # O token deste job não altera workflows. A configuração de CI é aplicada pela conexão autorizada.
+          git restore --worktree .github/workflows
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .github/workflows/ci.yml docs/NAVEGACAO-E-ROLAGEM.md frontend/public/index.html frontend/public/ui-icons.svg frontend/public/workspace.css frontend/src/workspace.ts frontend/templates/app.html frontend/tsconfig.json scripts/e2e-workspace.py scripts/ui_bridge.py frontend/dist
-          git rm scripts/ci/workspace-patch.[0-5] .github/workflows/apply-workspace.yml
+          git add docs/NAVEGACAO-E-ROLAGEM.md frontend/public/index.html frontend/public/ui-icons.svg frontend/public/workspace.css frontend/src/workspace.ts frontend/templates/app.html frontend/tsconfig.json scripts/e2e-workspace.py scripts/ui_bridge.py frontend/dist
+          git rm scripts/ci/workspace-patch.[0-5]
           git commit -m 'fix(ui): manter marca e cabeçalho fixos com navegação consistente'
           git push origin HEAD:fix/workspace-navigation
