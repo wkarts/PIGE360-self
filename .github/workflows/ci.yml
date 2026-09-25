@@ -81,6 +81,8 @@ jobs:
         run: |
           mkdir -p ci-evidence/browser
           if [[ -d evidence/0.3.0 ]]; then cp -a evidence/0.3.0/. ci-evidence/browser/; fi
+          # Checkpoint sanitizado do código efetivamente testado; sem .env real ou fontes.
+          python scripts/ci/package.py --version "$(cat VERSION)" --commit "$(git rev-parse HEAD)" --output ci-evidence/checkpoint/PIGE360-Self-source.zip
       - name: Docker Compose e teste de inicialização
         env:
           NODE_BASE_IMAGE: ${{ inputs.node_ref || 'ghcr.io/wkarts/pige360-self-base-node:22-alpine' }}
