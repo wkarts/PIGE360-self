@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from .config import settings
 from .db import engine
 from .storage import ensure_storage
-from . import auth, people, registry, enrollments, documents, reports, portal, admissions, integrations, connect, banking, profiles, support, institution
+from . import auth, people, registry, enrollments, documents, reports, portal, admissions, integrations, connect, banking, profiles, support, institution, business_people
 
 cfg = settings()
 logger = logging.getLogger('pige360')
@@ -23,7 +23,7 @@ async def lifespan(app):
     engine.dispose()
 
 app = FastAPI(title='PIGE360 Self — Gestão Educacional', version=cfg.app_version, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url='/api/v1/openapi.json')
-for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router]:
+for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router]:
     app.include_router(router)
 
 @app.exception_handler(HTTPException)
@@ -37,7 +37,7 @@ async def validation_error(request, exc):
 
 @app.exception_handler(IntegrityError)
 async def integrity_error(request, exc):
-    return JSONResponse({'detail':'Conflito de integridade: já existe CPF, cadastro, vínculo ou matrícula equivalente, ou um registro relacionado impede esta alteração.', 'request_id':getattr(request.state,'request_id','')}, status_code=409)
+    return JSONResponse({'detail':'Conflito de integridade: já existe CPF/CNPJ, cadastro, vínculo ou matrícula equivalente, ou um registro relacionado impede esta alteração.', 'request_id':getattr(request.state,'request_id','')}, status_code=409)
 
 @app.exception_handler(Exception)
 async def internal_error(request, exc):

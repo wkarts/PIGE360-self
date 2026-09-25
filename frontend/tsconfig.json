@@ -18,6 +18,7 @@
     "src/support-widget.ts",
     "src/online-types.ts",
     "src/expansion.ts",
+    "src/dialogs.ts",
     "src/app.ts"
   ]
 }
