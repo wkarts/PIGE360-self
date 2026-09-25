@@ -7,6 +7,15 @@ import vm from 'node:vm';
 import {webcrypto as crypto} from "node:crypto";
 import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+// Não aceitar fechamento de fieldset fora do formulário (compilador de produção pode tolerar HTML inválido).
+for(const filename of fs.readdirSync(path.join(root,'templates')).filter(name=>name.endsWith('.html'))) {
+  let openFieldsets=0;
+  for(const tag of fs.readFileSync(path.join(root,'templates',filename),'utf8').matchAll(/<\/?fieldset\b[^>]*>/g)) {
+    if(tag[0].startsWith('</')) {assert.ok(openFieldsets>0,filename+': fechamento de fieldset sem abertura');openFieldsets--;}
+    else openFieldsets++;
+  }
+  assert.equal(openFieldsets,0,filename+': fieldset não fechado');
+}
 const applications=[];
 const document={createElement:()=>({}),querySelector:()=>null,querySelectorAll:()=>[],title:''};
 const sandbox={crypto,console,document,navigator:{onLine:true},location:{hash:'',pathname:'/',origin:'http://test'},localStorage:{getItem:()=>null,setItem:()=>{}},URLSearchParams,URL,Intl,Headers,FormData,Blob,File,Event,CustomEvent,setTimeout,clearTimeout};
@@ -22,6 +31,27 @@ const context=app.setup();
 const render=()=>app.render.call(context,context,[]);
 render();context.state.ready=true;render();context.state.configured=false;render();
 context.state.configured=true;
+// As marcações do login são removidas sem trocar logo, slogan, formulário ou layout.
+function nodes(vnode) {
+  if(!vnode || typeof vnode!=='object')return [];
+  return [vnode,...(Array.isArray(vnode.children)?vnode.children.flatMap(nodes):[])];
+}
+function loginLink(tree){return nodes(tree).filter(n=>n.type==='a' && n.props?.href==='/online.html');}
+function loginText(tree){return nodes(tree).map(n=>typeof n.children==='string'?n.children:'').join(' ');}
+let loginTree=render();
+assert.equal(loginLink(loginTree).length,1,'Atalho visível nas instalações existentes');
+assert.match(loginText(loginTree),/A gestão educacional\./);
+assert.match(loginText(loginTree),/Organizada, de verdade\./);
+assert.equal(nodes(loginTree).filter(n=>n.type==='form').length,1);
+for(const removed of ['GESTÃO ESCOLAR','WEB / PWA','Alunos, famílias, matrículas e documentos reunidos',
+                      'Cadastro único','Matrículas e turmas','Documentação e histórico','Dados sob gestão da instituição']) {
+  assert.ok(!loginText(loginTree).includes(removed),'Trecho removido: '+removed);
+}
+context.identity.show_preenrollment_button=false;
+loginTree=render();assert.equal(loginLink(loginTree).length,0,'Ocultar o atalho por configuração pública');
+context.identity.show_preenrollment_button=true;
+assert.equal(loginLink(render()).length,1,'Reativar o atalho sem mudar de tela');
+console.log('Login smoke: remoções pontuais, slogan preservado e atalho configurável OK.');
 context.state.user={id:'test-admin',name:'Administrador',role:'admin',permissions:[...new Set([...fs.readFileSync(path.join(root,'templates/app.html'),'utf8').matchAll(/can\('([^']+)'\)/g)].map(match=>match[1]))]};
 context.state.schoolId='school-test';context.state.schools=[{id:'school-test',company_id:'company-test',name:'Escola de teste'}];
 for(const page of Object.keys(context.pageLabels)){context.state.page=page;render();}

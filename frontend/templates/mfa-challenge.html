@@ -1,0 +1,15 @@
+<div class="mfa-box" aria-live="polite">
+  <div v-if="mfa.state.error" role="alert" class="alert error">{{mfa.state.error}}</div>
+  <template v-if="mfa.state.codes.length">
+    <h2>Guarde seus códigos de recuperação</h2><p>Use um código se perder o autenticador. Cada código funciona uma única vez; eles não serão exibidos novamente.</p>
+    <div class="mfa-codes"><code v-for="code in mfa.state.codes" :key="code">{{code}}</code></div>
+    <div class="actions"><button class="btn btn-secondary" type="button" @click="mfa.downloadCodes">Salvar códigos</button><button class="btn btn-primary" type="button" :disabled="mfa.state.busy" @click="mfa.acknowledge">Guardei os códigos · Continuar</button></div>
+  </template>
+  <template v-else>
+    <h2>{{mfa.state.enrolling?'Ative a autenticação em duas etapas':'Confirme seu acesso'}}</h2>
+    <template v-if="mfa.state.enrolling"><p>Adicione esta conta ao seu aplicativo autenticador e informe o código gerado.</p><img v-if="mfa.state.qr" :src="mfa.state.qr" class="mfa-qr" alt="QR Code para configurar seu autenticador"><details><summary>Digitar chave manualmente</summary><code class="mfa-secret">{{mfa.state.secret}}</code></details></template>
+    <p v-else>Informe o código do autenticador ou um código de recuperação.</p>
+    <label class="field">{{mfa.state.enrolling?'Código de 6 dígitos':'Código do autenticador ou de recuperação'}}<input v-model="mfa.state.code" autocomplete="one-time-code" :inputmode="mfa.state.enrolling?'numeric':'text'" maxlength="30" :disabled="mfa.state.busy" @keydown.enter.prevent="mfa.finish"></label>
+    <div class="actions"><button type="button" class="btn btn-secondary" :disabled="mfa.state.busy" @click="mfa.cancel">Voltar</button><button type="button" class="btn btn-primary" :disabled="mfa.state.busy || !mfa.state.code" @click="mfa.finish">{{mfa.state.busy?'Validando…':'Confirmar'}}</button></div>
+  </template>
+</div>

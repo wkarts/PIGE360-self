@@ -52,6 +52,7 @@ try:
         def form_field(name, **kwargs):
             locator=dialog().get_by_label(name, **kwargs)
             locator.wait_for(state='attached')
+            locator.evaluate("e=>{const d=e.closest('details');if(d)d.open=true;}")
             section=locator.evaluate("el=>el.closest('[data-form-section]')?.dataset.formSection || ''")
             if section and not locator.is_visible():
                 dialog().locator(f'[data-section-target="{section}"]').click()
@@ -62,7 +63,10 @@ try:
         page.get_by_role('button',name='+ Nova pessoa').click()
         expect(dialog().get_by_role('heading',name='Cadastrar pessoa')).to_be_visible()
         form_field('Nome completo').fill('Pessoa Unificada — Teste')
-        form_field('Tipos de pessoa').select_option(['guardian','staff'])
+        dialog().locator('.person-type-picker summary').click()
+        dialog().get_by_role('button',name='Responsável',exact=True).click()
+        dialog().locator('.person-type-picker summary').click()
+        dialog().get_by_role('button',name='Funcionário',exact=True).click()
         save()
         expect(page.get_by_text('Pessoa Unificada — Teste',exact=True)).to_be_visible()
         page.get_by_role('row').filter(has_text='Pessoa Unificada — Teste').get_by_role('button',name='Editar').click()

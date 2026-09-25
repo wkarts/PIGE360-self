@@ -21,7 +21,8 @@ const sandbox={console,document:{createElement(){return {textContent:'',get inne
 execFileSync(compiler,['-p',path.join(root,'tsconfig.portal.json')],{stdio:'inherit'});
 const renders={};
 for(const name of ['app','portal','expansion']){
- const template=fs.readFileSync(path.join(root,'templates',name+'.html'),'utf8');
+ const fragment=key=>fs.readFileSync(path.join(root,'templates',key+'.html'),'utf8');
+ const template=fs.readFileSync(path.join(root,'templates',name+'.html'),'utf8').replaceAll('<!-- MFA-MANAGE -->',fragment('mfa-manage')).replaceAll('<!-- MFA-CHALLENGE -->',fragment('mfa-challenge')).replaceAll('<!-- FAMILY -->',fragment('family')).replaceAll('<!-- FORM-FIELDS -->',fragment('form-fields'));
  const errors=[];
  const render=sandbox.Vue.compile(template,{hoistStatic:false,onError:error=>errors.push(String(error))});
  if(errors.length)throw new Error(name+': '+errors.join('; '));

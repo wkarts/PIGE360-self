@@ -11,7 +11,7 @@ var PigeInstitution;
         }
     })();
     let hydrated = Boolean(initial);
-    PigeInstitution.state = Vue.reactive({ display_name: 'Sua escola', short_name: 'Escola', primary_color: '#006D77', secondary_color: '#0D1B2A', font_family: 'system', logo_url: '', font_configured: false, version: 1, ...(initial || {}) });
+    PigeInstitution.state = Vue.reactive({ display_name: 'Sua escola', short_name: 'Escola', primary_color: '#006D77', secondary_color: '#0D1B2A', font_family: 'system', logo_url: '', font_configured: false, show_preenrollment_button: true, version: 1, ...(initial || {}) });
     function apply(value) {
         Object.assign(PigeInstitution.state, value);
         document.title = value.display_name + ' · ' + (location.pathname === '/online.html' ? 'Portal dos responsáveis' : 'Gestão escolar');
@@ -78,6 +78,91 @@ var PigeOnline;
     } }
     PigeOnline.safeLink = safeLink;
 })(PigeOnline || (PigeOnline = {}));
+/** Segredos transitórios ficam apenas na memória da tela, nunca no armazenamento do navegador. */
+var PigeMFA;
+(function (PigeMFA) {
+    PigeMFA.state = Vue.reactive({ challenge: '', enrolling: false, secret: '', qr: '', code: '', password: '', busy: false, error: '', codes: [], status: { enabled: false, required: false, recovery_remaining: 0 }, managed: false });
+    let requester;
+    let onAuthenticated;
+    let onLogout;
+    let prefix = '/auth';
+    let pending = null;
+    function init(request, authenticated, logout, portal = false) { requester = request; onAuthenticated = authenticated; onLogout = logout; prefix = portal ? '/portal' : '/auth'; }
+    PigeMFA.init = init;
+    function post(path, data) { return requester(path, { method: 'POST', body: JSON.stringify(data) }); }
+    function clear() { PigeMFA.state.challenge = ''; PigeMFA.state.secret = ''; PigeMFA.state.qr = ''; PigeMFA.state.code = ''; PigeMFA.state.password = ''; PigeMFA.state.codes = []; PigeMFA.state.error = ''; pending = null; }
+    PigeMFA.clear = clear;
+    async function run(action) { if (PigeMFA.state.busy)
+        return; PigeMFA.state.busy = true; PigeMFA.state.error = ''; try {
+        await action();
+    }
+    catch (e) {
+        PigeMFA.state.error = e instanceof Error ? e.message : String(e);
+    }
+    finally {
+        PigeMFA.state.busy = false;
+    } }
+    async function accept(result) {
+        if (!result.mfa_required)
+            return false;
+        clear();
+        PigeMFA.state.challenge = String(result.mfa_token);
+        PigeMFA.state.enrolling = Boolean(result.enrollment_required);
+        if (PigeMFA.state.enrolling) {
+            try {
+                const data = await post('/auth/mfa/challenge', { token: PigeMFA.state.challenge });
+                PigeMFA.state.secret = String(data.secret || '');
+                PigeMFA.state.qr = String(data.qr || '');
+            }
+            catch (error) {
+                PigeMFA.state.error = error instanceof Error ? error.message : String(error);
+            }
+        }
+        return true;
+    }
+    PigeMFA.accept = accept;
+    async function finish() {
+        await run(async () => {
+            const result = await post('/auth/mfa/verify', { token: PigeMFA.state.challenge, code: PigeMFA.state.code });
+            PigeMFA.state.code = '';
+            PigeMFA.state.secret = '';
+            PigeMFA.state.qr = '';
+            PigeMFA.state.enrolling = false;
+            if (Array.isArray(result.recovery_codes)) {
+                PigeMFA.state.codes = result.recovery_codes.map(String);
+                pending = result;
+                return;
+            }
+            clear();
+            await onAuthenticated(result);
+        });
+    }
+    PigeMFA.finish = finish;
+    async function acknowledge() { await run(async () => { const result = pending; clear(); if (result)
+        await onAuthenticated(result);
+    else
+        await refresh(); }); }
+    PigeMFA.acknowledge = acknowledge;
+    async function cancel() { if (PigeMFA.state.busy)
+        return; if (PigeMFA.state.codes.length && pending) {
+        await acknowledge();
+        return;
+    } await run(async () => { if (PigeMFA.state.challenge)
+        await post('/auth/mfa/cancel', { token: PigeMFA.state.challenge }); clear(); }); }
+    PigeMFA.cancel = cancel;
+    async function refresh() { PigeMFA.state.status = await requester(prefix + '/mfa'); }
+    PigeMFA.refresh = refresh;
+    async function manage() { clear(); PigeMFA.state.managed = true; await run(refresh); }
+    PigeMFA.manage = manage;
+    async function enroll() { await run(async () => { const result = await post(prefix + '/mfa/enroll', { current_password: PigeMFA.state.password }); await accept(result); }); }
+    PigeMFA.enroll = enroll;
+    async function disable() { await run(async () => { await post(prefix + '/mfa/disable', { current_password: PigeMFA.state.password, code: PigeMFA.state.code }); clear(); await onLogout(); }); }
+    PigeMFA.disable = disable;
+    async function recovery() { await run(async () => { const result = await post(prefix + '/mfa/recovery', { current_password: PigeMFA.state.password, code: PigeMFA.state.code }); PigeMFA.state.codes = result.recovery_codes; PigeMFA.state.password = ''; PigeMFA.state.code = ''; }); }
+    PigeMFA.recovery = recovery;
+    function downloadCodes() { const content = 'Códigos de recuperação — ' + PigeInstitution.state.display_name + '\nCada código pode ser utilizado uma única vez. Guarde em local seguro.\n\n' + PigeMFA.state.codes.join('\n'); const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' })); const a = document.createElement('a'); a.href = url; a.download = 'codigos-de-recuperacao.txt'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
+    PigeMFA.downloadCodes = downloadCodes;
+})(PigeMFA || (PigeMFA = {}));
 var PigePortal;
 (function (PigePortal) {
     const state = Vue.reactive({ ready: false, busy: false, error: '', notice: '', online: navigator.onLine, account: null, campaign: null, campaigns: [], slug: new URLSearchParams(location.search).get('campaign') || '', mode: 'login', rows: [], total: 0, page: 1, selected: null, editing: false, charges: [], code: '', verifyChannel: 'email', message: '', documentType: '', acceptTerms: false, legal: false, register: { name: '', email: '', password: '', cpf: '', phone: '', address: '', accept_privacy: false, whatsapp_opt_in: false }, login: { email: '', password: '' }, reset: { email: '', code: '', password: '' }, form: { student: PigeOnline.person(), class_group_id: '', previous_school: '', relationship: 'Responsável legal', notes: '', client_key: PigeOnline.newId() } });
@@ -125,10 +210,16 @@ var PigePortal;
         state.account = null;
     } }); state.ready = true; }
     async function selectCampaign() { await run(async () => { state.selected = null; state.editing = false; await loadCampaign(); }); }
+    async function afterMFA(result) { state.account = result; await loadList(); }
+    async function mfaRequest(path, options = {}) { const headers = new Headers(options.headers); headers.set('X-CSRF-Protection', '1'); if (options.body)
+        headers.set('Content-Type', 'application/json'); const r = await fetch('/api/v1' + path, { ...options, headers, credentials: 'same-origin', cache: 'no-store' }); const data = await r.json(); if (!r.ok)
+        throw new Error(data.detail || 'Não foi possível confirmar a autenticação.'); return data; }
     async function login() { await run(async () => { if (!state.slug)
-        throw new Error('Selecione o processo de matrícula.'); state.account = await post('/login', { ...state.login, campaign_slug: state.slug }); state.login.password = ''; await loadList(); }); }
+        throw new Error('Selecione o processo de matrícula.'); const result = await post('/login', { ...state.login, campaign_slug: state.slug }); state.login.password = ''; if (await PigeMFA.accept(result))
+        return; await afterMFA(result); }); }
     async function register() { await run(async () => { if (!state.campaign)
-        throw new Error('Selecione um processo de matrícula.'); state.account = await post('/register', { ...state.register, cpf: state.register.cpf || null, campaign_slug: state.slug, terms_version: state.campaign.terms_version }); state.register.password = ''; await loadList(); state.notice = 'Conta criada. Confirme um contato e preencha os dados do aluno.'; }); }
+        throw new Error('Selecione um processo de matrícula.'); const result = await post('/register', { ...state.register, cpf: state.register.cpf || null, campaign_slug: state.slug, terms_version: state.campaign.terms_version }); state.register.password = ''; if (await PigeMFA.accept(result))
+        return; await afterMFA(result); state.notice = 'Conta criada. Confirme um contato e preencha os dados do aluno.'; }); }
     async function logout() { await run(async () => { await post('/logout', {}); state.account = null; state.rows = []; state.selected = null; state.charges = []; state.editing = false; state.register = { name: '', email: '', password: '', cpf: '', phone: '', address: '', accept_privacy: false, whatsapp_opt_in: false }; state.login.password = ''; state.form.student = PigeOnline.person(); }); }
     async function verifyRequest() { await run(async () => { await post('/verification/request', { channel: state.verifyChannel }); state.notice = 'Código solicitado. Consulte o canal escolhido; a entrega depende da integração da escola.'; }); }
     async function verifyConfirm() { await run(async () => { state.account = await post('/verification/confirm', { code: state.code }); state.code = ''; state.notice = 'Contato confirmado.'; }); }
@@ -168,6 +259,6 @@ var PigePortal;
     async function saveProfile() { await run(async () => { if (!state.account)
         return; const a = state.account; state.account = await request('/me', { method: 'PATCH', body: JSON.stringify({ version: a.version, name: a.name, cpf: a.cpf || null, phone: a.phone, address: a.address, whatsapp_opt_in: a.whatsapp_opt_in }) }); state.notice = 'Conta atualizada. Inscrições já enviadas e cadastros oficiais não foram alterados; solicite correção à Secretaria.'; }); }
     const editable = () => !state.selected || ['draft', 'changes_requested'].includes(state.selected.status);
-    Vue.createApp({ render: PigeRenders.portal, setup() { Vue.onMounted(() => { window.addEventListener('online', () => { state.online = true; }); window.addEventListener('offline', () => { state.online = false; }); if ('serviceWorker' in navigator && window.isSecureContext)
-            void navigator.serviceWorker.register('/sw.js').catch(() => { }); void PigeInstitution.load(); void start(); }); return { state, identity: PigeInstitution.state, run, selectCampaign, login, register, logout, verifyRequest, verifyConfirm, resetRequest, resetConfirm, newAdmission, edit, view, save, fileChange, upload, submit, sendMessage, withdraw, download, paginate, refresh, copy, saveProfile, editable, label: PigeOnline.label, date: PigeOnline.date, money: PigeOnline.money, safeLink: PigeOnline.safeLink }; } }).mount('#portal');
+    Vue.createApp({ render: PigeRenders.portal, setup() { Vue.onMounted(() => { PigeMFA.init(mfaRequest, afterMFA, logout, true); window.addEventListener('online', () => { state.online = true; }); window.addEventListener('offline', () => { state.online = false; }); if ('serviceWorker' in navigator && window.isSecureContext)
+            void navigator.serviceWorker.register('/sw.js').catch(() => { }); void PigeInstitution.load(); void start(); }); return { state, mfa: PigeMFA, identity: PigeInstitution.state, run, selectCampaign, login, register, logout, verifyRequest, verifyConfirm, resetRequest, resetConfirm, newAdmission, edit, view, save, fileChange, upload, submit, sendMessage, withdraw, download, paginate, refresh, copy, saveProfile, editable, label: PigeOnline.label, date: PigeOnline.date, money: PigeOnline.money, safeLink: PigeOnline.safeLink }; } }).mount('#portal');
 })(PigePortal || (PigePortal = {}));

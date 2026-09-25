@@ -101,7 +101,8 @@ def save_profile(db: DB, user: Actor, request: Request, payload: str = Form(...)
         profile.photo = content; profile.photo_hash = hashlib.sha256(content).hexdigest()
     user.name = data.name; user.email = email; user.version += 1
     if changed_email:
-        db.execute(update(m.AuthSession).where(m.AuthSession.user_id == user.id).values(revoked=True))
+        from .mfa import revoke
+        revoke(db, 'user', user)
     audit(db, request, user, 'account.profile.updated', user, details={'email_changed': changed_email, 'photo_changed': bool(photo or data.remove_photo)})
     db.flush()
     return {**profile_data(db, user), 'requires_login': changed_email}

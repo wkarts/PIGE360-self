@@ -78,6 +78,7 @@ def save_settings(payload: EmbeddingInput, db: DB, user: Actor, request: Request
         # Uma origem removida não deve conservar uma sessão já aberta em um iframe.
         db.execute(update(m.AuthSession).values(revoked=True))
         db.execute(update(m.PortalSession).values(revoked=True))
+        db.execute(update(m.MFAChallenge).values(consumed=True, encrypted_secret=''))
     audit(db, request, user, 'institution.embedding.updated', row, details={
         'enabled': row.enabled, 'allowed_origins': row.allowed_origins,
         'previous_origins': before['allowed_origins'], 'sessions_revoked': changed})

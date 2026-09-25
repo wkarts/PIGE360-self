@@ -88,6 +88,7 @@ class AuthSession(Record, Base):
     previous_hash: Mapped[str | None] = mapped_column(String(64))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+    mfa_verified: Mapped[bool] = mapped_column(Boolean, default=False)
 
 class LoginAttempt(Base):
     __tablename__ = 'login_attempts'
@@ -388,3 +389,37 @@ class ProtocolEvent(Record, Scoped, Base):
 from .online_models import (AdmissionCampaign, PortalAccount, PortalSession, PortalChallenge,
     Admission, AdmissionMessage, AdmissionAttachment, ConnectInstance, ConnectMessageJob, IntegrationConnection,
     IntegrationJob, BankCharge, BankEvent, IntegrationWebhook)
+
+
+class MFAPolicy(Base):
+    __tablename__ = 'installation_mfa'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    required: Mapped[bool] = mapped_column(Boolean, default=False)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class MFACredential(Base):
+    __tablename__ = 'mfa_credentials'
+    subject: Mapped[str] = mapped_column(String(80), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    encrypted_secret: Mapped[str] = mapped_column(Text, default='')
+    last_counter: Mapped[int] = mapped_column(Integer, default=-1)
+
+
+class MFAChallenge(Record, Base):
+    __tablename__ = 'mfa_challenges'
+    subject: Mapped[str] = mapped_column(String(80), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    password_revision: Mapped[str] = mapped_column(String(64))
+    policy_version: Mapped[int] = mapped_column(Integer)
+    purpose: Mapped[str] = mapped_column(String(16))
+    encrypted_secret: Mapped[str] = mapped_column(Text, default='')
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    failures: Mapped[int] = mapped_column(Integer, default=0)
+    consumed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class MFARecovery(Record, Base):
+    __tablename__ = 'mfa_recovery_codes'
+    subject: Mapped[str] = mapped_column(ForeignKey('mfa_credentials.subject'), index=True)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True)

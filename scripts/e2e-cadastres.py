@@ -60,6 +60,7 @@ try:
         def field(label):
             element=dialog().get_by_label(label,exact=False)
             element.wait_for(state='attached')
+            element.evaluate("e=>{const d=e.closest('details');if(d)d.open=true;}")
             section=element.evaluate("el=>el.closest('[data-form-section]')?.dataset.formSection||''")
             if section and not element.is_visible():dialog().locator(f'[data-section-target="{section}"]').click()
             return element
@@ -83,7 +84,7 @@ try:
         field('Pessoa de contato').fill('Contato de Teste')
         field('Telefone / WhatsApp').fill('5575999990000')
         field('Logradouro').fill('Rua Sintética, Centro')
-        dialog().locator('[data-section-target="identification"]').click()
+        dialog().locator('[data-section-target="general"]').click()
         expect(field('Razão social')).to_have_value('Papelaria Exemplo Ltda')
         expect(dialog().get_by_role('button',name='Salvar',exact=True)).to_be_in_viewport()
         page.screenshot(path=str(OUT/'01-fornecedor-desktop.png'),full_page=True)
@@ -125,7 +126,10 @@ try:
         expect(dialog().get_by_text('Existem alterações não salvas. Deseja descartá-las?',exact=True)).to_be_visible()
         dialog().get_by_role('button',name='Continuar editando',exact=True).click()
         expect(field('Nome completo')).to_have_value('Pessoa com alterações pendentes')
-        field('Tipos de pessoa').select_option(['guardian','supplier'])
+        dialog().locator('.person-type-picker summary').click()
+        dialog().get_by_role('button',name='Responsável',exact=True).click()
+        dialog().locator('.person-type-picker summary').click()
+        dialog().get_by_role('button',name='Fornecedor',exact=True).click()
         record('Escape pede confirmação interna e mantém o formulário preenchido')
         # Focus never leaves the dialog; background is inert while it is open.
         dialog().get_by_role('button',name='Salvar',exact=True).focus()

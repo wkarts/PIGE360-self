@@ -10,6 +10,8 @@ Tags Git e versões do produto usam `MAJOR.MINOR.PATCH`, sem prefixo v/w. `devel
 
 A inicialização deste fluxo foi autorizada diretamente em main/develop. As próximas mudanças seguem o fluxo acima. Não efetuar merge de release nem deploy em VPS sem pedido explícito. GitHub Actions produz imagens GHCR e artefatos de instalação; não executa deploy externo.
 
+Após implementar um pedido, publique a PR correspondente para `develop` no mesmo atendimento, sem aguardar uma solicitação adicional para criar a PR. A abertura automática da PR não autoriza merge em `main`, release ou deploy.
+
 ## Limpeza e segurança
 
 Escopo exclusivo: `wkarts/PIGE360-self` e pacotes PIGE360 explicitamente cadastrados. Preservar imagens estáveis, aliases e descendentes OCI. Preferir simulação antes de ajuste de política. Nunca excluir imagens pela simples ausência de tag Git, nem tratar todo manifesto sem tag como lixo.

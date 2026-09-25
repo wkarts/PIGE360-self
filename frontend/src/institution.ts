@@ -2,13 +2,13 @@
 namespace PigeInstitution {
   export interface Identity {
     display_name:string; short_name:string; primary_color:string; secondary_color:string;
-    font_family:string; logo_url:string; font_configured:boolean; version:number; app_version?:string; configured?:boolean;
+    font_family:string; logo_url:string; font_configured:boolean; show_preenrollment_button:boolean; version:number; app_version?:string; configured?:boolean;
   }
   const initial = (()=>{
     try{return JSON.parse(document.querySelector('#institution-bootstrap')?.textContent||'null') as Identity|null;}catch{return null;}
   })();
   let hydrated=Boolean(initial);
-  export const state = Vue.reactive<Identity>({display_name:'Sua escola',short_name:'Escola',primary_color:'#006D77',secondary_color:'#0D1B2A',font_family:'system',logo_url:'',font_configured:false,version:1,...(initial||{})});
+  export const state = Vue.reactive<Identity>({display_name:'Sua escola',short_name:'Escola',primary_color:'#006D77',secondary_color:'#0D1B2A',font_family:'system',logo_url:'',font_configured:false,show_preenrollment_button:true,version:1,...(initial||{})});
   export function apply(value:Identity):void {
     Object.assign(state,value);
     document.title=value.display_name+' · '+(location.pathname==='/online.html'?'Portal dos responsáveis':'Gestão escolar');

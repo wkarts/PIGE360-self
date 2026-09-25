@@ -30,7 +30,7 @@ namespace PigeDialogs {
       if(!current)return;
       if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();current.querySelector<HTMLButtonElement>('[data-dialog-close]')?.click();return;}
       if(event.key!=='Tab')return;
-      const controls=Array.from(current.querySelectorAll<HTMLElement>('button,a[href],input,select,textarea,[tabindex="0"]'))
+      const controls=Array.from(current.querySelectorAll<HTMLElement>('button,a[href],input,select,textarea,summary,[tabindex="0"]'))
         .filter(el=>!el.matches(':disabled')&&el.getClientRects().length>0&&!el.closest('[inert]'));
       const first=controls[0],last=controls.at(-1);
       if(!first){event.preventDefault();return;}

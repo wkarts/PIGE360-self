@@ -13,7 +13,7 @@ from .config import settings
 from .db import engine
 from .storage import ensure_storage
 from starlette.concurrency import run_in_threadpool
-from . import embedding, embedding_settings
+from . import embedding, embedding_settings, mfa, dossiers
 from . import auth, people, registry, enrollments, documents, reports, portal, admissions, integrations, connect, banking, profiles, support, institution, business_people, account
 
 cfg = settings()
@@ -26,7 +26,7 @@ async def lifespan(app):
     engine.dispose()
 
 app = FastAPI(title='PIGE360 Self — Gestão Educacional', version=cfg.app_version, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url='/api/v1/openapi.json')
-for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router]:
+for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router, mfa.router, dossiers.router]:
     app.include_router(router)
 
 @app.exception_handler(HTTPException)
@@ -56,6 +56,7 @@ async def security_headers(request: Request, call_next):
         return JSONResponse({'detail':'Origem não autorizada.'}, status_code=403)
     response = await call_next(request)
     response.headers['X-Request-ID'] = request.state.request_id
+    response.headers['X-App-Version'] = cfg.app_version
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'same-origin'
     parents = await run_in_threadpool(embedding.frame_sources)
@@ -147,8 +148,8 @@ def ready():
     except Exception:
         return JSONResponse({'status':'not_ready'}, status_code=503)
 
-@app.get('/{path:path}', include_in_schema=False)
-def frontend(path: str, db: auth.DB):
+@app.api_route('/{path:path}', methods=['GET', 'HEAD'], include_in_schema=False)
+def frontend(path: str, request: Request, db: auth.DB):
     if path.startswith(('api/', 'health/')):
         raise HTTPException(404, 'Rota não encontrada.')
     root = cfg.frontend_path.resolve()
@@ -163,5 +164,7 @@ def frontend(path: str, db: auth.DB):
         raise HTTPException(503, 'Frontend ainda não compilado. Execute node frontend/build.mjs.')
     if requested.name in ('index.html', 'online.html'):
         from .branding import branded_html
-        return HTMLResponse(branded_html(requested, db), headers={'Cache-Control':'no-store'})
+        content = branded_html(requested, db)
+        headers = {'Cache-Control':'no-store', 'Content-Length':str(len(content.encode('utf-8')))}
+        return HTMLResponse('' if request.method == 'HEAD' else content, headers=headers)
     return FileResponse(requested)

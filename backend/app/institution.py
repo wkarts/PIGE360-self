@@ -59,6 +59,7 @@ class IdentityInput(BaseModel):
     remove_logo: bool = False
     remove_font: bool = False
     font_license_confirmed: bool = False
+    show_preenrollment_button: bool = Field(default=True, strict=True)
 
 
 def identity_data(db):
@@ -72,6 +73,7 @@ def identity_data(db):
         'primary_color': saved.get('primary_color', '#006D77'),
         'secondary_color': saved.get('secondary_color', '#0D1B2A'),
         'font_family': saved.get('font_family', 'system'),
+        'show_preenrollment_button': saved.get('show_preenrollment_button', True),
         'logo_asset_id': saved.get('logo_asset_id', ''),
         'font_asset_id': saved.get('font_asset_id', ''),
         'version': install.identity_version if install else 1,
@@ -144,6 +146,9 @@ def save_identity(
     saved = identity_data(db)
     for key in ('display_name', 'short_name', 'primary_color', 'secondary_color', 'font_family'):
         saved[key] = getattr(data, key)
+    # Clientes antigos não enviam este campo; preservar o valor já salvo.
+    if 'show_preenrollment_button' in data.model_fields_set:
+        saved['show_preenrollment_button'] = data.show_preenrollment_button
     for kind, upload, remove in (('logo', logo, data.remove_logo), ('font', font, data.remove_font)):
         if remove and upload:
             fail(422, 'Não remova e envie o mesmo ativo na mesma operação.')
@@ -165,6 +170,7 @@ def save_identity(
     audit(db, request, user, 'institution.identity.updated', install, details={
         'display_name': saved['display_name'], 'version': install.identity_version,
         'logo_configured': bool(saved.get('logo_asset_id')), 'font_family': data.font_family,
+        'show_preenrollment_button': saved['show_preenrollment_button'],
     })
     # Ativos não referenciados são públicos de marca, mas não precisam crescer indefinidamente.
     keep = {saved.get('logo_asset_id'), saved.get('font_asset_id')} - {'', None}
