@@ -31,6 +31,16 @@ def install(page, root, url, output, entry="app", campaign=""):
     page.set_content('<!doctype html><html lang="pt-BR"><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="' + entry + '"></div></body></html>')
     page.add_style_tag(content=(root/'frontend/dist/branding/pige360/tokens.css').read_text())
     page.add_style_tag(content=(root/'frontend/dist/app.css').read_text())
+    # Mesmos estilos locais da entrada administrativa, sem requisição externa.
+    for name in ['institution-layout.css', 'workspace.css']:
+        asset=root/'frontend/dist'/name
+        if asset.exists():page.add_style_tag(content=asset.read_text())
+    icons=root/'frontend/dist/ui-icons.svg'
+    if icons.exists():
+        page.evaluate("svg => { const el=document.createElement('div');el.hidden=true;el.innerHTML=svg;document.body.appendChild(el); }",icons.read_text())
+        page.add_script_tag(content="""new MutationObserver(()=>{for(const icon of document.querySelectorAll('use')) {
+          const href=icon.getAttribute('href');if(href?.startsWith('/ui-icons.svg#'))icon.setAttribute('href',href.slice('/ui-icons.svg'.length));
+        }}).observe(document.body,{childList:true,subtree:true});""")
     # Usa os mesmos bytes oficiais, incorporados apenas no harness de inspeção.
     # Não navega para URLs bloqueadas nem altera qualquer política do navegador.
     images={}
