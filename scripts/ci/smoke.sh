@@ -43,6 +43,38 @@ if [[ "$MODE" == remote ]]; then docker pull "$IMAGE"; fi
 docker pull "$POSTGRES_IMAGE"
 compose config --quiet
 compose up -d --wait --wait-timeout 240
+# Nenhum serviço de longa duração pode permanecer Exited (inclui storage-init).
+assert_healthy_services() {
+  local service container
+  for service in db storage-init app worker; do
+    container="$(compose ps -q "$service")"
+    [[ -n "$container" ]] || { echo "Serviço ausente: $service"; return 1; }
+    [[ "$(docker inspect --format '{{.State.Status}}/{{.State.Health.Status}}' "$container")" == running/healthy ]] \
+      || { echo "Serviço não saudável: $service"; return 1; }
+  done
+}
+assert_healthy_services
+# O processo do monitor deve ter abandonado root e suas capabilities.
+compose exec -T storage-init python - <<'PYSTORAGE'
+import json
+from pathlib import Path
+from app.storage_guard import drop_privileges, healthy, probe, STATE
+payload = json.loads(STATE.read_text())
+status = dict(line.split(':', 1) for line in Path(f"/proc/{payload['pid']}/status").read_text().splitlines() if ':' in line)
+assert all(int(uid) == 10001 for uid in status['Uid'].split()), status['Uid']
+assert all(int(gid) == 10001 for gid in status['Gid'].split()), status['Gid']
+assert int(status['CapEff'].strip(), 16) == 0, status['CapEff']
+assert status['NoNewPrivs'].strip() == '1', status['NoNewPrivs']
+drop_privileges()
+assert healthy(), 'Heartbeat do monitor deve estar saudável'
+probe()
+print('storage-init: running/healthy, UID/GID 10001, sem capabilities; escrita/leitura OK')
+PYSTORAGE
+# Restart precisa executar novamente o preparo e recuperar um heartbeat novo.
+compose restart storage-init
+compose up -d --wait --wait-timeout 240
+assert_healthy_services
+printf '{"services":["db","storage-init","app","worker"],"all_running_healthy":true,"storage_restart":true,"monitor_uid":10001,"monitor_capabilities":0}\n' > ci-evidence/docker-storage-health.json
 ADDRESS="$(compose port app 8000)"
 python - "$ADDRESS" "$IMAGE" <<'PYHTTP'
 import json,sys,urllib.request
