@@ -466,7 +466,7 @@ namespace PigeUI {
   async function editMyProfile():Promise<void>{await safe(async()=>{
     const row=await PigeAPI.request<Row>('/auth/profile');
     const fields=[field('name','Nome de exibição','text',true),field('email','E-mail de acesso','email',true),field('phone','Telefone / WhatsApp','tel'),field('job_title','Cargo / função'),field('department','Setor / departamento'),field('photo','Foto do usuário (PNG, JPEG ou WebP, até 2 MB)','user-photo',false,undefined,true),field('remove_photo','Remover minha foto','checkbox'),field('bio','Sobre mim','textarea',false,undefined,true),field('current_password','Senha atual (somente para trocar o e-mail)','password')];
-    clearProfilePreview();openModal('my-profile','Meu perfil',fields,valuesFrom(row,fields),row);
+    clearProfilePreview();openModal('my-profile','Meu perfil',fields,{...valuesFrom(row,fields),remove_photo:false},row);
   });}
   function profilePassword():void{if(modalDirty()){state.modal.error='Salve ou cancele as alterações antes de trocar a senha.';return;}password();}
   function password():void{openModal('password','Alterar minha senha',[field('current_password','Senha atual','password',true),field('new_password','Nova senha (mínimo 12 caracteres)','password',true)]);}

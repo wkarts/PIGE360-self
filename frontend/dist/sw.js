@@ -1,4 +1,4 @@
-const CACHE='pige360-shell-7e389260fce50412'; const ASSETS=["/","/index.html","/app.js","/portal.js","/renders.js","/app.css","/vendor/vue-3.5.13.global.prod.js","/apple-touch-icon.png","/favicon.ico","/favicon.svg","/icons/icon-192.png","/icons/icon-512.png","/institution-layout.css","/manifest.webmanifest","/online.html","/ui-icons.svg","/workspace.css"];
+const CACHE='pige360-shell-42ca0edec5a14d71'; const ASSETS=["/","/index.html","/app.js","/portal.js","/renders.js","/app.css","/vendor/vue-3.5.13.global.prod.js","/apple-touch-icon.png","/favicon.ico","/favicon.svg","/icons/icon-192.png","/icons/icon-512.png","/institution-layout.css","/manifest.webmanifest","/online.html","/ui-icons.svg","/workspace.css"];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS))));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('pige360-shell-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
 self.addEventListener('message',event=>{if(event.data?.type==='SKIP_WAITING')self.skipWaiting();});
@@ -10,5 +10,5 @@ self.addEventListener('fetch',event=>{
  if(url.pathname.startsWith('/api/')||url.pathname.startsWith('/health/'))return;
  if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).catch(()=>caches.match(url.pathname==='/online.html'?'/online.html':'/index.html')));return;}
  // Nunca atender uma URL de outro build com bytes deste cache.
- if(ASSETS.includes(url.pathname))event.respondWith((url.searchParams.has('v')&&url.searchParams.get('v')!=='7e389260fce50412')?fetch(event.request):caches.open(CACHE).then(cache=>cache.match(event.request,{ignoreSearch:true})).then(cached=>cached||fetch(event.request)));
+ if(ASSETS.includes(url.pathname))event.respondWith((url.searchParams.has('v')&&url.searchParams.get('v')!=='42ca0edec5a14d71')?fetch(event.request):caches.open(CACHE).then(cache=>cache.match(event.request,{ignoreSearch:true})).then(cached=>cached||fetch(event.request)));
 });
