@@ -2,6 +2,7 @@
 """Layout fixo, scroll independente e navegação. Somente dados sintéticos locais."""
 import io, json, os, shutil, socket, subprocess, sys, tempfile, time
 from pathlib import Path
+from collections.abc import Callable
 import httpx
 from PIL import Image, ImageDraw
 from playwright.sync_api import sync_playwright, expect
@@ -23,6 +24,15 @@ log=(OUT/'server.log').open('w')
 proc=subprocess.Popen([sys.executable,'-m','uvicorn','app.main:app','--host','127.0.0.1','--port',str(port)],cwd=ROOT/'backend',env=env,stdout=log,stderr=log)
 checks=[];errors=[]
 def record(message):checks.append(message);print('PASS:',message,flush=True)
+def wait_until(predicate: Callable[[], bool], message: str, timeout: float = 10) -> None:
+    # Polling pelo cliente: não utiliza o eval do wait_for_function na página.
+    # A CSP da aplicação permanece ativa, sem unsafe-eval ou bypass_csp.
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        page.wait_for_timeout(50)
+    raise AssertionError(message)
 try:
     client=httpx.Client(base_url=URL,timeout=30)
     for _ in range(70):
@@ -68,7 +78,7 @@ try:
         page.get_by_role('button',name='Entrar na aplicação').click()
         expect(page.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible()
         expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
-        page.wait_for_function("document.querySelector('.sidebar-logo')?.complete && document.querySelector('.sidebar-logo').naturalWidth>0")
+        wait_until(lambda: page.locator('.sidebar-logo').evaluate('el=>el.complete && el.naturalWidth>0'), 'Logotipo institucional não carregou')
         nav=page.locator('.sidebar-scroll');main=page.locator('#main-content')
         def top(el):return el.evaluate('el=>el.scrollTop')
         def fixed():return page.evaluate("JSON.stringify(['.sidebar-brand','.topbar'].map(s=>{const r=document.querySelector(s).getBoundingClientRect();return [r.x,r.y,r.width,r.height]}))")
@@ -79,19 +89,19 @@ try:
         button.click();expect(page.locator('#cadastres-menu a')).to_have_count(9)
         before=fixed();main_before=top(main)
         nav.hover();page.mouse.wheel(0,900)
-        page.wait_for_function("document.querySelector('.sidebar-scroll').scrollTop>0")
+        wait_until(lambda: top(nav)>0, 'O menu deve rolar independentemente')
         assert fixed()==before and top(main)==main_before
         record('Logo fixa: rolar menu não desloca marca, cabeçalho ou conteúdo')
         nav_before=top(nav)
         main.hover();page.mouse.wheel(0,1200)
-        page.wait_for_function("document.querySelector('#main-content').scrollTop>0")
+        wait_until(lambda: top(main)>0, 'O conteúdo principal deve rolar independentemente')
         assert fixed()==before and top(nav)==nav_before
         width_ok();page.screenshot(path=str(OUT/'02-rolagem-independente.png'),full_page=True)
         record('Cabeçalho fixo: conteúdo tem scroll próprio sem rolagem global ou dupla')
         nav.focus();page.keyboard.press('Home')
-        page.wait_for_function("document.querySelector('.sidebar-scroll').scrollTop===0")
+        wait_until(lambda: top(nav)==0, 'Home deve levar o menu ao início')
         page.keyboard.press('End')
-        page.wait_for_function("document.querySelector('.sidebar-scroll').scrollTop>0")
+        wait_until(lambda: top(nav)>0, 'O menu deve rolar independentemente')
         record('Menu pode ser percorrido e rolado pelo teclado até o último item')
         page.locator('aside').get_by_role('link',name='Cadastro único',exact=True).click()
         expect(page.get_by_role('heading',name='Cadastro único',exact=True)).to_be_visible()
@@ -124,7 +134,7 @@ try:
         page.locator('aside').get_by_role('link',name='Auditoria',exact=True).focus()
         page.keyboard.press('Tab');expect(page.get_by_role('button',name='Fechar menu',exact=True)).to_be_focused()
         nav.evaluate('el=>el.scrollTop=0')
-        page.wait_for_function("Math.abs(document.querySelector('#school-navigation').getBoundingClientRect().x)<.5")
+        wait_until(lambda: page.locator('#school-navigation').evaluate('el=>Math.abs(el.getBoundingClientRect().x)<.5'), 'O menu móvel deve concluir sua abertura')
         page.screenshot(path=str(OUT/'04-menu-mobile.png'),full_page=True)
         page.keyboard.press('Escape')
         expect(opener).to_have_attribute('aria-expanded','false');expect(opener).to_be_focused()
