@@ -19,6 +19,7 @@
     "src/online-types.ts",
     "src/expansion.ts",
     "src/dialogs.ts",
+    "src/workspace.ts",
     "src/app.ts"
   ]
 }
