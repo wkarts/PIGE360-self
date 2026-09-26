@@ -32,7 +32,7 @@ def install(page, root, url, output, entry="app", campaign=""):
     page.add_style_tag(content=(root/'frontend/dist/branding/pige360/tokens.css').read_text())
     page.add_style_tag(content=(root/'frontend/dist/app.css').read_text())
     # Mesmos estilos locais da entrada administrativa, sem requisição externa.
-    for name in ['institution-layout.css', 'workspace.css', 'mfa.css', 'dossier.css']:
+    for name in ['institution-layout.css', 'workspace.css', 'mfa.css', 'dossier.css', 'assist.css']:
         asset=root/'frontend/dist'/name
         if asset.exists():page.add_style_tag(content=asset.read_text())
     icons=root/'frontend/dist/ui-icons.svg'

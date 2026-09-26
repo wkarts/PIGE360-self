@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eu
 cd /app/backend
+if [ "${1:-}" = "worker-ocr" ]; then
+  exec python -m app.ocr_worker
+fi
 if [ "${1:-}" = "worker" ]; then
   exec python -m app.integration_worker
 fi

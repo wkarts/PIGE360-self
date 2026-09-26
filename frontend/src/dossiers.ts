@@ -2,7 +2,7 @@ namespace PigeDossier {
   type Row=PigeAPI.Row;
   export interface FamilyRow { id:string;version?:number;direction:'guardian'|'student';peer:{id:string;name:string;phone?:string;cpf?:string};relationship:string;legal:boolean;financial:boolean;pickup:boolean;primary_contact:boolean;active:boolean;new_person?:Record<string,unknown>;local?:boolean }
   interface Reply {person:Row;profiles:Record<string,Row>;family:{items:FamilyRow[];page:number;total:number}}
-  const emptyDraft=()=>({direction:'guardian' as 'guardian'|'student',person_id:'',relationship:'Responsável',legal:false,financial:false,pickup:false,primary_contact:false,active:true,newMode:false,name:'',cpf:'',birth_date:'',phone:'',email:''});
+  const emptyDraft=()=>({direction:'guardian' as 'guardian'|'student',person_id:'',relationship:'Responsável',legal:false,financial:false,pickup:false,primary_contact:false,active:true,newMode:false,name:'',cpf:'',birth_date:'',phone:'',email:'',rg:'',rg_issuer:'',birth_certificate:'',mother_name:'',father_name:'',postal_code:'',street:'',address_number:'',address_complement:'',district:'',city:'',state:'',country:'',address:''});
   export const state=Vue.reactive({active:false,loading:false,error:'',personId:'',personVersion:0,profiles:{} as Record<string,Row>,rows:[] as FamilyRow[],operations:{} as Record<string,FamilyRow>,editor:false,editId:'',query:'',matches:[] as Row[],searching:false,draft:emptyDraft(),page:1,total:0});
   let root='',sequence=0,searchSequence=0,draftId=0;
   let pending:Promise<void>=Promise.resolve();
@@ -28,7 +28,7 @@ namespace PigeDossier {
   }
   export function dirty():boolean{return state.active&&(Object.keys(state.operations).length>0||(state.editor&&Boolean(state.draft.person_id||state.draft.name||state.draft.phone)));}
   export function begin(student:boolean):void{state.editor=true;state.editId='';state.error='';state.query='';state.matches=[];state.draft={...emptyDraft(),direction:student?'guardian':'student'};}
-  export function edit(row:FamilyRow):void{state.editId=row.id;state.editor=true;state.error='';state.draft={...emptyDraft(),...row,person_id:row.peer.id,newMode:Boolean(row.new_person),name:row.peer.name,cpf:String(row.new_person?.cpf||''),birth_date:String(row.new_person?.birth_date||''),phone:String(row.new_person?.phone||''),email:String(row.new_person?.email||'')};}
+  export function edit(row:FamilyRow):void{state.editId=row.id;state.editor=true;state.error='';state.draft={...emptyDraft(),...(row.new_person||{}),...row,person_id:row.peer.id,newMode:Boolean(row.new_person),name:row.peer.name,cpf:String(row.new_person?.cpf||''),birth_date:String(row.new_person?.birth_date||''),phone:String(row.new_person?.phone||''),email:String(row.new_person?.email||'')};}
   export function toggle(row:FamilyRow):void{if(row.local){state.rows=state.rows.filter(x=>x.id!==row.id);delete state.operations[row.id];return;}row.active=!row.active;state.operations[row.id]={...row};}
   export function search():void{if(timer)clearTimeout(timer);const current=++searchSequence;state.matches=[];state.draft.person_id='';timer=setTimeout(async()=>{const q=state.query.trim();if(q.length<2)return;state.searching=true;try{const result=await PigeAPI.request<PigeAPI.Page<Row>>(root+'/persons?entity_kind=individual&active=true&page_size=20&q='+encodeURIComponent(q)+(state.draft.direction==='student'?'&type_code=student':''));if(current===searchSequence)state.matches=result.items.filter(p=>p.id!==state.personId&&(state.draft.direction!=='student'||Boolean(p.student_id)));}catch(e){if(current===searchSequence)state.error=e instanceof Error?e.message:String(e);}finally{if(current===searchSequence)state.searching=false;}},250);}
   export function choose(person:Row):void{state.draft.person_id=person.id;state.draft.name=String(person.name);state.query=String(person.name);state.matches=[];}
@@ -40,7 +40,7 @@ namespace PigeDossier {
     const old=state.rows.find(r=>r.id===state.editId),id=old?.id||('new-'+(++draftId));
     if(!old&&!d.newMode&&state.rows.some(r=>r.peer.id===d.person_id&&r.direction===d.direction)){state.error='Este vínculo já está na ficha. Use Editar ou Reativar.';return;}
     const row:FamilyRow={id,version:old?.version,local:old?.local??!old,direction:d.direction,peer:{id:d.person_id,name:d.name},relationship:d.relationship.trim(),legal:d.legal,financial:d.financial,pickup:d.pickup,primary_contact:d.primary_contact,active:d.active};
-    if(d.newMode)row.new_person={name:d.name.trim(),cpf:d.cpf||null,birth_date:d.birth_date||null,phone:d.phone,email:d.email,entity_kind:'individual',person_types:d.direction==='student'?['student']:['guardian']};
+    if(d.newMode)row.new_person={name:d.name.trim(),cpf:d.cpf||null,birth_date:d.birth_date||null,phone:d.phone,email:d.email,rg:d.rg,rg_issuer:d.rg_issuer,birth_certificate:d.birth_certificate,mother_name:d.mother_name,father_name:d.father_name,postal_code:d.postal_code,street:d.street,address_number:d.address_number,address_complement:d.address_complement,district:d.district,city:d.city,state:d.state,country:d.country,address:d.address,entity_kind:'individual',person_types:d.direction==='student'?['student']:['guardian']};
     if(old)state.rows.splice(state.rows.indexOf(old),1,row);else state.rows.push(row);
     state.operations[id]=row;state.editor=false;state.editId='';state.draft=emptyDraft();
   }

@@ -43,7 +43,9 @@ def get_campaign(db,slug=None,id=None,open_required=False):
     return row
 
 def account_output(account):
-    return output(account,('password_hash','registration_consent'))
+    result=output(account,('password_hash','registration_consent','personal_details'))
+    result.update({k:v for k,v in (account.personal_details or {}).items() if k in s.GuardianDetails.model_fields})
+    return result
 
 def new_session(db,account,response,mfa_verified=False):
     secret=secrets.token_urlsafe(48)
@@ -294,7 +296,7 @@ def submit(id:str,data:s.SubmitAdmission,request:Request,db:DB,account:Parent):
         delivered=set(db.scalars(select(m.AdmissionAttachment.document_type_id).where(m.AdmissionAttachment.admission_id==obj.id,m.AdmissionAttachment.active.is_(True),m.AdmissionAttachment.review_status!='rejected')))
         if any(d.required and d.id not in delivered for d in document_types(db,obj)):fail(409,'Envie os documentos obrigatórios antes de concluir.')
     # Não captura o hash de senha nem atribui vínculo com alunos existentes.
-    obj.guardian_snapshot={k:getattr(account,k) for k in ('name','email','cpf','phone','address','email_verified','phone_verified')}
+    obj.guardian_snapshot={**(account.personal_details or {}),**{k:getattr(account,k) for k in ('name','email','cpf','phone','address','email_verified','phone_verified')}}
     obj.consent={'terms_version':campaign.terms_version,'privacy_notice':campaign.privacy_notice,'accepted_at':now().isoformat(),'account_id':account.id,'legal_responsibility':True,'ip':request.client.host if request.client else '', 'user_agent':request.headers.get('user-agent','')[:400]}
     obj.status='submitted';obj.submitted_at=now();obj.version+=1
     add_message(db,obj,'Inscrição enviada para análise da Secretaria. O envio não garante vaga.','submitted',account=account)
@@ -392,7 +394,10 @@ def update_profile(data:s.PortalProfile,account:Parent,db:DB,request:Request):
     if data.phone!=account.phone:
         account.phone_verified=False
         db.execute(update(m.PortalChallenge).where(m.PortalChallenge.account_id==account.id,m.PortalChallenge.channel=='whatsapp',m.PortalChallenge.used.is_(False)).values(used=True))
-    for key,value in data.model_dump(exclude={'version'}).items():setattr(account,key,value)
+    details=set(s.GuardianDetails.model_fields)
+    for key,value in data.model_dump(exclude={'version',*details}).items():setattr(account,key,value)
+    changed=data.model_dump(mode='json',include=details,exclude_unset=True)
+    account.personal_details={**(account.personal_details or {}),**changed}
     account.version+=1
     parent_audit(db,request,account,'profile.updated',account,{'official_records_unchanged':True})
     return account_output(account)

@@ -33,6 +33,7 @@ class PortalAccount(Record, Scoped, Base):
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     phone_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     whatsapp_opt_in: Mapped[bool] = mapped_column(Boolean, default=False)
+    personal_details: Mapped[dict] = mapped_column(JSON, default=dict, server_default='{}')
     registration_consent: Mapped[dict] = mapped_column(JSON, default=dict)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     __table_args__ = (UniqueConstraint('school_id', 'email'),)

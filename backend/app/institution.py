@@ -268,7 +268,7 @@ def edit_company(company_id: str, data: Edit, db: DB, user: Actor, request: Requ
         fail(404, 'Mantenedora não encontrada.')
     if company.version != data.version:
         fail(409, 'A mantenedora foi alterada. Reabra o cadastro.')
-    for key, value in values.model_dump().items():
+    for key, value in values.model_dump(exclude_unset=True).items():
         setattr(company, key, value)
     company.version += 1
     audit(db, request, user, 'company.updated', company)

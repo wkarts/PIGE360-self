@@ -46,7 +46,7 @@ compose up -d --wait --wait-timeout 240
 # Nenhum serviço de longa duração pode permanecer Exited (inclui storage-init).
 assert_healthy_services() {
   local service container
-  for service in db storage-init app worker; do
+  for service in db storage-init app worker worker-ocr; do
     container="$(compose ps -q "$service")"
     [[ -n "$container" ]] || { echo "Serviço ausente: $service"; return 1; }
     [[ "$(docker inspect --format '{{.State.Status}}/{{.State.Health.Status}}' "$container")" == running/healthy ]] \
@@ -78,7 +78,23 @@ compose stop --timeout 10 storage-init
 compose start storage-init
 compose up -d --wait --wait-timeout 240
 assert_healthy_services
-printf '{"services":["db","storage-init","app","worker"],"all_running_healthy":true,"storage_restart":true,"storage_stop_exit_code":0,"monitor_uid":10001,"monitor_capabilities":0}\n' > ci-evidence/docker-storage-health.json
+printf '{"services":["db","storage-init","app","worker","worker-ocr"],"all_running_healthy":true,"storage_restart":true,"storage_stop_exit_code":0,"monitor_uid":10001,"monitor_capabilities":0}\n' > ci-evidence/docker-storage-health.json
+# O mesmo runtime publicado deve reconhecer uma imagem sintética como usuário sem root.
+compose exec -T worker-ocr python - <<'PYOCR'
+import json, os, subprocess, sys, tempfile
+from pathlib import Path
+from PIL import Image, ImageDraw, ImageFont
+assert os.getuid()==10001
+with tempfile.TemporaryDirectory(prefix='ocr-smoke-') as tmp:
+    p=Path(tmp)/'test.png';im=Image.new('RGB',(1200,650),'white');d=ImageDraw.Draw(im);f=ImageFont.load_default(size=36)
+    for i,t in enumerate(['DOCUMENTO SINTETICO DE TESTE','NOME: PESSOA EXEMPLO','CPF: 529.982.247-25','DATA DE NASCIMENTO: 15/05/2000']):d.text((50,50+i*100),t,font=f,fill='black')
+    im.save(p)
+    r=subprocess.run([sys.executable,'-m','app.ocr_engine',str(p),'image/png','identity',tmp],check=True,capture_output=True,timeout=120)
+    data=json.loads(r.stdout)
+    assert any(s['field']=='cpf' and s['value']=='52998224725' for s in data['suggestions'])
+    assert data['requires_review'] and not data['document_authenticity_verified']
+print('OCR: imagem sintética reconhecida localmente; UID 10001 e conferência obrigatória')
+PYOCR
 ADDRESS="$(compose port app 8000)"
 python - "$ADDRESS" "$IMAGE" <<'PYHTTP'
 import json,sys,urllib.request

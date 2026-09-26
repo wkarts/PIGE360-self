@@ -1,7 +1,7 @@
 namespace PigeOnline {
   export interface Entity { id:string; version:number; created_at:string }
-  export interface Account extends Entity {school_id:string; name:string; email:string; cpf:string|null; phone:string; address:string; email_verified:boolean;phone_verified:boolean;whatsapp_opt_in:boolean}
-  export interface Person {name:string;social_name:string;cpf:string|null;birth_date:string|null;email:string;phone:string;address:string;notes:string;is_guardian:boolean;previous_school?:string}
+  export interface Account extends Entity {birth_date?:string|null;rg?:string;rg_issuer?:string;birth_certificate?:string;mother_name?:string;father_name?:string;postal_code?:string;street?:string;address_number?:string;address_complement?:string;district?:string;city?:string;state?:string;country?:string;school_id:string; name:string; email:string; cpf:string|null; phone:string; address:string; email_verified:boolean;phone_verified:boolean;whatsapp_opt_in:boolean}
+  export interface Person {rg?:string;rg_issuer?:string;birth_certificate?:string;mother_name?:string;father_name?:string;postal_code?:string;street?:string;address_number?:string;address_complement?:string;district?:string;city?:string;state?:string;country?:string;name:string;social_name:string;cpf:string|null;birth_date:string|null;email:string;phone:string;address:string;notes:string;is_guardian:boolean;previous_school?:string}
   export interface Group {id:string;name:string;grade:string;shift:string;year:string;unit:string;vacancies:number}
   export interface Campaign extends Entity {slug:string;title:string;instructions:string;privacy_notice:string;terms_version:string;class_group_ids:string[];opens_on:string;closes_on:string;active:boolean;require_verified_contact:boolean;require_documents:boolean;require_payment_before_enrollment:boolean;school_name:string;school_id:string;groups:Group[];accepting:boolean}
   export interface DocType {id:string;name:string;required:boolean}

@@ -49,7 +49,8 @@ def setup(data: Setup, db: DB, request: Request, x_setup_token: str = Header(def
         fail(503, 'Execute as migrations antes da instalação.')
     if install.configured:
         fail(409, 'A instalação já foi configurada.')
-    company = Company(name=data.company_name, document=data.company_document)
+    details = data.company_details.model_dump(exclude={'name','document'}) if data.company_details else {}
+    company = Company(name=data.company_name, document=data.company_document, **details)
     db.add(company); db.flush()
     school = School(company_id=company.id, name=data.school_name)
     db.add(school); db.flush()

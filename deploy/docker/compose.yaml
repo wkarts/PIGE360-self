@@ -68,6 +68,9 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       EMBED_ALLOWED_ORIGINS: ${EMBED_ALLOWED_ORIGINS:-}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
+      OCR_MAX_UPLOAD_MB: ${OCR_MAX_UPLOAD_MB:-8}
+      OCR_RETENTION_HOURS: ${OCR_RETENTION_HOURS:-24}
+      OCR_TIMEOUT_SECONDS: ${OCR_TIMEOUT_SECONDS:-120}
       MAX_PHOTO_MB: ${MAX_PHOTO_MB:-5}
       ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-15}
       REFRESH_TOKEN_DAYS: ${REFRESH_TOKEN_DAYS:-7}
@@ -124,6 +127,34 @@ services:
       interval: 30s
       timeout: 5s
       start_period: 30s
+      retries: 3
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  # CPU do OCR isolada da API e do worker de comunicação/bancos.
+  worker-ocr:
+    image: ${APP_IMAGE:-ghcr.io/wkarts/pige360-self:latest}
+    pull_policy: ${APP_PULL_POLICY:-always}
+    command: ["worker-ocr"]
+    init: true
+    environment: *application_environment
+    volumes:
+      - ./data-documents:/data
+    depends_on:
+      app: {condition: service_healthy}
+    cpus: ${OCR_CPUS:-1.0}
+    mem_limit: ${OCR_MEMORY_LIMIT:-1g}
+    pids_limit: 64
+    stop_grace_period: 150s
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.ocr_worker", "--health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 40s
       retries: 3
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]

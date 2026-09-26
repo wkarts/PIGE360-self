@@ -53,6 +53,10 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Motor local de leitura (mesmas ferramentas da imagem)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-por tesseract-ocr-eng poppler-utils
       - name: Dependências reproduzíveis
         run: |
           python -m pip install -r backend/requirements-dev.txt
@@ -80,6 +84,7 @@ jobs:
           python scripts/e2e-workspace.py
           python scripts/e2e-whitelabel.py
           python scripts/e2e-access.py
+          python scripts/e2e-assisted.py
       - name: Reunir somente evidências E2E novas
         if: always()
         run: |

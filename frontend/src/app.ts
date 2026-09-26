@@ -14,6 +14,7 @@ namespace PigeUI {
   const blankModal = (): Modal => ({kind:'',title:'',fields:[],form:{},target:null,action:'',error:''});
   const state = Vue.reactive({
     embeddingProbe:{busy:false,message:'',frame_policy:'',x_frame_options:''},
+    assistSource:'',
     ready:false, configured:true, embedded:window.self!==window.top, online:navigator.onLine, loginBusy:false, busy:false, loading:false,
     error:'', success:'', menuOpen:false, user:null as PigeAPI.User|null, userPhotoUrl:'', profilePhotoPreview:'',
     schools:[] as PigeAPI.School[], schoolId:'', page:'dashboard', q:'', pageNumber:1, total:0,
@@ -76,6 +77,7 @@ namespace PigeUI {
   function personFields(extraTypes:string[]=[]):Field[] { return [
     field('entity_kind','Natureza da pessoa','select',true,[{value:'individual',label:'Pessoa física'},{value:'organization',label:'Pessoa jurídica'}]),
     field('cnpj','CNPJ'),field('trade_name','Nome fantasia'),field('state_registration','Inscrição estadual'),field('municipal_registration','Inscrição municipal'),
+    field('registration_status','Situação cadastral CNPJ'),field('opened_on','Data de abertura'),field('legal_nature','Natureza jurídica'),field('main_activity','Atividade principal'),
     field('person_types','Tipos de pessoa','multiselect',false,personTypeOptions(extraTypes),true),
     field('name','Nome completo','text',true),field('social_name','Nome social'),field('cpf','CPF'),field('birth_date','Data de nascimento','date'),
     field('birth_certificate','Certidão / registro de nascimento'),field('birth_city','Cidade de nascimento'),field('birth_state','UF de nascimento'),
@@ -147,7 +149,7 @@ namespace PigeUI {
   async function editMFAPolicy():Promise<void>{await safe(async()=>{const cfg=await PigeAPI.request<Row>('/institution/mfa');if(!cfg.own_enabled){state.error='Ative primeiro seu 2FA em Meu perfil → Segurança. Depois defina a obrigatoriedade para a instituição.';return;}openModal('mfa-policy','Política de autenticação em duas etapas',[field('required','Exigir 2FA de todos os usuários e contas do portal','checkbox'),field('current_password','Sua senha atual','password',true),field('code','Código do seu autenticador ou de recuperação','text',true)],{required:Boolean(cfg.required)},cfg);});}
   async function configure():Promise<void>{
     state.loginBusy=true;state.error='';
-    try{const {token,...data}=state.setup;await PigeAPI.request('/setup',{method:'POST',headers:{'X-Setup-Token':token},body:JSON.stringify(data)});state.configured=true;await PigeInstitution.load();state.login.email=data.admin_email;state.setup.admin_password='';state.setup.token='';state.success='Instalação concluída. Entre com seu usuário.';}
+    try{const {token,...data}=state.setup;const payload={...data,company_name:setupCompany.name,company_document:setupCompany.document,company_details:setupCompany};await PigeAPI.request('/setup',{method:'POST',headers:{'X-Setup-Token':token},body:JSON.stringify(payload)});state.configured=true;await PigeInstitution.load();state.login.email=data.admin_email;state.setup.admin_password='';state.setup.token='';state.success='Instalação concluída. Entre com seu usuário.';}
     catch(error){notify(error);}finally{state.loginBusy=false;}
   }
   async function loadShell():Promise<void>{
@@ -230,7 +232,7 @@ namespace PigeUI {
   function openModal(kind:string,title:string,fields:Field[],values:PigeAPI.FormDataMap={},target:Row|null=null):void{
     const form:PigeAPI.FormDataMap={};for(const f of fields)form[f.key]=values[f.key]??(f.key==='entity_kind'?'individual':f.type==='checkbox'?(f.key==='active'):f.type==='number'?30:f.type==='multiselect'?[]:'');
     state.modal={kind,title,fields,form,target,action:'',error:''};selectedFile=null;identityFiles={};state.error='';state.discardChanges=false;state.reuseTarget='';
-    state.personTypeQuery='';
+    state.personTypeQuery='';state.assistSource='';
     if(PigeDossier.eligible(kind)){
       const primary=kind.split('-')[0], additions:Field[]=[];
       for(const [profile,items] of [['student',studentFields()],['teacher',teacherFields()],['employee',employeeFields()]] as [string,Field[]][]){
@@ -261,7 +263,7 @@ namespace PigeUI {
     if(f.key==='person_types')return false;
     if(f.key.includes('__'))return selectedPersonTypes().includes(f.key.split('__')[0]);
     if(f.key==='entity_kind'&&kind!=='person'&&kind!=='business')return false;
-    if(['cnpj','trade_name','state_registration','municipal_registration'].includes(f.key))return legal;
+    if(['cnpj','trade_name','state_registration','municipal_registration','registration_status','opened_on','legal_nature','main_activity'].includes(f.key))return legal;
     return !(legal&&personalKeys.has(f.key));
   }
   const complementaryKeys=new Set(['social_name','birth_certificate','birth_city','birth_state','nationality','sex','gender','race_color','marital_status','rg','rg_issuer','rg_state','rg_issued_on','mother_name','father_name','notes','state_registration','municipal_registration']);
@@ -452,10 +454,25 @@ namespace PigeUI {
   async function manageUnits():Promise<void>{await navigate('academic');await setCatalog('units');}
   function editMaintainer():void {
     const row=state.companies.find(c=>c.id===school()?.company_id);if(!row)return;
-    const fields=[field('name','Razão social','text',true),field('document','CPF / CNPJ')];
+    const fields=companyFields();
     openModal('company-edit','Dados da mantenedora',fields,valuesFrom(row,fields),row);
   }
-  function newCompany():void{openModal('company','Cadastrar empresa / mantenedora',[field('name','Razão social','text',true),field('document','CPF / CNPJ')]);}
+  function newCompany():void{openModal('company','Cadastrar empresa / mantenedora',companyFields());}
+
+  const familyAssistFields=['name', 'cpf', 'birth_date', 'phone', 'email', 'rg', 'rg_issuer', 'birth_certificate', 'mother_name', 'father_name', 'postal_code', 'street', 'address_number', 'address_complement', 'district', 'city', 'state', 'country', 'address'];
+  const companyExtra=[['trade_name','Nome fantasia'],['address','Endereço completo'],['postal_code','CEP'],['street','Logradouro'],['address_number','Número'],['address_complement','Complemento'],['district','Bairro'],['city','Cidade'],['state','UF'],['country','País'],['phone','Telefone'],['email','E-mail'],['registration_status','Situação cadastral'],['opened_on','Abertura'],['legal_nature','Natureza jurídica'],['main_activity','Atividade principal']];
+  const setupCompany=Vue.reactive<Record<string,string>>(Object.fromEntries([['name',''],['document',''],...companyExtra.map(([key])=>[key,''])]));
+  const setupCompanyFields=['name','document',...companyExtra.map(([key])=>key)];
+  function companyFields():Field[]{return [field('name','Razão social','text',true),field('document','CPF / CNPJ'),...companyExtra.map(([key,caption])=>field(key,caption,key==='email'?'email':'text'))];}
+  const assistRequest=PigeAPI.request;
+  function assistEligible():boolean{return isPersonModal()||['company','company-edit','school'].includes(state.modal.kind);}
+  function assistFields():string[]{return state.modal.fields.filter(modalFieldRelevant).map(f=>f.key);}
+  function assistCompany():boolean{return ['company','company-edit'].includes(state.modal.kind);}
+  async function setupLookup<T>(path:string,options:RequestInit={}):Promise<T>{return PigeAPI.request<T>(path,{...options,headers:{'X-Setup-Token':state.setup.token}});}
+  async function readResponsibleDocument(id:string):Promise<void>{await safe(async()=>{await searchPersons();openModal('ocr-target','Escolher pessoa responsável para a leitura',[field('person_id','Pessoa responsável cadastrada','person',true)]);state.assistSource=base()+'/files/'+id+'/ocr';});}
+  function readStudentDocument(id:string):void{editStudent();state.assistSource=base()+'/files/'+id+'/ocr';}
+  async function editIntake():Promise<void>{await safe(async()=>{const cfg=await PigeAPI.request<Row>('/institution/intake');openModal('intake-settings','Leitura de documentos e consultas cadastrais',[field('ocr_enabled','Permitir leitura local de documentos (OCR)','checkbox'),field('lookups_enabled','Permitir consulta online de CNPJ e CEP','checkbox')],{ocr_enabled:Boolean(cfg.ocr_enabled),lookups_enabled:Boolean(cfg.lookups_enabled)},cfg);});}
+
   function newSchool(row:Row|null=null):void{const fields=[field('company_id','Empresa / mantenedora','select',true,state.companies.map(c=>({value:c.id,label:text(c.name)}))),field('name','Nome da escola','text',true),field('address','Endereço','text',false,undefined,true),field('phone','Telefone'),field('email','E-mail','email'),field('document_policy','Pendências na ativação da matrícula','select',true,[{value:'warn',label:'Avisar sem bloquear'},{value:'block',label:'Exigir validação dos documentos obrigatórios'}]),field('active','Escola ativa','checkbox')];openModal('school',row?'Editar escola':'Cadastrar escola',fields,row?valuesFrom(row,fields):{document_policy:'warn',active:true},row);}
    function editSupportHub():void{
      const companyId=text(state.schools.find(s=>s.id===state.schoolId)?.company_id);
@@ -504,6 +521,7 @@ namespace PigeUI {
     const modal=state.modal,form={...modal.form},target=modal.target,studentId=state.selectedStudent?.id;let createdStudent:Student|null=null;let savedPersonId='';
     try{
       const photo=selectedFile;delete form.photo;
+      if(modal.kind==='ocr-target'){const source=state.assistSource;const data=await PigeAPI.request<{person:Row}>(base()+'/persons/'+form.person_id+'/dossier');editPerson(data.person);state.assistSource=source;return;}
       if(modal.kind==='reuse'){await useExisting();return;}
       if(PigeDossier.eligible(modal.kind)){
         const saved=await PigeDossier.save(modal.kind,form,photo);savedPersonId=saved.person.id;
@@ -615,7 +633,8 @@ namespace PigeUI {
         state.modal=blankModal();
         if(updated.requires_login){await logout();state.success='Origens atualizadas. Entre novamente; os demais acessos também precisarão se autenticar.';return;}
         state.success='Segurança de incorporação atualizada.';return;
-      }else if(modal.kind==='company-edit')await PigeAPI.patch('/companies/'+target!.id,{version:target!.version,data:form});
+      }else if(modal.kind==='intake-settings')await PigeAPI.request('/institution/intake',{method:'PUT',body:JSON.stringify({...form,version:target!.version})});
+      else if(modal.kind==='company-edit')await PigeAPI.patch('/companies/'+target!.id,{version:target!.version,data:form});
       else if(modal.kind==='company')await PigeAPI.post('/companies',form);
       else if(modal.kind==='school'){
         if(target)await PigeAPI.patch('/schools/'+target.id,{version:target.version,data:form});else await PigeAPI.post('/schools',form);
@@ -670,5 +689,5 @@ namespace PigeUI {
     }
     window.addEventListener('beforeunload',event=>{if(state.modal.kind&&modalDirty()){event.preventDefault();event.returnValue='';}});
   }
-  Vue.createApp({components:{'expansion-panel':PigeExpansion.component},render:PigeRenders.app,setup(){Vue.onMounted(()=>{PigeMFA.init(PigeAPI.request,afterMFA,logout);PigeDialogs.install();setupPWA();void initialize();});return{state,mfa:PigeMFA,dossier:PigeDossier,selectedPersonTypes,availablePersonTypes,togglePersonType,lockedPersonType,familyRelevant,manageMFA,editMFAPolicy,editEmbedding,probeEmbedding,editMyProfile,myPhotoChange,profilePassword,registryPages,businessTypes,isBusiness,newBusiness,reusePerson,personDocument,modalSections,modalTab,visibleSection,modalFieldLabel,modalFieldRelevant,advancedPersonField,isPersonModal,personTypeOptions,personTypeLabel,modalDirty,identity:PigeInstitution.state,supportStatus:PigeSupport.status,editIdentity,identityFileChange,manageUnits,editMaintainer,text,can,isProfileRole,school,label,date,cpf,initials,photoSrc,getName,options,pageLabels,catalogLabels,configure,login,logout,navigate,changeSchool,setCatalog,search,page,loadPage,viewStudent,newPerson,newStudent,editStudent,newGuardian,newTeacher,editTeacher,newEmployee,editEmployee,editPerson,newCatalog,newEnrollment,viewEnrollment,startMovement,reenroll,newLink,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,editSupportHub,newUser,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,protocolReceipt,exportPendencies,install,updateApp};}}).mount('#app');
+  Vue.createApp({components:{'expansion-panel':PigeExpansion.component,'assist-panel':PigeAssist.component},render:PigeRenders.app,setup(){Vue.onMounted(()=>{PigeMFA.init(PigeAPI.request,afterMFA,logout);PigeDialogs.install();setupPWA();void initialize();});return{state,base,familyAssistFields,assistRequest,assistFields,assistEligible,assistCompany,setupCompany,setupCompanyFields,companyExtra,setupLookup,readStudentDocument,readResponsibleDocument,editIntake,mfa:PigeMFA,dossier:PigeDossier,selectedPersonTypes,availablePersonTypes,togglePersonType,lockedPersonType,familyRelevant,manageMFA,editMFAPolicy,editEmbedding,probeEmbedding,editMyProfile,myPhotoChange,profilePassword,registryPages,businessTypes,isBusiness,newBusiness,reusePerson,personDocument,modalSections,modalTab,visibleSection,modalFieldLabel,modalFieldRelevant,advancedPersonField,isPersonModal,personTypeOptions,personTypeLabel,modalDirty,identity:PigeInstitution.state,supportStatus:PigeSupport.status,editIdentity,identityFileChange,manageUnits,editMaintainer,text,can,isProfileRole,school,label,date,cpf,initials,photoSrc,getName,options,pageLabels,catalogLabels,configure,login,logout,navigate,changeSchool,setCatalog,search,page,loadPage,viewStudent,newPerson,newStudent,editStudent,newGuardian,newTeacher,editTeacher,newEmployee,editEmployee,editPerson,newCatalog,newEnrollment,viewEnrollment,startMovement,reenroll,newLink,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,editSupportHub,newUser,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,protocolReceipt,exportPendencies,install,updateApp};}}).mount('#app');
 }
