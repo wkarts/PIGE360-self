@@ -119,6 +119,25 @@ def _set_preferred(db, school, obj):
         ))
 
 
+def _set_unit_preferred(db, school, unit, obj):
+    if unit.school_id != school.id or not unit.active:
+        fail(422, "Unidade inválida ou inativa.")
+    if obj.company_id != school.company_id or not obj.enabled or obj.status == "deleted":
+        fail(409, "A instância não está disponível para esta unidade.")
+    binding = db.get(m.ConnectUnitBinding, unit.id)
+    if binding:
+        binding.instance_id = obj.id
+        binding.version += 1
+        binding.updated_at = datetime.now(UTC)
+    else:
+        db.add(m.ConnectUnitBinding(
+            unit_id=unit.id,
+            instance_id=obj.id,
+            version=1,
+            updated_at=datetime.now(UTC),
+        ))
+
+
 def _state_from_response(obj, response):
     status, state = _remote_status(response)
     obj.status = status
@@ -155,6 +174,14 @@ def connect_overview(db: DB, user: Actor, school: Scope):
         },
         "preferred_instance_id": preferred_id,
         "items": [_instance_output(item, preferred_id) for item in instances],
+        "units": [
+            {
+                "id": unit.id,
+                "name": unit.name,
+                "preferred_instance_id": (db.get(m.ConnectUnitBinding, unit.id).instance_id if db.get(m.ConnectUnitBinding, unit.id) else ""),
+            }
+            for unit in db.scalars(select(m.Unit).where(m.Unit.school_id == school.id, m.Unit.active.is_(True)).order_by(m.Unit.name))
+        ],
     }
 
 
@@ -274,6 +301,17 @@ def prefer_connect_instance(instance_id: str, db: DB, user: Actor, school: Scope
     _set_preferred(db, school, obj)
     audit(db, request, user, "connect.instance.preferred", obj, school.id)
     return {"instance": _instance_output(obj, obj.id)}
+
+
+@router.post("/connect/unit-preference")
+def set_connect_unit_preference(data: s.ConnectUnitPreferenceInput, db: DB, user: Actor, school: Scope, request: Request):
+    require(user, "connect.manage")
+    lock_school(db, school.id)
+    unit = scoped(db, m.Unit, data.unit_id, school.id)
+    obj = _instance(db, school, data.instance_id)
+    _set_unit_preferred(db, school, unit, obj)
+    audit(db, request, user, "connect.instance.unit_preferred", obj, school.id, {"unit_id": unit.id})
+    return {"unit_id": unit.id, "instance_id": obj.id}
 
 
 @router.post("/connect/instances/{instance_id}/restart")
@@ -432,7 +470,8 @@ def send_connect_message(data: s.SendMessage, db: DB, user: Actor, school: Scope
     account = db.get(m.PortalAccount, admission.account_id)
     if not account.phone_verified or not account.whatsapp_opt_in:
         fail(409, "O responsável precisa verificar o telefone e autorizar os avisos por WhatsApp.")
-    instance = connect_instance_for_school(db, school.id)
+    group = db.get(m.ClassGroup, admission.class_group_id) if admission.class_group_id else None
+    instance = connect_instance_for_school(db, school.id, True, group.unit_id if group else None)
     task = enqueue_connect_message(
         db,
         school.id,
