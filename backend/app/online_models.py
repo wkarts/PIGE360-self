@@ -110,12 +110,30 @@ class ConnectInstance(Record, Base):
     status: Mapped[str] = mapped_column(String(24), default='created')
     connection_state: Mapped[str] = mapped_column(String(24), default='')
     external_id: Mapped[str] = mapped_column(String(160), default='')
+    source: Mapped[str] = mapped_column(String(16), default='pige360')
     last_error: Mapped[str] = mapped_column(String(240), default='')
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
         UniqueConstraint('company_id', 'name', name='uq_connect_instances_company_name'),
         CheckConstraint("status IN ('creating','created','connecting','open','close','error','deleted')", name='connect_instance_status'),
+        CheckConstraint("source IN ('pige360','adopted')", name='connect_instance_source'),
     )
+
+
+class ConnectSchoolBinding(Base):
+    __tablename__ = 'connect_school_bindings'
+    school_id: Mapped[str] = mapped_column(ForeignKey('schools.id'), primary_key=True)
+    instance_id: Mapped[str] = mapped_column(ForeignKey('connect_instances.id'), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ConnectUnitBinding(Base):
+    __tablename__ = 'connect_unit_bindings'
+    unit_id: Mapped[str] = mapped_column(ForeignKey('units.id'), primary_key=True)
+    instance_id: Mapped[str] = mapped_column(ForeignKey('connect_instances.id'), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class ConnectMessageJob(Record, Scoped, Base):
