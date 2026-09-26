@@ -59,6 +59,7 @@ class IdentityInput(BaseModel):
     remove_logo: bool = False
     remove_font: bool = False
     font_license_confirmed: bool = False
+    show_preenrollment_button: bool = Field(default=True, strict=True)
 
 
 def identity_data(db):
@@ -72,6 +73,7 @@ def identity_data(db):
         'primary_color': saved.get('primary_color', '#006D77'),
         'secondary_color': saved.get('secondary_color', '#0D1B2A'),
         'font_family': saved.get('font_family', 'system'),
+        'show_preenrollment_button': saved.get('show_preenrollment_button', True),
         'logo_asset_id': saved.get('logo_asset_id', ''),
         'font_asset_id': saved.get('font_asset_id', ''),
         'version': install.identity_version if install else 1,
@@ -103,13 +105,11 @@ def _asset_content(upload: UploadFile, kind: str) -> tuple[bytes, str, str]:
     if not data or len(data) > MAX_ASSET:
         fail(422, 'Cada ativo de marca deve ter conteúdo e no máximo 2 MB.')
     if kind == 'font':
-        # WOFF2 é entregue como fonte binária local, nunca interpretado como CSS/HTML.
-        if not (upload.filename or '').lower().endswith('.woff2') or len(data) < 48:
-            fail(422, 'Envie uma fonte WOFF2 válida e licenciada para uso web.')
-        signature, _, length, tables, reserved, sfnt_size, compressed = struct.unpack('>4sIIHHII', data[:24])
-        if signature != b'wOF2' or length != len(data) or reserved or not 0 < tables <= 256 or not 0 < compressed <= len(data) - 48 or not 0 < sfnt_size <= 20 * MAX_ASSET:
-            fail(422, 'Cabeçalho da fonte WOFF2 inválido.')
-        return data, 'font/woff2', '.woff2'
+        from .institution_fonts import truetype
+        if not (upload.filename or '').lower().endswith(('.woff2', '.ttf')):
+            fail(422, 'Envie uma fonte TTF ou WOFF2 licenciada para tela e PDF.')
+        truetype(data)  # valida integralmente antes de persistir
+        return (data, 'font/woff2', '.woff2') if data[:4] == b'wOF2' else (data, 'font/ttf', '.ttf')
     try:
         with Image.open(io.BytesIO(data)) as image:
             if image.format not in ('PNG', 'JPEG', 'WEBP') or image.width * image.height > 16_000_000:
@@ -146,6 +146,9 @@ def save_identity(
     saved = identity_data(db)
     for key in ('display_name', 'short_name', 'primary_color', 'secondary_color', 'font_family'):
         saved[key] = getattr(data, key)
+    # Clientes antigos não enviam este campo; preservar o valor já salvo.
+    if 'show_preenrollment_button' in data.model_fields_set:
+        saved['show_preenrollment_button'] = data.show_preenrollment_button
     for kind, upload, remove in (('logo', logo, data.remove_logo), ('font', font, data.remove_font)):
         if remove and upload:
             fail(422, 'Não remova e envie o mesmo ativo na mesma operação.')
@@ -153,20 +156,21 @@ def save_identity(
             saved[kind + '_asset_id'] = ''
         if upload:
             if kind == 'font' and not data.font_license_confirmed:
-                fail(422, 'Confirme a licença de uso web da fonte enviada.')
+                fail(422, 'Confirme a licença de uso web e incorporação em PDF da fonte enviada.')
             content, media, extension = _asset_content(upload, kind)
             asset_id = hashlib.sha256(content).hexdigest() + extension
             if not db.get(InstitutionAsset, asset_id):
                 db.add(InstitutionAsset(id=asset_id, media_type=media, content=content))
             saved[kind + '_asset_id'] = asset_id
     if data.font_family == 'custom' and not saved.get('font_asset_id'):
-        fail(422, 'Envie uma fonte WOFF2 para utilizar a tipografia personalizada.')
+        fail(422, 'Envie uma fonte TTF ou WOFF2 para utilizar a tipografia personalizada.')
     saved.pop('version', None)
     install.identity = saved
     install.identity_version += 1
     audit(db, request, user, 'institution.identity.updated', install, details={
         'display_name': saved['display_name'], 'version': install.identity_version,
         'logo_configured': bool(saved.get('logo_asset_id')), 'font_family': data.font_family,
+        'show_preenrollment_button': saved['show_preenrollment_button'],
     })
     # Ativos não referenciados são públicos de marca, mas não precisam crescer indefinidamente.
     keep = {saved.get('logo_asset_id'), saved.get('font_asset_id')} - {'', None}
@@ -205,7 +209,7 @@ def theme(db: DB):
     family = FONTS.get(data['font_family'], FONTS['system'])
     css = ''
     if data['font_family'] == 'custom' and data['font_asset_id']:
-        css += '@font-face{font-family:InstitutionFont;src:url("/api/v1/institution/assets/' + data['font_asset_id'] + '") format("woff2");font-display:swap;}'
+        css += '@font-face{font-family:InstitutionFont;src:url("/api/v1/institution/assets/' + data['font_asset_id'] + '");font-display:swap;}'
     dark = '#' + ''.join(f'{round(int(primary[i:i+2], 16) * .82):02x}' for i in (1, 3, 5))
     css += (f':root{{--primary:{primary};--primary-dark:{dark};--ink:{secondary};'
             f'--institution-font:{family};--primary-on:{foreground(primary)};'

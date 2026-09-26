@@ -1,0 +1,11 @@
+<section class="mfa-box">
+  <template v-if="mfa.state.challenge || mfa.state.codes.length"><!-- MFA-CHALLENGE --></template>
+  <template v-else>
+    <h3>Autenticação em duas etapas</h3><p>{{mfa.state.status.enabled?'2FA ativado nesta conta.':'2FA ainda não ativado nesta conta.'}} {{mfa.state.status.required?'Obrigatório pela instituição.':'Uso opcional pela instituição.'}}</p>
+    <p v-if="mfa.state.status.enabled" class="small muted">{{mfa.state.status.recovery_remaining}} códigos de recuperação disponíveis.</p>
+    <div v-if="mfa.state.error" class="alert error" role="alert">{{mfa.state.error}}</div>
+    <label class="field">Senha atual<input type="password" v-model="mfa.state.password" autocomplete="current-password" maxlength="128" :disabled="mfa.state.busy"></label>
+    <label v-if="mfa.state.status.enabled" class="field">Código do autenticador ou de recuperação<input v-model="mfa.state.code" autocomplete="one-time-code" maxlength="30" :disabled="mfa.state.busy"></label>
+    <div class="actions"><button v-if="!mfa.state.status.enabled" class="btn btn-primary" type="button" :disabled="mfa.state.busy || !mfa.state.password" @click="mfa.enroll">Configurar 2FA</button><template v-else><button type="button" class="btn btn-secondary" :disabled="mfa.state.busy || !mfa.state.password || !mfa.state.code" @click="mfa.recovery">Gerar novos códigos</button><button v-if="!mfa.state.status.required" type="button" class="btn btn-secondary" :disabled="mfa.state.busy || !mfa.state.password || !mfa.state.code" @click="mfa.disable">Desativar 2FA</button></template></div>
+  </template>
+</section>

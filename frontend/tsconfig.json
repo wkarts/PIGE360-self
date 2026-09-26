@@ -18,6 +18,10 @@
     "src/support-widget.ts",
     "src/online-types.ts",
     "src/expansion.ts",
+    "src/dialogs.ts",
+    "src/workspace.ts",
+    "src/mfa.ts",
+    "src/dossiers.ts",
     "src/app.ts"
   ]
 }

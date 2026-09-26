@@ -15,6 +15,7 @@
     "src/vue-globals.d.ts",
     "src/institution.ts",
     "src/online-types.ts",
+    "src/mfa.ts",
     "src/portal.ts"
   ]
 }

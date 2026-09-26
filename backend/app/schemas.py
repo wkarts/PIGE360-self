@@ -7,6 +7,40 @@ class Input(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
 
 class PersonInput(Input):
+    entity_kind: Literal['individual', 'organization'] = 'individual'
+    cnpj: str | None = Field(default=None, max_length=24)
+    trade_name: str = Field(default='', max_length=180)
+    state_registration: str = Field(default='', max_length=40)
+    municipal_registration: str = Field(default='', max_length=40)
+
+    @field_validator('cnpj', mode='before')
+    @classmethod
+    def cnpj_valid(cls, value):
+        value = re.sub(r'[.\s/\-]', '', str(value or '')).upper()
+        if not value:
+            return None
+        if not re.fullmatch(r'[A-Z0-9]{12}[0-9]{2}', value) or len(set(value)) == 1:
+            raise ValueError('CNPJ inválido.')
+        # Receita Federal: ASCII - 48, pesos módulo 11 (numérico e alfanumérico).
+        for size in (12, 13):
+            weights = list(range(size - 7, 1, -1)) + list(range(9, 1, -1))
+            remainder = sum((ord(c) - 48) * w for c, w in zip(value[:size], weights)) % 11
+            if str(0 if remainder < 2 else 11 - remainder) != value[size]:
+                raise ValueError('CNPJ inválido.')
+        return value
+
+    @model_validator(mode='after')
+    def entity_identity(self):
+        if self.entity_kind == 'organization':
+            if self.cpf or self.birth_date or self.is_guardian:
+                raise ValueError('Pessoa jurídica não utiliza CPF, nascimento ou vínculo de responsável.')
+            physical = {'student', 'teacher', 'employee', 'collaborator', 'parent', 'mother', 'father', 'guardian', 'financial_responsible', 'legal_responsible', 'staff'}
+            if physical.intersection(self.person_types or []):
+                raise ValueError('Vínculos escolares pessoais exigem pessoa física.')
+        elif self.cnpj:
+            raise ValueError('Informe o CNPJ no cadastro de pessoa jurídica, não no CPF da pessoa física.')
+        return self
+
     name: str = Field(min_length=2, max_length=180)
     social_name: str = Field(default='', max_length=180)
     cpf: str | None = Field(default=None, max_length=20)

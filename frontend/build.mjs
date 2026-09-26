@@ -21,7 +21,8 @@ const sandbox={console,document:{createElement(){return {textContent:'',get inne
 execFileSync(compiler,['-p',path.join(root,'tsconfig.portal.json')],{stdio:'inherit'});
 const renders={};
 for(const name of ['app','portal','expansion']){
- const template=fs.readFileSync(path.join(root,'templates',name+'.html'),'utf8');
+ const fragment=key=>fs.readFileSync(path.join(root,'templates',key+'.html'),'utf8');
+ const template=fs.readFileSync(path.join(root,'templates',name+'.html'),'utf8').replaceAll('<!-- MFA-MANAGE -->',fragment('mfa-manage')).replaceAll('<!-- MFA-CHALLENGE -->',fragment('mfa-challenge')).replaceAll('<!-- FAMILY -->',fragment('family')).replaceAll('<!-- FORM-FIELDS -->',fragment('form-fields'));
  const errors=[];
  const render=sandbox.Vue.compile(template,{hoistStatic:false,onError:error=>errors.push(String(error))});
  if(errors.length)throw new Error(name+': '+errors.join('; '));
@@ -35,13 +36,17 @@ fs.copyFileSync(path.join(root,'src/app.css'),path.join(dist,'app.css'));
 const staticFiles=['/','/index.html','/app.js','/portal.js','/renders.js','/app.css','/vendor/vue-3.5.13.global.prod.js'];
 function collectPublic(dir,prefix='') { for(const entry of fs.readdirSync(dir,{withFileTypes:true})) {
  const name=prefix+'/'+entry.name;
- if(entry.isDirectory())collectPublic(path.join(dir,entry.name),name);
+ if(entry.isDirectory()){if(!['/branding','/fonts'].includes(name))collectPublic(path.join(dir,entry.name),name);}
  else if(!staticFiles.includes(name))staticFiles.push(name);
 } }
 collectPublic(path.join(root,'public'));
 const fingerprint=createHash('sha256');fingerprint.update(version);
 for(const asset of [...new Set(staticFiles.map(f=>f==='/'?'/index.html':f))].sort()){fingerprint.update(asset);fingerprint.update(fs.readFileSync(path.join(dist,asset.slice(1))));}
 const hash=fingerprint.digest('hex').slice(0,16);
+for(const name of ['index.html','online.html']){
+ const file=path.join(dist,name);
+ fs.writeFileSync(file,fs.readFileSync(file,'utf8').replace(/(src|href)="(\/(?!api\/)[^"?]+\.(?:js|css))"/g,(_,attr,url)=>`${attr}="${url}?v=${hash}"`));
+}
 const sw=`const CACHE='pige360-shell-${hash}'; const ASSETS=${JSON.stringify(staticFiles)};
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS))));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('pige360-shell-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
@@ -53,7 +58,8 @@ self.addEventListener('fetch',event=>{
  if(publicIdentity){event.respondWith(caches.open('pige360-public-identity').then(async cache=>{try{const response=await fetch(event.request);if(response.ok){await cache.put(event.request,response.clone());const keys=await cache.keys();await Promise.all(keys.slice(0,Math.max(0,keys.length-24)).map(key=>cache.delete(key)));}return response;}catch(error){const cached=await cache.match(event.request);if(cached)return cached;throw error;}}));return;}
  if(url.pathname.startsWith('/api/')||url.pathname.startsWith('/health/'))return;
  if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).catch(()=>caches.match(url.pathname==='/online.html'?'/online.html':'/index.html')));return;}
- if(ASSETS.includes(url.pathname))event.respondWith(caches.match(event.request).then(cached=>cached||fetch(event.request)));
+ // Nunca atender uma URL de outro build com bytes deste cache.
+ if(ASSETS.includes(url.pathname))event.respondWith((url.searchParams.has('v')&&url.searchParams.get('v')!=='${hash}')?fetch(event.request):caches.open(CACHE).then(cache=>cache.match(event.request,{ignoreSearch:true})).then(cached=>cached||fetch(event.request)));
 });\n`;
 fs.writeFileSync(path.join(dist,'sw.js'),sw);
 fs.writeFileSync(path.join(dist,'build-info.json'),JSON.stringify({product:'PIGE360 Self',version,vue:'3.5.13',build_id:hash,pipeline:'typescript-vue-precompiled',external_cdn:false},null,2)+'\n');

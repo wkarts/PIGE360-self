@@ -4,14 +4,17 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from .config import settings
 from .db import engine
 from .storage import ensure_storage
-from . import auth, people, registry, enrollments, documents, reports, portal, admissions, integrations, connect, banking, profiles, support, institution
+from starlette.concurrency import run_in_threadpool
+from . import embedding, embedding_settings, mfa, dossiers
+from . import auth, people, registry, enrollments, documents, reports, portal, admissions, integrations, connect, banking, profiles, support, institution, business_people, account
 
 cfg = settings()
 logger = logging.getLogger('pige360')
@@ -23,7 +26,7 @@ async def lifespan(app):
     engine.dispose()
 
 app = FastAPI(title='PIGE360 Self — Gestão Educacional', version=cfg.app_version, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url='/api/v1/openapi.json')
-for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router]:
+for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router, mfa.router, dossiers.router]:
     app.include_router(router)
 
 @app.exception_handler(HTTPException)
@@ -37,7 +40,7 @@ async def validation_error(request, exc):
 
 @app.exception_handler(IntegrityError)
 async def integrity_error(request, exc):
-    return JSONResponse({'detail':'Conflito de integridade: já existe CPF, cadastro, vínculo ou matrícula equivalente, ou um registro relacionado impede esta alteração.', 'request_id':getattr(request.state,'request_id','')}, status_code=409)
+    return JSONResponse({'detail':'Conflito de integridade: já existe CPF/CNPJ, cadastro, vínculo ou matrícula equivalente, ou um registro relacionado impede esta alteração.', 'request_id':getattr(request.state,'request_id','')}, status_code=409)
 
 @app.exception_handler(Exception)
 async def internal_error(request, exc):
@@ -53,11 +56,14 @@ async def security_headers(request: Request, call_next):
         return JSONResponse({'detail':'Origem não autorizada.'}, status_code=403)
     response = await call_next(request)
     response.headers['X-Request-ID'] = request.state.request_id
+    response.headers['X-App-Version'] = cfg.app_version
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'same-origin'
-    response.headers['X-Frame-Options'] = 'DENY'
+    parents = await run_in_threadpool(embedding.frame_sources)
+    if not parents:
+        response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
-    hub_origins, hub_sockets = support.csp_sources()
+    hub_origins, hub_sockets = await run_in_threadpool(support.csp_sources)
     hub_script_sources = ' '.join(hub_origins)
     # O SDK opcional do HUB injeta estilos Inter. Permissão restrita aos dois
     # hosts de fontes somente quando há um HUB ativo; a identidade da escola é local.
@@ -73,10 +79,16 @@ async def security_headers(request: Request, call_next):
         f"font-src 'self' {hub_font_sources}; "
         f"connect-src 'self' {hub_connect_sources}; "
         f"frame-src 'self' {hub_script_sources}; "
-        "object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+        "object-src 'none'; base-uri 'self'; form-action 'self'; "
+        + ("frame-ancestors 'self' " + ' '.join(parents) if parents else "frame-ancestors 'none'")
     )
     if request.url.path.startswith('/api') or request.url.path in ('/','/index.html','/online.html','/sw.js','/manifest.webmanifest'):
         response.headers['Cache-Control'] = 'no-store'
+    # Cache público somente dos ativos de identidade; jamais sessão, perfil ou foto pessoal.
+    public_asset = request.url.path.startswith('/api/v1/institution/assets/')
+    public_variant = request.url.path in ('/api/v1/institution/theme.css', '/api/v1/institution/icon.png')
+    if response.status_code == 200 and (public_asset or public_variant):
+        response.headers['Cache-Control'] = 'public, max-age=86400, immutable' if public_asset else 'public, max-age=60, must-revalidate'
     if cfg.cookie_secure:
         response.headers['Strict-Transport-Security'] = 'max-age=31536000'
     return response
@@ -121,6 +133,7 @@ class BodyLimitMiddleware:
 
 app.add_middleware(BodyLimitMiddleware, maximum=(cfg.max_upload_mb+1)*1024*1024)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=cfg.hosts)
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 @app.get('/health/live', include_in_schema=False)
 def live():
@@ -135,8 +148,8 @@ def ready():
     except Exception:
         return JSONResponse({'status':'not_ready'}, status_code=503)
 
-@app.get('/{path:path}', include_in_schema=False)
-def frontend(path: str):
+@app.api_route('/{path:path}', methods=['GET', 'HEAD'], include_in_schema=False)
+def frontend(path: str, request: Request, db: auth.DB):
     if path.startswith(('api/', 'health/')):
         raise HTTPException(404, 'Rota não encontrada.')
     root = cfg.frontend_path.resolve()
@@ -149,4 +162,9 @@ def frontend(path: str):
         requested = root / 'index.html'
     if not requested.is_file():
         raise HTTPException(503, 'Frontend ainda não compilado. Execute node frontend/build.mjs.')
+    if requested.name in ('index.html', 'online.html'):
+        from .branding import branded_html
+        content = branded_html(requested, db)
+        headers = {'Cache-Control':'no-store', 'Content-Length':str(len(content.encode('utf-8')))}
+        return HTMLResponse('' if request.method == 'HEAD' else content, headers=headers)
     return FileResponse(requested)

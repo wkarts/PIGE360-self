@@ -122,6 +122,8 @@ def current_user(db: DB, credential: Annotated[HTTPAuthorizationCredentials | No
     user = db.get(User, payload['sub'])
     if not session or session.revoked or session.user_id != payload['sub'] or utc(session.expires_at) <= datetime.now(UTC) or not user or not user.active:
         fail(401, 'Sessão revogada ou usuário inativo.')
+    from .mfa import enforce_session
+    enforce_session(db, 'user', user, session)
     return user
 
 Actor = Annotated[User, Depends(current_user)]

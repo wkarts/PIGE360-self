@@ -1,5 +1,6 @@
+from sqlalchemy import LargeBinary
 from datetime import date, datetime
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, JSON, UniqueConstraint, CheckConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, JSON, UniqueConstraint, CheckConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from .db import Base, Record, now
 
@@ -8,6 +9,15 @@ class Installation(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     configured: Mapped[bool] = mapped_column(Boolean, default=False)
     configured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+class EmbeddingSettings(Base):
+    __tablename__ = 'installation_embedding'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    configured: Mapped[bool] = mapped_column(Boolean, default=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    allowed_origins: Mapped[list] = mapped_column(JSON, default=list)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
 
 class Company(Record, Base):
     __tablename__ = 'companies'
@@ -55,6 +65,17 @@ class User(Record, Base):
         name='valid_role'
     ),)
 
+class UserProfile(Base):
+    __tablename__ = 'user_profiles'
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), primary_key=True)
+    phone: Mapped[str] = mapped_column(String(32), default='')
+    job_title: Mapped[str] = mapped_column(String(120), default='')
+    department: Mapped[str] = mapped_column(String(120), default='')
+    bio: Mapped[str] = mapped_column(String(1000), default='')
+    photo: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    photo_hash: Mapped[str] = mapped_column(String(64), default='')
+
+
 class SchoolAccess(Base):
     __tablename__ = 'school_access'
     user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), primary_key=True)
@@ -67,6 +88,7 @@ class AuthSession(Record, Base):
     previous_hash: Mapped[str | None] = mapped_column(String(64))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+    mfa_verified: Mapped[bool] = mapped_column(Boolean, default=False)
 
 class LoginAttempt(Base):
     __tablename__ = 'login_attempts'
@@ -171,7 +193,13 @@ class Person(Record, Scoped, Base):
     emergency_contact_phone: Mapped[str] = mapped_column(String(32), default='')
     photo_file_id: Mapped[str | None] = mapped_column(ForeignKey('files.id'))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    __table_args__ = (UniqueConstraint('school_id', 'cpf'),)
+    entity_kind: Mapped[str] = mapped_column(String(16), default='individual', server_default='individual')
+    cnpj: Mapped[str | None] = mapped_column(String(14))
+    trade_name: Mapped[str] = mapped_column(String(180), default='', server_default='')
+    state_registration: Mapped[str] = mapped_column(String(40), default='', server_default='')
+    municipal_registration: Mapped[str] = mapped_column(String(40), default='', server_default='')
+    __table_args__ = (UniqueConstraint('school_id', 'cpf'),
+                      Index('uq_persons_school_cnpj', 'school_id', 'cnpj', unique=True))
 
 
 class TeacherProfile(Record, Scoped, Base):
@@ -214,6 +242,7 @@ class PersonTypeLink(Record, Scoped, Base):
     type_code: Mapped[str] = mapped_column(String(40), index=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     notes: Mapped[str] = mapped_column(Text, default='')
+    details: Mapped[dict] = mapped_column(JSON, default=dict, server_default='{}')
     __table_args__ = (
         UniqueConstraint('school_id', 'person_id', 'type_code'),
     )
@@ -360,3 +389,37 @@ class ProtocolEvent(Record, Scoped, Base):
 from .online_models import (AdmissionCampaign, PortalAccount, PortalSession, PortalChallenge,
     Admission, AdmissionMessage, AdmissionAttachment, ConnectInstance, ConnectMessageJob, IntegrationConnection,
     IntegrationJob, BankCharge, BankEvent, IntegrationWebhook)
+
+
+class MFAPolicy(Base):
+    __tablename__ = 'installation_mfa'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    required: Mapped[bool] = mapped_column(Boolean, default=False)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class MFACredential(Base):
+    __tablename__ = 'mfa_credentials'
+    subject: Mapped[str] = mapped_column(String(80), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    encrypted_secret: Mapped[str] = mapped_column(Text, default='')
+    last_counter: Mapped[int] = mapped_column(Integer, default=-1)
+
+
+class MFAChallenge(Record, Base):
+    __tablename__ = 'mfa_challenges'
+    subject: Mapped[str] = mapped_column(String(80), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    password_revision: Mapped[str] = mapped_column(String(64))
+    policy_version: Mapped[int] = mapped_column(Integer)
+    purpose: Mapped[str] = mapped_column(String(16))
+    encrypted_secret: Mapped[str] = mapped_column(Text, default='')
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    failures: Mapped[int] = mapped_column(Integer, default=0)
+    consumed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class MFARecovery(Record, Base):
+    __tablename__ = 'mfa_recovery_codes'
+    subject: Mapped[str] = mapped_column(ForeignKey('mfa_credentials.subject'), index=True)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True)

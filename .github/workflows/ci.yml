@@ -76,6 +76,10 @@ jobs:
           python -m playwright install --with-deps chromium
           python scripts/e2e.py
           python scripts/e2e-online.py
+          python scripts/e2e-cadastres.py
+          python scripts/e2e-workspace.py
+          python scripts/e2e-whitelabel.py
+          python scripts/e2e-access.py
       - name: Reunir somente evidências E2E novas
         if: always()
         run: |

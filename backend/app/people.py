@@ -1,3 +1,4 @@
+import re
 from fastapi import APIRouter, File, Query, Request, UploadFile
 from sqlalchemy import func, or_, select
 from . import models as m, schemas as s
@@ -21,6 +22,10 @@ PERSON_TYPE_LABELS = {
     'financial_responsible': 'Responsável financeiro',
     'legal_responsible': 'Responsável legal',
     'staff': 'Equipe / administrativo',
+    'supplier': 'Fornecedor',
+    'service_provider': 'Prestador de serviços',
+    'customer': 'Cliente',
+    'partner': 'Sócio',
     'other': 'Outro',
 }
 RESPONSIBLE_PERSON_TYPES = frozenset({
@@ -106,7 +111,14 @@ def person_output(db, obj):
         'person_types': sorted(type_codes),
         'person_type_labels': [person_type_label(key) for key in sorted(type_codes)],
         'student_id': student_id,
+        'teacher_id': db.scalar(select(m.TeacherProfile.id).where(m.TeacherProfile.person_id == obj.id).limit(1)),
+        'employee_id': db.scalar(select(m.EmployeeProfile.id).where(m.EmployeeProfile.person_id == obj.id).limit(1)),
         'photo_file_id': obj.photo_file_id,
+        'business_profiles': {link.type_code: link.details for link in db.scalars(
+            select(m.PersonTypeLink).where(m.PersonTypeLink.person_id == obj.id,
+                m.PersonTypeLink.school_id == obj.school_id,
+                m.PersonTypeLink.active.is_(True),
+                m.PersonTypeLink.type_code.in_(['supplier', 'service_provider', 'customer', 'partner']))).all()},
     }
 
 
@@ -131,6 +143,10 @@ def _person_for_profile(db, school, person_id, person_data, type_code):
         person = m.Person(school_id=school.id, **values)
         db.add(person)
         db.flush()
+    if person.entity_kind != 'individual':
+        fail(422, 'Aluno, professor e funcionário precisam ser pessoas físicas.')
+    if person_data:
+        sync_person_types(db, person, person_data.person_types or [])
     ensure_person_type(db, person, type_code)
     return person
 
@@ -155,8 +171,17 @@ def _profile_list(db, school, model, output_fn, q, page, page_size, search_field
 
 
 @router.get('/persons')
-def list_persons(db: DB, user: Actor, school: Scope, q: str = Query(default='', max_length=160), guardians_only: bool = False, page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100)):
+def list_persons(db: DB, user: Actor, school: Scope, q: str = Query(default='', max_length=160), guardians_only: bool = False, type_code: str = Query(default='', max_length=40, pattern=r'^([a-z][a-z0-9_]{1,39})?$'), entity_kind: str = Query(default='', pattern=r'^(individual|organization)?$'), active: bool | None = None, page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100)):
     stmt = select(m.Person).where(m.Person.school_id == school.id)
+    if type_code:
+        matching = select(m.PersonTypeLink.person_id).where(
+            m.PersonTypeLink.school_id == school.id, m.PersonTypeLink.active.is_(True),
+            m.PersonTypeLink.type_code == type_code)
+        stmt = stmt.where(m.Person.id.in_(matching))
+    if entity_kind:
+        stmt = stmt.where(m.Person.entity_kind == entity_kind)
+    if active is not None:
+        stmt = stmt.where(m.Person.active == active)
     if guardians_only:
         responsible = select(m.PersonTypeLink.person_id).where(
             m.PersonTypeLink.school_id == school.id,
@@ -174,6 +199,10 @@ def list_persons(db: DB, user: Actor, school: Scope, q: str = Query(default='', 
             m.Person.phone.ilike(like, escape='\\'),
             m.Person.email.ilike(like, escape='\\'),
             m.Person.birth_certificate.ilike(like, escape='\\'),
+            m.Person.cnpj.ilike(like, escape='\\'),
+            m.Person.cnpj == re.sub(r'[.\s/\-]', '', q).upper(),
+            m.Person.cpf == re.sub(r'[.\s/\-]', '', q),
+            m.Person.trade_name.ilike(like, escape='\\'),
         ))
     total = db.scalar(select(func.count()).select_from(stmt.subquery()))
     items = [person_output(db, x) for x in db.scalars(stmt.order_by(m.Person.name).offset((page - 1) * page_size).limit(page_size))]
@@ -201,9 +230,16 @@ def update_person(person_id: str, data: s.Edit, db: DB, user: Actor, school: Sco
     lock_school(db, school.id)
     obj = scoped(db, m.Person, person_id, school.id)
     check_version(obj, data.version)
-    values = validate(s.PersonInput, data.data).model_dump()
+    before = person_output(db, obj)
+    current = {key: getattr(obj, key) for key in s.PersonInput.model_fields if hasattr(obj, key)}
+    values = validate(s.PersonInput, {**current, **data.data}).model_dump()
+    effective_types = set(data.data.get('person_types') or active_person_types(db, obj.id)) | derived_person_types(db, obj.id)
+    if values['entity_kind'] == 'organization' and effective_types.intersection(
+            {'student', 'teacher', 'employee', 'collaborator', 'staff'} | RESPONSIBLE_PERSON_TYPES):
+        fail(422, 'Remova os vínculos pessoais antes de transformar este cadastro em pessoa jurídica.')
     requested_types = values.pop('person_types', None)
-    legacy_guardian = values.pop('is_guardian', None)
+    values.pop('is_guardian', None)
+    legacy_guardian = data.data.get('is_guardian')
     if not values['birth_date'] and db.scalar(select(m.Student.id).where(
         m.Student.person_id == obj.id,
     ).limit(1)):
@@ -226,7 +262,6 @@ def update_person(person_id: str, data: s.Edit, db: DB, user: Actor, school: Sco
             fail(409, 'A pessoa possui vínculos ativos como responsável.')
         sync_person_types(db, obj, desired)
 
-    before = person_output(db, obj)
     for key, value in values.items():
         setattr(obj, key, value)
     obj.version += 1
@@ -392,6 +427,10 @@ def create_student(data: s.StudentInput, db: DB, user: Actor, school: Scope, req
         person = m.Person(school_id=school.id, **person_values)
         db.add(person)
         db.flush()
+    if person.entity_kind != 'individual':
+        fail(422, 'O cadastro de aluno exige pessoa física.')
+    if data.person:
+        sync_person_types(db, person, data.person.person_types or [])
     ensure_person_type(db, person, 'student')
     if not person.birth_date:
         fail(422, 'Informe a data de nascimento do aluno.')
@@ -430,6 +469,8 @@ def add_guardian(student_id: str, data: s.GuardianInput, db: DB, user: Actor, sc
     require(user, 'people.write'); lock_school(db, school.id)
     obj = scoped(db, m.Student, student_id, school.id)
     person = scoped(db, m.Person, data.person_id, school.id)
+    if person.entity_kind != 'individual':
+        fail(422, 'Responsáveis por alunos devem ser pessoas físicas.')
     if obj.person_id == person.id:
         fail(422, 'O aluno não pode ser vinculado como seu próprio responsável.')
     ensure_person_type(db, person, 'guardian')

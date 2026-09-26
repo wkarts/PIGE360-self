@@ -43,6 +43,7 @@ class PortalSession(Record, Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+    mfa_verified: Mapped[bool] = mapped_column(Boolean, default=False)
 
 class PortalChallenge(Record, Base):
     __tablename__ = 'portal_challenges'

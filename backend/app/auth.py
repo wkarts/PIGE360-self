@@ -13,22 +13,26 @@ router = APIRouter(prefix='/api/v1', tags=['Autenticação e instalação'])
 DUMMY_PASSWORD_HASH = hash_password('not-an-account-password-93401980')
 
 def user_output(db, user):
+    from .models import UserProfile
+    profile = db.get(UserProfile, user.id)
     return {**output(user, ('password_hash',)),
+            'has_photo': bool(profile and profile.photo_hash),
+            'photo_revision': profile.photo_hash if profile else '',
             'role_label': ROLE_LABELS.get(user.role, user.role),
             'permissions': sorted(PERMISSIONS.get(user.role, set())),
             'school_ids': list(db.scalars(select(SchoolAccess.school_id).where(SchoolAccess.user_id == user.id)))}
 
-def set_refresh(response, session, secret):
+def set_refresh(response, session, secret, db):
     cfg = settings()
-    response.set_cookie('pige_refresh', f'{session.id}.{secret}', httponly=True, secure=cfg.cookie_secure,
-                        samesite='strict', path='/api/v1/auth', max_age=cfg.refresh_token_days * 86400)
+    from .embedding import cookie
+    cookie(response, 'pige_refresh', f'{session.id}.{secret}', path='/api/v1/auth', max_age=cfg.refresh_token_days * 86400, db=db)
 
-def new_session(db, user, response):
+def new_session(db, user, response, mfa_verified=False):
     secret = secrets.token_urlsafe(48)
-    session = AuthSession(user_id=user.id, token_hash=digest(secret), expires_at=now() + timedelta(days=settings().refresh_token_days))
+    session = AuthSession(mfa_verified=mfa_verified, user_id=user.id, token_hash=digest(secret), expires_at=now() + timedelta(days=settings().refresh_token_days))
     db.add(session)
     db.flush()
-    set_refresh(response, session, secret)
+    set_refresh(response, session, secret, db)
     return {'access_token': access_token(user, session), 'token_type': 'bearer', 'user': user_output(db, user)}
 
 @router.get('/setup/status')
@@ -60,6 +64,9 @@ def setup(data: Setup, db: DB, request: Request, x_setup_token: str = Header(def
 
 @router.post('/auth/login')
 def login(data: Login, request: Request, response: Response, db: DB):
+    from .embedding import effective_origins
+    if effective_origins(db):
+        request_csrf(request)
     email = str(data.email).lower()
     peer = request.client.host if request.client else 'unknown'
     counters = []
@@ -80,6 +87,10 @@ def login(data: Login, request: Request, response: Response, db: DB):
         db.commit()  # Persistir limite mesmo quando a resposta é 401.
         fail(401, 'E-mail ou senha inválidos.')
     counters[0].count = 0
+    from .mfa import before_login
+    challenge = before_login(db, request, 'user', user)
+    if challenge:
+        return challenge
     result = new_session(db, user, response)
     audit(db, request, user, 'auth.login', user)
     return result
@@ -102,11 +113,13 @@ def refresh(request: Request, response: Response, db: DB):
     user = db.get(User, session.user_id)
     if not user or not user.active:
         fail(401, 'Usuário inativo.')
+    from .mfa import enforce_session
+    enforce_session(db, 'user', user, session)
     secret = secrets.token_urlsafe(48)
     session.previous_hash = session.token_hash
     session.token_hash = digest(secret)
     # Expiração absoluta: a rotação não estende indefinidamente a sessão.
-    set_refresh(response, session, secret)
+    set_refresh(response, session, secret, db)
     return {'access_token': access_token(user, session), 'token_type': 'bearer', 'user': user_output(db, user)}
 
 @router.post('/auth/logout')
@@ -117,7 +130,8 @@ def logout(request: Request, response: Response, db: DB):
         session = db.get(AuthSession, parts[0])
         if session and digest(parts[1]) in (session.token_hash, session.previous_hash):
             session.revoked = True
-    response.delete_cookie('pige_refresh', path='/api/v1/auth', secure=settings().cookie_secure, httponly=True, samesite='strict')
+    from .embedding import cookie
+    cookie(response, 'pige_refresh', path='/api/v1/auth', delete=True, db=db)
     return {'logged_out': True}
 
 @router.get('/auth/me')

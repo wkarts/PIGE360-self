@@ -29,8 +29,16 @@ def inspect(ref: str, field: str = 'Manifest', optional: bool = False) -> dict |
                                   + r':\s*not found\s*(?:\n|$)', error) is not None
         # Não confundir falta de permissão, rate limit ou rede com imagem ausente.
         missing = exact_missing or any(x in error for x in ('manifest unknown', 'manifest_unknown', 'name unknown', '404 not found'))
-        if optional and missing \
-                and not any(x in error for x in ('unauthorized', 'denied', 'forbidden', 'no such host', 'temporary failure', 'timeout', 'timed out', '502', '503')):
+        # O fingerprint pode conter 502/503: números na referência não são HTTP.
+        # Avaliar códigos isolados somente no diagnóstico, fora da imagem consultada.
+        diagnostic = error.replace(ref.lower(), '')
+        http_failure = re.search(r'(?<![a-z0-9])(?:401|403|408|429|5\d{2})(?![a-z0-9])', diagnostic) is not None
+        unavailable = http_failure or any(x in diagnostic for x in (
+            'unauthorized', 'denied', 'forbidden', 'no such host', 'temporary failure',
+            'timeout', 'timed out', 'rate limit', 'too many requests', 'toomanyrequests',
+            'connection refused', 'connection reset', 'tls handshake',
+        ))
+        if optional and missing and not unavailable:
             return None
         raise RuntimeError(f'Não foi possível inspecionar {ref}: {process.stderr.strip()}')
     result = json.loads(process.stdout)

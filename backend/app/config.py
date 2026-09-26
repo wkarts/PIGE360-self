@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     trusted_proxy_ips: str = ''
     allowed_hosts: str = 'localhost,127.0.0.1'
     cookie_secure: bool = False
+    embed_allowed_origins: str = ''
     access_token_minutes: int = 15
     refresh_token_days: int = 7
     max_upload_mb: int = 10
@@ -53,6 +54,11 @@ class Settings(BaseSettings):
 
     @model_validator(mode='after')
     def validate_runtime(self):
+        from .embedding import origins
+        parents = origins(self.embed_allowed_origins, self.app_env == 'production')
+        self.embed_allowed_origins = ','.join(parents)
+        if parents and (not self.cookie_secure or not self.app_url.startswith('https://')):
+            raise ValueError('Incorporação exige APP_URL HTTPS e COOKIE_SECURE=true.')
         if self.trusted_proxy_ips:
             import ipaddress
             for item in self.trusted_proxy_ips.split(','):
