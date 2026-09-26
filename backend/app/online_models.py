@@ -110,6 +110,7 @@ class ConnectInstance(Record, Base):
     status: Mapped[str] = mapped_column(String(24), default='created')
     connection_state: Mapped[str] = mapped_column(String(24), default='')
     external_id: Mapped[str] = mapped_column(String(160), default='')
+    phone: Mapped[str] = mapped_column(String(24), default='')
     source: Mapped[str] = mapped_column(String(16), default='pige360')
     last_error: Mapped[str] = mapped_column(String(240), default='')
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
