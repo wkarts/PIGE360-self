@@ -143,7 +143,7 @@ class ConnectAdoptInput(Input):
 
 class ConnectUnitPreferenceInput(Input):
     unit_id: str = Field(min_length=1,max_length=36)
-    instance_id: str = Field(min_length=1,max_length=36)
+    instance_id: str = Field(default='',max_length=36)
 
 
 class ConnectionInput(Input):
