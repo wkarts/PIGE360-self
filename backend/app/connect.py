@@ -308,6 +308,12 @@ def set_connect_unit_preference(data: s.ConnectUnitPreferenceInput, db: DB, user
     require(user, "connect.manage")
     lock_school(db, school.id)
     unit = scoped(db, m.Unit, data.unit_id, school.id)
+    if not data.instance_id:
+        binding = db.get(m.ConnectUnitBinding, unit.id)
+        if binding:
+            db.delete(binding)
+        audit(db, request, user, "connect.instance.unit_inherit", unit, school.id)
+        return {"unit_id": unit.id, "instance_id": ""}
     obj = _instance(db, school, data.instance_id)
     _set_unit_preferred(db, school, unit, obj)
     audit(db, request, user, "connect.instance.unit_preferred", obj, school.id, {"unit_id": unit.id})
