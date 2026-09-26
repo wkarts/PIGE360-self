@@ -12,6 +12,10 @@ class PersonInput(Input):
     trade_name: str = Field(default='', max_length=180)
     state_registration: str = Field(default='', max_length=40)
     municipal_registration: str = Field(default='', max_length=40)
+    registration_status: str = Field(default='', max_length=60)
+    opened_on: str = Field(default='', max_length=30)
+    legal_nature: str = Field(default='', max_length=180)
+    main_activity: str = Field(default='', max_length=180)
 
     @field_validator('cnpj', mode='before')
     @classmethod
@@ -335,6 +339,22 @@ class SchoolInput(Input):
 class CompanyInput(Input):
     name: str = Field(min_length=2, max_length=160)
     document: str | None = Field(default=None, max_length=24)
+    trade_name: str = Field(default='', max_length=180)
+    address: str = Field(default='', max_length=400)
+    phone: str = Field(default='', max_length=32)
+    email: str = Field(default='', max_length=254)
+    postal_code: str = Field(default='', max_length=16)
+    street: str = Field(default='', max_length=180)
+    address_number: str = Field(default='', max_length=24)
+    address_complement: str = Field(default='', max_length=120)
+    district: str = Field(default='', max_length=120)
+    city: str = Field(default='', max_length=120)
+    state: str = Field(default='', max_length=2)
+    country: str = Field(default='Brasil', max_length=80)
+    registration_status: str = Field(default='', max_length=60)
+    opened_on: str = Field(default='', max_length=30)
+    legal_nature: str = Field(default='', max_length=180)
+    main_activity: str = Field(default='', max_length=180)
 
 class SupportHubInput(Input):
     version: int | None = Field(default=None, ge=1)
@@ -356,6 +376,7 @@ class Setup(Input):
     admin_password: str = Field(min_length=12, max_length=128)
     company_name: str = Field(min_length=2, max_length=160)
     company_document: str | None = Field(default=None, max_length=24)
+    company_details: CompanyInput | None = None
     school_name: str = Field(min_length=2, max_length=160)
     unit_name: str = Field(default='Unidade principal', min_length=2, max_length=160)
     academic_year: int = Field(ge=2000, le=2200)

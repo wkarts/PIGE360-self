@@ -170,7 +170,30 @@ class AttachmentReview(Input):
     status: Literal["validated","rejected"]
     note: str = Field(min_length=3,max_length=1000)
 
-class PortalProfile(Input):
+class GuardianDetails(Input):
+    birth_date: date | None = None
+    rg: str = Field(default='',max_length=32)
+    rg_issuer: str = Field(default='',max_length=40)
+    birth_certificate: str = Field(default='',max_length=80)
+    mother_name: str = Field(default='',max_length=180)
+    father_name: str = Field(default='',max_length=180)
+    postal_code: str = Field(default='',max_length=16)
+    street: str = Field(default='',max_length=180)
+    address_number: str = Field(default='',max_length=24)
+    address_complement: str = Field(default='',max_length=120)
+    district: str = Field(default='',max_length=120)
+    city: str = Field(default='',max_length=120)
+    state: str = Field(default='',max_length=2)
+    country: str = Field(default='Brasil',max_length=80)
+
+    @field_validator('birth_date',mode='before')
+    @classmethod
+    def blank_date(cls,value):return PersonInput.blank_date(value)
+    @field_validator('birth_date')
+    @classmethod
+    def past_date(cls,value):return PersonInput.not_future(value)
+
+class PortalProfile(GuardianDetails):
     version: int = Field(ge=1)
     name: str = Field(min_length=2,max_length=180)
     cpf: str | None = None

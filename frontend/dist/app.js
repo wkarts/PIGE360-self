@@ -664,7 +664,7 @@ var PigeMFA;
 })(PigeMFA || (PigeMFA = {}));
 var PigeDossier;
 (function (PigeDossier) {
-    const emptyDraft = () => ({ direction: 'guardian', person_id: '', relationship: 'Responsável', legal: false, financial: false, pickup: false, primary_contact: false, active: true, newMode: false, name: '', cpf: '', birth_date: '', phone: '', email: '' });
+    const emptyDraft = () => ({ direction: 'guardian', person_id: '', relationship: 'Responsável', legal: false, financial: false, pickup: false, primary_contact: false, active: true, newMode: false, name: '', cpf: '', birth_date: '', phone: '', email: '', rg: '', rg_issuer: '', birth_certificate: '', mother_name: '', father_name: '', postal_code: '', street: '', address_number: '', address_complement: '', district: '', city: '', state: '', country: '', address: '' });
     PigeDossier.state = Vue.reactive({ active: false, loading: false, error: '', personId: '', personVersion: 0, profiles: {}, rows: [], operations: {}, editor: false, editId: '', query: '', matches: [], searching: false, draft: emptyDraft(), page: 1, total: 0 });
     let root = '', sequence = 0, searchSequence = 0, draftId = 0;
     let pending = Promise.resolve();
@@ -727,7 +727,7 @@ var PigeDossier;
     PigeDossier.dirty = dirty;
     function begin(student) { PigeDossier.state.editor = true; PigeDossier.state.editId = ''; PigeDossier.state.error = ''; PigeDossier.state.query = ''; PigeDossier.state.matches = []; PigeDossier.state.draft = { ...emptyDraft(), direction: student ? 'guardian' : 'student' }; }
     PigeDossier.begin = begin;
-    function edit(row) { PigeDossier.state.editId = row.id; PigeDossier.state.editor = true; PigeDossier.state.error = ''; PigeDossier.state.draft = { ...emptyDraft(), ...row, person_id: row.peer.id, newMode: Boolean(row.new_person), name: row.peer.name, cpf: String(row.new_person?.cpf || ''), birth_date: String(row.new_person?.birth_date || ''), phone: String(row.new_person?.phone || ''), email: String(row.new_person?.email || '') }; }
+    function edit(row) { PigeDossier.state.editId = row.id; PigeDossier.state.editor = true; PigeDossier.state.error = ''; PigeDossier.state.draft = { ...emptyDraft(), ...(row.new_person || {}), ...row, person_id: row.peer.id, newMode: Boolean(row.new_person), name: row.peer.name, cpf: String(row.new_person?.cpf || ''), birth_date: String(row.new_person?.birth_date || ''), phone: String(row.new_person?.phone || ''), email: String(row.new_person?.email || '') }; }
     PigeDossier.edit = edit;
     function toggle(row) { if (row.local) {
         PigeDossier.state.rows = PigeDossier.state.rows.filter(x => x.id !== row.id);
@@ -775,7 +775,7 @@ var PigeDossier;
         }
         const row = { id, version: old?.version, local: old?.local ?? !old, direction: d.direction, peer: { id: d.person_id, name: d.name }, relationship: d.relationship.trim(), legal: d.legal, financial: d.financial, pickup: d.pickup, primary_contact: d.primary_contact, active: d.active };
         if (d.newMode)
-            row.new_person = { name: d.name.trim(), cpf: d.cpf || null, birth_date: d.birth_date || null, phone: d.phone, email: d.email, entity_kind: 'individual', person_types: d.direction === 'student' ? ['student'] : ['guardian'] };
+            row.new_person = { name: d.name.trim(), cpf: d.cpf || null, birth_date: d.birth_date || null, phone: d.phone, email: d.email, rg: d.rg, rg_issuer: d.rg_issuer, birth_certificate: d.birth_certificate, mother_name: d.mother_name, father_name: d.father_name, postal_code: d.postal_code, street: d.street, address_number: d.address_number, address_complement: d.address_complement, district: d.district, city: d.city, state: d.state, country: d.country, address: d.address, entity_kind: 'individual', person_types: d.direction === 'student' ? ['student'] : ['guardian'] };
         if (old)
             PigeDossier.state.rows.splice(PigeDossier.state.rows.indexOf(old), 1, row);
         else
@@ -845,6 +845,249 @@ var PigeDossier;
     }
     PigeDossier.save = save;
 })(PigeDossier || (PigeDossier = {}));
+/** Reutilizável em cadastros/portal. Sugere campos; não salva nem autoriza documentos. */
+var PigeAssist;
+(function (PigeAssist) {
+    let instance = 0;
+    const labels = { name: 'Nome / razão social', trade_name: 'Nome fantasia', cpf: 'CPF', cnpj: 'CNPJ', document: 'Documento', birth_date: 'Nascimento', birth_certificate: 'Certidão', rg: 'RG', rg_issuer: 'Órgão emissor', mother_name: 'Nome da mãe', father_name: 'Nome do pai', birth_city: 'Naturalidade', nationality: 'Nacionalidade', postal_code: 'CEP', street: 'Logradouro', address: 'Endereço completo', address_number: 'Número', address_complement: 'Complemento', district: 'Bairro', city: 'Cidade', state: 'UF', country: 'País', email: 'E-mail', phone: 'Telefone', registration_status: 'Situação cadastral', opened_on: 'Abertura', legal_nature: 'Natureza jurídica', main_activity: 'Atividade principal' };
+    PigeAssist.component = {
+        props: { target: { type: Object, required: true }, fields: { type: Array, default: () => [] }, request: { type: Function, required: true }, root: { type: String, required: true }, lookupRoot: { type: String, default: '' }, ocr: { type: Boolean, default: true }, cnpj: { type: Boolean, default: false }, cep: { type: Boolean, default: true }, mapping: { type: Object, default: () => ({}) }, label: { type: String, default: 'este cadastro' }, source: { type: String, default: '' } },
+        emits: ['applied'], render: PigeRenders.assist,
+        setup(props, { emit }) {
+            const id = 'assist-' + (++instance);
+            const s = Vue.reactive({ open: false, busy: false, error: '', notice: '', purpose: 'identity', fileName: '', preview: '', camera: false,
+                status: '', jobId: '', rows: [], text: '', warnings: [], source: '', query: '', kind: '', confirmed: false });
+            let file = null, stream = null, sequence = 0, disposed = false, timer = null;
+            const targetField = (key) => props.mapping[key] || key;
+            const fields = () => new Set(props.fields.length ? props.fields : Object.keys(props.target));
+            function stopCamera() { stream?.getTracks().forEach(track => track.stop()); stream = null; s.camera = false; }
+            function clearPreview() { if (s.preview)
+                URL.revokeObjectURL(s.preview); s.preview = ''; }
+            function resetResult() { s.rows = []; s.text = ''; s.warnings = []; s.source = ''; s.confirmed = false; s.error = ''; s.notice = ''; }
+            function proposals(result) {
+                const allowed = fields();
+                s.text = result.text;
+                s.warnings = result.warnings;
+                s.rows = result.suggestions.filter(r => allowed.has(targetField(r.field))).map(r => ({ ...r, targetField: targetField(r.field), before: props.target[targetField(r.field)], checked: !props.target[targetField(r.field)] }));
+                s.status = 'Leitura concluída';
+                if (!s.rows.length)
+                    s.notice = 'Nenhum campo identificado com segurança para esta ficha. Consulte o texto lido ou preencha manualmente.';
+            }
+            function selectFile(e) { const input = e.target; file = input.files?.[0] || null; input.value = ''; clearPreview(); resetResult(); s.fileName = file?.name || ''; if (file?.type.startsWith('image/'))
+                s.preview = URL.createObjectURL(file); if (file)
+                void analyze(); }
+            async function camera() {
+                s.open = true;
+                s.error = '';
+                const stamp = ++sequence;
+                try {
+                    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)
+                        throw new Error('Abra por HTTPS ou use “Fotografar / escolher arquivo”.');
+                    const acquired = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+                    if (disposed || stamp !== sequence) {
+                        acquired.getTracks().forEach(t => t.stop());
+                        return;
+                    }
+                    stopCamera();
+                    stream = acquired;
+                    s.camera = true;
+                    await Vue.nextTick();
+                    const video = document.getElementById(id + '-camera');
+                    if (!video)
+                        throw new Error('Câmera não disponível nesta tela.');
+                    video.srcObject = stream;
+                    await video.play();
+                }
+                catch (e) {
+                    stopCamera();
+                    s.error = 'Não foi possível abrir a câmera. ' + (e instanceof Error ? e.message : 'Use o envio de arquivo.');
+                }
+            }
+            async function capture() {
+                const video = document.getElementById(id + '-camera');
+                if (!video?.videoWidth)
+                    return;
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .92));
+                if (blob) {
+                    file = new File([blob], 'documento.jpg', { type: 'image/jpeg' });
+                    s.fileName = file.name;
+                    clearPreview();
+                    s.preview = URL.createObjectURL(blob);
+                    resetResult();
+                }
+                stopCamera();
+                if (file)
+                    void analyze();
+            }
+            async function rotate() {
+                if (!file || !s.preview)
+                    return;
+                const image = new Image();
+                image.src = s.preview;
+                await image.decode();
+                const canvas = document.createElement('canvas');
+                canvas.width = image.naturalHeight;
+                canvas.height = image.naturalWidth;
+                const ctx = canvas.getContext('2d');
+                ctx.translate(canvas.width, 0);
+                ctx.rotate(Math.PI / 2);
+                ctx.drawImage(image, 0, 0);
+                const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', .92));
+                if (blob) {
+                    file = new File([blob], 'documento-rotacionado.jpg', { type: 'image/jpeg' });
+                    clearPreview();
+                    s.preview = URL.createObjectURL(blob);
+                    s.fileName = file.name;
+                }
+            }
+            async function poll(job, stamp, owner, started) {
+                if (disposed || stamp !== sequence || owner !== props.target)
+                    return;
+                s.jobId = job.id;
+                s.status = job.status === 'queued' ? 'Documento na fila de leitura…' : 'Lendo documento…';
+                if (job.status === 'succeeded' && job.result) {
+                    proposals(job.result);
+                    s.source = 'Leitura local do documento';
+                    s.busy = false;
+                    return;
+                }
+                if (['failed', 'cancelled'].includes(job.status)) {
+                    s.busy = false;
+                    s.error = 'Não foi possível ler o documento (' + job.error_code + '). Use outra foto ou preencha manualmente.';
+                    return;
+                }
+                if (Date.now() - started > 180000) {
+                    s.busy = false;
+                    s.error = 'A leitura está demorando. Verifique o worker OCR; o preenchimento manual não depende dele.';
+                    return;
+                }
+                timer = setTimeout(async () => { try {
+                    const next = await props.request(props.root + '/ocr/jobs/' + job.id);
+                    await poll(next, stamp, owner, started);
+                }
+                catch (e) {
+                    if (stamp === sequence) {
+                        s.busy = false;
+                        s.error = e instanceof Error ? e.message : String(e);
+                    }
+                } }, 1800);
+            }
+            function openDocument() { ++sequence; stopCamera(); resetResult(); s.open = true; s.kind = ''; }
+            async function analyze() {
+                if (s.busy)
+                    return;
+                if (!file && !props.source) {
+                    s.error = 'Selecione ou fotografe um documento.';
+                    return;
+                }
+                stopCamera();
+                resetResult();
+                s.busy = true;
+                s.open = true;
+                const stamp = ++sequence, owner = props.target;
+                try {
+                    let job;
+                    if (!file && props.source)
+                        job = await props.request(props.source, { method: 'POST', body: JSON.stringify({ purpose: s.purpose }) });
+                    else {
+                        const body = new FormData();
+                        body.set('purpose', s.purpose);
+                        body.set('file', file);
+                        job = await props.request(props.root + '/ocr/jobs', { method: 'POST', body });
+                    }
+                    await poll(job, stamp, owner, Date.now());
+                }
+                catch (e) {
+                    if (stamp === sequence) {
+                        s.busy = false;
+                        s.error = e instanceof Error ? e.message : String(e);
+                    }
+                }
+            }
+            async function cancel() {
+                ++sequence;
+                if (timer)
+                    clearTimeout(timer);
+                stopCamera();
+                s.busy = false;
+                s.status = '';
+                if (s.jobId) {
+                    const job = s.jobId;
+                    s.jobId = '';
+                    try {
+                        await props.request(props.root + '/ocr/jobs/' + job, { method: 'DELETE' });
+                    }
+                    catch { /* Expiração já garante descarte no worker. */ }
+                }
+                resetResult();
+                file = null;
+                clearPreview();
+                s.fileName = '';
+                s.open = false;
+            }
+            function openLookup(kind) { ++sequence; stopCamera(); s.open = true; s.kind = kind; resetResult(); s.query = String(props.target[targetField(kind === 'cep' ? 'postal_code' : 'cnpj')] || ''); }
+            async function lookup() {
+                if (!s.kind || s.busy)
+                    return;
+                resetResult();
+                s.busy = true;
+                const owner = props.target, stamp = ++sequence, query = s.query, kind = s.kind;
+                try {
+                    const result = await props.request((props.lookupRoot || props.root) + '/lookups/' + kind, { method: 'POST', body: JSON.stringify({ value: query }) });
+                    if (disposed || stamp !== sequence || owner !== props.target || query !== s.query)
+                        return;
+                    proposals({ text: '', confidence: null, warnings: [result.warning], suggestions: Object.entries(result.data).map(([field, value]) => ({ field, value })) });
+                    s.source = result.provider + ' · ' + (result.cached ? 'cache' : 'consulta online') + ' · ' + new Date(result.fetched_at).toLocaleString('pt-BR');
+                }
+                catch (e) {
+                    if (stamp === sequence)
+                        s.error = e instanceof Error ? e.message : String(e);
+                }
+                finally {
+                    if (stamp === sequence)
+                        s.busy = false;
+                }
+            }
+            function apply() {
+                if (!s.confirmed || s.busy)
+                    return;
+                s.error = '';
+                const applied = {};
+                for (const row of s.rows.filter(r => r.checked)) {
+                    if (!fields().has(row.targetField)) {
+                        row.checked = false;
+                        continue;
+                    }
+                    if (props.target[row.targetField] !== row.before) {
+                        row.checked = false;
+                        s.error = 'Um campo foi alterado durante a conferência. Consulte novamente para evitar sobrescrever sua edição.';
+                        continue;
+                    }
+                    props.target[row.targetField] = row.value;
+                    applied[row.targetField] = row.value;
+                    row.before = row.value;
+                    row.checked = false;
+                }
+                if (Object.keys(applied).length) {
+                    emit('applied', applied);
+                    s.notice = 'Campos preenchidos no rascunho. Revise a ficha e use o botão Salvar para persistir.';
+                    s.confirmed = false;
+                }
+            }
+            Vue.onUnmounted(() => { disposed = true; ++sequence; if (timer)
+                clearTimeout(timer); stopCamera(); clearPreview(); file = null; });
+            Vue.onMounted(() => { if (props.source) {
+                s.open = true;
+                void analyze();
+            } });
+            return { s, id, props, labels, selectFile, camera, capture, rotate, stopCamera, openDocument, analyze, cancel, openLookup, lookup, apply };
+        }
+    };
+})(PigeAssist || (PigeAssist = {}));
 var PigeUI;
 (function (PigeUI) {
     const text = (value) => value === null || value === undefined ? '' : String(value);
@@ -856,6 +1099,7 @@ var PigeUI;
     const blankModal = () => ({ kind: '', title: '', fields: [], form: {}, target: null, action: '', error: '' });
     const state = Vue.reactive({
         embeddingProbe: { busy: false, message: '', frame_policy: '', x_frame_options: '' },
+        assistSource: '',
         ready: false, configured: true, embedded: window.self !== window.top, online: navigator.onLine, loginBusy: false, busy: false, loading: false,
         error: '', success: '', menuOpen: false, user: null, userPhotoUrl: '', profilePhotoPreview: '',
         schools: [], schoolId: '', page: 'dashboard', q: '', pageNumber: 1, total: 0,
@@ -925,6 +1169,7 @@ var PigeUI;
         return [
             field('entity_kind', 'Natureza da pessoa', 'select', true, [{ value: 'individual', label: 'Pessoa física' }, { value: 'organization', label: 'Pessoa jurídica' }]),
             field('cnpj', 'CNPJ'), field('trade_name', 'Nome fantasia'), field('state_registration', 'Inscrição estadual'), field('municipal_registration', 'Inscrição municipal'),
+            field('registration_status', 'Situação cadastral CNPJ'), field('opened_on', 'Data de abertura'), field('legal_nature', 'Natureza jurídica'), field('main_activity', 'Atividade principal'),
             field('person_types', 'Tipos de pessoa', 'multiselect', false, personTypeOptions(extraTypes), true),
             field('name', 'Nome completo', 'text', true), field('social_name', 'Nome social'), field('cpf', 'CPF'), field('birth_date', 'Data de nascimento', 'date'),
             field('birth_certificate', 'Certidão / registro de nascimento'), field('birth_city', 'Cidade de nascimento'), field('birth_state', 'UF de nascimento'),
@@ -1054,7 +1299,8 @@ var PigeUI;
         state.error = '';
         try {
             const { token, ...data } = state.setup;
-            await PigeAPI.request('/setup', { method: 'POST', headers: { 'X-Setup-Token': token }, body: JSON.stringify(data) });
+            const payload = { ...data, company_name: setupCompany.name, company_document: setupCompany.document, company_details: setupCompany };
+            await PigeAPI.request('/setup', { method: 'POST', headers: { 'X-Setup-Token': token }, body: JSON.stringify(payload) });
             state.configured = true;
             await PigeInstitution.load();
             state.login.email = data.admin_email;
@@ -1249,6 +1495,7 @@ var PigeUI;
         state.discardChanges = false;
         state.reuseTarget = '';
         state.personTypeQuery = '';
+        state.assistSource = '';
         if (PigeDossier.eligible(kind)) {
             const primary = kind.split('-')[0], additions = [];
             for (const [profile, items] of [['student', studentFields()], ['teacher', teacherFields()], ['employee', employeeFields()]]) {
@@ -1301,7 +1548,7 @@ var PigeUI;
             return selectedPersonTypes().includes(f.key.split('__')[0]);
         if (f.key === 'entity_kind' && kind !== 'person' && kind !== 'business')
             return false;
-        if (['cnpj', 'trade_name', 'state_registration', 'municipal_registration'].includes(f.key))
+        if (['cnpj', 'trade_name', 'state_registration', 'municipal_registration', 'registration_status', 'opened_on', 'legal_nature', 'main_activity'].includes(f.key))
             return legal;
         return !(legal && personalKeys.has(f.key));
     }
@@ -1591,10 +1838,23 @@ var PigeUI;
         const row = state.companies.find(c => c.id === school()?.company_id);
         if (!row)
             return;
-        const fields = [field('name', 'Razão social', 'text', true), field('document', 'CPF / CNPJ')];
+        const fields = companyFields();
         openModal('company-edit', 'Dados da mantenedora', fields, valuesFrom(row, fields), row);
     }
-    function newCompany() { openModal('company', 'Cadastrar empresa / mantenedora', [field('name', 'Razão social', 'text', true), field('document', 'CPF / CNPJ')]); }
+    function newCompany() { openModal('company', 'Cadastrar empresa / mantenedora', companyFields()); }
+    const familyAssistFields = ['name', 'cpf', 'birth_date', 'phone', 'email', 'rg', 'rg_issuer', 'birth_certificate', 'mother_name', 'father_name', 'postal_code', 'street', 'address_number', 'address_complement', 'district', 'city', 'state', 'country', 'address'];
+    const companyExtra = [['trade_name', 'Nome fantasia'], ['address', 'Endereço completo'], ['postal_code', 'CEP'], ['street', 'Logradouro'], ['address_number', 'Número'], ['address_complement', 'Complemento'], ['district', 'Bairro'], ['city', 'Cidade'], ['state', 'UF'], ['country', 'País'], ['phone', 'Telefone'], ['email', 'E-mail'], ['registration_status', 'Situação cadastral'], ['opened_on', 'Abertura'], ['legal_nature', 'Natureza jurídica'], ['main_activity', 'Atividade principal']];
+    const setupCompany = Vue.reactive(Object.fromEntries([['name', ''], ['document', ''], ...companyExtra.map(([key]) => [key, ''])]));
+    const setupCompanyFields = ['name', 'document', ...companyExtra.map(([key]) => key)];
+    function companyFields() { return [field('name', 'Razão social', 'text', true), field('document', 'CPF / CNPJ'), ...companyExtra.map(([key, caption]) => field(key, caption, key === 'email' ? 'email' : 'text'))]; }
+    const assistRequest = PigeAPI.request;
+    function assistEligible() { return isPersonModal() || ['company', 'company-edit', 'school'].includes(state.modal.kind); }
+    function assistFields() { return state.modal.fields.filter(modalFieldRelevant).map(f => f.key); }
+    function assistCompany() { return ['company', 'company-edit'].includes(state.modal.kind); }
+    async function setupLookup(path, options = {}) { return PigeAPI.request(path, { ...options, headers: { 'X-Setup-Token': state.setup.token } }); }
+    async function readResponsibleDocument(id) { await safe(async () => { await searchPersons(); openModal('ocr-target', 'Escolher pessoa responsável para a leitura', [field('person_id', 'Pessoa responsável cadastrada', 'person', true)]); state.assistSource = base() + '/files/' + id + '/ocr'; }); }
+    function readStudentDocument(id) { editStudent(); state.assistSource = base() + '/files/' + id + '/ocr'; }
+    async function editIntake() { await safe(async () => { const cfg = await PigeAPI.request('/institution/intake'); openModal('intake-settings', 'Leitura de documentos e consultas cadastrais', [field('ocr_enabled', 'Permitir leitura local de documentos (OCR)', 'checkbox'), field('lookups_enabled', 'Permitir consulta online de CNPJ e CEP', 'checkbox')], { ocr_enabled: Boolean(cfg.ocr_enabled), lookups_enabled: Boolean(cfg.lookups_enabled) }, cfg); }); }
     function newSchool(row = null) { const fields = [field('company_id', 'Empresa / mantenedora', 'select', true, state.companies.map(c => ({ value: c.id, label: text(c.name) }))), field('name', 'Nome da escola', 'text', true), field('address', 'Endereço', 'text', false, undefined, true), field('phone', 'Telefone'), field('email', 'E-mail', 'email'), field('document_policy', 'Pendências na ativação da matrícula', 'select', true, [{ value: 'warn', label: 'Avisar sem bloquear' }, { value: 'block', label: 'Exigir validação dos documentos obrigatórios' }]), field('active', 'Escola ativa', 'checkbox')]; openModal('school', row ? 'Editar escola' : 'Cadastrar escola', fields, row ? valuesFrom(row, fields) : { document_policy: 'warn', active: true }, row); }
     function editSupportHub() {
         const companyId = text(state.schools.find(s => s.id === state.schoolId)?.company_id);
@@ -1678,6 +1938,13 @@ var PigeUI;
         try {
             const photo = selectedFile;
             delete form.photo;
+            if (modal.kind === 'ocr-target') {
+                const source = state.assistSource;
+                const data = await PigeAPI.request(base() + '/persons/' + form.person_id + '/dossier');
+                editPerson(data.person);
+                state.assistSource = source;
+                return;
+            }
             if (modal.kind === 'reuse') {
                 await useExisting();
                 return;
@@ -1887,6 +2154,8 @@ var PigeUI;
                 state.success = 'Segurança de incorporação atualizada.';
                 return;
             }
+            else if (modal.kind === 'intake-settings')
+                await PigeAPI.request('/institution/intake', { method: 'PUT', body: JSON.stringify({ ...form, version: target.version }) });
             else if (modal.kind === 'company-edit')
                 await PigeAPI.patch('/companies/' + target.id, { version: target.version, data: form });
             else if (modal.kind === 'company')
@@ -2038,5 +2307,5 @@ var PigeUI;
             event.returnValue = '';
         } });
     }
-    Vue.createApp({ components: { 'expansion-panel': PigeExpansion.component }, render: PigeRenders.app, setup() { Vue.onMounted(() => { PigeMFA.init(PigeAPI.request, afterMFA, logout); PigeDialogs.install(); setupPWA(); void initialize(); }); return { state, mfa: PigeMFA, dossier: PigeDossier, selectedPersonTypes, availablePersonTypes, togglePersonType, lockedPersonType, familyRelevant, manageMFA, editMFAPolicy, editEmbedding, probeEmbedding, editMyProfile, myPhotoChange, profilePassword, registryPages, businessTypes, isBusiness, newBusiness, reusePerson, personDocument, modalSections, modalTab, visibleSection, modalFieldLabel, modalFieldRelevant, advancedPersonField, isPersonModal, personTypeOptions, personTypeLabel, modalDirty, identity: PigeInstitution.state, supportStatus: PigeSupport.status, editIdentity, identityFileChange, manageUnits, editMaintainer, text, can, isProfileRole, school, label, date, cpf, initials, photoSrc, getName, options, pageLabels, catalogLabels, configure, login, logout, navigate, changeSchool, setCatalog, search, page, loadPage, viewStudent, newPerson, newStudent, editStudent, newGuardian, newTeacher, editTeacher, newEmployee, editEmployee, editPerson, newCatalog, newEnrollment, viewEnrollment, startMovement, reenroll, newLink, editLink, uploadDocument, fileChange, reviewDocument, waiveDocument, issueDocument, downloadFile, newProtocol, newCompany, newSchool, editSupportHub, newUser, password, archiveStudent, closeModal, saveModal, loadReport, exportStudents, exportClass, searchStudents, searchPersons, filteredClasses, clearFilters, yearChanged, editDraft, viewProtocol, protocolNote, protocolReceipt, exportPendencies, install, updateApp }; } }).mount('#app');
+    Vue.createApp({ components: { 'expansion-panel': PigeExpansion.component, 'assist-panel': PigeAssist.component }, render: PigeRenders.app, setup() { Vue.onMounted(() => { PigeMFA.init(PigeAPI.request, afterMFA, logout); PigeDialogs.install(); setupPWA(); void initialize(); }); return { state, base, familyAssistFields, assistRequest, assistFields, assistEligible, assistCompany, setupCompany, setupCompanyFields, companyExtra, setupLookup, readStudentDocument, readResponsibleDocument, editIntake, mfa: PigeMFA, dossier: PigeDossier, selectedPersonTypes, availablePersonTypes, togglePersonType, lockedPersonType, familyRelevant, manageMFA, editMFAPolicy, editEmbedding, probeEmbedding, editMyProfile, myPhotoChange, profilePassword, registryPages, businessTypes, isBusiness, newBusiness, reusePerson, personDocument, modalSections, modalTab, visibleSection, modalFieldLabel, modalFieldRelevant, advancedPersonField, isPersonModal, personTypeOptions, personTypeLabel, modalDirty, identity: PigeInstitution.state, supportStatus: PigeSupport.status, editIdentity, identityFileChange, manageUnits, editMaintainer, text, can, isProfileRole, school, label, date, cpf, initials, photoSrc, getName, options, pageLabels, catalogLabels, configure, login, logout, navigate, changeSchool, setCatalog, search, page, loadPage, viewStudent, newPerson, newStudent, editStudent, newGuardian, newTeacher, editTeacher, newEmployee, editEmployee, editPerson, newCatalog, newEnrollment, viewEnrollment, startMovement, reenroll, newLink, editLink, uploadDocument, fileChange, reviewDocument, waiveDocument, issueDocument, downloadFile, newProtocol, newCompany, newSchool, editSupportHub, newUser, password, archiveStudent, closeModal, saveModal, loadReport, exportStudents, exportClass, searchStudents, searchPersons, filteredClasses, clearFilters, yearChanged, editDraft, viewProtocol, protocolNote, protocolReceipt, exportPendencies, install, updateApp }; } }).mount('#app');
 })(PigeUI || (PigeUI = {}));

@@ -163,9 +163,252 @@ var PigeMFA;
     function downloadCodes() { const content = 'Códigos de recuperação — ' + PigeInstitution.state.display_name + '\nCada código pode ser utilizado uma única vez. Guarde em local seguro.\n\n' + PigeMFA.state.codes.join('\n'); const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' })); const a = document.createElement('a'); a.href = url; a.download = 'codigos-de-recuperacao.txt'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
     PigeMFA.downloadCodes = downloadCodes;
 })(PigeMFA || (PigeMFA = {}));
+/** Reutilizável em cadastros/portal. Sugere campos; não salva nem autoriza documentos. */
+var PigeAssist;
+(function (PigeAssist) {
+    let instance = 0;
+    const labels = { name: 'Nome / razão social', trade_name: 'Nome fantasia', cpf: 'CPF', cnpj: 'CNPJ', document: 'Documento', birth_date: 'Nascimento', birth_certificate: 'Certidão', rg: 'RG', rg_issuer: 'Órgão emissor', mother_name: 'Nome da mãe', father_name: 'Nome do pai', birth_city: 'Naturalidade', nationality: 'Nacionalidade', postal_code: 'CEP', street: 'Logradouro', address: 'Endereço completo', address_number: 'Número', address_complement: 'Complemento', district: 'Bairro', city: 'Cidade', state: 'UF', country: 'País', email: 'E-mail', phone: 'Telefone', registration_status: 'Situação cadastral', opened_on: 'Abertura', legal_nature: 'Natureza jurídica', main_activity: 'Atividade principal' };
+    PigeAssist.component = {
+        props: { target: { type: Object, required: true }, fields: { type: Array, default: () => [] }, request: { type: Function, required: true }, root: { type: String, required: true }, lookupRoot: { type: String, default: '' }, ocr: { type: Boolean, default: true }, cnpj: { type: Boolean, default: false }, cep: { type: Boolean, default: true }, mapping: { type: Object, default: () => ({}) }, label: { type: String, default: 'este cadastro' }, source: { type: String, default: '' } },
+        emits: ['applied'], render: PigeRenders.assist,
+        setup(props, { emit }) {
+            const id = 'assist-' + (++instance);
+            const s = Vue.reactive({ open: false, busy: false, error: '', notice: '', purpose: 'identity', fileName: '', preview: '', camera: false,
+                status: '', jobId: '', rows: [], text: '', warnings: [], source: '', query: '', kind: '', confirmed: false });
+            let file = null, stream = null, sequence = 0, disposed = false, timer = null;
+            const targetField = (key) => props.mapping[key] || key;
+            const fields = () => new Set(props.fields.length ? props.fields : Object.keys(props.target));
+            function stopCamera() { stream?.getTracks().forEach(track => track.stop()); stream = null; s.camera = false; }
+            function clearPreview() { if (s.preview)
+                URL.revokeObjectURL(s.preview); s.preview = ''; }
+            function resetResult() { s.rows = []; s.text = ''; s.warnings = []; s.source = ''; s.confirmed = false; s.error = ''; s.notice = ''; }
+            function proposals(result) {
+                const allowed = fields();
+                s.text = result.text;
+                s.warnings = result.warnings;
+                s.rows = result.suggestions.filter(r => allowed.has(targetField(r.field))).map(r => ({ ...r, targetField: targetField(r.field), before: props.target[targetField(r.field)], checked: !props.target[targetField(r.field)] }));
+                s.status = 'Leitura concluída';
+                if (!s.rows.length)
+                    s.notice = 'Nenhum campo identificado com segurança para esta ficha. Consulte o texto lido ou preencha manualmente.';
+            }
+            function selectFile(e) { const input = e.target; file = input.files?.[0] || null; input.value = ''; clearPreview(); resetResult(); s.fileName = file?.name || ''; if (file?.type.startsWith('image/'))
+                s.preview = URL.createObjectURL(file); if (file)
+                void analyze(); }
+            async function camera() {
+                s.open = true;
+                s.error = '';
+                const stamp = ++sequence;
+                try {
+                    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)
+                        throw new Error('Abra por HTTPS ou use “Fotografar / escolher arquivo”.');
+                    const acquired = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+                    if (disposed || stamp !== sequence) {
+                        acquired.getTracks().forEach(t => t.stop());
+                        return;
+                    }
+                    stopCamera();
+                    stream = acquired;
+                    s.camera = true;
+                    await Vue.nextTick();
+                    const video = document.getElementById(id + '-camera');
+                    if (!video)
+                        throw new Error('Câmera não disponível nesta tela.');
+                    video.srcObject = stream;
+                    await video.play();
+                }
+                catch (e) {
+                    stopCamera();
+                    s.error = 'Não foi possível abrir a câmera. ' + (e instanceof Error ? e.message : 'Use o envio de arquivo.');
+                }
+            }
+            async function capture() {
+                const video = document.getElementById(id + '-camera');
+                if (!video?.videoWidth)
+                    return;
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .92));
+                if (blob) {
+                    file = new File([blob], 'documento.jpg', { type: 'image/jpeg' });
+                    s.fileName = file.name;
+                    clearPreview();
+                    s.preview = URL.createObjectURL(blob);
+                    resetResult();
+                }
+                stopCamera();
+                if (file)
+                    void analyze();
+            }
+            async function rotate() {
+                if (!file || !s.preview)
+                    return;
+                const image = new Image();
+                image.src = s.preview;
+                await image.decode();
+                const canvas = document.createElement('canvas');
+                canvas.width = image.naturalHeight;
+                canvas.height = image.naturalWidth;
+                const ctx = canvas.getContext('2d');
+                ctx.translate(canvas.width, 0);
+                ctx.rotate(Math.PI / 2);
+                ctx.drawImage(image, 0, 0);
+                const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', .92));
+                if (blob) {
+                    file = new File([blob], 'documento-rotacionado.jpg', { type: 'image/jpeg' });
+                    clearPreview();
+                    s.preview = URL.createObjectURL(blob);
+                    s.fileName = file.name;
+                }
+            }
+            async function poll(job, stamp, owner, started) {
+                if (disposed || stamp !== sequence || owner !== props.target)
+                    return;
+                s.jobId = job.id;
+                s.status = job.status === 'queued' ? 'Documento na fila de leitura…' : 'Lendo documento…';
+                if (job.status === 'succeeded' && job.result) {
+                    proposals(job.result);
+                    s.source = 'Leitura local do documento';
+                    s.busy = false;
+                    return;
+                }
+                if (['failed', 'cancelled'].includes(job.status)) {
+                    s.busy = false;
+                    s.error = 'Não foi possível ler o documento (' + job.error_code + '). Use outra foto ou preencha manualmente.';
+                    return;
+                }
+                if (Date.now() - started > 180000) {
+                    s.busy = false;
+                    s.error = 'A leitura está demorando. Verifique o worker OCR; o preenchimento manual não depende dele.';
+                    return;
+                }
+                timer = setTimeout(async () => { try {
+                    const next = await props.request(props.root + '/ocr/jobs/' + job.id);
+                    await poll(next, stamp, owner, started);
+                }
+                catch (e) {
+                    if (stamp === sequence) {
+                        s.busy = false;
+                        s.error = e instanceof Error ? e.message : String(e);
+                    }
+                } }, 1800);
+            }
+            function openDocument() { ++sequence; stopCamera(); resetResult(); s.open = true; s.kind = ''; }
+            async function analyze() {
+                if (s.busy)
+                    return;
+                if (!file && !props.source) {
+                    s.error = 'Selecione ou fotografe um documento.';
+                    return;
+                }
+                stopCamera();
+                resetResult();
+                s.busy = true;
+                s.open = true;
+                const stamp = ++sequence, owner = props.target;
+                try {
+                    let job;
+                    if (!file && props.source)
+                        job = await props.request(props.source, { method: 'POST', body: JSON.stringify({ purpose: s.purpose }) });
+                    else {
+                        const body = new FormData();
+                        body.set('purpose', s.purpose);
+                        body.set('file', file);
+                        job = await props.request(props.root + '/ocr/jobs', { method: 'POST', body });
+                    }
+                    await poll(job, stamp, owner, Date.now());
+                }
+                catch (e) {
+                    if (stamp === sequence) {
+                        s.busy = false;
+                        s.error = e instanceof Error ? e.message : String(e);
+                    }
+                }
+            }
+            async function cancel() {
+                ++sequence;
+                if (timer)
+                    clearTimeout(timer);
+                stopCamera();
+                s.busy = false;
+                s.status = '';
+                if (s.jobId) {
+                    const job = s.jobId;
+                    s.jobId = '';
+                    try {
+                        await props.request(props.root + '/ocr/jobs/' + job, { method: 'DELETE' });
+                    }
+                    catch { /* Expiração já garante descarte no worker. */ }
+                }
+                resetResult();
+                file = null;
+                clearPreview();
+                s.fileName = '';
+                s.open = false;
+            }
+            function openLookup(kind) { ++sequence; stopCamera(); s.open = true; s.kind = kind; resetResult(); s.query = String(props.target[targetField(kind === 'cep' ? 'postal_code' : 'cnpj')] || ''); }
+            async function lookup() {
+                if (!s.kind || s.busy)
+                    return;
+                resetResult();
+                s.busy = true;
+                const owner = props.target, stamp = ++sequence, query = s.query, kind = s.kind;
+                try {
+                    const result = await props.request((props.lookupRoot || props.root) + '/lookups/' + kind, { method: 'POST', body: JSON.stringify({ value: query }) });
+                    if (disposed || stamp !== sequence || owner !== props.target || query !== s.query)
+                        return;
+                    proposals({ text: '', confidence: null, warnings: [result.warning], suggestions: Object.entries(result.data).map(([field, value]) => ({ field, value })) });
+                    s.source = result.provider + ' · ' + (result.cached ? 'cache' : 'consulta online') + ' · ' + new Date(result.fetched_at).toLocaleString('pt-BR');
+                }
+                catch (e) {
+                    if (stamp === sequence)
+                        s.error = e instanceof Error ? e.message : String(e);
+                }
+                finally {
+                    if (stamp === sequence)
+                        s.busy = false;
+                }
+            }
+            function apply() {
+                if (!s.confirmed || s.busy)
+                    return;
+                s.error = '';
+                const applied = {};
+                for (const row of s.rows.filter(r => r.checked)) {
+                    if (!fields().has(row.targetField)) {
+                        row.checked = false;
+                        continue;
+                    }
+                    if (props.target[row.targetField] !== row.before) {
+                        row.checked = false;
+                        s.error = 'Um campo foi alterado durante a conferência. Consulte novamente para evitar sobrescrever sua edição.';
+                        continue;
+                    }
+                    props.target[row.targetField] = row.value;
+                    applied[row.targetField] = row.value;
+                    row.before = row.value;
+                    row.checked = false;
+                }
+                if (Object.keys(applied).length) {
+                    emit('applied', applied);
+                    s.notice = 'Campos preenchidos no rascunho. Revise a ficha e use o botão Salvar para persistir.';
+                    s.confirmed = false;
+                }
+            }
+            Vue.onUnmounted(() => { disposed = true; ++sequence; if (timer)
+                clearTimeout(timer); stopCamera(); clearPreview(); file = null; });
+            Vue.onMounted(() => { if (props.source) {
+                s.open = true;
+                void analyze();
+            } });
+            return { s, id, props, labels, selectFile, camera, capture, rotate, stopCamera, openDocument, analyze, cancel, openLookup, lookup, apply };
+        }
+    };
+})(PigeAssist || (PigeAssist = {}));
 var PigePortal;
 (function (PigePortal) {
-    const state = Vue.reactive({ ready: false, busy: false, error: '', notice: '', online: navigator.onLine, account: null, campaign: null, campaigns: [], slug: new URLSearchParams(location.search).get('campaign') || '', mode: 'login', rows: [], total: 0, page: 1, selected: null, editing: false, charges: [], code: '', verifyChannel: 'email', message: '', documentType: '', acceptTerms: false, legal: false, register: { name: '', email: '', password: '', cpf: '', phone: '', address: '', accept_privacy: false, whatsapp_opt_in: false }, login: { email: '', password: '' }, reset: { email: '', code: '', password: '' }, form: { student: PigeOnline.person(), class_group_id: '', previous_school: '', relationship: 'Responsável legal', notes: '', client_key: PigeOnline.newId() } });
+    const state = Vue.reactive({ assistSource: '', profileReadSource: '', profileOpen: false, ready: false, busy: false, error: '', notice: '', online: navigator.onLine, account: null, campaign: null, campaigns: [], slug: new URLSearchParams(location.search).get('campaign') || '', mode: 'login', rows: [], total: 0, page: 1, selected: null, editing: false, charges: [], code: '', verifyChannel: 'email', message: '', documentType: '', acceptTerms: false, legal: false, register: { name: '', email: '', password: '', cpf: '', phone: '', address: '', accept_privacy: false, whatsapp_opt_in: false }, login: { email: '', password: '' }, reset: { email: '', code: '', password: '' }, form: { student: PigeOnline.person(), class_group_id: '', previous_school: '', relationship: 'Responsável legal', notes: '', client_key: PigeOnline.newId() } });
     let selectedFile = null;
     async function request(path, options = {}) {
         if (!navigator.onLine)
@@ -220,21 +463,21 @@ var PigePortal;
     async function register() { await run(async () => { if (!state.campaign)
         throw new Error('Selecione um processo de matrícula.'); const result = await post('/register', { ...state.register, cpf: state.register.cpf || null, campaign_slug: state.slug, terms_version: state.campaign.terms_version }); state.register.password = ''; if (await PigeMFA.accept(result))
         return; await afterMFA(result); state.notice = 'Conta criada. Confirme um contato e preencha os dados do aluno.'; }); }
-    async function logout() { await run(async () => { await post('/logout', {}); state.account = null; state.rows = []; state.selected = null; state.charges = []; state.editing = false; state.register = { name: '', email: '', password: '', cpf: '', phone: '', address: '', accept_privacy: false, whatsapp_opt_in: false }; state.login.password = ''; state.form.student = PigeOnline.person(); }); }
+    async function logout() { state.assistSource = ''; state.profileReadSource = ''; state.profileOpen = false; await run(async () => { await post('/logout', {}); state.account = null; state.rows = []; state.selected = null; state.charges = []; state.editing = false; state.register = { name: '', email: '', password: '', cpf: '', phone: '', address: '', accept_privacy: false, whatsapp_opt_in: false }; state.login.password = ''; state.form.student = PigeOnline.person(); }); }
     async function verifyRequest() { await run(async () => { await post('/verification/request', { channel: state.verifyChannel }); state.notice = 'Código solicitado. Consulte o canal escolhido; a entrega depende da integração da escola.'; }); }
     async function verifyConfirm() { await run(async () => { state.account = await post('/verification/confirm', { code: state.code }); state.code = ''; state.notice = 'Contato confirmado.'; }); }
     async function resetRequest() { await run(async () => { await post('/password/request', { email: state.reset.email, campaign_slug: state.slug }); state.notice = 'Caso exista uma conta elegível, o código será enviado ao e-mail informado.'; }); }
     async function resetConfirm() { await run(async () => { await post('/password/confirm', { ...state.reset, campaign_slug: state.slug }); state.reset.password = ''; state.reset.code = ''; state.mode = 'login'; state.notice = 'Senha redefinida. Entre novamente.'; }); }
-    function newAdmission() { state.error = ''; if (!state.campaign || !state.campaign.accepting) {
+    function newAdmission() { state.assistSource = ''; state.error = ''; if (!state.campaign || !state.campaign.accepting) {
         state.error = 'Selecione um processo aberto.';
         return;
     } if (state.account?.school_id !== state.campaign.school_id) {
         state.error = 'Esta conta pertence a outra escola. Saia e entre no contexto correto.';
         return;
     } state.selected = null; state.form = { student: PigeOnline.person(), class_group_id: '', previous_school: '', relationship: 'Responsável legal', notes: '', client_key: PigeOnline.newId() }; state.editing = true; }
-    function edit() { const a = state.selected; if (!a)
+    function edit() { state.assistSource = ''; const a = state.selected; if (!a)
         return; const { previous_school, ...student } = a.student_data; state.form = { student: { ...student }, class_group_id: a.class_group_id, previous_school: previous_school || '', relationship: a.relationship, notes: a.notes, client_key: PigeOnline.newId() }; state.editing = true; }
-    async function openRecord(id) { const a = await request('/admissions/' + id); state.selected = a; state.editing = false; state.acceptTerms = false; state.legal = false; state.charges = await request('/admissions/' + id + '/charges'); const c = state.campaigns.find(c => c.id === a.campaign_id); if (c && c.slug !== state.slug) {
+    async function openRecord(id) { state.assistSource = ''; const a = await request('/admissions/' + id); state.selected = a; state.editing = false; state.acceptTerms = false; state.legal = false; state.charges = await request('/admissions/' + id + '/charges'); const c = state.campaigns.find(c => c.id === a.campaign_id); if (c && c.slug !== state.slug) {
         state.slug = c.slug;
         await loadCampaign();
     } state.documentType = a.document_types[0]?.id || ''; }
@@ -257,8 +500,25 @@ var PigePortal;
         await openRecord(state.selected.id); }); }
     async function copy(value) { await run(async () => { await navigator.clipboard.writeText(value); state.notice = 'Código copiado. Confira o beneficiário antes de pagar.'; }); }
     async function saveProfile() { await run(async () => { if (!state.account)
-        return; const a = state.account; state.account = await request('/me', { method: 'PATCH', body: JSON.stringify({ version: a.version, name: a.name, cpf: a.cpf || null, phone: a.phone, address: a.address, whatsapp_opt_in: a.whatsapp_opt_in }) }); state.notice = 'Conta atualizada. Inscrições já enviadas e cadastros oficiais não foram alterados; solicite correção à Secretaria.'; }); }
+        return; const a = state.account; state.account = await request('/me', { method: 'PATCH', body: JSON.stringify({ version: a.version, name: a.name, cpf: a.cpf || null, phone: a.phone, address: a.address, whatsapp_opt_in: a.whatsapp_opt_in, ...Object.fromEntries(detailFields.map(([key]) => [key, a[key] || (key === 'birth_date' ? null : '')])) }) }); state.notice = 'Conta atualizada. Inscrições já enviadas e cadastros oficiais não foram alterados; solicite correção à Secretaria.'; }); }
+    const detailFields = [["birth_date", "Nascimento"], ["rg", "RG"], ["rg_issuer", "Órgão emissor"], ["birth_certificate", "Certidão"], ["mother_name", "Nome da mãe"], ["father_name", "Nome do pai"], ["postal_code", "CEP"], ["street", "Logradouro"], ["address_number", "Número"], ["address_complement", "Complemento"], ["district", "Bairro"], ["city", "Cidade"], ["state", "UF"], ["country", "País"]];
+    const personAssistFields = ['name', 'cpf', 'birth_date', 'phone', 'email', 'address', ...detailFields.map(([key]) => key)];
+    async function assistRequest(path, options = {}) { return request(path.replace(/^\/portal/, ''), options); }
+    function readAttachment(id, who) {
+        if (!state.selected)
+            return;
+        const source = '/portal/admissions/' + state.selected.id + '/attachments/' + id + '/ocr';
+        if (who === 'student') {
+            edit();
+            state.assistSource = source;
+        }
+        else {
+            state.profileOpen = true;
+            state.profileReadSource = source;
+            void Vue.nextTick(() => document.getElementById('portal-profile')?.scrollIntoView({ block: 'start' }));
+        }
+    }
     const editable = () => !state.selected || ['draft', 'changes_requested'].includes(state.selected.status);
-    Vue.createApp({ render: PigeRenders.portal, setup() { Vue.onMounted(() => { PigeMFA.init(mfaRequest, afterMFA, logout, true); window.addEventListener('online', () => { state.online = true; }); window.addEventListener('offline', () => { state.online = false; }); if ('serviceWorker' in navigator && window.isSecureContext)
-            void navigator.serviceWorker.register('/sw.js').catch(() => { }); void PigeInstitution.load(); void start(); }); return { state, mfa: PigeMFA, identity: PigeInstitution.state, run, selectCampaign, login, register, logout, verifyRequest, verifyConfirm, resetRequest, resetConfirm, newAdmission, edit, view, save, fileChange, upload, submit, sendMessage, withdraw, download, paginate, refresh, copy, saveProfile, editable, label: PigeOnline.label, date: PigeOnline.date, money: PigeOnline.money, safeLink: PigeOnline.safeLink }; } }).mount('#portal');
+    Vue.createApp({ components: { 'assist-panel': PigeAssist.component }, render: PigeRenders.portal, setup() { Vue.onMounted(() => { PigeMFA.init(mfaRequest, afterMFA, logout, true); window.addEventListener('online', () => { state.online = true; }); window.addEventListener('offline', () => { state.online = false; }); if ('serviceWorker' in navigator && window.isSecureContext)
+            void navigator.serviceWorker.register('/sw.js').catch(() => { }); void PigeInstitution.load(); void start(); }); return { state, assistRequest, personAssistFields, detailFields, readAttachment, mfa: PigeMFA, identity: PigeInstitution.state, run, selectCampaign, login, register, logout, verifyRequest, verifyConfirm, resetRequest, resetConfirm, newAdmission, edit, view, save, fileChange, upload, submit, sendMessage, withdraw, download, paginate, refresh, copy, saveProfile, editable, label: PigeOnline.label, date: PigeOnline.date, money: PigeOnline.money, safeLink: PigeOnline.safeLink }; } }).mount('#portal');
 })(PigePortal || (PigePortal = {}));

@@ -23,6 +23,22 @@ class Company(Record, Base):
     __tablename__ = 'companies'
     name: Mapped[str] = mapped_column(String(160))
     document: Mapped[str | None] = mapped_column(String(24))
+    trade_name: Mapped[str] = mapped_column(String(180), default='')
+    address: Mapped[str] = mapped_column(String(400), default='')
+    phone: Mapped[str] = mapped_column(String(32), default='')
+    email: Mapped[str] = mapped_column(String(254), default='')
+    postal_code: Mapped[str] = mapped_column(String(16), default='')
+    street: Mapped[str] = mapped_column(String(180), default='')
+    address_number: Mapped[str] = mapped_column(String(24), default='')
+    address_complement: Mapped[str] = mapped_column(String(120), default='')
+    district: Mapped[str] = mapped_column(String(120), default='')
+    city: Mapped[str] = mapped_column(String(120), default='')
+    state: Mapped[str] = mapped_column(String(2), default='')
+    country: Mapped[str] = mapped_column(String(80), default='Brasil')
+    registration_status: Mapped[str] = mapped_column(String(60), default='')
+    opened_on: Mapped[str] = mapped_column(String(30), default='')
+    legal_nature: Mapped[str] = mapped_column(String(180), default='')
+    main_activity: Mapped[str] = mapped_column(String(180), default='')
 
 class CompanySupportSettings(Record, Base):
     """Configuração do widget de suporte por empresa/tenant."""
@@ -198,6 +214,10 @@ class Person(Record, Scoped, Base):
     trade_name: Mapped[str] = mapped_column(String(180), default='', server_default='')
     state_registration: Mapped[str] = mapped_column(String(40), default='', server_default='')
     municipal_registration: Mapped[str] = mapped_column(String(40), default='', server_default='')
+    registration_status: Mapped[str] = mapped_column(String(60), default='')
+    opened_on: Mapped[str] = mapped_column(String(30), default='')
+    legal_nature: Mapped[str] = mapped_column(String(180), default='')
+    main_activity: Mapped[str] = mapped_column(String(180), default='')
     __table_args__ = (UniqueConstraint('school_id', 'cpf'),
                       Index('uq_persons_school_cnpj', 'school_id', 'cnpj', unique=True))
 
@@ -423,3 +443,5 @@ class MFARecovery(Record, Base):
     __tablename__ = 'mfa_recovery_codes'
     subject: Mapped[str] = mapped_column(ForeignKey('mfa_credentials.subject'), index=True)
     code_hash: Mapped[str] = mapped_column(String(64), unique=True)
+
+from .assisted_models import OcrJob, LookupCache, LookupProvider, AssistedQuota, IntakeSettings  # noqa: F401

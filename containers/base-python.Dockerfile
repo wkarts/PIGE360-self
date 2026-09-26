@@ -3,6 +3,7 @@ FROM ${UPSTREAM_IMAGE}
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /opt/pige360
 COPY backend/requirements.txt ./requirements.txt
+RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-por tesseract-ocr-eng poppler-utils && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir -r requirements.txt \
     && pip check \
     && pip freeze > python-freeze.txt \

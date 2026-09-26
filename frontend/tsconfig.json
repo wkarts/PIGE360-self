@@ -22,6 +22,7 @@
     "src/workspace.ts",
     "src/mfa.ts",
     "src/dossiers.ts",
+    "src/assist.ts",
     "src/app.ts"
   ]
 }

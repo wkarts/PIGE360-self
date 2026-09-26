@@ -13,7 +13,7 @@ from .config import settings
 from .db import engine
 from .storage import ensure_storage
 from starlette.concurrency import run_in_threadpool
-from . import embedding, embedding_settings, mfa, dossiers
+from . import embedding, embedding_settings, mfa, dossiers, ocr, lookups
 from . import auth, people, registry, enrollments, documents, reports, portal, admissions, integrations, connect, banking, profiles, support, institution, business_people, account
 
 cfg = settings()
@@ -26,7 +26,7 @@ async def lifespan(app):
     engine.dispose()
 
 app = FastAPI(title='PIGE360 Self — Gestão Educacional', version=cfg.app_version, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url='/api/v1/openapi.json')
-for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router, mfa.router, dossiers.router]:
+for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router, mfa.router, dossiers.router, ocr.router, lookups.router]:
     app.include_router(router)
 
 @app.exception_handler(HTTPException)
@@ -62,7 +62,7 @@ async def security_headers(request: Request, call_next):
     parents = await run_in_threadpool(embedding.frame_sources)
     if not parents:
         response.headers['X-Frame-Options'] = 'DENY'
-    response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+    response.headers['Permissions-Policy'] = 'camera=(self), microphone=(), geolocation=()'
     hub_origins, hub_sockets = await run_in_threadpool(support.csp_sources)
     hub_script_sources = ' '.join(hub_origins)
     # O SDK opcional do HUB injeta estilos Inter. Permissão restrita aos dois
