@@ -128,6 +128,14 @@ class ConnectSchoolBinding(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class ConnectUnitBinding(Base):
+    __tablename__ = 'connect_unit_bindings'
+    unit_id: Mapped[str] = mapped_column(ForeignKey('units.id'), primary_key=True)
+    instance_id: Mapped[str] = mapped_column(ForeignKey('connect_instances.id'), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class ConnectMessageJob(Record, Scoped, Base):
     """Fila de mensagens da Connect API; não compartilha a fila financeira."""
     __tablename__ = 'connect_message_jobs'
