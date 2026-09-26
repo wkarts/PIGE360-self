@@ -187,7 +187,7 @@ def _remote_status(response) -> tuple[str, str]:
     return status, state
 
 
-def connect_instance_for_school(db, school_id: str, required: bool = True):
+def connect_instance_for_school(db, school_id: str, required: bool = True, unit_id: str | None = None):
     school = db.get(m.School, school_id)
     if not school:
         if required:
@@ -198,9 +198,17 @@ def connect_instance_for_school(db, school_id: str, required: bool = True):
         m.ConnectInstance.enabled.is_(True),
         m.ConnectInstance.status != "deleted",
     )
-    binding = db.get(m.ConnectSchoolBinding, school_id)
     obj = None
-    if binding:
+    if unit_id:
+        unit = db.get(m.Unit, unit_id)
+        if unit and unit.school_id == school_id and unit.active:
+            unit_binding = db.get(m.ConnectUnitBinding, unit_id)
+            if unit_binding:
+                candidate = db.get(m.ConnectInstance, unit_binding.instance_id)
+                if candidate and candidate.company_id == school.company_id and candidate.enabled and candidate.status != "deleted":
+                    obj = candidate
+    binding = db.get(m.ConnectSchoolBinding, school_id)
+    if obj is None and binding:
         candidate = db.get(m.ConnectInstance, binding.instance_id)
         if candidate and candidate.company_id == school.company_id and candidate.enabled and candidate.status != "deleted":
             obj = candidate
