@@ -180,7 +180,8 @@ def admission_notification(db,admission,text,code):
     if not account.whatsapp_opt_in or not account.phone_verified:
         return None
     from .connect_core import connect_instance_for_school, enqueue_connect_message
-    instance = connect_instance_for_school(db, admission.school_id, False)
+    group = db.get(m.ClassGroup, admission.class_group_id) if admission.class_group_id else None
+    instance = connect_instance_for_school(db, admission.school_id, False, group.unit_id if group else None)
     if not instance:
         return None
     return enqueue_connect_message(
