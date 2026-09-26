@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from app import connect, connect_core
+from app.online_schemas import ConnectInstanceInput
 from app.integration_core import IntegrationFailure
 
 
@@ -68,3 +69,14 @@ def test_transport_rejects_host_outside_explicit_allowlist(monkeypatch):
     with pytest.raises(IntegrationFailure) as error:
         integration_core.validate_target("https://api.connect.example.com", "connect_api")
     assert error.value.code == "CONNECT_HOST_NOT_ALLOWED"
+
+
+def test_connect_instance_creation_requires_and_normalizes_phone():
+    data = ConnectInstanceInput.model_validate({
+        "label": "Secretaria",
+        "phone": "(75) 99999-0000",
+        "primary": True,
+    })
+    assert data.phone == "5575999990000"
+    with pytest.raises(Exception):
+        ConnectInstanceInput.model_validate({"label": "Sem telefone", "primary": False})
