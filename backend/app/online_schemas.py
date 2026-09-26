@@ -141,6 +141,11 @@ class ConnectAdoptInput(Input):
     primary: bool = True
 
 
+class ConnectUnitPreferenceInput(Input):
+    unit_id: str = Field(min_length=1,max_length=36)
+    instance_id: str = Field(min_length=1,max_length=36)
+
+
 class ConnectionInput(Input):
     version: int | None = Field(default=None,ge=1)
     enabled: bool = False
