@@ -18,9 +18,17 @@ def upgrade():
         sa.Column("version", sa.Integer(), nullable=False, server_default="1"),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
     )
+    op.create_table(
+        "connect_unit_bindings",
+        sa.Column("unit_id", sa.String(36), sa.ForeignKey("units.id"), primary_key=True),
+        sa.Column("instance_id", sa.String(36), sa.ForeignKey("connect_instances.id"), nullable=False, index=True),
+        sa.Column("version", sa.Integer(), nullable=False, server_default="1"),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
+    )
 
 
 def downgrade():
+    op.drop_table("connect_unit_bindings")
     op.drop_table("connect_school_bindings")
     op.drop_constraint("connect_instance_source", "connect_instances", type_="check")
     op.drop_column("connect_instances", "source")
