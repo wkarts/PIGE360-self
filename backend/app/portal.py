@@ -17,6 +17,7 @@ from .common import output, number, audit
 from .auth import DUMMY_PASSWORD_HASH
 from .documents import validate_upload, render_pdf
 from .integration_core import connection, enqueue, admission_notification
+from .portal_access import login_school, offered_groups, public_context, today
 
 router=APIRouter(prefix='/api/v1/portal',tags=['Portal dos responsáveis'])
 EDITABLE={'draft','changes_requested'}
@@ -39,7 +40,7 @@ def get_campaign(db,slug=None,id=None,open_required=False):
     row=db.scalar(select(m.AdmissionCampaign).where(m.AdmissionCampaign.slug==slug)) if slug else db.get(m.AdmissionCampaign,id)
     school=db.get(m.School,row.school_id) if row else None
     if not row or not school or not school.active:fail(404,'Processo de matrícula não encontrado.')
-    if open_required and (not row.active or not row.opens_on<=date.today()<=row.closes_on):fail(409,'Inscrições encerradas ou ainda não abertas.')
+    if open_required and (not row.active or not row.opens_on<=today()<=row.closes_on or not offered_groups(db,row)):fail(409,'Inscrições encerradas ou ainda não abertas.')
     return row
 
 def account_output(account):
@@ -87,7 +88,7 @@ def campaign_output(db,obj):
         y=db.get(m.AcademicYear,g.academic_year_id)
         if y.status!='active':continue
         groups.append({'id':g.id,'name':g.name,'grade':db.get(m.Grade,g.grade_id).name,'shift':db.get(m.Shift,g.shift_id).name,'year':y.name,'unit':db.get(m.Unit,g.unit_id).name,'vacancies':max(0,g.capacity-occupancy(db,g.id))})
-    return {**output(obj),'school_name':school.name,'school_phone':school.phone,'school_email':school.email,'groups':groups,'accepting':obj.active and obj.opens_on<=date.today()<=obj.closes_on}
+    return {**output(obj),'school_name':school.name,'school_phone':school.phone,'school_email':school.email,'groups':groups,'accepting':obj.active and obj.opens_on<=today()<=obj.closes_on and bool(groups)}
 
 def document_types(db,admission):
     group=db.get(m.ClassGroup,admission.class_group_id)
@@ -118,10 +119,14 @@ def add_message(db,obj,text,kind='message',user=None,account=None,internal=False
 def parent_audit(db,request,account,action,obj,details=None):
     audit(db,request,None,'portal.'+action,obj,account.school_id,{'portal_account_id':account.id,**(details or {})})
 
+@router.get('/context')
+def context(db:DB):
+    return public_context(db)
+
 @router.get('/campaigns')
 def campaigns(db:DB):
-    rows=db.scalars(select(m.AdmissionCampaign).join(m.School).where(m.School.active.is_(True),m.AdmissionCampaign.active.is_(True),m.AdmissionCampaign.opens_on<=date.today(),m.AdmissionCampaign.closes_on>=date.today()).order_by(m.AdmissionCampaign.title).limit(100))
-    return [{'id':x.id,'slug':x.slug,'title':x.title,'school_name':db.get(m.School,x.school_id).name,'closes_on':x.closes_on.isoformat()} for x in rows]
+    rows=db.scalars(select(m.AdmissionCampaign).join(m.School).where(m.School.active.is_(True),m.AdmissionCampaign.active.is_(True),m.AdmissionCampaign.opens_on<=today(),m.AdmissionCampaign.closes_on>=today()).order_by(m.AdmissionCampaign.title).limit(100))
+    return [{'id':x.id,'slug':x.slug,'title':x.title,'school_id':x.school_id,'school_name':db.get(m.School,x.school_id).name,'closes_on':x.closes_on.isoformat()} for x in rows if offered_groups(db,x)]
 
 @router.get('/campaigns/{slug}')
 def campaign_detail(slug:str,db:DB):
@@ -148,8 +153,8 @@ def register(data:s.Registration,request:Request,response:Response,db:DB):
 def login(data:s.PortalLogin,request:Request,response:Response,db:DB):
     request_csrf(request)
     email=str(data.email).lower();rate_limit(db,request,'login',email,10)
-    campaign=get_campaign(db,slug=data.campaign_slug)
-    account=db.scalar(select(m.PortalAccount).where(m.PortalAccount.school_id==campaign.school_id,m.PortalAccount.email==email))
+    school=login_school(db,data.school_id,data.campaign_slug)
+    account=db.scalar(select(m.PortalAccount).where(m.PortalAccount.school_id==school.id,m.PortalAccount.email==email))
     valid=verify(data.password,account.password_hash if account else DUMMY_PASSWORD_HASH)
     if not account or not account.active or not valid:fail(401,'E-mail ou senha inválidos.')
     parent_audit(db,request,account,'login',account)
@@ -217,8 +222,8 @@ def confirm_verification(data:s.VerifyCode,request:Request,db:DB,account:Parent)
 def reset_request(data:s.ResetRequest,request:Request,db:DB):
     request_csrf(request)
     email=str(data.email).lower();rate_limit(db,request,'reset',email,4,600)
-    campaign=get_campaign(db,slug=data.campaign_slug)
-    account=db.scalar(select(m.PortalAccount).where(m.PortalAccount.school_id==campaign.school_id,m.PortalAccount.email==email,m.PortalAccount.active.is_(True)))
+    school=login_school(db,data.school_id,data.campaign_slug)
+    account=db.scalar(select(m.PortalAccount).where(m.PortalAccount.school_id==school.id,m.PortalAccount.email==email,m.PortalAccount.active.is_(True)))
     if settings().smtp_host and settings().smtp_from and settings().integration_encryption_key and account:
         challenge(db,account,'reset','email')
     return {'ok':True,'message':'Caso haja uma conta e envio de e-mail configurado, um código será enviado. Caso contrário, procure a Secretaria.'}
@@ -227,8 +232,8 @@ def reset_request(data:s.ResetRequest,request:Request,db:DB):
 def reset_confirm(data:s.ResetConfirm,request:Request,db:DB,response:Response):
     request_csrf(request)
     email=str(data.email).lower();rate_limit(db,request,'reset-confirm',email,10)
-    campaign=get_campaign(db,slug=data.campaign_slug)
-    account=db.scalar(select(m.PortalAccount).where(m.PortalAccount.school_id==campaign.school_id,m.PortalAccount.email==email,m.PortalAccount.active.is_(True)))
+    school=login_school(db,data.school_id,data.campaign_slug)
+    account=db.scalar(select(m.PortalAccount).where(m.PortalAccount.school_id==school.id,m.PortalAccount.email==email,m.PortalAccount.active.is_(True)))
     if not account:fail(400,'Código inválido ou expirado.')
     consume_code(db,account,'reset',data.code)
     account.password_hash=hash_password(data.password)
@@ -251,6 +256,11 @@ def valid_group(db,campaign,id):
     if not group or group.school_id!=campaign.school_id:fail(422,'Turma não encontrada.')
     check_group(db,group,campaign.school_id)
     return group
+
+@router.get('/admissions/{id}/campaign')
+def own_campaign(id:str, db:DB, account:Parent):
+    row=own_admission(db,account,id)
+    return campaign_output(db,db.get(m.AdmissionCampaign,row.campaign_id))
 
 @router.post('/admissions',status_code=201)
 def create_admission(data:s.AdmissionInput,request:Request,db:DB,account:Parent):

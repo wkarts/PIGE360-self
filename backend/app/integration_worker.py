@@ -176,6 +176,8 @@ def recover_expired(db):
             if charge and not charge.remote_payment_id and charge.status != 'cancelled': charge.status = 'uncertain'
     db.commit()
 
+from .telemetry import emit, heartbeat as diagnostic_heartbeat
+
 def process_one(job_id=None):
     """Executa no máximo um job. Retorna False quando não houver trabalho elegível."""
     # Conexão dedicada mantém o advisory lock entre os checkpoints (commits).
@@ -217,6 +219,7 @@ def process_one(job_id=None):
                 job.error_code = 'UNEXPECTED_WORKER_ERROR'
                 LOG.error('job=%s kind=%s code=%s', job.id, job.kind, job.error_code)
             job.lease_until = None; db.commit()
+            emit('integration.job_finished', service='worker', level='INFO' if job.status=='completed' else 'WARNING', job_id=job.id, kind=job.kind, state=job.status, code=job.error_code, attempts=job.attempts)
             return True
         finally:
             if locked:
@@ -288,6 +291,7 @@ def process_connect_one():
                 LOG.error('connect_job=%s code=%s', job.id, job.error_code)
             job.lease_until = None
             db.commit()
+            emit('integration.job_finished', service='worker', level='INFO' if job.status=='completed' else 'WARNING', job_id=job.id, kind=job.kind, state=job.status, code=job.error_code, attempts=job.attempts)
             return True
         finally:
             if locked:
@@ -318,15 +322,18 @@ def main():
     if args.health:
         raise SystemExit(0 if HEARTBEAT.exists() and time.time() - HEARTBEAT.stat().st_mtime < 360 else 1)
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+    emit('service.started',service='worker')
     done = 0
     next_reconcile = 0.0
     while True:
         HEARTBEAT.touch()
+        diagnostic_heartbeat('worker')
         try:
             if time.monotonic() >= next_reconcile:
                 schedule_reconciliations(); next_reconcile=time.monotonic()+60
             worked = process_one() or process_connect_one()
         except Exception:
+            emit('worker.loop_failed',service='worker',level='ERROR',code='WORKER_DATABASE_OR_CONFIGURATION_ERROR')
             LOG.error('code=WORKER_DATABASE_OR_CONFIGURATION_ERROR'); worked = False
         done += int(worked)
         if args.once and (not worked or done >= args.limit): return

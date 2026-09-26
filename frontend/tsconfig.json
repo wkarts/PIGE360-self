@@ -23,6 +23,7 @@
     "src/mfa.ts",
     "src/dossiers.ts",
     "src/assist.ts",
+    "src/diagnostics.ts",
     "src/app.ts"
   ]
 }

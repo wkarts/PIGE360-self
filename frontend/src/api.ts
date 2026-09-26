@@ -31,7 +31,8 @@ namespace PigeAPI {
     let data: { detail?: string; errors?: { field: string; message: string }[]; request_id?: string } = {};
     try { data = await response.json(); } catch { /* A origem pode estar indisponível. */ }
     const fields = data.errors?.map(e => `${e.field.replace(/^body\./, '')}: ${e.message}`).join('\n');
-    const failure = new Error(fields || data.detail || `Falha de comunicação (${response.status}).`);
+    const reference = data.request_id || response.headers.get('X-Request-ID') || '';
+    const failure = new Error((fields || data.detail || `Falha de comunicação (${response.status}).`) + (reference ? ' · Referência: '+reference : ''));
     Object.assign(failure, { status: response.status, fields: data.errors || [] });
     return failure;
   }

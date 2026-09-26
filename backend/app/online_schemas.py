@@ -51,7 +51,8 @@ class Registration(Input):
         return digits
 
 class PortalLogin(Input):
-    campaign_slug: str = Field(max_length=80)
+    campaign_slug: str = Field(default="", max_length=80)
+    school_id: str = Field(default="", max_length=36)
     email: EmailStr
     password: str = Field(min_length=1,max_length=128)
 
@@ -62,7 +63,8 @@ class VerifyRequest(Input):
     channel: Literal['email','whatsapp'] = 'email'
 
 class ResetRequest(Input):
-    campaign_slug: str = Field(max_length=80)
+    campaign_slug: str = Field(default="", max_length=80)
+    school_id: str = Field(default="", max_length=36)
     email: EmailStr
 
 class ResetConfirm(ResetRequest, VerifyCode):

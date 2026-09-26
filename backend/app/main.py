@@ -13,7 +13,7 @@ from .config import settings
 from .db import engine
 from .storage import ensure_storage
 from starlette.concurrency import run_in_threadpool
-from . import embedding, embedding_settings, mfa, dossiers, ocr, lookups
+from . import embedding, embedding_settings, mfa, dossiers, ocr, lookups, diagnostics, telemetry
 from . import auth, people, registry, enrollments, documents, reports, portal, admissions, integrations, connect, banking, profiles, support, institution, business_people, account
 
 cfg = settings()
@@ -22,11 +22,13 @@ logger = logging.getLogger('pige360')
 @asynccontextmanager
 async def lifespan(app):
     ensure_storage()
+    telemetry.emit('service.started')
+    telemetry.heartbeat('app', force=True)
     yield
     engine.dispose()
 
 app = FastAPI(title='PIGE360 Self — Gestão Educacional', version=cfg.app_version, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url='/api/v1/openapi.json')
-for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router, mfa.router, dossiers.router, ocr.router, lookups.router]:
+for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router, mfa.router, dossiers.router, ocr.router, lookups.router, diagnostics.router]:
     app.include_router(router)
 
 @app.exception_handler(HTTPException)
@@ -50,7 +52,8 @@ async def internal_error(request, exc):
 
 @app.middleware('http')
 async def security_headers(request: Request, call_next):
-    request.state.request_id = secrets.token_hex(12)
+    if not getattr(request.state, 'request_id', None):
+        request.state.request_id = secrets.token_hex(12)
     origin = request.headers.get('origin')
     if request.method not in ('GET','HEAD','OPTIONS') and origin and origin.rstrip('/') != cfg.app_url.rstrip('/'):
         return JSONResponse({'detail':'Origem não autorizada.'}, status_code=403)
@@ -134,6 +137,7 @@ class BodyLimitMiddleware:
 app.add_middleware(BodyLimitMiddleware, maximum=(cfg.max_upload_mb+1)*1024*1024)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=cfg.hosts)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+app.add_middleware(telemetry.RequestTelemetry)
 
 @app.get('/health/live', include_in_schema=False)
 def live():
