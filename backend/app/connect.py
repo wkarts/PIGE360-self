@@ -55,10 +55,68 @@ def _instance(db, school, instance_id):
     return obj
 
 
-def _instance_output(obj):
+def _instance_output(obj, preferred_id: str = ""):
     data = output(obj)
     data["remote_configured"] = bool(settings().connect_api_base_url and settings().connect_api_key)
+    data["preferred_for_school"] = bool(preferred_id and obj.id == preferred_id)
+    data["managed_by_pige360"] = obj.source == "pige360"
     return data
+
+
+def _remote_rows(response):
+    if isinstance(response, list):
+        rows = response
+    elif isinstance(response, dict):
+        value = response.get("instances")
+        if not isinstance(value, list):
+            value = response.get("instance")
+        if isinstance(value, list):
+            rows = value
+        elif isinstance(value, dict):
+            rows = [value]
+        elif any(key in response for key in ("instanceName", "name")):
+            rows = [response]
+        else:
+            rows = []
+    else:
+        rows = []
+    result = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        nested = row.get("instance") if isinstance(row.get("instance"), dict) else {}
+        name = str(row.get("instanceName") or row.get("name") or nested.get("instanceName") or nested.get("name") or "").strip()
+        if not name:
+            continue
+        state = str(row.get("connectionStatus") or row.get("state") or row.get("status") or nested.get("state") or nested.get("status") or "")
+        integration = str(row.get("integration") or nested.get("integration") or "")
+        number = str(row.get("number") or row.get("ownerJid") or nested.get("number") or nested.get("ownerJid") or "")
+        external_id = str(row.get("instanceId") or nested.get("instanceId") or "")
+        result.append({
+            "name": name[:100],
+            "state": state[:40],
+            "integration": integration[:60],
+            "number": re.sub(r"\D", "", number)[:24],
+            "external_id": external_id[:160],
+        })
+    return result
+
+
+def _set_preferred(db, school, obj):
+    if obj.company_id != school.company_id or not obj.enabled or obj.status == "deleted":
+        fail(409, "A instância não está disponível para esta escola.")
+    binding = db.get(m.ConnectSchoolBinding, school.id)
+    if binding:
+        binding.instance_id = obj.id
+        binding.version += 1
+        binding.updated_at = datetime.now(UTC)
+    else:
+        db.add(m.ConnectSchoolBinding(
+            school_id=school.id,
+            instance_id=obj.id,
+            version=1,
+            updated_at=datetime.now(UTC),
+        ))
 
 
 def _state_from_response(obj, response):
@@ -78,14 +136,25 @@ def connect_overview(db: DB, user: Actor, school: Scope):
         m.ConnectInstance.company_id == company.id,
         m.ConnectInstance.status != "deleted",
     ).order_by(m.ConnectInstance.primary.desc(), m.ConnectInstance.created_at)).all()
+    binding = db.get(m.ConnectSchoolBinding, school.id)
+    preferred_id = binding.instance_id if binding else ""
+    cfg = settings()
+    base_host = ""
+    if cfg.connect_api_base_url:
+        from urllib.parse import urlsplit
+        base_host = (urlsplit(cfg.connect_api_base_url).hostname or "").lower()
+    explicit_hosts = [x.strip().lower() for x in cfg.connect_allowed_hosts.split(",") if x.strip()]
     return {
         "config": {
-            "configured": bool(settings().connect_api_base_url and settings().connect_api_key),
-            "base_url": settings().connect_api_base_url.rstrip("/"),
-            "api_key_configured": bool(settings().connect_api_key),
+            "configured": bool(cfg.connect_api_base_url and cfg.connect_api_key),
+            "base_url": cfg.connect_api_base_url.rstrip("/"),
+            "api_key_configured": bool(cfg.connect_api_key),
             "instance_prefix": "PG360",
+            "host_policy": "explicit" if explicit_hosts else "base_url",
+            "effective_host": base_host,
         },
-        "items": [_instance_output(item) for item in instances],
+        "preferred_instance_id": preferred_id,
+        "items": [_instance_output(item, preferred_id) for item in instances],
     }
 
 
@@ -112,6 +181,111 @@ def connect_jobs(
         )
     ]
     return {"items": items, "total": total, "page": page, "page_size": page_size}
+
+
+@router.get("/connect/remote-instances")
+def remote_connect_instances(db: DB, user: Actor, school: Scope):
+    require(user, "connect.manage")
+    company = _company(db, school)
+    response = _remote_call(lambda: ConnectApiClient().fetch_instances())
+    local = {
+        item.name: item
+        for item in db.scalars(select(m.ConnectInstance).where(
+            m.ConnectInstance.company_id == company.id,
+            m.ConnectInstance.status != "deleted",
+        ))
+    }
+    items = []
+    for row in _remote_rows(response):
+        current = local.get(row["name"])
+        items.append({
+            **row,
+            "registered": bool(current),
+            "local_id": current.id if current else "",
+            "source": current.source if current else "",
+        })
+    return {"items": items}
+
+
+@router.post("/connect/instances/adopt", status_code=201)
+def adopt_connect_instance(
+    data: s.ConnectAdoptInput,
+    db: DB,
+    user: Actor,
+    school: Scope,
+    request: Request,
+):
+    require(user, "connect.manage")
+    lock_school(db, school.id)
+    company = _company(db, school)
+    response = _remote_call(lambda: ConnectApiClient().fetch_instance(data.instance_name))
+    rows = [row for row in _remote_rows(response) if row["name"] == data.instance_name]
+    if not rows:
+        fail(404, "Instância não encontrada na Connect API configurada.")
+    row = rows[0]
+    obj = db.scalar(select(m.ConnectInstance).where(
+        m.ConnectInstance.company_id == company.id,
+        m.ConnectInstance.name == row["name"],
+    ))
+    if obj and obj.status != "deleted":
+        if data.primary:
+            _set_preferred(db, school, obj)
+        return {"instance": _instance_output(obj, obj.id if data.primary else "")}
+    status_value = row["state"].lower()
+    status = "open" if status_value == "open" else "connecting" if status_value == "connecting" else "close" if status_value == "close" else "created"
+    if obj:
+        obj.enabled = True
+        obj.status = status
+        obj.connection_state = row["state"]
+        obj.external_id = row["external_id"]
+        obj.source = "adopted"
+        obj.last_synced_at = datetime.now(UTC)
+        obj.version += 1
+    else:
+        obj = m.ConnectInstance(
+            company_id=company.id,
+            name=row["name"],
+            display_name=row["name"],
+            document=re.sub(r"\D", "", company.document or ""),
+            primary=False,
+            enabled=True,
+            status=status,
+            connection_state=row["state"],
+            external_id=row["external_id"],
+            source="adopted",
+            last_synced_at=datetime.now(UTC),
+        )
+        db.add(obj)
+        db.flush()
+    if data.primary or db.get(m.ConnectSchoolBinding, school.id) is None:
+        _set_preferred(db, school, obj)
+    audit(db, request, user, "connect.instance.adopted", obj, school.id, {
+        "name": obj.name,
+        "preferred": bool(data.primary),
+    })
+    return {"instance": _instance_output(obj, obj.id if data.primary else "")}
+
+
+@router.post("/connect/instances/{instance_id}/prefer")
+def prefer_connect_instance(instance_id: str, db: DB, user: Actor, school: Scope, request: Request):
+    require(user, "connect.manage")
+    lock_school(db, school.id)
+    obj = _instance(db, school, instance_id)
+    _set_preferred(db, school, obj)
+    audit(db, request, user, "connect.instance.preferred", obj, school.id)
+    return {"instance": _instance_output(obj, obj.id)}
+
+
+@router.post("/connect/instances/{instance_id}/restart")
+def restart_connect_instance(instance_id: str, db: DB, user: Actor, school: Scope, request: Request):
+    require(user, "connect.manage")
+    obj = _instance(db, school, instance_id)
+    if obj.source != "pige360":
+        fail(409, "Instância preexistente: reinício remoto não é administrado pelo PIGE360.")
+    response = _remote_call(lambda: ConnectApiClient().restart(obj.name))
+    _state_from_response(obj, response)
+    audit(db, request, user, "connect.instance.restarted", obj, school.id)
+    return {"instance": _instance_output(obj), **connect_response(response)}
 
 
 @router.post("/connect/instances", status_code=201)
@@ -148,6 +322,7 @@ def create_connect_instance(
         status=status,
         connection_state=state,
         external_id=str((response.get("instance") or {}).get("instanceId", ""))[:160] if isinstance(response, dict) else "",
+        source="pige360",
         last_synced_at=datetime.now(UTC),
     )
     if primary:
@@ -155,6 +330,8 @@ def create_connect_instance(
             other.primary = False
     db.add(obj)
     db.flush()
+    if primary or db.get(m.ConnectSchoolBinding, school.id) is None:
+        _set_preferred(db, school, obj)
     audit(db, request, user, "connect.instance.created", obj, school.id, {
         "company_id": company.id,
         "name": name,
@@ -200,6 +377,8 @@ def connect_instance(
 def logout_connect_instance(instance_id: str, db: DB, user: Actor, school: Scope, request: Request):
     require(user, "connect.manage")
     obj = _instance(db, school, instance_id)
+    if obj.source != "pige360":
+        fail(409, "Instância preexistente: logout remoto não é administrado pelo PIGE360.")
     response = _remote_call(lambda: ConnectApiClient().logout(obj.name))
     obj.status, obj.connection_state, obj.last_error = "close", "close", ""
     obj.last_synced_at = datetime.now(UTC)
@@ -213,14 +392,24 @@ def delete_connect_instance(instance_id: str, db: DB, user: Actor, school: Scope
     require(user, "connect.manage")
     lock_school(db, school.id)
     obj = _instance(db, school, instance_id)
-    response = _remote_call(lambda: ConnectApiClient().delete(obj.name))
+    bindings = list(db.scalars(select(m.ConnectSchoolBinding).where(m.ConnectSchoolBinding.instance_id == obj.id)))
+    other_bindings = [item for item in bindings if item.school_id != school.id]
+    if other_bindings:
+        fail(409, "Esta instância é preferencial de outra escola da instalação. Troque o vínculo antes de removê-la.")
+    current = db.get(m.ConnectSchoolBinding, school.id)
+    if current and current.instance_id == obj.id:
+        db.delete(current)
+    response = {}
+    if obj.source == "pige360":
+        response = _remote_call(lambda: ConnectApiClient().delete(obj.name))
     obj.enabled = False
     obj.primary = False
     obj.status, obj.connection_state = "deleted", "close"
     obj.last_error = ""
     obj.version += 1
-    audit(db, request, user, "connect.instance.deleted", obj, school.id, {"name": obj.name})
-    return {"deleted": True, "instance": _instance_output(obj), **connect_response(response)}
+    action = "connect.instance.deleted" if obj.source == "pige360" else "connect.instance.unlinked"
+    audit(db, request, user, action, obj, school.id, {"name": obj.name, "remote_deleted": obj.source == "pige360"})
+    return {"deleted": True, "remote_deleted": obj.source == "pige360", "instance": _instance_output(obj), **connect_response(response)}
 
 
 @router.post("/connect/test")
