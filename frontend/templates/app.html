@@ -67,6 +67,7 @@
         <a v-if="can('connect.manage')" href="#/connect" :class="{active:state.page==='connect'}" :aria-current="state.page==='connect'?'page':undefined" @click.prevent="navigate('connect')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#connect"></use></svg>Connect API</a>
         <a v-if="can('schools.manage')" href="#/settings" :class="{active:state.page==='settings'}" :aria-current="state.page==='settings'?'page':undefined" @click.prevent="navigate('settings')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#school"></use></svg>Instituição</a>
         <a v-if="can('users.manage')" href="#/users" :class="{active:state.page==='users'}" :aria-current="state.page==='users'?'page':undefined" @click.prevent="navigate('users')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#access"></use></svg>Usuários e acessos</a>
+        <a v-if="state.user?.role==='admin'" href="#/diagnostics" :class="{active:state.page==='diagnostics'}" @click.prevent="navigate('diagnostics')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#audit"></use></svg>Diagnóstico e logs</a>
         <a v-if="can('audit.read')" href="#/audit" :class="{active:state.page==='audit'}" :aria-current="state.page==='audit'?'page':undefined" @click.prevent="navigate('audit')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#audit"></use></svg>Auditoria</a>
       </nav>
       </div>
@@ -101,6 +102,7 @@
           </div>
         </div>
         <div v-if="state.loading" class="loading-strip" role="status">Carregando registros…</div>
+        <diagnostics-panel v-if="state.page==='diagnostics' && state.user?.role==='admin'"></diagnostics-panel>
         <expansion-panel v-if="['online','banking','integrations','connect'].includes(state.page)" :key="state.schoolId+':'+state.page" :school-id="state.schoolId" :page="state.page" :permissions="state.user.permissions"></expansion-panel>
         <section v-if="state.page==='dashboard' && !isProfileRole()" class="dashboard">
           <div class="welcome-card"><div><p class="eyebrow">ROTINA ESCOLAR EM DIA</p><h2>Uma visão completa.<br>Uma Secretaria mais próxima.</h2><p>Comece um cadastro, acompanhe matrículas ou consulte a documentação dos alunos.</p><div class="actions"><button v-if="can('people.write')" class="btn btn-primary" @click="newStudent()">+ Cadastrar aluno</button><button v-if="can('enrollments.write')" class="btn btn-secondary" @click="newEnrollment">Nova matrícula →</button></div></div><div class="welcome-art" aria-hidden="true"><span>ALUNO</span><strong>Cadastro<br>Documentos<br>Matrícula</strong><i>✓</i></div></div>

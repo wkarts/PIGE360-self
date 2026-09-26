@@ -11,6 +11,12 @@ from .integration_core import admission_notification
 
 router=APIRouter(prefix='/api/v1/schools/{school_id}',tags=['Secretaria — inscrições online'])
 
+@router.get('/admission-readiness')
+def admission_readiness(db:DB,user:Actor,school:Scope):
+    require(user,'admissions.read')
+    from .portal_access import readiness
+    return readiness(db,school)
+
 @router.get('/admission-campaigns')
 def campaigns(db:DB,user:Actor,school:Scope):
     require(user,'admissions.read')

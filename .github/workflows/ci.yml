@@ -85,6 +85,7 @@ jobs:
           python scripts/e2e-whitelabel.py
           python scripts/e2e-access.py
           python scripts/e2e-assisted.py
+          python scripts/e2e-diagnostics.py
       - name: Reunir somente evidências E2E novas
         if: always()
         run: |

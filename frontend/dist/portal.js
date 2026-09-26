@@ -408,7 +408,7 @@ var PigeAssist;
 })(PigeAssist || (PigeAssist = {}));
 var PigePortal;
 (function (PigePortal) {
-    const state = Vue.reactive({ assistSource: '', profileReadSource: '', profileOpen: false, ready: false, busy: false, error: '', notice: '', online: navigator.onLine, account: null, campaign: null, campaigns: [], slug: new URLSearchParams(location.search).get('campaign') || '', mode: 'login', rows: [], total: 0, page: 1, selected: null, editing: false, charges: [], code: '', verifyChannel: 'email', message: '', documentType: '', acceptTerms: false, legal: false, register: { name: '', email: '', password: '', cpf: '', phone: '', address: '', accept_privacy: false, whatsapp_opt_in: false }, login: { email: '', password: '' }, reset: { email: '', code: '', password: '' }, form: { student: PigeOnline.person(), class_group_id: '', previous_school: '', relationship: 'Responsável legal', notes: '', client_key: PigeOnline.newId() } });
+    const state = Vue.reactive({ schools: [], schoolId: new URLSearchParams(location.search).get('school') || '', catalogFailed: false, assistSource: '', profileReadSource: '', profileOpen: false, ready: false, busy: false, error: '', notice: '', online: navigator.onLine, account: null, campaign: null, campaigns: [], slug: new URLSearchParams(location.search).get('campaign') || '', mode: 'login', rows: [], total: 0, page: 1, selected: null, editing: false, charges: [], code: '', verifyChannel: 'email', message: '', documentType: '', acceptTerms: false, legal: false, register: { name: '', email: '', password: '', cpf: '', phone: '', address: '', accept_privacy: false, whatsapp_opt_in: false }, login: { email: '', password: '' }, reset: { email: '', code: '', password: '' }, form: { student: PigeOnline.person(), class_group_id: '', previous_school: '', relationship: 'Responsável legal', notes: '', client_key: PigeOnline.newId() } });
     let selectedFile = null;
     async function request(path, options = {}) {
         if (!navigator.onLine)
@@ -424,7 +424,10 @@ var PigePortal;
                 value = await response.json();
             }
             catch { }
-            throw new Error(value.errors?.map(x => x.field + ': ' + x.message).join('\n') || value.detail || 'Falha de comunicação.');
+            const ref = value.request_id || response.headers.get('X-Request-ID') || '';
+            const error = new Error((value.errors?.map(x => x.field + ': ' + x.message).join('\n') || value.detail || 'Falha de comunicação.') + (ref ? ' · Referência: ' + ref : ''));
+            Object.assign(error, { status: response.status });
+            throw error;
         }
         return await response.json();
     }
@@ -440,25 +443,79 @@ var PigePortal;
         state.busy = false;
     } }
     async function loadList() { const data = await request('/admissions?page=' + state.page); state.rows = data.items; state.total = data.total; }
-    async function loadCampaign() { if (state.slug) {
-        state.campaign = await request('/campaigns/' + encodeURIComponent(state.slug));
-        history.replaceState({}, '', '/online.html?campaign=' + encodeURIComponent(state.slug));
-    } }
-    async function start() { await run(async () => { state.campaigns = await request('/campaigns'); if (!state.slug && state.campaigns.length === 1)
-        state.slug = state.campaigns[0].slug; await loadCampaign(); try {
-        state.account = await request('/me');
-        await loadList();
+    const visibleCampaigns = () => state.campaigns.filter(c => !state.schoolId || c.school_id === state.schoolId);
+    const authContext = () => ({ school_id: state.schoolId, campaign_slug: '' });
+    async function loadCampaign() {
+        state.campaign = null;
+        if (state.slug) {
+            state.campaign = await request('/campaigns/' + encodeURIComponent(state.slug));
+            state.schoolId = state.campaign.school_id;
+            history.replaceState({}, '', '/online.html?campaign=' + encodeURIComponent(state.slug));
+        }
     }
-    catch {
-        state.account = null;
-    } }); state.ready = true; }
+    async function start() {
+        await run(async () => {
+            state.catalogFailed = false;
+            try {
+                const context = await request('/context');
+                state.schools = context.schools;
+                if (!state.schools.some(s => s.id === state.schoolId))
+                    state.schoolId = context.default_school_id;
+                state.campaigns = await request('/campaigns');
+                if (state.slug) {
+                    try {
+                        await loadCampaign();
+                    }
+                    catch (e) {
+                        if (e.status !== 404)
+                            throw e;
+                        state.slug = '';
+                        state.notice = 'O link deste processo não está disponível. Acesse sua conta ou consulte a Secretaria.';
+                    }
+                }
+            }
+            catch (e) {
+                state.catalogFailed = true;
+                state.error = e instanceof Error ? e.message : 'Não foi possível carregar o portal.';
+            }
+            try {
+                state.account = await request('/me');
+                state.schoolId = state.account.school_id;
+                await loadList();
+            }
+            catch (e) {
+                if (e.status === 401)
+                    state.account = null;
+                else if (!state.error)
+                    state.error = e instanceof Error ? e.message : 'Não foi possível recuperar a sessão.';
+            }
+            if (state.campaign && state.schoolId !== state.campaign.school_id) {
+                state.campaign = null;
+                state.slug = '';
+            }
+            if (!state.campaign && !state.catalogFailed) {
+                const rows = visibleCampaigns();
+                if (rows.length === 1) {
+                    state.slug = rows[0].slug;
+                    await loadCampaign();
+                }
+            }
+        });
+        state.ready = true;
+    }
+    async function selectSchool() { await run(async () => { state.slug = ''; state.campaign = null; const rows = visibleCampaigns(); if (rows.length === 1) {
+        state.slug = rows[0].slug;
+        await loadCampaign();
+    }
+    else
+        history.replaceState({}, '', '/online.html?school=' + encodeURIComponent(state.schoolId)); }); }
     async function selectCampaign() { await run(async () => { state.selected = null; state.editing = false; await loadCampaign(); }); }
-    async function afterMFA(result) { state.account = result; await loadList(); }
+    async function afterMFA(result) { state.account = result; state.schoolId = state.account.school_id; await loadList(); }
     async function mfaRequest(path, options = {}) { const headers = new Headers(options.headers); headers.set('X-CSRF-Protection', '1'); if (options.body)
         headers.set('Content-Type', 'application/json'); const r = await fetch('/api/v1' + path, { ...options, headers, credentials: 'same-origin', cache: 'no-store' }); const data = await r.json(); if (!r.ok)
         throw new Error(data.detail || 'Não foi possível confirmar a autenticação.'); return data; }
-    async function login() { await run(async () => { if (!state.slug)
-        throw new Error('Selecione o processo de matrícula.'); const result = await post('/login', { ...state.login, campaign_slug: state.slug }); state.login.password = ''; if (await PigeMFA.accept(result))
+    async function login() { await run(async () => { if (!state.schoolId)
+        throw new Error('Selecione a unidade para acessar sua conta.'); const result = await post('/login', { ...state.login, ...authContext() }); state.login.password = ''; if (await PigeMFA.accept(result))
         return; await afterMFA(result); }); }
     async function register() { await run(async () => { if (!state.campaign)
         throw new Error('Selecione um processo de matrícula.'); const result = await post('/register', { ...state.register, cpf: state.register.cpf || null, campaign_slug: state.slug, terms_version: state.campaign.terms_version }); state.register.password = ''; if (await PigeMFA.accept(result))
@@ -466,8 +523,8 @@ var PigePortal;
     async function logout() { state.assistSource = ''; state.profileReadSource = ''; state.profileOpen = false; await run(async () => { await post('/logout', {}); state.account = null; state.rows = []; state.selected = null; state.charges = []; state.editing = false; state.register = { name: '', email: '', password: '', cpf: '', phone: '', address: '', accept_privacy: false, whatsapp_opt_in: false }; state.login.password = ''; state.form.student = PigeOnline.person(); }); }
     async function verifyRequest() { await run(async () => { await post('/verification/request', { channel: state.verifyChannel }); state.notice = 'Código solicitado. Consulte o canal escolhido; a entrega depende da integração da escola.'; }); }
     async function verifyConfirm() { await run(async () => { state.account = await post('/verification/confirm', { code: state.code }); state.code = ''; state.notice = 'Contato confirmado.'; }); }
-    async function resetRequest() { await run(async () => { await post('/password/request', { email: state.reset.email, campaign_slug: state.slug }); state.notice = 'Caso exista uma conta elegível, o código será enviado ao e-mail informado.'; }); }
-    async function resetConfirm() { await run(async () => { await post('/password/confirm', { ...state.reset, campaign_slug: state.slug }); state.reset.password = ''; state.reset.code = ''; state.mode = 'login'; state.notice = 'Senha redefinida. Entre novamente.'; }); }
+    async function resetRequest() { await run(async () => { await post('/password/request', { email: state.reset.email, ...authContext() }); state.notice = 'Caso exista uma conta elegível, o código será enviado ao e-mail informado.'; }); }
+    async function resetConfirm() { await run(async () => { await post('/password/confirm', { ...state.reset, ...authContext() }); state.reset.password = ''; state.reset.code = ''; state.mode = 'login'; state.notice = 'Senha redefinida. Entre novamente.'; }); }
     function newAdmission() { state.assistSource = ''; state.error = ''; if (!state.campaign || !state.campaign.accepting) {
         state.error = 'Selecione um processo aberto.';
         return;
@@ -477,10 +534,7 @@ var PigePortal;
     } state.selected = null; state.form = { student: PigeOnline.person(), class_group_id: '', previous_school: '', relationship: 'Responsável legal', notes: '', client_key: PigeOnline.newId() }; state.editing = true; }
     function edit() { state.assistSource = ''; const a = state.selected; if (!a)
         return; const { previous_school, ...student } = a.student_data; state.form = { student: { ...student }, class_group_id: a.class_group_id, previous_school: previous_school || '', relationship: a.relationship, notes: a.notes, client_key: PigeOnline.newId() }; state.editing = true; }
-    async function openRecord(id) { state.assistSource = ''; const a = await request('/admissions/' + id); state.selected = a; state.editing = false; state.acceptTerms = false; state.legal = false; state.charges = await request('/admissions/' + id + '/charges'); const c = state.campaigns.find(c => c.id === a.campaign_id); if (c && c.slug !== state.slug) {
-        state.slug = c.slug;
-        await loadCampaign();
-    } state.documentType = a.document_types[0]?.id || ''; }
+    async function openRecord(id) { state.assistSource = ''; const a = await request('/admissions/' + id); state.selected = a; state.editing = false; state.acceptTerms = false; state.legal = false; state.charges = await request('/admissions/' + id + '/charges'); state.campaign = await request('/admissions/' + id + '/campaign'); state.slug = state.campaign.slug; state.schoolId = state.account?.school_id || state.campaign.school_id; state.documentType = a.document_types[0]?.id || ''; }
     async function view(id) { await run(() => openRecord(id)); }
     async function save() { await run(async () => { if (!state.campaign)
         throw new Error('Selecione um processo.'); const a = state.selected; const { client_key, ...body } = state.form; body.student.cpf = body.student.cpf || null; const result = a ? await request('/admissions/' + a.id, { method: 'PATCH', body: JSON.stringify({ ...body, version: a.version }) }) : await post('/admissions', { ...body, campaign_id: state.campaign.id, client_key }); await openRecord(result.id); await loadList(); state.notice = 'Rascunho salvo. Envie os anexos e conclua o envio para análise.'; }); }
@@ -520,5 +574,5 @@ var PigePortal;
     }
     const editable = () => !state.selected || ['draft', 'changes_requested'].includes(state.selected.status);
     Vue.createApp({ components: { 'assist-panel': PigeAssist.component }, render: PigeRenders.portal, setup() { Vue.onMounted(() => { PigeMFA.init(mfaRequest, afterMFA, logout, true); window.addEventListener('online', () => { state.online = true; }); window.addEventListener('offline', () => { state.online = false; }); if ('serviceWorker' in navigator && window.isSecureContext)
-            void navigator.serviceWorker.register('/sw.js').catch(() => { }); void PigeInstitution.load(); void start(); }); return { state, assistRequest, personAssistFields, detailFields, readAttachment, mfa: PigeMFA, identity: PigeInstitution.state, run, selectCampaign, login, register, logout, verifyRequest, verifyConfirm, resetRequest, resetConfirm, newAdmission, edit, view, save, fileChange, upload, submit, sendMessage, withdraw, download, paginate, refresh, copy, saveProfile, editable, label: PigeOnline.label, date: PigeOnline.date, money: PigeOnline.money, safeLink: PigeOnline.safeLink }; } }).mount('#portal');
+            void navigator.serviceWorker.register('/sw.js').catch(() => { }); void PigeInstitution.load(); void start(); }); return { state, start, visibleCampaigns, selectSchool, assistRequest, personAssistFields, detailFields, readAttachment, mfa: PigeMFA, identity: PigeInstitution.state, run, selectCampaign, login, register, logout, verifyRequest, verifyConfirm, resetRequest, resetConfirm, newAdmission, edit, view, save, fileChange, upload, submit, sendMessage, withdraw, download, paginate, refresh, copy, saveProfile, editable, label: PigeOnline.label, date: PigeOnline.date, money: PigeOnline.money, safeLink: PigeOnline.safeLink }; } }).mount('#portal');
 })(PigePortal || (PigePortal = {}));

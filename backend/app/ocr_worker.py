@@ -17,12 +17,14 @@ from .db import SessionLocal, now
 from .storage import read_bytes, delete_file
 from .security import utc
 from .ocr import seal
+from .telemetry import emit, heartbeat as diagnostic_heartbeat
 
 STATE=Path('/tmp/ocr-worker-health.json')
 STOP=False
 
 
 def heartbeat():
+    diagnostic_heartbeat('worker-ocr')
     temporary=STATE.with_suffix('.part')
     temporary.write_text(json.dumps({'pid':os.getpid(),'time':time.time()}))
     temporary.chmod(0o600);temporary.replace(STATE)
@@ -100,6 +102,7 @@ def process_one():
         # Uma tentativa expirada/cancelada não pode sobrescrever outra execução.
         db.execute(update(OcrJob).execution_options(synchronize_session=False).where(OcrJob.id==ident,OcrJob.status=='processing',
             OcrJob.lease_token==token,OcrJob.expires_at>now()).values(**values));db.commit()
+        emit('ocr.job_finished', service='worker-ocr', level='INFO' if values['status']=='succeeded' else 'WARNING', job_id=ident, state=values['status'], code=values['error_code'])
         return True
 
 
@@ -116,6 +119,7 @@ def main():
     if not all(shutil.which(c) for c in ('tesseract','pdftoppm')):raise SystemExit('OCR tools unavailable')
     languages=subprocess.check_output(['tesseract','--list-langs'],text=True)
     if 'por' not in languages:raise SystemExit('Portuguese OCR model unavailable')
+    emit('service.started', service='worker-ocr')
     ticks=0
     try:
         while not STOP:
@@ -124,6 +128,9 @@ def main():
                 with SessionLocal() as db:cleanup(db)
             worked=process_one();ticks+=1;heartbeat()
             if not worked:time.sleep(2)
+    except Exception as exc:
+        emit('worker.loop_failed', service='worker-ocr', level='ERROR', error_type=type(exc).__name__)
+        raise
     finally:STATE.unlink(missing_ok=True)
 
 
