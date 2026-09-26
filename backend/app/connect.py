@@ -265,6 +265,8 @@ def adopt_connect_instance(
         obj.status = status
         obj.connection_state = row["state"]
         obj.external_id = row["external_id"]
+        if row["number"]:
+            obj.phone = row["number"]
         obj.source = "adopted"
         obj.last_synced_at = datetime.now(UTC)
         obj.version += 1
@@ -279,6 +281,7 @@ def adopt_connect_instance(
             status=status,
             connection_state=row["state"],
             external_id=row["external_id"],
+            phone=row["number"],
             source="adopted",
             last_synced_at=datetime.now(UTC),
         )
@@ -366,6 +369,7 @@ def create_connect_instance(
         status=status,
         connection_state=state,
         external_id=str((response.get("instance") or {}).get("instanceId", ""))[:160] if isinstance(response, dict) else "",
+        phone=data.phone,
         source="pige360",
         last_synced_at=datetime.now(UTC),
     )
@@ -380,6 +384,7 @@ def create_connect_instance(
         "company_id": company.id,
         "name": name,
         "primary": primary,
+        "phone_configured": True,
     })
     return {"instance": _instance_output(obj), **connect_response(response)}
 
@@ -391,6 +396,57 @@ def sync_connect_instance(instance_id: str, db: DB, user: Actor, school: Scope, 
     response = _remote_call(lambda: ConnectApiClient().connection_state(obj.name))
     _state_from_response(obj, response)
     audit(db, request, user, "connect.instance.synced", obj, school.id, {"state": obj.connection_state})
+    return {"instance": _instance_output(obj), **connect_response(response)}
+
+
+@router.post("/connect/instances/{instance_id}/phone")
+def update_connect_instance_phone(
+    instance_id: str,
+    data: s.ConnectPhoneInput,
+    db: DB,
+    user: Actor,
+    school: Scope,
+    request: Request,
+):
+    require(user, "connect.manage")
+    obj = _instance(db, school, instance_id)
+    if obj.source != "pige360":
+        fail(409, "O telefone de uma instância preexistente é administrado na Connect API de origem.")
+    obj.phone = data.number
+    obj.version += 1
+    audit(db, request, user, "connect.instance.phone_updated", obj, school.id, {"phone_configured": True})
+    return {"instance": _instance_output(obj)}
+
+
+@router.post("/connect/instances/{instance_id}/qr")
+def connect_instance_qr(instance_id: str, db: DB, user: Actor, school: Scope, request: Request):
+    require(user, "connect.manage")
+    obj = _instance(db, school, instance_id)
+    if obj.source != "pige360":
+        fail(409, "Instância preexistente: conexão remota não é administrada pelo PIGE360.")
+    response = _remote_call(lambda: ConnectApiClient().connect(obj.name, ""))
+    status, state = _remote_status(response)
+    obj.status, obj.connection_state, obj.last_error = status, state, ""
+    obj.last_synced_at = datetime.now(UTC)
+    obj.version += 1
+    audit(db, request, user, "connect.instance.qr_requested", obj, school.id, {"state": state})
+    return {"instance": _instance_output(obj), **connect_response(response)}
+
+
+@router.post("/connect/instances/{instance_id}/pairing-code")
+def connect_instance_pairing_code(instance_id: str, db: DB, user: Actor, school: Scope, request: Request):
+    require(user, "connect.manage")
+    obj = _instance(db, school, instance_id)
+    if obj.source != "pige360":
+        fail(409, "Instância preexistente: pareamento remoto não é administrado pelo PIGE360.")
+    if not obj.phone:
+        fail(409, "Cadastre o telefone da instância antes de solicitar o código de pareamento.")
+    response = _remote_call(lambda: ConnectApiClient().connect(obj.name, obj.phone))
+    status, state = _remote_status(response)
+    obj.status, obj.connection_state, obj.last_error = status, state, ""
+    obj.last_synced_at = datetime.now(UTC)
+    obj.version += 1
+    audit(db, request, user, "connect.instance.pairing_requested", obj, school.id, {"state": state, "phone_configured": True})
     return {"instance": _instance_output(obj), **connect_response(response)}
 
 
