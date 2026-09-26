@@ -129,11 +129,31 @@ class MessageInput(Input):
 
 class ConnectInstanceInput(Input):
     label: str = Field(default='', max_length=40)
+    phone: str = Field(min_length=10,max_length=24)
     primary: bool = False
+
+    @field_validator('phone')
+    @classmethod
+    def phone_valid(cls, value):
+        digits = re.sub(r'\D','',value)
+        if len(digits) in (10,11):
+            digits = '55' + digits
+        if not 12 <= len(digits) <= 15:
+            raise ValueError('Informe um telefone válido com país, DDD e número.')
+        return digits
 
 
 class ConnectPairInput(Input):
     number: str = Field(default='', max_length=24)
+
+
+class ConnectPhoneInput(Input):
+    number: str = Field(min_length=10,max_length=24)
+
+    @field_validator('number')
+    @classmethod
+    def phone_valid(cls, value):
+        return ConnectInstanceInput.phone_valid(value)
 
 
 class ConnectAdoptInput(Input):
