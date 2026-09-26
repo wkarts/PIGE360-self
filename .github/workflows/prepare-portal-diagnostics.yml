@@ -1,0 +1,57 @@
+name: Preparar correções do portal e diagnóstico
+on:
+  push:
+    branches: [feature/portal-diagnosticos]
+    paths: ['.github/workflows/prepare-portal-diagnostics.yml']
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Aplicar alterações textuais com verificação integral
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, subprocess
+          from pathlib import Path
+          assert os.environ['GITHUB_REF_NAME'] == 'feature/portal-diagnosticos'
+          assert subprocess.check_output(['git','rev-parse','HEAD^'],text=True).strip() == '0a34f87875b1f1cd3982b265a24d13db0656b409'
+          changes = []
+          for i in (1, 2):
+              changes.extend(json.loads(Path(f'scripts/ci/portal-diagnostics-edits-{i}.json').read_text()))
+          assert len(changes) == 22 and len({x['path'] for x in changes}) == 22
+          for item in changes:
+              path = Path(item['path'])
+              assert not path.is_absolute() and '..' not in path.parts
+              assert path.parts[0] in ('backend','frontend','scripts') or str(path) == '.github/workflows/ci.yml'
+              source = path.read_text(encoding='utf-8')
+              assert hashlib.sha256(source.encode()).hexdigest() == item['before'], str(path)
+              for edit in reversed(item['edits']):
+                  assert 0 <= edit['start'] <= edit['end'] <= len(source)
+                  source = source[:edit['start']] + edit['text'] + source[edit['end']:]
+              assert hashlib.sha256(source.encode()).hexdigest() == item['after'], str(path)
+              path.write_text(source,encoding='utf-8')
+          PY
+      - name: Compilar fontes da revisão
+        run: |
+          python -m compileall -q backend/app scripts
+          npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
+          npm run typecheck --prefix frontend
+          npm run build --prefix frontend
+      - name: Registrar somente a melhoria na branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend frontend docs/PORTAL-E-DIAGNOSTICOS.md scripts/start.sh scripts/e2e-diagnostics.py .github/workflows/ci.yml
+          git rm scripts/ci/portal-diagnostics-edits-1.json scripts/ci/portal-diagnostics-edits-2.json .github/workflows/prepare-portal-diagnostics.yml
+          git diff --cached --name-only | grep -E '(^|/)(\.env$|node_modules/)|\.(ttf|woff2?|otf)$' && exit 1 || true
+          git commit -m 'fix(portal): entrada independente do processo e diagnóstico com logs exportáveis'
+          git push origin HEAD:feature/portal-diagnosticos
