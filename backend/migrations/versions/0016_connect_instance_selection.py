@@ -10,7 +10,9 @@ depends_on = None
 
 def upgrade():
     op.add_column("connect_instances", sa.Column("source", sa.String(16), nullable=False, server_default="pige360"))
-    op.create_check_constraint("connect_instance_source", "connect_instances", "source IN ('pige360','adopted')")
+    # SQLite exige batch mode para alterar constraints de tabela; PostgreSQL também é compatível.
+    with op.batch_alter_table("connect_instances") as batch:
+        batch.create_check_constraint("connect_instance_source", "source IN ('pige360','adopted')")
     op.create_table(
         "connect_school_bindings",
         sa.Column("school_id", sa.String(36), sa.ForeignKey("schools.id"), primary_key=True),
@@ -30,5 +32,6 @@ def upgrade():
 def downgrade():
     op.drop_table("connect_unit_bindings")
     op.drop_table("connect_school_bindings")
-    op.drop_constraint("connect_instance_source", "connect_instances", type_="check")
+    with op.batch_alter_table("connect_instances") as batch:
+        batch.drop_constraint("connect_instance_source", type_="check")
     op.drop_column("connect_instances", "source")
