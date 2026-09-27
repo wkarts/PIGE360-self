@@ -1,7 +1,7 @@
 """API do núcleo do Diário Escolar Digital."""
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
@@ -101,14 +101,45 @@ def _diary_output(db, obj):
     }
 
 
-def _attendance_roster(db, diary):
-    enrollments = db.scalars(select(m.Enrollment).where(
-        m.Enrollment.school_id == diary.school_id,
-        m.Enrollment.class_group_id == diary.class_group_id,
-        m.Enrollment.status.in_(["active","suspended"]),
-    ).order_by(m.Enrollment.number)).all()
+def _enrollment_state_on(db, enrollment, on_date: date):
+    if enrollment.enrolled_on > on_date:
+        return None
+    status = enrollment.status
+    class_group_id = enrollment.class_group_id
+    events = list(db.scalars(select(m.EnrollmentEvent).where(
+        m.EnrollmentEvent.enrollment_id == enrollment.id
+    ).order_by(m.EnrollmentEvent.created_at.desc(), m.EnrollmentEvent.id.desc())))
+    for event in events:
+        event_date = event.created_at.date() if event.created_at else enrollment.enrolled_on
+        if event_date > on_date and isinstance(event.before, dict):
+            status = str(event.before.get("status") or status)
+            class_group_id = str(event.before.get("class_group_id") or class_group_id)
+    return status, class_group_id
+
+
+def _attendance_roster(db, diary, lesson_date: date | None = None):
+    if lesson_date is None:
+        enrollments = db.scalars(select(m.Enrollment).where(
+            m.Enrollment.school_id == diary.school_id,
+            m.Enrollment.class_group_id == diary.class_group_id,
+            m.Enrollment.status.in_(["active","suspended"]),
+        ).order_by(m.Enrollment.number)).all()
+    else:
+        enrollments = db.scalars(select(m.Enrollment).where(
+            m.Enrollment.school_id == diary.school_id,
+            m.Enrollment.academic_year_id == diary.academic_year_id,
+        ).order_by(m.Enrollment.number)).all()
     rows = []
     for enrollment in enrollments:
+        if lesson_date is not None:
+            state = _enrollment_state_on(db, enrollment, lesson_date)
+            if not state:
+                continue
+            status, class_group_id = state
+            if class_group_id != diary.class_group_id or status not in ("active","suspended"):
+                continue
+        else:
+            status = enrollment.status
         student = db.get(m.Student, enrollment.student_id)
         person = db.get(m.Person, student.person_id) if student else None
         if student and person:
@@ -117,7 +148,7 @@ def _attendance_roster(db, diary):
                 "student_id": student.id,
                 "number": student.number,
                 "name": person.name,
-                "enrollment_status": enrollment.status,
+                "enrollment_status": status,
             })
     return rows
 
@@ -214,6 +245,17 @@ def create_plan(data: s.CurriculumPlanInput, db: DB, user: Actor, school: DiaryS
             fail(403, "A atribuição docente não pertence ao usuário.")
     elif user.role == "teacher":
         fail(422, "Professor deve informar sua atribuição docente.")
+    duplicate_stmt = select(m.CurriculumPlan.id).where(
+        m.CurriculumPlan.school_id == school.id,
+        m.CurriculumPlan.class_group_id == data.class_group_id,
+        m.CurriculumPlan.component_id == data.component_id,
+    )
+    duplicate_stmt = duplicate_stmt.where(
+        m.CurriculumPlan.academic_period_id == data.academic_period_id
+        if data.academic_period_id else m.CurriculumPlan.academic_period_id.is_(None)
+    )
+    if db.scalar(duplicate_stmt):
+        fail(409, "Já existe planejamento para esta turma, componente e período.")
     obj = m.CurriculumPlan(school_id=school.id, **data.model_dump())
     db.add(obj); db.flush()
     audit(db, request, user, "diary.plan.created", obj, school.id)
@@ -335,7 +377,7 @@ def attendance(diary_id: str, lesson_id: str, db: DB, user: Actor, school: Diary
     lesson=_scoped(db,m.DiaryLesson,lesson_id,school.id)
     if lesson.diary_id != diary.id: fail(404,"Aula não encontrada neste diário.")
     existing={x.enrollment_id:output(x) for x in db.scalars(select(m.DiaryAttendance).where(m.DiaryAttendance.lesson_id==lesson.id))}
-    return {"lesson":output(lesson),"roster":[{**row,"attendance":existing.get(row["enrollment_id"])} for row in _attendance_roster(db,diary)]}
+    return {"lesson":output(lesson),"roster":[{**row,"attendance":existing.get(row["enrollment_id"])} for row in _attendance_roster(db,diary,lesson.lesson_date)]}
 
 
 @router.put("/diaries/{diary_id}/lessons/{lesson_id}/attendance")
@@ -344,7 +386,7 @@ def save_attendance(diary_id: str, lesson_id: str, data: s.AttendanceInput, db: 
     if diary.status=="closed": fail(409,"O diário está fechado.")
     lesson=_scoped(db,m.DiaryLesson,lesson_id,school.id)
     if lesson.diary_id != diary.id: fail(404,"Aula não encontrada neste diário.")
-    allowed={row["enrollment_id"]:row for row in _attendance_roster(db,diary)}
+    allowed={row["enrollment_id"]:row for row in _attendance_roster(db,diary,lesson.lesson_date)}
     if len({item.enrollment_id for item in data.items}) != len(data.items):
         fail(422,"Matrícula duplicada na chamada.")
     for item in data.items:
@@ -371,7 +413,8 @@ def close_diary(diary_id: str, data: s.CloseDiaryInput, db: DB, user: Actor, sch
     missing=[]
     for lesson in snapshot["lessons"]:
         count=db.scalar(select(func.count()).select_from(m.DiaryAttendance).where(m.DiaryAttendance.lesson_id==lesson["id"])) or 0
-        if count < len(snapshot["roster"]): missing.append(lesson["lesson_date"])
+        expected=len(_attendance_roster(db,diary,date.fromisoformat(lesson["lesson_date"])))
+        if count < expected: missing.append(lesson["lesson_date"])
     if missing:
         fail(409,"Existem aulas sem chamada completa: "+", ".join(missing[:5]))
     canonical=json.dumps(snapshot,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
