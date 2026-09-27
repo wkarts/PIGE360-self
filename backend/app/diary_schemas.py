@@ -72,12 +72,16 @@ class AttendanceInput(Input):
     items: list[AttendanceItem] = Field(min_length=1,max_length=300)
 
 
-class CloseDiaryInput(Input):
+class DiaryTransitionInput(Input):
+    version: int = Field(ge=1)
+
+
+class CloseDiaryInput(DiaryTransitionInput):
     academic_period_id: str | None = None
     reason: str = Field(min_length=3,max_length=1000)
 
 
-class ReopenDiaryInput(Input):
+class ReopenDiaryInput(DiaryTransitionInput):
     reason: str = Field(min_length=10,max_length=1000)
 
 
