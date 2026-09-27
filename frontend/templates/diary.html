@@ -177,7 +177,7 @@
             <div class="x-grid">
               <label>Aluno<select v-model="state.opinionForm.enrollment_id" required><option value="">Selecione</option><option v-for="r in state.selected.roster||[]" :key="r.enrollment_id" :value="r.enrollment_id">{{r.name}} · {{r.number}}</option></select></label>
               <label>Período<select v-model="state.opinionForm.academic_period_id"><option value="">Geral</option><option v-for="p in state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id)" :key="p.id" :value="p.id">{{p.name}}</option></select></label>
-              <label>Situação<select v-model="state.opinionForm.status"><option value="draft">Rascunho</option><option value="reviewed">Revisado</option><option value="final">Final</option></select></label>
+              <label>Situação<select v-model="state.opinionForm.status"><option value="draft">Rascunho</option><option v-if="can('diary.review')" value="reviewed">Revisado</option><option v-if="can('diary.review')" value="final">Final</option></select></label>
             </div>
             <label>Texto<textarea v-model="state.opinionForm.text" required minlength="2" maxlength="12000" rows="5"></textarea></label>
             <button class="btn btn-primary">Salvar parecer</button>
