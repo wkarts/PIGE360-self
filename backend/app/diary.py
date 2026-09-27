@@ -524,6 +524,8 @@ def save_opinion(diary_id: str, data: s.DescriptiveOpinionInput, db: DB, user: A
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.write")
     if diary.status=="closed": fail(409,"O diário está fechado.")
     enrollment=_enrollment_for_diary(db,diary,data.enrollment_id)
+    if data.status in ("reviewed","final"):
+        require(user,"diary.review")
     if data.academic_period_id: _period(db,school.id,data.academic_period_id,diary.academic_year_id)
     stmt=select(m.DescriptiveOpinion).where(m.DescriptiveOpinion.diary_id==diary.id,m.DescriptiveOpinion.enrollment_id==enrollment.id)
     stmt=stmt.where(m.DescriptiveOpinion.academic_period_id==data.academic_period_id if data.academic_period_id else m.DescriptiveOpinion.academic_period_id.is_(None))
