@@ -153,6 +153,27 @@ def _attendance_roster(db, diary, lesson_date: date | None = None):
     return rows
 
 
+def _enrollment_for_diary(db, diary, enrollment_id: str, on_date: date | None = None):
+    enrollment = _scoped(db, m.Enrollment, enrollment_id, diary.school_id)
+    if enrollment.academic_year_id != diary.academic_year_id:
+        fail(422, "A matrícula pertence a outro ano letivo.")
+    if on_date:
+        state = _enrollment_state_on(db, enrollment, on_date)
+        if not state or state[1] != diary.class_group_id or state[0] not in ("active","suspended"):
+            fail(422, "A matrícula não pertencia a esta turma na data informada.")
+    elif enrollment.class_group_id != diary.class_group_id:
+        belonged = False
+        for event in db.scalars(select(m.EnrollmentEvent).where(m.EnrollmentEvent.enrollment_id == enrollment.id)):
+            before = event.before if isinstance(event.before, dict) else {}
+            after = event.after if isinstance(event.after, dict) else {}
+            if before.get("class_group_id") == diary.class_group_id or after.get("class_group_id") == diary.class_group_id:
+                belonged = True
+                break
+        if not belonged:
+            fail(422, "A matrícula não pertence ao histórico desta turma.")
+    return enrollment
+
+
 def _snapshot(db, diary, period_id=None):
     lessons_stmt = select(m.DiaryLesson).where(m.DiaryLesson.diary_id == diary.id)
     if period_id:
@@ -174,6 +195,25 @@ def _snapshot(db, diary, period_id=None):
         if period_id else m.CurriculumPlan.academic_period_id.is_(None)
     )
     plan = db.scalar(plan_stmt)
+    assessment_stmt = select(m.AssessmentInstrument).where(m.AssessmentInstrument.diary_id == diary.id)
+    opinion_stmt = select(m.DescriptiveOpinion).where(m.DescriptiveOpinion.diary_id == diary.id)
+    records_stmt = select(m.PedagogicalRecord).where(m.PedagogicalRecord.diary_id == diary.id)
+    if period_id:
+        assessment_stmt = assessment_stmt.where(m.AssessmentInstrument.academic_period_id == period_id)
+        opinion_stmt = opinion_stmt.where(m.DescriptiveOpinion.academic_period_id == period_id)
+        period = db.get(m.AcademicPeriod, period_id)
+        if period:
+            records_stmt = records_stmt.where(
+                m.PedagogicalRecord.record_date >= period.starts_on,
+                m.PedagogicalRecord.record_date <= period.ends_on,
+            )
+    instruments = list(db.scalars(assessment_stmt.order_by(m.AssessmentInstrument.assessment_date,m.AssessmentInstrument.id)))
+    instrument_ids = [x.id for x in instruments]
+    results = [output(x) for x in db.scalars(select(m.AssessmentResult).where(
+        m.AssessmentResult.instrument_id.in_(instrument_ids)
+    ).order_by(m.AssessmentResult.instrument_id,m.AssessmentResult.enrollment_id))] if instrument_ids else []
+    opinions = [output(x) for x in db.scalars(opinion_stmt.order_by(m.DescriptiveOpinion.enrollment_id))]
+    pedagogical = [output(x) for x in db.scalars(records_stmt.order_by(m.PedagogicalRecord.record_date,m.PedagogicalRecord.id))]
     return {
         "diary": _diary_output(db, diary),
         "period": output(db.get(m.AcademicPeriod, period_id)) if period_id and db.get(m.AcademicPeriod, period_id) else None,
@@ -181,6 +221,10 @@ def _snapshot(db, diary, period_id=None):
         "lessons": [output(x) for x in lessons],
         "attendance": attendances,
         "roster": _attendance_roster(db, diary),
+        "assessments": [output(x) for x in instruments],
+        "assessment_results": results,
+        "opinions": opinions,
+        "pedagogical_records": pedagogical,
     }
 
 
@@ -403,6 +447,115 @@ def save_attendance(diary_id: str, lesson_id: str, data: s.AttendanceInput, db: 
     return {"saved":len(data.items)}
 
 
+@router.get("/diaries/{diary_id}/assessments")
+def assessments(diary_id: str, db: DB, user: Actor, school: DiaryScope):
+    diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.read")
+    items=[]
+    for obj in db.scalars(select(m.AssessmentInstrument).where(m.AssessmentInstrument.diary_id==diary.id).order_by(m.AssessmentInstrument.assessment_date,m.AssessmentInstrument.id)):
+        count=db.scalar(select(func.count()).select_from(m.AssessmentResult).where(m.AssessmentResult.instrument_id==obj.id)) or 0
+        items.append({**output(obj),"result_count":count})
+    return items
+
+
+@router.post("/diaries/{diary_id}/assessments", status_code=201)
+def create_assessment(diary_id: str, data: s.AssessmentInstrumentInput, db: DB, user: Actor, school: DiaryScope, request: Request):
+    diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.assessments")
+    if diary.status=="closed": fail(409,"O diário está fechado.")
+    if data.academic_period_id:
+        period=_period(db,school.id,data.academic_period_id,diary.academic_year_id)
+        if data.assessment_date < period.starts_on or data.assessment_date > period.ends_on:
+            fail(422,"A data da avaliação está fora do período informado.")
+    year=db.get(m.AcademicYear,diary.academic_year_id)
+    if data.assessment_date < year.starts_on or data.assessment_date > year.ends_on:
+        fail(422,"A data da avaliação está fora do ano letivo.")
+    obj=m.AssessmentInstrument(school_id=school.id,diary_id=diary.id,created_by=user.id,**data.model_dump())
+    db.add(obj);db.flush()
+    audit(db,request,user,"diary.assessment.created",obj,school.id,{"diary_id":diary.id})
+    return output(obj)
+
+
+@router.get("/diaries/{diary_id}/assessments/{instrument_id}/results")
+def assessment_results(diary_id: str, instrument_id: str, db: DB, user: Actor, school: DiaryScope):
+    diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.read")
+    instrument=_scoped(db,m.AssessmentInstrument,instrument_id,school.id)
+    if instrument.diary_id!=diary.id: fail(404,"Avaliação não encontrada neste diário.")
+    existing={x.enrollment_id:output(x) for x in db.scalars(select(m.AssessmentResult).where(m.AssessmentResult.instrument_id==instrument.id))}
+    roster=_attendance_roster(db,diary,instrument.assessment_date)
+    return {"instrument":output(instrument),"roster":[{**row,"result":existing.get(row["enrollment_id"])} for row in roster]}
+
+
+@router.put("/diaries/{diary_id}/assessments/{instrument_id}/results")
+def save_assessment_results(diary_id: str, instrument_id: str, data: s.AssessmentResultsInput, db: DB, user: Actor, school: DiaryScope, request: Request):
+    diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.assessments")
+    if diary.status=="closed": fail(409,"O diário está fechado.")
+    instrument=_scoped(db,m.AssessmentInstrument,instrument_id,school.id)
+    if instrument.diary_id!=diary.id: fail(404,"Avaliação não encontrada neste diário.")
+    if len({item.enrollment_id for item in data.items})!=len(data.items): fail(422,"Matrícula duplicada nos resultados.")
+    for item in data.items:
+        enrollment=_enrollment_for_diary(db,diary,item.enrollment_id,instrument.assessment_date)
+        if instrument.value_type=="numeric":
+            if item.numeric_score is None: fail(422,"Informe a nota numérica.")
+            if instrument.max_score is not None and item.numeric_score > instrument.max_score: fail(422,"Nota acima do valor máximo da avaliação.")
+            concept=""
+            numeric=item.numeric_score
+        else:
+            if not item.concept.strip(): fail(422,"Informe o conceito.")
+            concept=item.concept.strip()
+            numeric=None
+        obj=db.scalar(select(m.AssessmentResult).where(m.AssessmentResult.instrument_id==instrument.id,m.AssessmentResult.enrollment_id==enrollment.id))
+        if obj:
+            obj.numeric_score=numeric;obj.concept=concept;obj.note=item.note;obj.recorded_by=user.id;obj.version+=1
+        else:
+            obj=m.AssessmentResult(school_id=school.id,instrument_id=instrument.id,enrollment_id=enrollment.id,student_id=enrollment.student_id,numeric_score=numeric,concept=concept,note=item.note,recorded_by=user.id)
+            db.add(obj)
+    db.flush()
+    audit(db,request,user,"diary.assessment.results_saved",instrument,school.id,{"count":len(data.items)})
+    return {"saved":len(data.items)}
+
+
+@router.get("/diaries/{diary_id}/opinions")
+def opinions(diary_id: str, db: DB, user: Actor, school: DiaryScope):
+    diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.read")
+    return [output(x) for x in db.scalars(select(m.DescriptiveOpinion).where(m.DescriptiveOpinion.diary_id==diary.id).order_by(m.DescriptiveOpinion.updated_at.desc()))]
+
+
+@router.post("/diaries/{diary_id}/opinions", status_code=201)
+def save_opinion(diary_id: str, data: s.DescriptiveOpinionInput, db: DB, user: Actor, school: DiaryScope, request: Request):
+    diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.write")
+    if diary.status=="closed": fail(409,"O diário está fechado.")
+    enrollment=_enrollment_for_diary(db,diary,data.enrollment_id)
+    if data.academic_period_id: _period(db,school.id,data.academic_period_id,diary.academic_year_id)
+    stmt=select(m.DescriptiveOpinion).where(m.DescriptiveOpinion.diary_id==diary.id,m.DescriptiveOpinion.enrollment_id==enrollment.id)
+    stmt=stmt.where(m.DescriptiveOpinion.academic_period_id==data.academic_period_id if data.academic_period_id else m.DescriptiveOpinion.academic_period_id.is_(None))
+    obj=db.scalar(stmt)
+    created=obj is None
+    if obj:
+        obj.text=data.text;obj.status=data.status;obj.authored_by=user.id;obj.reviewed_by=user.id if data.status in ("reviewed","final") and user.role!="teacher" else None;obj.version+=1
+    else:
+        obj=m.DescriptiveOpinion(school_id=school.id,diary_id=diary.id,academic_period_id=data.academic_period_id,enrollment_id=enrollment.id,student_id=enrollment.student_id,text=data.text,status=data.status,authored_by=user.id,reviewed_by=user.id if data.status in ("reviewed","final") and user.role!="teacher" else None)
+        db.add(obj)
+    db.flush()
+    audit(db,request,user,"diary.opinion.created" if created else "diary.opinion.updated",obj,school.id)
+    return output(obj)
+
+
+@router.get("/diaries/{diary_id}/pedagogical-records")
+def pedagogical_records(diary_id: str, db: DB, user: Actor, school: DiaryScope):
+    diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.read")
+    return [output(x) for x in db.scalars(select(m.PedagogicalRecord).where(m.PedagogicalRecord.diary_id==diary.id).order_by(m.PedagogicalRecord.record_date.desc(),m.PedagogicalRecord.created_at.desc()))]
+
+
+@router.post("/diaries/{diary_id}/pedagogical-records", status_code=201)
+def create_pedagogical_record(diary_id: str, data: s.PedagogicalRecordInput, db: DB, user: Actor, school: DiaryScope, request: Request):
+    diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.write")
+    if diary.status=="closed": fail(409,"O diário está fechado.")
+    enrollment=_enrollment_for_diary(db,diary,data.enrollment_id,data.record_date)
+    obj=m.PedagogicalRecord(school_id=school.id,diary_id=diary.id,enrollment_id=enrollment.id,student_id=enrollment.student_id,recorded_by=user.id,**data.model_dump(exclude={"enrollment_id"}))
+    db.add(obj);db.flush()
+    audit(db,request,user,"diary.pedagogical_record.created",obj,school.id,{"kind":obj.kind})
+    return output(obj)
+
+
 @router.post("/diaries/{diary_id}/close")
 def close_diary(diary_id: str, data: s.CloseDiaryInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.close")
@@ -502,4 +655,7 @@ def diary_summary(diary_id: str, db: DB, user: Actor, school: DiaryScope):
         "absences":sum(1 for x in attendance if x.status=="absent"),
         "justified_absences":sum(1 for x in attendance if x.status=="justified_absence"),
         "roster":len(_attendance_roster(db,diary)),
+        "assessments":db.scalar(select(func.count()).select_from(m.AssessmentInstrument).where(m.AssessmentInstrument.diary_id==diary.id)) or 0,
+        "opinions":db.scalar(select(func.count()).select_from(m.DescriptiveOpinion).where(m.DescriptiveOpinion.diary_id==diary.id)) or 0,
+        "pedagogical_records":db.scalar(select(func.count()).select_from(m.PedagogicalRecord).where(m.PedagogicalRecord.diary_id==diary.id)) or 0,
     }
