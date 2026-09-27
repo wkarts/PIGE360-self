@@ -55,6 +55,7 @@
         </div>
         <a href="#/enrollments" :class="{active:state.page==='enrollments'}" :aria-current="state.page==='enrollments'?'page':undefined" @click.prevent="navigate('enrollments')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#enrollment"></use></svg>Matrículas</a>
         <a href="#/academic" :class="{active:state.page==='academic'}" :aria-current="state.page==='academic'?'page':undefined" @click.prevent="navigate('academic')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#academic"></use></svg>Estrutura acadêmica</a>
+        <a v-if="can('diary.read')" href="#/diary" :class="{active:state.page==='diary'}" :aria-current="state.page==='diary'?'page':undefined" @click.prevent="navigate('diary')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#academic"></use></svg>Diário Escolar</a>
         <a href="#/documents" :class="{active:state.page==='documents'}" :aria-current="state.page==='documents'?'page':undefined" @click.prevent="navigate('documents')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#documents"></use></svg>Documentação</a>
         <a href="#/protocols" :class="{active:state.page==='protocols'}" :aria-current="state.page==='protocols'?'page':undefined" @click.prevent="navigate('protocols')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#protocols"></use></svg>Protocolos</a>
         <a v-if="can('reports.read')" href="#/reports" :class="{active:state.page==='reports'}" :aria-current="state.page==='reports'?'page':undefined" @click.prevent="navigate('reports')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#reports"></use></svg>Relatórios</a>
@@ -104,6 +105,7 @@
         <div v-if="state.loading" class="loading-strip" role="status">Carregando registros…</div>
         <diagnostics-panel v-if="state.page==='diagnostics' && state.user?.role==='admin'"></diagnostics-panel>
         <expansion-panel v-if="['online','banking','integrations','connect'].includes(state.page)" :key="state.schoolId+':'+state.page" :school-id="state.schoolId" :page="state.page" :permissions="state.user.permissions"></expansion-panel>
+        <diary-panel v-if="state.page==='diary'" :key="state.schoolId+':diary'" :school-id="state.schoolId" :permissions="state.user.permissions"></diary-panel>
         <section v-if="state.page==='dashboard' && !isProfileRole()" class="dashboard">
           <div class="welcome-card"><div><p class="eyebrow">ROTINA ESCOLAR EM DIA</p><h2>Uma visão completa.<br>Uma Secretaria mais próxima.</h2><p>Comece um cadastro, acompanhe matrículas ou consulte a documentação dos alunos.</p><div class="actions"><button v-if="can('people.write')" class="btn btn-primary" @click="newStudent()">+ Cadastrar aluno</button><button v-if="can('enrollments.write')" class="btn btn-secondary" @click="newEnrollment">Nova matrícula →</button></div></div><div class="welcome-art" aria-hidden="true"><span>ALUNO</span><strong>Cadastro<br>Documentos<br>Matrícula</strong><i>✓</i></div></div>
           <div class="stats-grid">
@@ -116,7 +118,7 @@
         </section>
         <section v-if="state.page==='dashboard' && isProfileRole()" class="dashboard">
           <div v-if="state.user.role==='teacher'">
-            <div class="welcome-card"><div><p class="eyebrow">ESPAÇO DO PROFESSOR</p><h2>Suas turmas e alunos.</h2><p>Consulte as turmas atribuídas a você e acompanhe a lista real de alunos de cada classe.</p></div><div class="welcome-art" aria-hidden="true"><span>PROFESSOR</span><strong>Turmas<br>Alunos<br>Vínculos</strong><i>✓</i></div></div>
+            <div class="welcome-card"><div><p class="eyebrow">ESPAÇO DO PROFESSOR</p><h2>Suas turmas e alunos.</h2><p>Consulte as turmas atribuídas a você e acompanhe a lista real de alunos de cada classe.</p><div class="actions"><button v-if="can('diary.read')" class="btn btn-primary" @click="navigate('diary')">Abrir Diário Escolar →</button></div></div><div class="welcome-art" aria-hidden="true"><span>PROFESSOR</span><strong>Turmas<br>Alunos<br>Vínculos</strong><i>✓</i></div></div>
             <div v-if="!state.profileContext.assignments?.length" class="alert info">Seu usuário ainda não possui turmas atribuídas. Solicite à Direção ou à Coordenação o vínculo com uma turma.</div>
             <section v-for="assignment in state.profileContext.assignments || []" :key="assignment.id" class="panel spaced">
               <div class="panel-header"><div><p class="eyebrow">{{ assignment.school_name }}</p><h2>{{ assignment.class_name }}</h2><p class="muted">{{ assignment.grade_name }} · {{ assignment.shift_name }} · {{ assignment.year_name }}<span v-if="assignment.subject_name"> · {{ assignment.subject_name }}</span></p></div><span class="badge active">{{ assignment.students.length }} aluno(s)</span></div>
