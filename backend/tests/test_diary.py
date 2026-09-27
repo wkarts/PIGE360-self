@@ -53,6 +53,43 @@ def test_diary_lesson_attendance_close_and_reopen(api):
     })
     assert saved["saved"] == 1
 
+    assessment = api.post("/diaries/"+diary["id"]+"/assessments", {
+        "academic_period_id": period["id"],
+        "title": "Atividade de leitura",
+        "kind": "activity",
+        "assessment_date": "2026-09-22",
+        "value_type": "numeric",
+        "max_score": "10.00",
+        "weight": "1.0",
+        "description": "Compreensão do texto",
+        "skills": "EF00TESTE",
+        "status": "published",
+    })
+    result_roster = api.get("/diaries/"+diary["id"]+"/assessments/"+assessment["id"]+"/results")
+    assert len(result_roster["roster"]) == 1
+    api.call("PUT", "/diaries/"+diary["id"]+"/assessments/"+assessment["id"]+"/results", {
+        "items": [{
+            "enrollment_id": result_roster["roster"][0]["enrollment_id"],
+            "numeric_score": "9.50",
+            "concept": "",
+            "note": "Bom desempenho",
+        }]
+    })
+    opinion = api.post("/diaries/"+diary["id"]+"/opinions", {
+        "academic_period_id": period["id"],
+        "enrollment_id": enrollment["id"],
+        "text": "Apresentou evolução consistente no período.",
+        "status": "final",
+    })
+    assert opinion["status"] == "final"
+    record = api.post("/diaries/"+diary["id"]+"/pedagogical-records", {
+        "enrollment_id": enrollment["id"],
+        "record_date": "2026-09-22",
+        "kind": "follow_up",
+        "text": "Acompanhamento individual registrado.",
+    })
+    assert record["kind"] == "follow_up"
+
     period_close = api.post("/diaries/"+diary["id"]+"/close", {
         "academic_period_id": period["id"],
         "reason": "Período conferido",
@@ -68,6 +105,12 @@ def test_diary_lesson_attendance_close_and_reopen(api):
     assert full_close["scope"] == "diary"
     assert full_close["diary"]["status"] == "closed"
     assert len(full_close["closure"]["snapshot_hash"]) == 64
+    with SessionLocal() as db:
+        closure = db.get(m.DiaryClosure, full_close["closure"]["id"])
+        assert len(closure.snapshot["assessments"]) == 1
+        assert len(closure.snapshot["assessment_results"]) == 1
+        assert len(closure.snapshot["opinions"]) == 1
+        assert len(closure.snapshot["pedagogical_records"]) == 1
 
     api.post("/diaries/"+diary["id"]+"/lessons", {
         "academic_period_id": period["id"],
