@@ -14,8 +14,8 @@ def test_diary_lesson_attendance_close_and_reopen(api):
     period = api.post("/academic-periods", {
         "academic_year_id": catalog["year"]["id"],
         "name": "1º Bimestre",
-        "starts_on": "2026-01-01",
-        "ends_on": "2026-04-30",
+        "starts_on": "2026-09-01",
+        "ends_on": "2026-12-20",
         "order_index": 1,
         "active": True,
     })
@@ -33,7 +33,7 @@ def test_diary_lesson_attendance_close_and_reopen(api):
     })
     lesson = api.post("/diaries/"+diary["id"]+"/lessons", {
         "academic_period_id": period["id"],
-        "lesson_date": "2026-03-10",
+        "lesson_date": "2026-09-22",
         "lesson_count": 2,
         "content": "Leitura e interpretação de texto",
         "skills": "EF00TESTE",
@@ -71,7 +71,7 @@ def test_diary_lesson_attendance_close_and_reopen(api):
 
     api.post("/diaries/"+diary["id"]+"/lessons", {
         "academic_period_id": period["id"],
-        "lesson_date": "2026-03-11",
+        "lesson_date": "2026-09-23",
         "lesson_count": 1,
         "content": "Não deve gravar",
     }, 409)
