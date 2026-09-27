@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from typing import Literal
 from pydantic import Field, model_validator
 
@@ -86,3 +87,49 @@ class PlanEdit(CurriculumPlanInput):
 
 class LessonEdit(LessonInput):
     version: int = Field(ge=1)
+
+
+class AssessmentInstrumentInput(Input):
+    academic_period_id: str | None = None
+    title: str = Field(min_length=2,max_length=160)
+    kind: str = Field(default="activity",min_length=2,max_length=60)
+    assessment_date: date
+    value_type: Literal["numeric","concept"] = "numeric"
+    max_score: Decimal | None = Field(default=None,gt=0,max_digits=10,decimal_places=2)
+    weight: Decimal | None = Field(default=None,gt=0,max_digits=10,decimal_places=4)
+    description: str = Field(default="",max_length=8000)
+    skills: str = Field(default="",max_length=6000)
+    status: Literal["draft","published","closed"] = "draft"
+
+    @model_validator(mode="after")
+    def numeric_requirements(self):
+        if self.value_type == "numeric" and self.max_score is None:
+            raise ValueError("Avaliação numérica exige valor máximo.")
+        if self.value_type == "concept" and self.max_score is not None:
+            raise ValueError("Avaliação conceitual não utiliza valor máximo.")
+        return self
+
+
+class AssessmentResultItem(Input):
+    enrollment_id: str
+    numeric_score: Decimal | None = Field(default=None,max_digits=10,decimal_places=2)
+    concept: str = Field(default="",max_length=80)
+    note: str = Field(default="",max_length=1000)
+
+
+class AssessmentResultsInput(Input):
+    items: list[AssessmentResultItem] = Field(min_length=1,max_length=300)
+
+
+class DescriptiveOpinionInput(Input):
+    academic_period_id: str | None = None
+    enrollment_id: str
+    text: str = Field(min_length=2,max_length=12000)
+    status: Literal["draft","reviewed","final"] = "draft"
+
+
+class PedagogicalRecordInput(Input):
+    enrollment_id: str
+    record_date: date
+    kind: Literal["follow_up","intervention","recovery","adaptation","referral","observation"] = "observation"
+    text: str = Field(min_length=2,max_length=12000)
