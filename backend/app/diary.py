@@ -502,6 +502,7 @@ def save_assessment_results(diary_id: str, instrument_id: str, data: s.Assessmen
     if diary.status=="closed": fail(409,"O diário está fechado.")
     instrument=_scoped(db,m.AssessmentInstrument,instrument_id,school.id)
     if instrument.diary_id!=diary.id: fail(404,"Avaliação não encontrada neste diário.")
+    if instrument.status=="closed": fail(409,"A avaliação está fechada.")
     if len({item.enrollment_id for item in data.items})!=len(data.items): fail(422,"Matrícula duplicada nos resultados.")
     for item in data.items:
         enrollment=_enrollment_for_diary(db,diary,item.enrollment_id,instrument.assessment_date)
@@ -650,6 +651,9 @@ def diary_report(diary_id: str, db: DB, user: Actor, school: DiaryScope):
         ("Aulas registradas",str(len(data["lessons"]))),
         ("Quantidade de aulas",str(total_lessons)),
         ("Registros de ausência",str(absences)),
+        ("Avaliações",str(len(data.get("assessments",[])))),
+        ("Pareceres descritivos",str(len(data.get("opinions",[])))),
+        ("Registros pedagógicos",str(len(data.get("pedagogical_records",[])))),
     ]
     note=("Relatório emitido a partir do snapshot do fechamento. Hash de integridade: "+closure.snapshot_hash) if closure else "Relatório gerado a partir dos registros atuais do Diário Escolar Digital. Fechamentos possuem snapshot e hash de integridade próprios."
     content=render_pdf(school.name,"Diário Escolar Digital",rows,note,user.name,db=db)
