@@ -74,6 +74,11 @@ def _require_diary(db, user, diary, permission):
         fail(403, "Este diário não pertence a uma atribuição docente do usuário.")
 
 
+def _require_open_diary(diary):
+    if diary.status != "open":
+        fail(409, "O diário precisa estar aberto para alterações.")
+
+
 def _period(db, school_id, period_id, year_id=None):
     if not period_id:
         return None
@@ -388,12 +393,42 @@ def diary_detail(diary_id: str, db: DB, user: Actor, school: DiaryScope):
     return {**_diary_output(db,obj), "lessons":lessons, "roster":_attendance_roster(db,obj)}
 
 
+@router.post("/diaries/{diary_id}/submit")
+def submit_diary(diary_id: str, data: s.DiaryTransitionInput, db: DB, user: Actor, school: DiaryScope, request: Request):
+    diary = _scoped(db, m.SchoolDiary, diary_id, school.id)
+    _require_diary(db, user, diary, "diary.write")
+    check_version(diary, data.version)
+    if diary.status != "open":
+        fail(409, "Somente um diário aberto pode ser enviado para revisão.")
+    lessons = db.scalar(select(func.count()).select_from(m.DiaryLesson).where(
+        m.DiaryLesson.diary_id == diary.id
+    )) or 0
+    if not lessons:
+        fail(409, "Não é possível enviar um diário sem aulas registradas.")
+    diary.status = "submitted"
+    diary.version += 1
+    audit(db, request, user, "diary.submitted", diary, school.id)
+    return _diary_output(db, diary)
+
+
+@router.post("/diaries/{diary_id}/review")
+def review_diary(diary_id: str, data: s.DiaryTransitionInput, db: DB, user: Actor, school: DiaryScope, request: Request):
+    diary = _scoped(db, m.SchoolDiary, diary_id, school.id)
+    _require_diary(db, user, diary, "diary.review")
+    check_version(diary, data.version)
+    if diary.status != "submitted":
+        fail(409, "Somente um diário enviado pode ser revisado.")
+    diary.status = "reviewed"
+    diary.version += 1
+    audit(db, request, user, "diary.reviewed", diary, school.id)
+    return _diary_output(db, diary)
+
+
 @router.post("/diaries/{diary_id}/lessons", status_code=201)
 def create_lesson(diary_id: str, data: s.LessonInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     diary = _scoped(db,m.SchoolDiary,diary_id,school.id)
     _require_diary(db,user,diary,"diary.write")
-    if diary.status == "closed":
-        fail(409, "O diário está fechado. Reabra-o formalmente antes de registrar aulas.")
+    _require_open_diary(diary)
     group = db.get(m.ClassGroup,diary.class_group_id)
     year = db.get(m.AcademicYear,diary.academic_year_id)
     if data.lesson_date < year.starts_on or data.lesson_date > year.ends_on:
@@ -412,7 +447,7 @@ def create_lesson(diary_id: str, data: s.LessonInput, db: DB, user: Actor, schoo
 def edit_lesson(diary_id: str, lesson_id: str, data: s.LessonEdit, db: DB, user: Actor, school: DiaryScope, request: Request):
     diary = _scoped(db,m.SchoolDiary,diary_id,school.id)
     _require_diary(db,user,diary,"diary.write")
-    if diary.status == "closed": fail(409,"O diário está fechado.")
+    _require_open_diary(diary)
     obj = _scoped(db,m.DiaryLesson,lesson_id,school.id)
     if obj.diary_id != diary.id: fail(404,"Aula não encontrada neste diário.")
     check_version(obj,data.version)
@@ -439,7 +474,7 @@ def attendance(diary_id: str, lesson_id: str, db: DB, user: Actor, school: Diary
 @router.put("/diaries/{diary_id}/lessons/{lesson_id}/attendance")
 def save_attendance(diary_id: str, lesson_id: str, data: s.AttendanceInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.attendance")
-    if diary.status=="closed": fail(409,"O diário está fechado.")
+    _require_open_diary(diary)
     lesson=_scoped(db,m.DiaryLesson,lesson_id,school.id)
     if lesson.diary_id != diary.id: fail(404,"Aula não encontrada neste diário.")
     allowed={row["enrollment_id"]:row for row in _attendance_roster(db,diary,lesson.lesson_date)}
@@ -472,7 +507,7 @@ def assessments(diary_id: str, db: DB, user: Actor, school: DiaryScope):
 @router.post("/diaries/{diary_id}/assessments", status_code=201)
 def create_assessment(diary_id: str, data: s.AssessmentInstrumentInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.assessments")
-    if diary.status=="closed": fail(409,"O diário está fechado.")
+    _require_open_diary(diary)
     if data.academic_period_id:
         period=_period(db,school.id,data.academic_period_id,diary.academic_year_id)
         if data.assessment_date < period.starts_on or data.assessment_date > period.ends_on:
@@ -499,7 +534,7 @@ def assessment_results(diary_id: str, instrument_id: str, db: DB, user: Actor, s
 @router.put("/diaries/{diary_id}/assessments/{instrument_id}/results")
 def save_assessment_results(diary_id: str, instrument_id: str, data: s.AssessmentResultsInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.assessments")
-    if diary.status=="closed": fail(409,"O diário está fechado.")
+    _require_open_diary(diary)
     instrument=_scoped(db,m.AssessmentInstrument,instrument_id,school.id)
     if instrument.diary_id!=diary.id: fail(404,"Avaliação não encontrada neste diário.")
     if instrument.status=="closed": fail(409,"A avaliação está fechada.")
@@ -535,7 +570,7 @@ def opinions(diary_id: str, db: DB, user: Actor, school: DiaryScope):
 @router.post("/diaries/{diary_id}/opinions", status_code=201)
 def save_opinion(diary_id: str, data: s.DescriptiveOpinionInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.write")
-    if diary.status=="closed": fail(409,"O diário está fechado.")
+    _require_open_diary(diary)
     enrollment=_enrollment_for_diary(db,diary,data.enrollment_id)
     if data.status in ("reviewed","final"):
         require(user,"diary.review")
@@ -563,7 +598,7 @@ def pedagogical_records(diary_id: str, db: DB, user: Actor, school: DiaryScope):
 @router.post("/diaries/{diary_id}/pedagogical-records", status_code=201)
 def create_pedagogical_record(diary_id: str, data: s.PedagogicalRecordInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.write")
-    if diary.status=="closed": fail(409,"O diário está fechado.")
+    _require_open_diary(diary)
     enrollment=_enrollment_for_diary(db,diary,data.enrollment_id,data.record_date)
     obj=m.PedagogicalRecord(school_id=school.id,diary_id=diary.id,enrollment_id=enrollment.id,student_id=enrollment.student_id,recorded_by=user.id,**data.model_dump(exclude={"enrollment_id"}))
     db.add(obj);db.flush()
@@ -574,7 +609,8 @@ def create_pedagogical_record(diary_id: str, data: s.PedagogicalRecordInput, db:
 @router.post("/diaries/{diary_id}/close")
 def close_diary(diary_id: str, data: s.CloseDiaryInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.close")
-    if diary.status=="closed": fail(409,"O diário já está fechado.")
+    check_version(diary, data.version)
+    if diary.status != "reviewed": fail(409,"Somente um diário revisado pode ser fechado.")
     if data.academic_period_id: _period(db,school.id,data.academic_period_id,diary.academic_year_id)
     snapshot=_snapshot(db,diary,data.academic_period_id)
     if not snapshot["lessons"]: fail(409,"Não é possível fechar um diário sem aulas registradas.")
@@ -601,20 +637,31 @@ def close_diary(diary_id: str, data: s.CloseDiaryInput, db: DB, user: Actor, sch
     closure=m.DiaryClosure(school_id=school.id,diary_id=diary.id,academic_period_id=data.academic_period_id,snapshot=snapshot,snapshot_hash=digest,reason=data.reason,closed_by=user.id,closed_at=stamp,active=True)
     db.add(closure)
     if not data.academic_period_id:
-        diary.status="closed"; diary.closed_at=stamp; diary.closed_by=user.id; diary.version += 1
+        diary.status="closed"; diary.closed_at=stamp; diary.closed_by=user.id
+    diary.version += 1
     db.flush()
-    audit(db,request,user,"diary.closed",diary,school.id,{"closure_id":closure.id,"snapshot_hash":digest})
+    action = "diary.period.closed" if data.academic_period_id else "diary.closed"
+    audit(db,request,user,action,diary,school.id,{"closure_id":closure.id,"snapshot_hash":digest})
     return {"diary":_diary_output(db,diary),"closure":output(closure,("snapshot",)),"scope":"period" if data.academic_period_id else "diary"}
 
 
 @router.post("/diaries/{diary_id}/reopen")
 def reopen_diary(diary_id: str, data: s.ReopenDiaryInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.reopen")
-    if diary.status!="closed": fail(409,"Somente diário fechado pode ser reaberto.")
-    closure=db.scalar(select(m.DiaryClosure).where(m.DiaryClosure.diary_id==diary.id,m.DiaryClosure.active.is_(True)).order_by(m.DiaryClosure.closed_at.desc()))
+    check_version(diary, data.version)
+    if diary.status not in {"submitted","reviewed","closed"}:
+        fail(409,"Somente um diário enviado, revisado ou fechado pode ser reaberto.")
+    active_closures=list(db.scalars(select(m.DiaryClosure).where(
+        m.DiaryClosure.diary_id==diary.id,
+        m.DiaryClosure.active.is_(True),
+    ).order_by(m.DiaryClosure.closed_at.desc())))
+    closure=active_closures[0] if active_closures else None
     stamp=datetime.now(UTC)
     revision=m.DiaryRevision(school_id=school.id,diary_id=diary.id,closure_id=closure.id if closure else None,reason=data.reason,reopened_by=user.id,reopened_at=stamp,previous_status=diary.status)
     db.add(revision)
+    for old in active_closures:
+        old.active=False
+        old.version += 1
     diary.status="open"; diary.closed_at=None; diary.closed_by=None; diary.version += 1
     db.flush()
     audit(db,request,user,"diary.reopened",diary,school.id,{"revision_id":revision.id,"reason":data.reason})

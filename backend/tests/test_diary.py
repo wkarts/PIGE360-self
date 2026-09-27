@@ -31,6 +31,7 @@ def test_diary_lesson_attendance_close_and_reopen(api):
         "teacher_assignment_id": None,
         "notes": "Diário de teste",
     })
+    api.post("/diaries/"+diary["id"]+"/submit", {"version": diary["version"]}, 409)
     lesson = api.post("/diaries/"+diary["id"]+"/lessons", {
         "academic_period_id": period["id"],
         "lesson_date": "2026-09-22",
@@ -90,17 +91,30 @@ def test_diary_lesson_attendance_close_and_reopen(api):
     })
     assert record["kind"] == "follow_up"
 
+    submitted = api.post("/diaries/"+diary["id"]+"/submit", {"version": diary["version"]})
+    assert submitted["status"] == "submitted"
+    api.post("/diaries/"+diary["id"]+"/review", {"version": diary["version"]}, 409)
+    api.post("/diaries/"+diary["id"]+"/lessons", {
+        "lesson_date": "2026-09-23",
+        "lesson_count": 1,
+        "content": "Não deve gravar",
+    }, 409)
+    reviewed = api.post("/diaries/"+diary["id"]+"/review", {"version": submitted["version"]})
+    assert reviewed["status"] == "reviewed"
+
     period_close = api.post("/diaries/"+diary["id"]+"/close", {
         "academic_period_id": period["id"],
         "reason": "Período conferido",
+        "version": reviewed["version"],
     }, 200)
     assert period_close["scope"] == "period"
-    assert period_close["diary"]["status"] == "open"
+    assert period_close["diary"]["status"] == "reviewed"
     assert len(period_close["closure"]["snapshot_hash"]) == 64
 
     full_close = api.post("/diaries/"+diary["id"]+"/close", {
         "academic_period_id": None,
         "reason": "Diário anual conferido",
+        "version": period_close["diary"]["version"],
     }, 200)
     assert full_close["scope"] == "diary"
     assert full_close["diary"]["status"] == "closed"
@@ -124,11 +138,15 @@ def test_diary_lesson_attendance_close_and_reopen(api):
 
     reopened = api.post("/diaries/"+diary["id"]+"/reopen", {
         "reason": "Correção formal após conferência pedagógica",
+        "version": full_close["diary"]["version"],
     }, 200)
     assert reopened["diary"]["status"] == "open"
     history = api.get("/diaries/"+diary["id"]+"/history")
     assert len(history["closures"]) == 2
     assert len(history["revisions"]) == 1
+    with SessionLocal() as db:
+        closures = db.query(m.DiaryClosure).filter_by(diary_id=diary["id"]).all()
+        assert all(not closure.active for closure in closures)
 
 
 def test_period_must_be_inside_academic_year(api):

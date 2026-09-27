@@ -227,6 +227,8 @@ Estados propostos do diário:
 
 Reabertura não será uma edição direta. Será uma ação auditada por usuário autorizado, com justificativa.
 
+O fluxo operacional implementado segue `open -> submitted -> reviewed -> closed`. O envio exige ao menos uma aula; a revisão e o fechamento respeitam RBAC e versão otimista. Lançamentos são aceitos somente enquanto o diário está aberto. Fechamentos por período preservam o estado revisado para permitir fechar outros períodos; qualquer reabertura exige justificativa e invalida os snapshots ativos sem apagar o histórico.
+
 O fechamento deve gerar snapshot imutável do conjunto de dados e hash de integridade. O documento emitido precisa apontar:
 
 - escola;
@@ -313,6 +315,8 @@ Base sugerida:
 - `/api/v1/schools/{school_id}/diaries/{id}/attendance`
 - `/api/v1/schools/{school_id}/diaries/{id}/assessments`
 - `/api/v1/schools/{school_id}/diaries/{id}/opinions`
+- `/api/v1/schools/{school_id}/diaries/{id}/submit`
+- `/api/v1/schools/{school_id}/diaries/{id}/review`
 - `/api/v1/schools/{school_id}/diaries/{id}/close`
 - `/api/v1/schools/{school_id}/diaries/{id}/reopen`
 - `/api/v1/schools/{school_id}/diaries/{id}/reports/*`
