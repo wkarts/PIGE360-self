@@ -29,11 +29,16 @@ def diary_school_scope(school_id: str, db: DB, user: Actor):
             fail(403, "Acesso não autorizado a esta escola.")
         return school
     if user.role == "teacher":
+        ownership = [m.TeacherAssignment.teacher_user_id == user.id]
+        if user.person_id:
+            ownership.append(m.TeacherAssignment.teacher_person_id == user.person_id)
+        condition = ownership[0]
+        for item in ownership[1:]:
+            condition = condition | item
         own = db.scalar(select(m.TeacherAssignment.id).where(
             m.TeacherAssignment.school_id == school_id,
             m.TeacherAssignment.active.is_(True),
-            (m.TeacherAssignment.teacher_user_id == user.id) |
-            ((m.TeacherAssignment.teacher_person_id == user.person_id) if user.person_id else False),
+            condition,
         ))
         if own:
             return school
@@ -128,12 +133,16 @@ def _snapshot(db, diary, period_id=None):
         attendances = [output(x) for x in db.scalars(select(m.DiaryAttendance).where(
             m.DiaryAttendance.lesson_id.in_(lesson_ids)
         ).order_by(m.DiaryAttendance.lesson_id, m.DiaryAttendance.enrollment_id))]
-    plan = db.scalar(select(m.CurriculumPlan).where(
+    plan_stmt = select(m.CurriculumPlan).where(
         m.CurriculumPlan.school_id == diary.school_id,
         m.CurriculumPlan.class_group_id == diary.class_group_id,
         m.CurriculumPlan.component_id == diary.component_id,
-        m.CurriculumPlan.academic_period_id == period_id if period_id else m.CurriculumPlan.academic_period_id.is_(None),
-    ))
+    )
+    plan_stmt = plan_stmt.where(
+        m.CurriculumPlan.academic_period_id == period_id
+        if period_id else m.CurriculumPlan.academic_period_id.is_(None)
+    )
+    plan = db.scalar(plan_stmt)
     return {
         "diary": _diary_output(db, diary),
         "period": output(db.get(m.AcademicPeriod, period_id)) if period_id and db.get(m.AcademicPeriod, period_id) else None,
@@ -232,11 +241,16 @@ def diaries(db: DB, user: Actor, school: DiaryScope, class_group_id: str = ""):
     stmt = select(m.SchoolDiary).where(m.SchoolDiary.school_id == school.id)
     if class_group_id: stmt = stmt.where(m.SchoolDiary.class_group_id == class_group_id)
     if user.role == "teacher":
+        ownership = [m.TeacherAssignment.teacher_user_id == user.id]
+        if user.person_id:
+            ownership.append(m.TeacherAssignment.teacher_person_id == user.person_id)
+        condition = ownership[0]
+        for item in ownership[1:]:
+            condition = condition | item
         own_assignments = select(m.TeacherAssignment.id).where(
             m.TeacherAssignment.school_id == school.id,
             m.TeacherAssignment.active.is_(True),
-            (m.TeacherAssignment.teacher_user_id == user.id) |
-            ((m.TeacherAssignment.teacher_person_id == user.person_id) if user.person_id else False),
+            condition,
         )
         stmt = stmt.where(m.SchoolDiary.teacher_assignment_id.in_(own_assignments))
     return [_diary_output(db,x) for x in db.scalars(stmt.order_by(m.SchoolDiary.created_at.desc()))]
@@ -363,14 +377,23 @@ def close_diary(diary_id: str, data: s.CloseDiaryInput, db: DB, user: Actor, sch
     canonical=json.dumps(snapshot,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
     digest=hashlib.sha256(canonical).hexdigest()
     stamp=datetime.now(UTC)
-    for old in db.scalars(select(m.DiaryClosure).where(m.DiaryClosure.diary_id==diary.id,m.DiaryClosure.active.is_(True))):
+    scope = select(m.DiaryClosure).where(
+        m.DiaryClosure.diary_id==diary.id,
+        m.DiaryClosure.active.is_(True),
+    )
+    scope = scope.where(
+        m.DiaryClosure.academic_period_id == data.academic_period_id
+        if data.academic_period_id else m.DiaryClosure.academic_period_id.is_(None)
+    )
+    for old in db.scalars(scope):
         old.active=False; old.version += 1
     closure=m.DiaryClosure(school_id=school.id,diary_id=diary.id,academic_period_id=data.academic_period_id,snapshot=snapshot,snapshot_hash=digest,reason=data.reason,closed_by=user.id,closed_at=stamp,active=True)
     db.add(closure)
-    diary.status="closed"; diary.closed_at=stamp; diary.closed_by=user.id; diary.version += 1
+    if not data.academic_period_id:
+        diary.status="closed"; diary.closed_at=stamp; diary.closed_by=user.id; diary.version += 1
     db.flush()
     audit(db,request,user,"diary.closed",diary,school.id,{"closure_id":closure.id,"snapshot_hash":digest})
-    return {"diary":_diary_output(db,diary),"closure":output(closure,("snapshot",))}
+    return {"diary":_diary_output(db,diary),"closure":output(closure,("snapshot",)),"scope":"period" if data.academic_period_id else "diary"}
 
 
 @router.post("/diaries/{diary_id}/reopen")
@@ -398,7 +421,14 @@ def diary_history(diary_id: str, db: DB, user: Actor, school: DiaryScope):
 @router.get("/diaries/{diary_id}/report.pdf")
 def diary_report(diary_id: str, db: DB, user: Actor, school: DiaryScope):
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.reports")
-    data=_snapshot(db,diary)
+    closure = None
+    if diary.status == "closed":
+        closure = db.scalar(select(m.DiaryClosure).where(
+            m.DiaryClosure.diary_id==diary.id,
+            m.DiaryClosure.academic_period_id.is_(None),
+            m.DiaryClosure.active.is_(True),
+        ).order_by(m.DiaryClosure.closed_at.desc()))
+    data = closure.snapshot if closure else _snapshot(db,diary)
     total_lessons=sum(int(x["lesson_count"]) for x in data["lessons"])
     absences=sum(1 for x in data["attendance"] if x["status"] in ("absent","justified_absence"))
     rows=[
@@ -411,7 +441,7 @@ def diary_report(diary_id: str, db: DB, user: Actor, school: DiaryScope):
         ("Quantidade de aulas",str(total_lessons)),
         ("Registros de ausência",str(absences)),
     ]
-    note="Relatório gerado a partir dos registros atuais do Diário Escolar Digital. Fechamentos possuem snapshot e hash de integridade próprios."
+    note=("Relatório emitido a partir do snapshot do fechamento. Hash de integridade: "+closure.snapshot_hash) if closure else "Relatório gerado a partir dos registros atuais do Diário Escolar Digital. Fechamentos possuem snapshot e hash de integridade próprios."
     content=render_pdf(school.name,"Diário Escolar Digital",rows,note,user.name,db=db)
     return Response(content,media_type="application/pdf",headers={"Content-Disposition":f'attachment; filename="diario-{diary.id}.pdf"'})
 
