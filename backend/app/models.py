@@ -445,3 +445,6 @@ class MFARecovery(Record, Base):
     code_hash: Mapped[str] = mapped_column(String(64), unique=True)
 
 from .assisted_models import OcrJob, LookupCache, LookupProvider, AssistedQuota, IntakeSettings  # noqa: F401
+
+# Registro aditivo do Diário Escolar Digital.
+from .diary_models import AcademicPeriod, CurriculumComponent, CurriculumPlan, SchoolDiary, DiaryLesson, DiaryAttendance, DiaryClosure, DiaryRevision  # noqa: F401,E402
