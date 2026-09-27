@@ -29,7 +29,7 @@ namespace PigeDiary {
       PigeAPI.request<Diary[]>(base()+'/diaries'),
       PigeAPI.request<Row[]>(base()+'/academic-periods'),
       PigeAPI.request<Row[]>(base()+'/curriculum-components'),
-      PigeAPI.request<Row[]>(base()+'/class-groups'),
+      PigeAPI.request<Row[]>(base()+'/class-groups').catch(()=>[] as Row[]),
       PigeAPI.request<Row[]>(base()+'/teacher-assignments').catch(()=>[] as Row[])
     ]);state.diaries=results[0] as Diary[];state.periods=results[1] as Row[];state.components=results[2] as Row[];state.groups=results[3] as Row[];state.assignments=results[4] as Row[];
       if(!state.periodForm.academic_year_id&&state.groups.length)state.periodForm.academic_year_id=str(state.groups[0].academic_year_id);
