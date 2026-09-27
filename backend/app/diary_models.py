@@ -127,3 +127,67 @@ class DiaryRevision(Record, Scoped, Base):
     reopened_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     reopened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     previous_status: Mapped[str] = mapped_column(String(16))
+
+
+class AssessmentInstrument(Record, Scoped, Base):
+    __tablename__ = "assessment_instruments"
+    diary_id: Mapped[str] = mapped_column(ForeignKey("school_diaries.id"), index=True)
+    academic_period_id: Mapped[str | None] = mapped_column(ForeignKey("academic_periods.id"), index=True)
+    title: Mapped[str] = mapped_column(String(160))
+    kind: Mapped[str] = mapped_column(String(60), default="activity")
+    assessment_date: Mapped[date] = mapped_column(Date)
+    value_type: Mapped[str] = mapped_column(String(16), default="numeric")
+    max_score: Mapped[float | None] = mapped_column(Numeric(10,2))
+    weight: Mapped[float | None] = mapped_column(Numeric(10,4))
+    description: Mapped[str] = mapped_column(Text, default="")
+    skills: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16), default="draft")
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    __table_args__ = (
+        CheckConstraint("value_type IN ('numeric','concept')", name="assessment_value_type"),
+        CheckConstraint("status IN ('draft','published','closed')", name="assessment_status"),
+        CheckConstraint("max_score IS NULL OR max_score > 0", name="assessment_max_score"),
+        CheckConstraint("weight IS NULL OR weight > 0", name="assessment_weight"),
+    )
+
+
+class AssessmentResult(Record, Scoped, Base):
+    __tablename__ = "assessment_results"
+    instrument_id: Mapped[str] = mapped_column(ForeignKey("assessment_instruments.id"), index=True)
+    enrollment_id: Mapped[str] = mapped_column(ForeignKey("enrollments.id"), index=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("students.id"), index=True)
+    numeric_score: Mapped[float | None] = mapped_column(Numeric(10,2))
+    concept: Mapped[str] = mapped_column(String(80), default="")
+    note: Mapped[str] = mapped_column(String(1000), default="")
+    recorded_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    __table_args__ = (UniqueConstraint("instrument_id","enrollment_id",name="uq_assessment_result_enrollment"),)
+
+
+class DescriptiveOpinion(Record, Scoped, Base):
+    __tablename__ = "descriptive_opinions"
+    diary_id: Mapped[str] = mapped_column(ForeignKey("school_diaries.id"), index=True)
+    academic_period_id: Mapped[str | None] = mapped_column(ForeignKey("academic_periods.id"), index=True)
+    enrollment_id: Mapped[str] = mapped_column(ForeignKey("enrollments.id"), index=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("students.id"), index=True)
+    text: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), default="draft")
+    authored_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    __table_args__ = (
+        UniqueConstraint("diary_id","academic_period_id","enrollment_id",name="uq_descriptive_opinion_scope"),
+        CheckConstraint("status IN ('draft','reviewed','final')",name="descriptive_opinion_status"),
+    )
+
+
+class PedagogicalRecord(Record, Scoped, Base):
+    __tablename__ = "pedagogical_records"
+    diary_id: Mapped[str] = mapped_column(ForeignKey("school_diaries.id"), index=True)
+    enrollment_id: Mapped[str] = mapped_column(ForeignKey("enrollments.id"), index=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("students.id"), index=True)
+    record_date: Mapped[date] = mapped_column(Date, index=True)
+    kind: Mapped[str] = mapped_column(String(24), default="observation")
+    text: Mapped[str] = mapped_column(Text)
+    recorded_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    __table_args__ = (
+        CheckConstraint("kind IN ('follow_up','intervention','recovery','adaptation','referral','observation')",name="pedagogical_record_kind"),
+    )
