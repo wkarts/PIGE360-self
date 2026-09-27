@@ -58,7 +58,8 @@ try:
             expect(page.get_by_role('heading',name=label,exact=True)).to_be_visible()
         def dialog():return page.get_by_role('dialog')
         def field(label):
-            element=dialog().get_by_label(label,exact=False)
+            # CNPJ is distinct from the complementary registration-status field.
+            element=dialog().get_by_label(label,exact=(label=='CNPJ'))
             element.wait_for(state='attached')
             element.evaluate("e=>{const d=e.closest('details');if(d)d.open=true;}")
             section=element.evaluate("el=>el.closest('[data-form-section]')?.dataset.formSection||''")

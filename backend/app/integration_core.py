@@ -85,7 +85,13 @@ def validate_target(url, provider):
     if provider=='asaas':
         if host not in ('api.asaas.com','api-sandbox.asaas.com'): raise IntegrationFailure('UNTRUSTED_BANK_HOST')
         return
-    if host not in {s.strip().lower() for s in settings().connect_allowed_hosts.split(',') if s.strip()}:
+    cfg = settings()
+    allowed = {s.strip().lower() for s in cfg.connect_allowed_hosts.split(',') if s.strip()}
+    if not allowed:
+        configured = urlsplit(cfg.connect_api_base_url.strip().rstrip('/')).hostname
+        if configured:
+            allowed = {configured.lower()}
+    if not host or host.lower() not in allowed:
         raise IntegrationFailure('CONNECT_HOST_NOT_ALLOWED')
     try: addresses=socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)
     except OSError: raise IntegrationFailure('DNS_UNAVAILABLE',retryable=True)
@@ -180,7 +186,8 @@ def admission_notification(db,admission,text,code):
     if not account.whatsapp_opt_in or not account.phone_verified:
         return None
     from .connect_core import connect_instance_for_school, enqueue_connect_message
-    instance = connect_instance_for_school(db, admission.school_id, False)
+    group = db.get(m.ClassGroup, admission.class_group_id) if admission.class_group_id else None
+    instance = connect_instance_for_school(db, admission.school_id, False, group.unit_id if group else None)
     if not instance:
         return None
     return enqueue_connect_message(

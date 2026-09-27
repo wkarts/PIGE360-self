@@ -66,6 +66,29 @@ const portal=applications.pop(),portalContext=portal.setup();
 portal.render.call(portalContext,portalContext,[]);
 assert.equal(context.identity.display_name,'Sua escola');
 console.log('Render smoke: shell, páginas administrativas, Cadastro Único e portal OK.');
+portalContext.state.ready=true;portalContext.state.schoolId='school-test';portalContext.state.schools=[{id:'school-test',name:'Escola de teste'}];
+let portalTree=portal.render.call(portalContext,portalContext,[]);
+assert.equal(nodes(portalTree).filter(n=>n.type==='select').length,0,'Não apresentar seleção vazia');
+assert.match(loginText(portalTree),/Não há processo de matrícula aberto/);
+portalContext.state.catalogFailed=true;portalTree=portal.render.call(portalContext,portalContext,[]);
+assert.match(loginText(portalTree),/Não foi possível consultar/);
+assert.ok(!loginText(portalTree).includes('Não há processo de matrícula aberto'));
+const diagnosticContext=sandbox.PigeDiagnostics.component.setup();
+sandbox.PigeDiagnostics.component.render.call(diagnosticContext,diagnosticContext,[]);
+console.log('Portal vazio, falha de API e render do diagnóstico OK.');
+
+// Exercita o componente assistido e impede preenchimento fora da lista/edição atrasada.
+const target={name:'Nome preservado',cpf:''};
+const assistProps={target,fields:['name','cpf'],request:sandbox.fetch,root:'/test',lookupRoot:'',ocr:true,cnpj:true,cep:true,mapping:{},label:'Pessoa de teste',source:''};
+let emitted=null;const assisted=sandbox.PigeAssist.component.setup(assistProps,{emit:(_,v)=>emitted=v});
+const renderAssist=()=>sandbox.PigeAssist.component.render.call(assisted,assisted,[]);
+renderAssist();assisted.openDocument();renderAssist();assisted.openLookup('cnpj');renderAssist();
+assisted.s.rows=[{field:'cpf',targetField:'cpf',value:'52998224725',checked:true,before:''},{field:'role',targetField:'role',value:'admin',checked:true}];
+assisted.s.confirmed=true;renderAssist();assisted.apply();assert.equal(target.cpf,'52998224725');assert.equal(target.role,undefined);assert.ok(emitted);
+assisted.s.rows=[{field:'name',targetField:'name',value:'Leitura atrasada',checked:true,before:'Outro nome'}];
+assisted.s.confirmed=true;assisted.apply();assert.equal(target.name,'Nome preservado');assert.ok(assisted.s.error);
+console.log('Assist smoke: render, campos permitidos e proteção de edição concorrente OK.');
+
 // SDK opcional com falha não pode produzir uma exceção na operação escolar.
 const elements=[];
 document.createElement=()=>({dataset:{},remove(){const i=elements.indexOf(this);if(i>=0)elements.splice(i,1);}});

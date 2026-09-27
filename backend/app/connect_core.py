@@ -51,6 +51,11 @@ def _connect_config() -> tuple[str, str]:
     if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise IntegrationFailure("CONNECT_API_BASE_URL_MUST_BE_HTTPS")
     allowed = {item.strip().lower() for item in cfg.connect_allowed_hosts.split(",") if item.strip()}
+    # CONNECT_API_BASE_URL e a chave já são configuração administrativa da instalação.
+    # Sem allowlist explícita, autoriza somente o hostname exato dessa própria URL.
+    # Quando CONNECT_ALLOWED_HOSTS é informado, ele continua sendo uma restrição adicional.
+    if not allowed:
+        allowed = {parsed.hostname.lower()}
     if parsed.hostname.lower() not in allowed:
         raise IntegrationFailure("CONNECT_API_HOST_NOT_ALLOWED")
     try:
@@ -88,6 +93,12 @@ class ConnectApiClient:
     def health(self):
         return self.request("/health")
 
+    def fetch_instances(self):
+        return self.request("/instance/fetchInstances")
+
+    def fetch_instance(self, name: str):
+        return self.request("/instance/fetchInstances", params={"instanceName": name})
+
     def create_instance(self, name: str):
         return self.request(
             "/instance/create",
@@ -105,6 +116,9 @@ class ConnectApiClient:
     def connect(self, name: str, number: str = ""):
         params = {"number": number} if number else None
         return self.request(f"/instance/connect/{name}", params=params)
+
+    def restart(self, name: str):
+        return self.request(f"/instance/restart/{name}", method="POST")
 
     def logout(self, name: str):
         return self.request(f"/instance/logout/{name}", method="DELETE")
@@ -173,7 +187,7 @@ def _remote_status(response) -> tuple[str, str]:
     return status, state
 
 
-def connect_instance_for_school(db, school_id: str, required: bool = True):
+def connect_instance_for_school(db, school_id: str, required: bool = True, unit_id: str | None = None):
     school = db.get(m.School, school_id)
     if not school:
         if required:
@@ -184,7 +198,23 @@ def connect_instance_for_school(db, school_id: str, required: bool = True):
         m.ConnectInstance.enabled.is_(True),
         m.ConnectInstance.status != "deleted",
     )
-    obj = db.scalar(query.where(m.ConnectInstance.primary.is_(True)).order_by(m.ConnectInstance.created_at))
+    obj = None
+    if unit_id:
+        unit = db.get(m.Unit, unit_id)
+        if unit and unit.school_id == school_id and unit.active:
+            unit_binding = db.get(m.ConnectUnitBinding, unit_id)
+            if unit_binding:
+                candidate = db.get(m.ConnectInstance, unit_binding.instance_id)
+                if candidate and candidate.company_id == school.company_id and candidate.enabled and candidate.status != "deleted":
+                    obj = candidate
+    binding = db.get(m.ConnectSchoolBinding, school_id)
+    if obj is None and binding:
+        candidate = db.get(m.ConnectInstance, binding.instance_id)
+        if candidate and candidate.company_id == school.company_id and candidate.enabled and candidate.status != "deleted":
+            obj = candidate
+    # Compatibilidade com instalações anteriores: principal da empresa e depois a primeira ativa.
+    if obj is None:
+        obj = db.scalar(query.where(m.ConnectInstance.primary.is_(True)).order_by(m.ConnectInstance.created_at))
     if obj is None:
         obj = db.scalar(query.order_by(m.ConnectInstance.created_at))
     if required and obj is None:

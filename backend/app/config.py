@@ -51,9 +51,14 @@ class Settings(BaseSettings):
     smtp_security: str = 'starttls'
     worker_poll_seconds: int = 5
     bank_reconcile_interval_seconds: int = 900
+    ocr_max_upload_mb: int = 8
+    ocr_retention_hours: int = 24
+    ocr_timeout_seconds: int = 120
 
     @model_validator(mode='after')
     def validate_runtime(self):
+        if not 1 <= self.ocr_max_upload_mb <= 16 or not 1 <= self.ocr_retention_hours <= 168 or not 30 <= self.ocr_timeout_seconds <= 180:
+            raise ValueError('Limites OCR inválidos: 1–16 MB, retenção 1–168 horas e timeout 30–180 segundos.')
         from .embedding import origins
         parents = origins(self.embed_allowed_origins, self.app_env == 'production')
         self.embed_allowed_origins = ','.join(parents)

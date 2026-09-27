@@ -11,6 +11,12 @@ from .integration_core import admission_notification
 
 router=APIRouter(prefix='/api/v1/schools/{school_id}',tags=['Secretaria — inscrições online'])
 
+@router.get('/admission-readiness')
+def admission_readiness(db:DB,user:Actor,school:Scope):
+    require(user,'admissions.read')
+    from .portal_access import readiness
+    return readiness(db,school)
+
 @router.get('/admission-campaigns')
 def campaigns(db:DB,user:Actor,school:Scope):
     require(user,'admissions.read')
@@ -126,7 +132,8 @@ def approve(id:str,data:s.Approval,db:DB,user:Actor,school:Scope,request:Request
     else:
         if guardian_data.get('cpf') and db.scalar(select(m.Person.id).where(m.Person.school_id==school.id,m.Person.cpf==guardian_data['cpf'])):
             fail(409,'CPF de responsável já cadastrado. Confira a identidade e informe o ID do responsável existente.')
-        guardian=m.Person(school_id=school.id,is_guardian=True,**{k:guardian_data.get(k) or (None if k=='cpf' else '') for k in ('name','cpf','email','phone','address')})
+        validated_guardian=schemas.PersonInput.model_validate({**{k:guardian_data[k] for k in s.GuardianDetails.model_fields if k in guardian_data},**{k:guardian_data.get(k) or (None if k=='cpf' else '') for k in ('name','cpf','email','phone','address')},'is_guardian':True})
+        guardian=m.Person(school_id=school.id,**validated_guardian.model_dump(exclude={'person_types'}))
         db.add(guardian);db.flush()
     from .people import ensure_person_type
     ensure_person_type(db, guardian, 'guardian')

@@ -1,0 +1,33 @@
+<section class="assist" aria-label="Preenchimento assistido">
+  <div class="assist-toolbar">
+    <span class="assist-caption">Preencher com ajuda</span>
+    <button v-if="props.ocr" type="button" class="btn btn-secondary small-button" @click="openDocument" :disabled="s.busy">Ler documento</button>
+    <button v-if="props.cnpj" type="button" class="btn btn-secondary small-button" @click="openLookup('cnpj')" :disabled="s.busy">Consultar CNPJ</button>
+    <button v-if="props.cep" type="button" class="btn btn-secondary small-button" @click="openLookup('cep')" :disabled="s.busy">Consultar CEP</button>
+  </div>
+  <div v-if="s.open" class="assist-panel">
+    <div class="assist-heading"><strong>Preenchendo: {{props.label}}</strong><button type="button" class="link-button" @click="cancel">Fechar / descartar leitura</button></div>
+    <template v-if="s.kind">
+      <div class="assist-query"><label :for="id+'-query'">{{s.kind==='cnpj'?'CNPJ':'CEP'}}<input :id="id+'-query'" v-model="s.query" :inputmode="s.kind==='cep'?'numeric':'text'" :maxlength="s.kind==='cep'?9:24" @keydown.enter.prevent="lookup" :disabled="s.busy"></label><button type="button" class="btn btn-primary" @click="lookup" :disabled="s.busy||!s.query">Consultar</button></div>
+      <small>Consulta pontual a provedores externos. Cache e limites evitam chamadas repetidas. Não altera a ficha sem sua conferência.</small>
+    </template>
+    <template v-else>
+      <p>Fotografe um documento por vez, inteiro, reto e sem reflexos. Use frente e verso em leituras separadas. Somente texto impresso; confira a pessoa indicada acima.</p>
+      <div class="assist-query"><label :for="id+'-purpose'">Documento<select :id="id+'-purpose'" v-model="s.purpose" :disabled="s.busy"><option value="identity">Identidade / CIN / RG / CNH / CPF</option><option value="birth">Certidão de nascimento</option><option value="address">Comprovante de endereço</option><option value="company">Cartão do CNPJ</option><option value="generic">Outro documento</option></select></label>
+      <label :for="id+'-file'">Fotografar / escolher arquivo<input :id="id+'-file'" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" @change="selectFile" :disabled="s.busy"></label></div>
+      <div class="assist-toolbar"><button type="button" class="btn btn-secondary small-button" @click="camera" :disabled="s.busy">Abrir câmera com guia</button><button v-if="s.preview" type="button" class="btn btn-secondary small-button" @click="rotate" :disabled="s.busy">Girar 90°</button></div>
+      <div v-if="s.camera" class="assist-camera"><video :id="id+'-camera'" autoplay muted playsinline></video><div class="assist-frame" aria-hidden="true"></div><p>Mantenha todo o documento dentro da imagem.</p><button type="button" class="btn btn-primary" @click="capture">Fotografar</button><button type="button" class="btn btn-secondary" @click="stopCamera">Cancelar câmera</button></div>
+      <img v-if="s.preview" class="assist-preview" :src="s.preview" alt="Confira se o documento está inteiro e legível">
+      <p v-if="s.fileName">{{s.fileName}}</p><button type="button" class="btn btn-primary" @click="analyze" :disabled="s.busy||(!s.fileName&&!props.source)">Ler e conferir dados</button>
+      <small class="assist-privacy">Leitura local na instalação da escola. Cópia temporária, sem envio a serviços de OCR externos. A leitura não substitui o envio e a conferência dos documentos exigidos.</small>
+    </template>
+    <p v-if="s.busy" role="status">{{s.status||'Consultando…'}} Você pode continuar preenchendo os demais campos.</p>
+    <p v-if="s.error" class="alert error" role="alert">{{s.error}}</p><p v-if="s.notice" class="alert info" role="status">{{s.notice}}</p>
+    <p v-for="w in s.warnings" :key="w" class="assist-warning">{{w}}</p><small v-if="s.source">Origem: {{s.source}}</small>
+    <div v-if="s.rows.length" class="assist-review"><p>Selecione o que deseja utilizar. Campos já preenchidos ficam desmarcados; marcar autoriza a substituição.</p>
+      <label v-for="row in s.rows" :key="row.field" class="assist-row"><input type="checkbox" v-model="row.checked"><span><strong>{{labels[row.field]||row.field}}</strong><small v-if="row.before">Atual: {{row.before}}</small><span>{{row.value}}</span><small v-if="row.confidence!=null">Qualidade média da leitura: {{row.confidence}}% · não é garantia do dado</small></span></label>
+      <label class="assist-confirm"><input type="checkbox" v-model="s.confirmed">Conferi os dados e a pessoa à qual este documento pertence.</label><button type="button" class="btn btn-primary" @click="apply" :disabled="!s.confirmed||s.busy">Aplicar campos selecionados</button>
+    </div>
+    <details v-if="s.text"><summary>Texto extraído para conferência</summary><pre class="assist-text">{{s.text}}</pre></details>
+  </div>
+</section>

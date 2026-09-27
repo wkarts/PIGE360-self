@@ -202,7 +202,7 @@ def connect(o, monkeypatch, label=''):
         company = db.get(m.Company, school.company_id)
         company.document = '11222333000181'
         db.commit()
-    result = o['api'].post('/connect/instances', {'label': label, 'primary': not bool(label)}, 201)
+    result = o['api'].post('/connect/instances', {'label': label, 'phone': '(75) 99999-0000', 'primary': not bool(label)}, 201)
     return result['instance'], FakeConnect
 
 def test_connect_optin_and_payload(online, monkeypatch):
@@ -227,16 +227,28 @@ def test_connect_instance_name_and_additional_instance(online, monkeypatch):
     assert first['name'].startswith('PG360-MANTENEDORA-DE-TESTE-11222333000181')
     assert second['name'].endswith('-ATENDIMENTO-2')
     assert first['primary'] is True and second['primary'] is False
+    assert first['phone']=='5575999990000' and second['phone']=='5575999990000'
     overview=o['api'].get('/connect')
     assert overview['config']['configured'] is True and overview['config']['api_key_configured'] is True
     assert {item['id'] for item in overview['items']}==previous|{first['id'],second['id']}
     assert {item['id'] for item in overview['items'] if item['primary']}=={first['id']}
 
+def test_connect_qr_and_pairing_code_are_separate_actions(online, monkeypatch):
+    o=online;instance,fake=connect(o,monkeypatch)
+    qr=o['api'].post('/connect/instances/'+instance['id']+'/qr',{},200)
+    assert qr['qrcode']['code']=='qr-code'
+    pairing=o['api'].post('/connect/instances/'+instance['id']+'/pairing-code',{},200)
+    assert pairing['qrcode']['pairingCode']=='12345678'
+    calls=[x for x in fake.calls if x[0]=='connect']
+    assert ('connect',instance['name'],'') in calls
+    assert ('connect',instance['name'],'5575999990000') in calls
+
+
 def test_connect_requires_company_cnpj(online):
     o=online
     with SessionLocal() as db:
         school=db.get(m.School,o['api'].school['id']);company=db.get(m.Company,school.company_id);company.document='';db.commit()
-    o['api'].post('/connect/instances',{},422)
+    o['api'].post('/connect/instances',{'phone':'(75) 99999-0000'},422)
 
 def test_connect_is_not_mixed_with_finance(online):
     online['api'].post('/integrations/connect_api',{},404)

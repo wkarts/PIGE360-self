@@ -215,3 +215,5 @@
   .nav-icon { color: LinkText; }
 }
 @media (prefers-reduced-motion: reduce) { .workspace *, .workspace .sidebar { transition: none; scroll-behavior: auto; } }
+
+.diagnostic-pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:65ch;max-height:24rem;overflow:auto;font-size:.8rem}.table-wrap td small{display:block}

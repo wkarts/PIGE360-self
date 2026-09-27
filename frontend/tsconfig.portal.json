@@ -16,6 +16,7 @@
     "src/institution.ts",
     "src/online-types.ts",
     "src/mfa.ts",
+    "src/assist.ts",
     "src/portal.ts"
   ]
 }

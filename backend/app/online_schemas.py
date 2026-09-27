@@ -5,11 +5,14 @@ from typing import Literal
 from pydantic import EmailStr, Field, field_validator, model_validator
 from .schemas import Input, PersonInput
 
+DEFAULT_GUARDIAN_INSTRUCTIONS = "Leia atentamente antes de iniciar a inscrição.\n\n1. Preencha os dados do aluno e do responsável exatamente como constam nos documentos oficiais.\n2. Informe e-mail e telefone atualizados, pois a instituição poderá utilizá-los para comunicações sobre a inscrição e a matrícula.\n3. Envie somente os documentos solicitados. Ao fotografar, enquadre o documento inteiro, com boa iluminação, sem reflexos e com os dados legíveis.\n4. Quando o sistema sugerir dados a partir da leitura de um documento, confira as informações antes de aplicá-las ao cadastro.\n5. Revise todos os dados antes de enviar a inscrição. Informações incompletas ou divergentes poderão exigir correção ou nova documentação.\n6. A inscrição online não garante vaga nem matrícula. A efetivação depende da análise da instituição, da disponibilidade de vaga e do cumprimento das etapas definidas para este processo.\n7. Acompanhe o andamento pelo Portal dos responsáveis e observe as mensagens, solicitações de ajuste, prazos e documentos pendentes.\n8. Em caso de dúvida ou dificuldade, entre em contato diretamente com a instituição pelos canais oficiais."
+DEFAULT_INSTITUTION_PRIVACY_NOTICE = "A instituição é responsável pelo tratamento dos dados pessoais informados neste processo de inscrição e matrícula.\n\nOs dados do aluno e de seus responsáveis serão utilizados para receber e analisar a inscrição, conferir documentos, manter contato com a família, organizar o atendimento escolar, preparar e efetivar a matrícula quando aprovada, cumprir obrigações legais e regulatórias e proteger a segurança do processo.\n\nPoderão ser tratados dados de identificação, contato, endereço, informações acadêmicas e documentos necessários à inscrição. Dados pessoais sensíveis somente deverão ser solicitados e utilizados quando forem necessários ao atendimento educacional, à segurança, à acessibilidade, ao cumprimento de obrigação legal ou à proteção dos direitos do aluno, sempre considerando o seu melhor interesse.\n\nA instituição poderá utilizar prestadores indispensáveis à operação do serviço, como hospedagem, armazenamento, comunicação, meios de pagamento e suporte técnico, observando medidas de segurança e confidencialidade. Dados também poderão ser fornecidos a autoridades públicas quando houver obrigação legal ou determinação válida. Os dados não serão comercializados.\n\nAs informações serão mantidas pelo período necessário à análise da inscrição, à execução da relação escolar, ao cumprimento de obrigações legais e à preservação de direitos. Registros que não precisem mais ser mantidos deverão seguir a política de retenção da instituição.\n\nO responsável poderá solicitar à instituição informações sobre o tratamento, correção de dados inexatos e o exercício dos demais direitos aplicáveis previstos na legislação de proteção de dados, pelos canais oficiais de atendimento da escola.\n\nA instituição adota medidas técnicas e administrativas para proteger os dados contra acessos não autorizados, perda, alteração ou divulgação indevida. O envio de dados pela internet, entretanto, exige também que o responsável proteja suas credenciais de acesso e utilize dispositivos confiáveis.\n\nAutorizações opcionais, como o recebimento de comunicações por WhatsApp, devem ser apresentadas separadamente e podem ser alteradas conforme as opções disponibilizadas pela instituição.\n\nAo prosseguir, o responsável declara que leu este aviso e que as informações fornecidas são verdadeiras, sem que essa ciência substitua bases legais específicas exigidas para cada atividade de tratamento."
+
 class CampaignInput(Input):
     slug: str = Field(min_length=4,max_length=80,pattern=r'^[a-z0-9]+(?:-[a-z0-9]+)*$')
     title: str = Field(min_length=4,max_length=160)
-    instructions: str = Field(default='',max_length=5000)
-    privacy_notice: str = Field(min_length=40,max_length=10000)
+    instructions: str = Field(default=DEFAULT_GUARDIAN_INSTRUCTIONS,max_length=5000)
+    privacy_notice: str = Field(default=DEFAULT_INSTITUTION_PRIVACY_NOTICE,min_length=40,max_length=10000)
     terms_version: str = Field(default='1',min_length=1,max_length=40)
     class_group_ids: list[str] = Field(min_length=1,max_length=100)
     opens_on: date
@@ -51,7 +54,8 @@ class Registration(Input):
         return digits
 
 class PortalLogin(Input):
-    campaign_slug: str = Field(max_length=80)
+    campaign_slug: str = Field(default="", max_length=80)
+    school_id: str = Field(default="", max_length=36)
     email: EmailStr
     password: str = Field(min_length=1,max_length=128)
 
@@ -62,7 +66,8 @@ class VerifyRequest(Input):
     channel: Literal['email','whatsapp'] = 'email'
 
 class ResetRequest(Input):
-    campaign_slug: str = Field(max_length=80)
+    campaign_slug: str = Field(default="", max_length=80)
+    school_id: str = Field(default="", max_length=36)
     email: EmailStr
 
 class ResetConfirm(ResetRequest, VerifyCode):
@@ -124,11 +129,41 @@ class MessageInput(Input):
 
 class ConnectInstanceInput(Input):
     label: str = Field(default='', max_length=40)
+    phone: str = Field(min_length=10,max_length=24)
     primary: bool = False
+
+    @field_validator('phone')
+    @classmethod
+    def phone_valid(cls, value):
+        digits = re.sub(r'\D','',value)
+        if len(digits) in (10,11):
+            digits = '55' + digits
+        if not 12 <= len(digits) <= 15:
+            raise ValueError('Informe um telefone válido com país, DDD e número.')
+        return digits
 
 
 class ConnectPairInput(Input):
     number: str = Field(default='', max_length=24)
+
+
+class ConnectPhoneInput(Input):
+    number: str = Field(min_length=10,max_length=24)
+
+    @field_validator('number')
+    @classmethod
+    def phone_valid(cls, value):
+        return ConnectInstanceInput.phone_valid(value)
+
+
+class ConnectAdoptInput(Input):
+    instance_name: str = Field(min_length=1,max_length=100)
+    primary: bool = True
+
+
+class ConnectUnitPreferenceInput(Input):
+    unit_id: str = Field(min_length=1,max_length=36)
+    instance_id: str = Field(default='',max_length=36)
 
 
 class ConnectionInput(Input):
@@ -170,7 +205,30 @@ class AttachmentReview(Input):
     status: Literal["validated","rejected"]
     note: str = Field(min_length=3,max_length=1000)
 
-class PortalProfile(Input):
+class GuardianDetails(Input):
+    birth_date: date | None = None
+    rg: str = Field(default='',max_length=32)
+    rg_issuer: str = Field(default='',max_length=40)
+    birth_certificate: str = Field(default='',max_length=80)
+    mother_name: str = Field(default='',max_length=180)
+    father_name: str = Field(default='',max_length=180)
+    postal_code: str = Field(default='',max_length=16)
+    street: str = Field(default='',max_length=180)
+    address_number: str = Field(default='',max_length=24)
+    address_complement: str = Field(default='',max_length=120)
+    district: str = Field(default='',max_length=120)
+    city: str = Field(default='',max_length=120)
+    state: str = Field(default='',max_length=2)
+    country: str = Field(default='Brasil',max_length=80)
+
+    @field_validator('birth_date',mode='before')
+    @classmethod
+    def blank_date(cls,value):return PersonInput.blank_date(value)
+    @field_validator('birth_date')
+    @classmethod
+    def past_date(cls,value):return PersonInput.not_future(value)
+
+class PortalProfile(GuardianDetails):
     version: int = Field(ge=1)
     name: str = Field(min_length=2,max_length=180)
     cpf: str | None = None
