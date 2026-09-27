@@ -1,0 +1,129 @@
+"""Modelos do Diário Escolar Digital.
+
+Estrutura aditiva: reutiliza escola, turma, matrícula, pessoa e atribuição docente.
+"""
+from datetime import date, datetime
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+
+from .db import Base, Record
+from .models import Scoped
+
+
+class AcademicPeriod(Record, Scoped, Base):
+    __tablename__ = "academic_periods"
+    academic_year_id: Mapped[str] = mapped_column(ForeignKey("academic_years.id"), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    starts_on: Mapped[date] = mapped_column(Date)
+    ends_on: Mapped[date] = mapped_column(Date)
+    order_index: Mapped[int] = mapped_column(Integer, default=1)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    __table_args__ = (
+        UniqueConstraint("school_id", "academic_year_id", "name", name="uq_academic_period_name"),
+        CheckConstraint("ends_on >= starts_on", name="academic_period_dates"),
+        CheckConstraint("order_index > 0", name="academic_period_order"),
+    )
+
+
+class CurriculumComponent(Record, Scoped, Base):
+    __tablename__ = "curriculum_components"
+    name: Mapped[str] = mapped_column(String(120))
+    code: Mapped[str] = mapped_column(String(40), default="")
+    workload_hours: Mapped[int] = mapped_column(Integer, default=0)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    __table_args__ = (
+        UniqueConstraint("school_id", "name", name="uq_curriculum_component_name"),
+        CheckConstraint("workload_hours >= 0", name="curriculum_component_workload"),
+    )
+
+
+class CurriculumPlan(Record, Scoped, Base):
+    __tablename__ = "curriculum_plans"
+    class_group_id: Mapped[str] = mapped_column(ForeignKey("class_groups.id"), index=True)
+    component_id: Mapped[str] = mapped_column(ForeignKey("curriculum_components.id"), index=True)
+    academic_period_id: Mapped[str | None] = mapped_column(ForeignKey("academic_periods.id"), index=True)
+    teacher_assignment_id: Mapped[str | None] = mapped_column(ForeignKey("teacher_assignments.id"), index=True)
+    objectives: Mapped[str] = mapped_column(Text, default="")
+    thematic_units: Mapped[str] = mapped_column(Text, default="")
+    knowledge_objects: Mapped[str] = mapped_column(Text, default="")
+    bncc_references: Mapped[list] = mapped_column(JSON, default=list)
+    methodology: Mapped[str] = mapped_column(Text, default="")
+    resources: Mapped[str] = mapped_column(Text, default="")
+    assessment_strategy: Mapped[str] = mapped_column(Text, default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16), default="draft")
+    __table_args__ = (
+        UniqueConstraint("school_id", "class_group_id", "component_id", "academic_period_id", name="uq_curriculum_plan_scope"),
+        CheckConstraint("status IN ('draft','published','archived')", name="curriculum_plan_status"),
+    )
+
+
+class SchoolDiary(Record, Scoped, Base):
+    __tablename__ = "school_diaries"
+    class_group_id: Mapped[str] = mapped_column(ForeignKey("class_groups.id"), index=True)
+    academic_year_id: Mapped[str] = mapped_column(ForeignKey("academic_years.id"), index=True)
+    component_id: Mapped[str] = mapped_column(ForeignKey("curriculum_components.id"), index=True)
+    teacher_assignment_id: Mapped[str | None] = mapped_column(ForeignKey("teacher_assignments.id"), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="open")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    closed_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    __table_args__ = (
+        UniqueConstraint("school_id", "class_group_id", "component_id", name="uq_school_diary_scope"),
+        CheckConstraint("status IN ('draft','open','submitted','reviewed','closed')", name="school_diary_status"),
+    )
+
+
+class DiaryLesson(Record, Scoped, Base):
+    __tablename__ = "diary_lessons"
+    diary_id: Mapped[str] = mapped_column(ForeignKey("school_diaries.id"), index=True)
+    academic_period_id: Mapped[str | None] = mapped_column(ForeignKey("academic_periods.id"), index=True)
+    lesson_date: Mapped[date] = mapped_column(Date, index=True)
+    lesson_count: Mapped[int] = mapped_column(Integer, default=1)
+    content: Mapped[str] = mapped_column(Text)
+    skills: Mapped[str] = mapped_column(Text, default="")
+    methodology: Mapped[str] = mapped_column(Text, default="")
+    activities: Mapped[str] = mapped_column(Text, default="")
+    homework: Mapped[str] = mapped_column(Text, default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    recorded_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    __table_args__ = (
+        UniqueConstraint("diary_id", "lesson_date", name="uq_diary_lesson_date"),
+        CheckConstraint("lesson_count > 0", name="diary_lesson_count"),
+    )
+
+
+class DiaryAttendance(Record, Scoped, Base):
+    __tablename__ = "diary_attendance"
+    lesson_id: Mapped[str] = mapped_column(ForeignKey("diary_lessons.id"), index=True)
+    enrollment_id: Mapped[str] = mapped_column(ForeignKey("enrollments.id"), index=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("students.id"), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="present")
+    note: Mapped[str] = mapped_column(String(500), default="")
+    recorded_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    __table_args__ = (
+        UniqueConstraint("lesson_id", "enrollment_id", name="uq_diary_attendance_enrollment"),
+        CheckConstraint("status IN ('present','absent','justified_absence')", name="diary_attendance_status"),
+    )
+
+
+class DiaryClosure(Record, Scoped, Base):
+    __tablename__ = "diary_closures"
+    diary_id: Mapped[str] = mapped_column(ForeignKey("school_diaries.id"), index=True)
+    academic_period_id: Mapped[str | None] = mapped_column(ForeignKey("academic_periods.id"), index=True)
+    snapshot: Mapped[dict] = mapped_column(JSON)
+    snapshot_hash: Mapped[str] = mapped_column(String(64), index=True)
+    reason: Mapped[str] = mapped_column(String(1000), default="")
+    closed_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    closed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class DiaryRevision(Record, Scoped, Base):
+    __tablename__ = "diary_revisions"
+    diary_id: Mapped[str] = mapped_column(ForeignKey("school_diaries.id"), index=True)
+    closure_id: Mapped[str | None] = mapped_column(ForeignKey("diary_closures.id"), index=True)
+    reason: Mapped[str] = mapped_column(String(1000))
+    reopened_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    reopened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    previous_status: Mapped[str] = mapped_column(String(16))
