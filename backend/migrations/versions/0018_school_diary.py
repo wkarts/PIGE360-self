@@ -136,6 +136,77 @@ def upgrade():
     for name,col in [("ix_diary_closures_school_id","school_id"),("ix_diary_closures_diary_id","diary_id"),("ix_diary_closures_academic_period_id","academic_period_id"),("ix_diary_closures_snapshot_hash","snapshot_hash")]:
         op.create_index(name,"diary_closures",[col])
 
+
+    op.create_table(
+        "assessment_instruments",
+        *record_columns(),
+        sa.Column("diary_id", sa.String(36), sa.ForeignKey("school_diaries.id"), nullable=False),
+        sa.Column("academic_period_id", sa.String(36), sa.ForeignKey("academic_periods.id"), nullable=True),
+        sa.Column("title", sa.String(160), nullable=False),
+        sa.Column("kind", sa.String(60), nullable=False, server_default="activity"),
+        sa.Column("assessment_date", sa.Date(), nullable=False),
+        sa.Column("value_type", sa.String(16), nullable=False, server_default="numeric"),
+        sa.Column("max_score", sa.Numeric(10,2), nullable=True),
+        sa.Column("weight", sa.Numeric(10,4), nullable=True),
+        sa.Column("description", sa.Text(), nullable=False, server_default=""),
+        sa.Column("skills", sa.Text(), nullable=False, server_default=""),
+        sa.Column("status", sa.String(16), nullable=False, server_default="draft"),
+        sa.Column("created_by", sa.String(36), sa.ForeignKey("users.id"), nullable=False),
+        sa.CheckConstraint("value_type IN ('numeric','concept')",name="assessment_value_type"),
+        sa.CheckConstraint("status IN ('draft','published','closed')",name="assessment_status"),
+        sa.CheckConstraint("max_score IS NULL OR max_score > 0",name="assessment_max_score"),
+        sa.CheckConstraint("weight IS NULL OR weight > 0",name="assessment_weight"),
+    )
+    for name,col in [("ix_assessment_instruments_school_id","school_id"),("ix_assessment_instruments_diary_id","diary_id"),("ix_assessment_instruments_academic_period_id","academic_period_id")]:
+        op.create_index(name,"assessment_instruments",[col])
+
+    op.create_table(
+        "assessment_results",
+        *record_columns(),
+        sa.Column("instrument_id", sa.String(36), sa.ForeignKey("assessment_instruments.id"), nullable=False),
+        sa.Column("enrollment_id", sa.String(36), sa.ForeignKey("enrollments.id"), nullable=False),
+        sa.Column("student_id", sa.String(36), sa.ForeignKey("students.id"), nullable=False),
+        sa.Column("numeric_score", sa.Numeric(10,2), nullable=True),
+        sa.Column("concept", sa.String(80), nullable=False, server_default=""),
+        sa.Column("note", sa.String(1000), nullable=False, server_default=""),
+        sa.Column("recorded_by", sa.String(36), sa.ForeignKey("users.id"), nullable=False),
+        sa.UniqueConstraint("instrument_id","enrollment_id",name="uq_assessment_result_enrollment"),
+    )
+    for name,col in [("ix_assessment_results_school_id","school_id"),("ix_assessment_results_instrument_id","instrument_id"),("ix_assessment_results_enrollment_id","enrollment_id"),("ix_assessment_results_student_id","student_id")]:
+        op.create_index(name,"assessment_results",[col])
+
+    op.create_table(
+        "descriptive_opinions",
+        *record_columns(),
+        sa.Column("diary_id", sa.String(36), sa.ForeignKey("school_diaries.id"), nullable=False),
+        sa.Column("academic_period_id", sa.String(36), sa.ForeignKey("academic_periods.id"), nullable=True),
+        sa.Column("enrollment_id", sa.String(36), sa.ForeignKey("enrollments.id"), nullable=False),
+        sa.Column("student_id", sa.String(36), sa.ForeignKey("students.id"), nullable=False),
+        sa.Column("text", sa.Text(), nullable=False),
+        sa.Column("status", sa.String(16), nullable=False, server_default="draft"),
+        sa.Column("authored_by", sa.String(36), sa.ForeignKey("users.id"), nullable=False),
+        sa.Column("reviewed_by", sa.String(36), sa.ForeignKey("users.id"), nullable=True),
+        sa.UniqueConstraint("diary_id","academic_period_id","enrollment_id",name="uq_descriptive_opinion_scope"),
+        sa.CheckConstraint("status IN ('draft','reviewed','final')",name="descriptive_opinion_status"),
+    )
+    for name,col in [("ix_descriptive_opinions_school_id","school_id"),("ix_descriptive_opinions_diary_id","diary_id"),("ix_descriptive_opinions_academic_period_id","academic_period_id"),("ix_descriptive_opinions_enrollment_id","enrollment_id"),("ix_descriptive_opinions_student_id","student_id")]:
+        op.create_index(name,"descriptive_opinions",[col])
+
+    op.create_table(
+        "pedagogical_records",
+        *record_columns(),
+        sa.Column("diary_id", sa.String(36), sa.ForeignKey("school_diaries.id"), nullable=False),
+        sa.Column("enrollment_id", sa.String(36), sa.ForeignKey("enrollments.id"), nullable=False),
+        sa.Column("student_id", sa.String(36), sa.ForeignKey("students.id"), nullable=False),
+        sa.Column("record_date", sa.Date(), nullable=False),
+        sa.Column("kind", sa.String(24), nullable=False, server_default="observation"),
+        sa.Column("text", sa.Text(), nullable=False),
+        sa.Column("recorded_by", sa.String(36), sa.ForeignKey("users.id"), nullable=False),
+        sa.CheckConstraint("kind IN ('follow_up','intervention','recovery','adaptation','referral','observation')",name="pedagogical_record_kind"),
+    )
+    for name,col in [("ix_pedagogical_records_school_id","school_id"),("ix_pedagogical_records_diary_id","diary_id"),("ix_pedagogical_records_enrollment_id","enrollment_id"),("ix_pedagogical_records_student_id","student_id"),("ix_pedagogical_records_record_date","record_date")]:
+        op.create_index(name,"pedagogical_records",[col])
+
     op.create_table(
         "diary_revisions",
         *record_columns(),
@@ -151,5 +222,5 @@ def upgrade():
 
 
 def downgrade():
-    for table in ["diary_revisions","diary_closures","diary_attendance","diary_lessons","school_diaries","curriculum_plans","curriculum_components","academic_periods"]:
+    for table in ["diary_revisions","pedagogical_records","descriptive_opinions","assessment_results","assessment_instruments","diary_closures","diary_attendance","diary_lessons","school_diaries","curriculum_plans","curriculum_components","academic_periods"]:
         op.drop_table(table)
