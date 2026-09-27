@@ -1,6 +1,7 @@
 """API do núcleo do Diário Escolar Digital."""
 import hashlib
 import json
+from decimal import Decimal
 from datetime import UTC, date, datetime
 from typing import Annotated
 
@@ -174,6 +175,16 @@ def _enrollment_for_diary(db, diary, enrollment_id: str, on_date: date | None = 
     return enrollment
 
 
+def _json_safe(value):
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, dict):
+        return {key:_json_safe(item) for key,item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    return value
+
+
 def _snapshot(db, diary, period_id=None):
     lessons_stmt = select(m.DiaryLesson).where(m.DiaryLesson.diary_id == diary.id)
     if period_id:
@@ -214,7 +225,7 @@ def _snapshot(db, diary, period_id=None):
     ).order_by(m.AssessmentResult.instrument_id,m.AssessmentResult.enrollment_id))] if instrument_ids else []
     opinions = [output(x) for x in db.scalars(opinion_stmt.order_by(m.DescriptiveOpinion.enrollment_id))]
     pedagogical = [output(x) for x in db.scalars(records_stmt.order_by(m.PedagogicalRecord.record_date,m.PedagogicalRecord.id))]
-    return {
+    snapshot = {
         "diary": _diary_output(db, diary),
         "period": output(db.get(m.AcademicPeriod, period_id)) if period_id and db.get(m.AcademicPeriod, period_id) else None,
         "plan": output(plan) if plan else None,
@@ -226,6 +237,7 @@ def _snapshot(db, diary, period_id=None):
         "opinions": opinions,
         "pedagogical_records": pedagogical,
     }
+    return _json_safe(snapshot)
 
 
 @router.get("/academic-periods")
