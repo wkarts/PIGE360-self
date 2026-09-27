@@ -91,7 +91,7 @@ def test_diary_lesson_attendance_close_and_reopen(api):
     })
     assert record["kind"] == "follow_up"
 
-    submitted = api.post("/diaries/"+diary["id"]+"/submit", {"version": diary["version"]})
+    submitted = api.post("/diaries/"+diary["id"]+"/submit", {"version": diary["version"]}, 200)
     assert submitted["status"] == "submitted"
     api.post("/diaries/"+diary["id"]+"/review", {"version": diary["version"]}, 409)
     api.post("/diaries/"+diary["id"]+"/lessons", {
@@ -99,7 +99,7 @@ def test_diary_lesson_attendance_close_and_reopen(api):
         "lesson_count": 1,
         "content": "Não deve gravar",
     }, 409)
-    reviewed = api.post("/diaries/"+diary["id"]+"/review", {"version": submitted["version"]})
+    reviewed = api.post("/diaries/"+diary["id"]+"/review", {"version": submitted["version"]}, 200)
     assert reviewed["status"] == "reviewed"
 
     period_close = api.post("/diaries/"+diary["id"]+"/close", {
