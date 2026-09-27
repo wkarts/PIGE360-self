@@ -46,7 +46,7 @@ ALL_PERMISSIONS = {
     'teacher.classes.read', 'teacher.students.read',
     'student.self.read', 'guardian.self.read',
     'staff.assignments.read', 'staff.assignments.write',
-    'diary.read', 'diary.write', 'diary.attendance', 'diary.review', 'diary.close', 'diary.reopen', 'diary.reports', 'diary.configure',
+    'diary.read', 'diary.write', 'diary.attendance', 'diary.assessments', 'diary.review', 'diary.close', 'diary.reopen', 'diary.reports', 'diary.configure',
 }
 
 PERMISSIONS = {
@@ -59,7 +59,7 @@ PERMISSIONS = {
         'documents.waive', 'documents.generate', 'protocols.read', 'protocols.write',
         'reports.read', 'audit.read', 'admissions.read', 'admissions.manage',
         'communications.send', 'profile.read', 'staff.assignments.read', 'staff.assignments.write',
-        'diary.read', 'diary.write', 'diary.attendance', 'diary.review', 'diary.close', 'diary.reopen', 'diary.reports', 'diary.configure',
+        'diary.read', 'diary.write', 'diary.attendance', 'diary.assessments', 'diary.review', 'diary.close', 'diary.reopen', 'diary.reports', 'diary.configure',
     },
     'secretary': {
         'read', 'dashboard.read', 'people.read', 'people.write', 'students.read', 'students.write',
@@ -73,7 +73,7 @@ PERMISSIONS = {
     'teacher': {
         'read', 'profile.read', 'profile.self', 'academic.read',
         'teacher.classes.read', 'teacher.students.read', 'communications.send',
-        'diary.read', 'diary.write', 'diary.attendance', 'diary.reports',
+        'diary.read', 'diary.write', 'diary.attendance', 'diary.assessments', 'diary.reports',
     },
     'student': {
         'read', 'profile.read', 'profile.self', 'student.self.read',
