@@ -100,6 +100,15 @@ jobs:
           POSTGRES_IMAGE: ${{ inputs.postgres_ref || 'ghcr.io/wkarts/pige360-self-postgres:17-bookworm' }}
         run: |
           python scripts/configure.py --env-file deploy/docker/.env.ci
+          export APP_SECRET_KEY=ci-only-long-random-looking-application-key-1234567890
+          export SETUP_TOKEN=ci-only-setup-token-1234567890
+          export POSTGRES_PASSWORD=ci-only-postgres-password-1234567890
+          for adapter in docker dockge portainer cloudpanel; do
+            for channel in develop production; do
+              docker compose --env-file "deploy/$adapter/.env.$channel.example" \
+                -f "deploy/$adapter/compose.yaml" config --quiet
+            done
+          done
           docker compose --env-file deploy/docker/.env.ci -f deploy/docker/compose.yaml config --quiet
           docker build --build-arg SOURCE_REVISION="$GITHUB_SHA" --build-arg APP_VERSION="$(cat VERSION)" \
             --build-arg NODE_BASE_IMAGE="$NODE_BASE_IMAGE" \
