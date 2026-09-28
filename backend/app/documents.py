@@ -106,7 +106,18 @@ def documents(student_id: str, db: DB, user: Actor, school: Scope):
     enrollment = db.scalar(select(m.Enrollment).where(m.Enrollment.student_id == student_id, m.Enrollment.school_id == school.id).order_by(m.Enrollment.created_at.desc()).limit(1))
     grade_id = db.get(m.ClassGroup, enrollment.class_group_id).grade_id if enrollment else None
     docs = [doc_output(db, doc) for doc in db.scalars(select(m.StudentDocument).where(m.StudentDocument.student_id == student_id, m.StudentDocument.school_id == school.id).order_by(m.StudentDocument.created_at.desc()))]
-    issued = [output(x) for x in db.scalars(select(m.IssuedDocument).where(m.IssuedDocument.student_id == student_id, m.IssuedDocument.school_id == school.id).order_by(m.IssuedDocument.created_at.desc()))]
+    issued = []
+    for x in db.scalars(select(m.IssuedDocument).where(
+            m.IssuedDocument.student_id == student_id, m.IssuedDocument.school_id == school.id
+    ).order_by(m.IssuedDocument.created_at.desc())):
+        current_file_id = x.file_id
+        if x.kind == 'template' and x.signature_status != 'unsigned':
+            from .contract_signatures import latest_signed_file
+            current = latest_signed_file(db, x)
+            if current:
+                current_file_id = current.id
+        issued.append({**output(x), 'current_file_id': current_file_id,
+                       'template_name': x.snapshot.get('template_name', '') if x.kind == 'template' else ''})
     return {'items': docs, 'checklist': checklist(db, school.id, student_id, grade_id), 'issued': issued}
 
 @router.post('/students/{student_id}/documents', status_code=201)

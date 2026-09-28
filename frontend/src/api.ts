@@ -77,4 +77,16 @@ namespace PigeAPI {
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
+  export async function downloadPost(path: string, body: unknown, filename: string): Promise<void> {
+    const data = JSON.stringify(body);
+    const send = () => fetch('/api/v1' + path, { method: 'POST', headers: {
+      Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'X-CSRF-Protection': '1'
+    }, body: data, credentials: 'same-origin', cache: 'no-store' });
+    let response = await send();
+    if (response.status === 401 && token) { await refresh(); response = await send(); }
+    if (!response.ok) throw await error(response);
+    const url = URL.createObjectURL(await response.blob());
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
 }

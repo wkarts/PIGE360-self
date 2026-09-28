@@ -119,8 +119,17 @@ def admission_output(db,obj,public=True):
     if obj.enrollment_id:
         enrollment=db.get(m.Enrollment,obj.enrollment_id)
         data['enrollment']={'id':enrollment.id,'number':enrollment.number,'status':enrollment.status,'class_group_id':enrollment.class_group_id}
-        data['issued_documents']=[output(x,('snapshot',)) for x in db.scalars(select(m.IssuedDocument).where(m.IssuedDocument.enrollment_id==enrollment.id,m.IssuedDocument.school_id==obj.school_id))]
+        issued=list(db.scalars(select(m.IssuedDocument).where(m.IssuedDocument.enrollment_id==enrollment.id,m.IssuedDocument.school_id==obj.school_id).order_by(m.IssuedDocument.created_at.desc(),m.IssuedDocument.id.desc())))
+        data['issued_documents']=[output(x,('snapshot',)) for x in issued]
     else:data['issued_documents']=[]
+    selected_template=obj.contract_template_id if obj.status in ('approved','enrolled') else campaign.contract_template_id
+    contract=next((item for item in issued if obj.contract_template_id and item.template_id==obj.contract_template_id
+                   and item.template_version==str(obj.contract_template_version)
+                   and (item.snapshot or {}).get('template_revision_sha256')==obj.contract_template_revision_sha256),None) if obj.enrollment_id else None
+    data['contract']={'required':bool(selected_template),'template_id':selected_template,
+                      'template_version':obj.contract_template_version,
+                      'issued_document_id':contract.id if contract and contract.signature_status in ('company_signed','pending_validation','verified','rejected') else None,
+                      'signature_status':contract.signature_status if contract else 'awaiting_school'}
     return data
 
 def add_message(db,obj,text,kind='message',user=None,account=None,internal=False):
@@ -573,9 +582,61 @@ def issued(id:str,issued_id:str,request:Request,db:DB,account:Parent):
     obj=own_admission(db,account,id)
     record=db.get(m.IssuedDocument,issued_id)
     if not obj.enrollment_id or not record or record.school_id!=obj.school_id or record.enrollment_id!=obj.enrollment_id:fail(404,'Documento não encontrado.')
-    stored=db.get(m.FileRecord,record.file_id)
+    if record.template_id and record.template_id==obj.contract_template_id and record.signature_status not in ('company_signed','pending_validation','verified','rejected'):
+        fail(409,'A escola ainda está preparando a assinatura do contrato.')
+    if record.template_id and record.template_id==obj.contract_template_id:
+        from .contract_signatures import latest_signed_file
+        stored=latest_signed_file(db,record)
+        if not stored:fail(409,'A versão assinada pela escola está indisponível.')
+    else:
+        stored=db.get(m.FileRecord,record.file_id)
+    if not stored or stored.school_id!=obj.school_id:fail(404,'Arquivo não encontrado.')
+    from .storage import read_bytes
+    try:raw=read_bytes(stored)
+    except (FileNotFoundError,KeyError):fail(404,'Arquivo indisponível.')
+    if not secrets.compare_digest(hashlib.sha256(raw).hexdigest(),stored.sha256):
+        fail(409,'Integridade do arquivo inválida.')
     parent_audit(db,request,account,'issued.downloaded',record)
-    return attachment_response(stored)
+    filename=Path(stored.original_name.replace('\\','/')).name.replace('"','')
+    return Response(raw,media_type=stored.mime_type,headers={
+        'Content-Disposition':f'attachment; filename="{filename}"',
+        'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
+
+
+@router.post('/admissions/{id}/issued/{issued_id}/external-signature')
+def submit_signed_contract(id:str,issued_id:str,request:Request,db:DB,account:Parent,file:UploadFile=File(...)):
+    """Recebe o mesmo PDF após assinatura externa no Gov.br; não confirma a matrícula por si só."""
+    obj=own_admission(db,account,id)
+    if obj.status!='approved' or not obj.enrollment_id or not obj.contract_template_id:
+        fail(409,'A inscrição precisa estar aprovada e possuir contrato para assinatura.')
+    rate_limit(db,request,'contract-upload',account.id+':'+id,6,900)
+    lock_school(db,account.school_id)
+    # Recarrega após a gravação do limite e obtém bloqueio antes de modificar revisões.
+    obj=own_admission(db,account,id)
+    record=db.scalar(select(m.IssuedDocument).where(
+        m.IssuedDocument.id==issued_id,m.IssuedDocument.school_id==account.school_id,
+        m.IssuedDocument.enrollment_id==obj.enrollment_id,
+        m.IssuedDocument.template_id==obj.contract_template_id,
+        m.IssuedDocument.template_version==str(obj.contract_template_version)).with_for_update())
+    if not record or (record.snapshot or {}).get('template_revision_sha256')!=obj.contract_template_revision_sha256:
+        fail(404,'Contrato da revisão aprovada não encontrado.')
+    if record.signature_status not in ('company_signed','pending_validation','verified','rejected'):
+        fail(409,'A escola deve assinar o contrato com o certificado A1 antes do envio pelo responsável.')
+    enrollment=db.get(m.Enrollment,obj.enrollment_id)
+    guardian=db.get(m.Person,enrollment.financial_person_id) if enrollment.financial_person_id else None
+    if not guardian or not guardian.cpf or account.cpf!=guardian.cpf:
+        fail(409,'O CPF do titular da conta deve coincidir com o responsável da matrícula. Procure a Secretaria.')
+    maximum=settings().max_upload_mb*1024*1024
+    raw=file.file.read(maximum+1)
+    if len(raw)>maximum:fail(413,'Arquivo acima do limite configurado.')
+    if not file.filename or Path(file.filename).suffix.lower()!='.pdf':
+        fail(422,'Envie o PDF assinado no portal Gov.br, sem conversão de formato.')
+    validate_upload(raw,file.filename)
+    from .contract_signatures import submit_external_signature
+    submit_external_signature(db,record,raw,actor_id=account.id,request=request,expected_signer_cpf=guardian.cpf)
+    parent_audit(db,request,account,'contract.submitted',record,{'sha256':hashlib.sha256(raw).hexdigest()})
+    db.flush()
+    return {'id':record.id,'signature_status':record.signature_status,'message':'Arquivo recebido. A matrícula aguarda a validação da assinatura pela Secretaria.'}
 
 @router.get('/admissions/{id}/charges')
 def charges(id:str,db:DB,account:Parent):

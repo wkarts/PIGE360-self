@@ -95,8 +95,9 @@ def enrollment_detail(enrollment_id: str, db: DB, user: Actor, school: Scope):
 
 def activation_validation(db, school, obj, group):
     # A regra vale também nas rotas administrativas antigas, não apenas no portal.
-    from .admissions import payment_gate
+    from .admissions import payment_gate, contract_gate
     payment_gate(db, school.id, obj.id)
+    contract_gate(db, school.id, obj.id)
     from .documents import checklist
     if occupancy(db, group.id) >= group.capacity and obj.status not in ('active','suspended'):
         fail(409, 'Não há vagas disponíveis nesta turma.')

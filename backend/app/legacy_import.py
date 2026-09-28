@@ -23,7 +23,7 @@ from typing import Any, Iterator
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse
 from PIL import Image, ImageOps, UnidentifiedImageError
-from sqlalchemy import func, select
+from sqlalchemy import func, insert, select
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 
@@ -42,6 +42,7 @@ MAX_MEDIA_FILE_BYTES = 20 * 1024 * 1024
 MAX_SOURCE_ROWS = 100_000
 MAX_MEDIA_FILES = 10_000
 MAX_ZIP_MEMBERS = 100_000
+ARCHIVE_BATCH_SIZE = 500
 PHOTO_FIELD = re.compile(r"(?:foto|photo|avatar|portrait|imagem|image|profile_picture)", re.I)
 SECRET_FIELD = re.compile(r"(?:senha|password|token|secret|authorization|cookie|csrf|mfa|private.?key|api.?key|refresh)", re.I)
 SUPPORTED_MEDIA = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".rtf", ".csv", ".txt", ".xml", ".json", ".md"}
@@ -1261,6 +1262,7 @@ def apply_import(db: DB, user: Actor, school: Scope, request: Request,
         _import_enrollments(source, db, school.id, user, source_student, academic, counts, entity_map)
         _import_student_documents(source, db, school.id, source_student, imported_media, basenames, counts, entity_map)
         _import_inactive_users(source, db, school.id, user, imported_media, basenames, counts, entity_map)
+        archive_batch: list[dict[str, Any]] = []
         for table in source.tables:
             for index, row in enumerate(source.rows(table)):
                 key = _archive_key(row.get("id"), index)
@@ -1274,10 +1276,15 @@ def apply_import(db: DB, user: Actor, school: Scope, request: Request,
                 data = _sanitized_row(table, row, mapped[2])
                 if related_file_ids:
                     data["_pige360_related_file_ids"] = sorted(related_file_ids)
-                db.add(m.LegacyImportRecord(run_id=run.id, source_table=table, source_key=key,
-                                            mapped_entity_type=mapped[0], mapped_entity_id=mapped[1] or None,
-                                            file_id=mapped[2], record_data=data))
+                archive_batch.append({"run_id": run.id, "source_table": table, "source_key": key,
+                                      "mapped_entity_type": mapped[0], "mapped_entity_id": mapped[1] or None,
+                                      "file_id": mapped[2], "record_data": data})
+                if len(archive_batch) >= ARCHIVE_BATCH_SIZE:
+                    db.execute(insert(m.LegacyImportRecord), archive_batch)
+                    archive_batch.clear()
                 counts["source_records_archived"] += 1
+        if archive_batch:
+            db.execute(insert(m.LegacyImportRecord), archive_batch)
         summary = {
             "source_system": "School Desktop Suite", "source_record_count": preview_result["source_record_count"],
             "source_table_count": preview_result["table_count"], "archive_record_count": counts["source_records_archived"] + counts["media_imported"],

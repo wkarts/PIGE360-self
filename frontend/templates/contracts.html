@@ -1,0 +1,92 @@
+<section class="contracts" aria-label="Modelos e documentos escolares">
+  <div v-if="state.error" class="alert error" role="alert">{{state.error}}</div>
+  <div v-if="state.notice" class="alert success" role="status">{{state.notice}}</div>
+  <div class="panel x-card contract-intro">
+    <div class="x-heading"><div><p class="eyebrow">DOCUMENTOS DA ESCOLA</p><h2>Modelos e contratos</h2><p>Cadastre contratos, autorizações, declarações e outros documentos. Vincule cada modelo ao ano letivo e à validade, preencha os dados da matrícula e emita o PDF preservado na ficha do aluno.</p></div><button class="btn btn-secondary" type="button" :disabled="state.loading || state.busy" @click="load">Atualizar</button></div>
+    <div class="tabs" role="tablist" aria-label="Etapas dos documentos"><button type="button" role="tab" :aria-selected="state.tab==='templates'" :class="{active:state.tab==='templates'}" @click="state.tab='templates'">Modelos</button><button type="button" role="tab" :aria-selected="state.tab==='issue'" :class="{active:state.tab==='issue'}" @click="state.tab='issue'">Preencher e emitir</button><button v-if="can('documents.read')" type="button" role="tab" :aria-selected="state.tab==='signatures'" :class="{active:state.tab==='signatures'}" @click="state.tab='signatures'">Assinaturas e revisão</button></div>
+    <p class="small muted">A escola pode manter vários modelos e atualizar suas versões. O documento já emitido conserva o conteúdo e a versão utilizados no momento da emissão.</p>
+  </div>
+  <p v-if="state.loading" class="loading-strip" role="status">Carregando modelos…</p>
+
+  <template v-if="state.tab==='templates'">
+    <section v-if="!state.editing" class="panel x-card">
+      <div class="x-heading"><div><h3>Biblioteca de modelos</h3><p class="muted">Modelos inativos continuam no histórico e deixam de aparecer para novas emissões.</p></div><button v-if="can('academic.write')" class="btn btn-primary" type="button" @click="beginNew">+ Novo modelo</button></div>
+      <div class="table-scroll"><table><thead><tr><th>Modelo</th><th>Categoria</th><th>Ano letivo</th><th>Vigência</th><th>Situação</th><th>Ações</th></tr></thead><tbody><tr v-for="template in state.templates" :key="template.id"><td><strong>{{template.name}}</strong><small>Versão {{template.version}}</small></td><td>{{template.kind}}</td><td>{{yearName(template.academic_year_id)}}</td><td>{{date(template.valid_from)}} a {{date(template.valid_until)}}</td><td><span class="badge" :class="template.active?'active':'archived'">{{template.active?'Ativo':'Inativo'}}</span></td><td><button v-if="can('academic.write')" class="link-button" type="button" @click="beginEdit(template)">Editar →</button><button v-else class="link-button" type="button" @click="beginEdit(template)">Consultar →</button></td></tr></tbody></table></div>
+      <p v-if="!state.templates.length && !state.loading" class="empty-state">Nenhum modelo cadastrado. Crie um documento ou importe o texto de um DOCX para começar.</p>
+    </section>
+
+    <section v-else class="contract-editor" aria-label="Editor do modelo">
+      <div class="contract-editor-actions"><h3>{{state.selected?'Editar modelo':'Novo modelo'}}</h3><div class="actions"><button class="btn btn-secondary" type="button" :disabled="state.busy" @click="cancelEdit">Voltar</button><button v-if="can('academic.write')" class="btn btn-primary" type="button" :disabled="state.busy" @click="save">{{state.busy?'Salvando…':'Salvar modelo'}}</button></div></div>
+      <fieldset :disabled="state.busy || !can('academic.write')" class="contract-editor-grid">
+        <div class="contract-edit-column">
+          <section class="panel x-card">
+            <h3>Identificação e período</h3><p class="small muted">Um modelo pode atender qualquer período ou apenas o ano letivo selecionado. Datas são opcionais; quando informadas, limitam a emissão.</p>
+            <div class="contract-fields">
+              <label class="field wide">Nome do modelo<input v-model="state.draft.name" maxlength="160" required placeholder="Ex.: Contrato de prestação de serviços 2027"></label>
+              <label class="field">Categoria (código)<input v-model="state.draft.kind" @input="syncContractSignature" pattern="[a-z][a-z0-9_]{1,39}" maxlength="40" required placeholder="educational_contract"></label>
+              <label class="field">Ano letivo<select v-model="state.draft.academic_year_id"><option value="">Todos os períodos</option><option v-for="year in state.years" :key="year.id" :value="year.id">{{year.name}}</option></select></label>
+              <label class="field">Válido a partir de<input v-model="state.draft.valid_from" type="date"></label><label class="field">Válido até<input v-model="state.draft.valid_until" type="date"></label>
+              <label class="field checkbox-field wide"><input v-model="state.draft.active" type="checkbox">Modelo ativo para novas emissões</label>
+              <label class="field checkbox-field wide"><input v-model="state.draft.require_signature" type="checkbox" :disabled="contractKind(state.draft.kind)">Exigir assinatura A1 automática da escola no PDF</label>
+              <p v-if="contractKind(state.draft.kind)" class="small muted wide">Modelos classificados como contrato exigem assinatura A1; esta opção fica obrigatória.</p>
+              <p v-if="state.draft.require_signature" class="small muted wide">A emissão exige certificado A1 configurado na escola. A assinatura externa do responsável, quando aplicável, é enviada separadamente e analisada pela Secretaria.</p>
+            </div>
+          </section>
+          <section class="panel x-card">
+            <h3>Importar arquivo de referência</h3>
+            <p class="small muted">O DOCX é convertido em texto editável. Revise títulos, tabelas, espaços e cláusulas: a tipografia e a diagramação do Word podem mudar. O PDF final usa a identidade da escola.</p>
+            <label class="field">Selecionar DOCX de até 2 MB<input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" @change="importDocx"></label>
+            <label class="field">Ou carregar modelo JSON local (até 1 MB)<input type="file" accept=".json,application/json" @change="importJson"></label>
+            <p v-if="state.importFileName" class="small muted">Texto importado de {{state.importFileName}}. Salve o modelo para mantê-lo no sistema.</p>
+            <div v-if="state.importWarnings.length" class="alert warning" role="status"><ul><li v-for="warning in state.importWarnings" :key="warning">{{warning}}</li></ul></div>
+          </section>
+          <section class="panel x-card">
+            <h3>Papel timbrado (opcional)</h3><p class="small muted">Após salvar o modelo, anexe uma imagem PNG ou JPEG A4 de até 2 MB. A imagem fica privada nesta escola e será repetida como fundo em cada página do PDF. Sem ela, a emissão usa a identidade visual cadastrada da instituição.</p>
+            <p v-if="!state.selected" class="alert info">Salve primeiro o modelo para adicionar o papel timbrado.</p>
+            <template v-else><label class="field">Substituir ou adicionar imagem<input type="file" accept="image/png,image/jpeg" @change="letterheadChanged"></label><div class="actions spaced"><button type="button" class="btn btn-secondary" :disabled="!state.letterheadName || state.busy" @click="uploadLetterhead">Enviar {{state.letterheadName || 'imagem'}}</button><button v-if="state.selected.letterhead_file_id" type="button" class="btn btn-secondary" :disabled="state.busy" @click="removeLetterhead">Remover timbrado</button></div><p v-if="state.selected.letterhead_file_id" class="small muted">Imagem privada vinculada ao modelo v{{state.selected.version}}.</p></template>
+          </section>
+          <section class="panel x-card">
+            <h3>Campos dinâmicos</h3><p class="small muted">Clique para inserir o campo no cursor do cabeçalho, conteúdo ou rodapé. Dados cadastrados são preenchidos na prévia; lacunas podem ser informadas manualmente na emissão.</p>
+            <details v-for="group in categories" :key="group" v-show="categoryFields(group).length" class="contract-fields-group"><summary>{{group}} · {{categoryFields(group).length}} campos</summary><div class="contract-field-buttons"><button v-for="field in categoryFields(group)" :key="field.key" type="button" class="btn btn-secondary small-button" :title="field.key+' · '+field.source" @click="insertField(field.key,$event)">{{field.label}}</button></div></details>
+            <p class="small muted">Campos deste modelo: {{placeholders().join(' · ') || 'nenhum. Use chaves duplas para os campos.'}}</p>
+          </section>
+        </div>
+        <div class="contract-edit-column">
+          <section class="panel x-card">
+            <h3>Texto do documento</h3><p class="small muted">Edite cabeçalho, corpo e rodapé livremente. As quebras de linha são mantidas na prévia e no PDF.</p>
+            <label class="field">Cabeçalho (opcional)<textarea id="contract-header-editor" data-section="header" v-model="state.draft.header" @focus="state.activeSection='header'" rows="3" maxlength="500" placeholder="Texto adicional acima do corpo"></textarea></label>
+            <label class="field">Cláusulas e conteúdo<textarea id="contract-body-editor" data-section="body" v-model="state.draft.body" @focus="state.activeSection='body'" rows="22" maxlength="100000" required placeholder="Digite as cláusulas e inclua campos como {{aluno.nome}}."></textarea></label>
+            <label class="field">Rodapé (opcional)<textarea id="contract-footer-editor" data-section="footer" v-model="state.draft.footer" @focus="state.activeSection='footer'" rows="3" maxlength="500" placeholder="Texto adicional de encerramento"></textarea></label>
+          </section>
+          <section class="contract-paper panel" aria-label="Prévia textual da página"><img v-if="state.letterheadUrl" class="contract-letterhead" :src="state.letterheadUrl" alt="Papel timbrado do modelo"><div v-if="!state.letterheadUrl" class="contract-paper-head"><img v-if="identity.logo_url" :src="identity.logo_url" :alt="'Logotipo de '+identity.display_name"><div><strong>{{identity.display_name}}</strong><small>Documento da instituição</small></div></div><div class="contract-paper-content"><p v-if="state.draft.header" class="preserve">{{state.draft.header}}</p><p class="preserve">{{state.draft.body || 'O texto do documento aparecerá aqui.'}}</p><p v-if="state.draft.footer" class="preserve">{{state.draft.footer}}</p></div><div v-if="!state.letterheadUrl" class="contract-paper-foot">{{identity.display_name}}</div></section>
+        </div>
+      </fieldset>
+    </section>
+  </template>
+
+  <template v-else-if="state.tab==='issue'">
+    <section class="panel x-card">
+      <h3>1 · Selecionar matrícula</h3><p class="small muted">Pesquise o aluno ou o número da matrícula. A relação de modelos considera o ano letivo e a vigência.</p>
+      <div v-if="state.enrollment" class="contract-enrollment"><div><strong>{{state.enrollment.student_name}}</strong><small>{{state.enrollment.number}} · {{state.enrollment.year_name}} · {{state.enrollment.status}}</small></div><button type="button" class="btn btn-secondary small-button" @click="clearEnrollment">Trocar matrícula</button></div>
+      <form v-else class="contract-search" @submit.prevent="searchEnrollments"><label class="field grow">Aluno ou matrícula<input v-model="state.enrollmentSearch" type="search" minlength="2" placeholder="Digite ao menos 2 caracteres" autocomplete="off"></label><button class="btn btn-secondary" type="submit" :disabled="state.busy || state.enrollmentSearch.trim().length<2">Pesquisar</button></form>
+      <div v-if="state.enrollmentChoices.length && !state.enrollment" class="contract-results"><button v-for="enrollment in state.enrollmentChoices" :key="enrollment.id" type="button" @click="chooseEnrollment(enrollment)"><strong>{{enrollment.student_name}}</strong><small>{{enrollment.number}} · {{enrollment.year_name}} · {{enrollment.status}}</small></button></div>
+    </section>
+    <section v-if="state.enrollment" class="panel x-card">
+      <h3>2 · Selecionar modelo válido</h3><label class="field">Modelo<select v-model="state.templateId" @change="selectTemplate"><option value="">Selecione um documento</option><option v-for="template in state.applicable" :key="template.id" :value="template.id">{{template.name}} · versão {{template.version}}</option></select></label>
+      <p v-if="!state.applicable.length" class="alert info spaced">Não há modelos ativos válidos para esta matrícula. Cadastre um modelo para o período na aba Modelos.</p>
+    </section>
+    <section v-if="state.enrollment && state.templateId" class="panel x-card">
+      <h3>3 · Conferir e preencher</h3><p class="small muted">A prévia aplica os dados da escola, do aluno, da matrícula e dos responsáveis. Informe os campos ainda pendentes, como valores financeiros, data de assinatura e testemunhas. Dados automáticos já cadastrados devem ser corrigidos na ficha de origem.</p>
+      <button class="btn btn-secondary" type="button" :disabled="state.busy" @click="preview">{{state.preview?'Atualizar prévia':'Gerar prévia'}}</button>
+      <div v-if="state.preview" class="contract-preview">
+        <div v-if="state.preview.missing_fields.length" class="alert warning">{{state.preview.missing_fields.length}} campo(s) ainda pendente(s). Preencha abaixo e atualize a prévia.</div>
+        <div v-if="state.previewStale" class="alert info">Dados alterados. Atualize a prévia antes da emissão.</div>
+        <div v-if="previewKeys().length" class="contract-value-grid"><label v-for="key in previewKeys()" :key="key" class="field" :class="{'contract-missing':state.preview.missing_fields.includes(key)}">{{fieldLabel(key)}} <small class="muted">{{key}} · {{automaticValue(key)?'do cadastro':'preenchimento desta emissão'}}</small><input :value="displayValue(key)" :readonly="automaticValue(key)" @input="setValue(key,$event)" :aria-label="fieldLabel(key)" autocomplete="off" maxlength="2000"></label></div>
+        <div class="contract-paper panel" aria-label="Prévia do conteúdo preenchido"><div class="contract-paper-head"><img v-if="identity.logo_url" :src="identity.logo_url" :alt="'Logotipo de '+identity.display_name"><div><strong>{{identity.display_name}}</strong><small>Prévia de emissão · versão {{state.preview.template_version}}</small></div></div><div class="contract-paper-content preserve"><p v-if="state.preview.header">{{state.preview.header}}</p><p>{{state.preview.content}}</p><p v-if="state.preview.footer">{{state.preview.footer}}</p></div><div class="contract-paper-foot">{{identity.display_name}}</div></div>
+        <div class="actions"><button type="button" class="btn btn-secondary" :disabled="state.busy || state.previewStale" @click="downloadPdfPreview">Conferir papel timbrado em PDF</button><button v-if="can('documents.generate')" type="button" class="btn btn-primary" :disabled="state.busy || state.previewStale || !!state.preview.missing_fields.length" @click="issue">{{state.busy?'Emitindo…':'Emitir e baixar PDF'}}</button></div>
+      </div>
+      <div v-if="state.issued" class="alert success"><span>Documento emitido e preservado na ficha do aluno.</span><button class="link-button" type="button" @click="downloadIssued">Baixar novamente</button></div>
+    </section>
+  </template>
+  <signing-panel v-else-if="state.tab==='signatures'" :school-id="schoolId" :permissions="permissions" :role="role" :enrollment-id="enrollmentId" :issued-id="issuedId"></signing-panel>
+</section>

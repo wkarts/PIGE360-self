@@ -32,6 +32,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app/backend
 COPY backend/requirements.txt ./requirements.txt
 RUN if ! command -v tesseract >/dev/null || ! command -v pdftoppm >/dev/null || ! tesseract --list-langs 2>/dev/null | grep -qx por; then apt-get update && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-por tesseract-ocr-eng poppler-utils && rm -rf /var/lib/apt/lists/*; fi
+RUN if [ ! -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf ]; then apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core && rm -rf /var/lib/apt/lists/*; fi
 RUN if ! cmp -s requirements.txt /opt/pige360/requirements.txt; then \
       pip install --no-cache-dir -r requirements.txt && pip check; fi \
     && (getent group pige360 >/dev/null || groupadd -g 10001 pige360) \
