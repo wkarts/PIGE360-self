@@ -96,7 +96,10 @@ try:
         assert supplier['cnpj']=='12ABC34501DE35' and supplier['street']=='Rua Sintética, Centro'
         nav('Clientes');expect(page.get_by_text('Papelaria Exemplo',exact=True)).to_have_count(0)
         page.get_by_role('button',name='Vincular pessoa existente',exact=True).click()
-        field('Pessoa cadastrada').select_option(supplier['id']);dialog().get_by_role('button',name='Salvar',exact=True).click()
+        dialog().get_by_role('searchbox',name='Filtrar pessoas').fill('Papelaria Exemplo Ltda')
+        selector=dialog().get_by_label('Pessoa cadastrada',exact=True)
+        expect(selector.locator('option',has_text='Papelaria Exemplo Ltda')).to_have_count(1)
+        selector.select_option(supplier['id']);dialog().get_by_role('button',name='Salvar',exact=True).click()
         # Reuse leads to a role-specific editor, not a new identity.
         expect(dialog().get_by_role('heading',name='Adicionar vínculo de cliente',exact=True)).to_be_visible()
         field('Categoria do cliente').fill('Venda eventual');save()
