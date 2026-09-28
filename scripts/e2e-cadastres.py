@@ -202,6 +202,7 @@ try:
         page.keyboard.press('Escape');dialog().get_by_role('button',name='Descartar alterações',exact=True).click()
         expect(dialog()).to_have_count(0)
         record('Lançamento em modal responsivo com resumo nominal e confirmação de descarte; sem alterar emissão')
+        page.set_viewport_size({'width':1440,'height':960})
         for label in ['Visão geral','Cadastro único','Alunos','Professores','Funcionários','Pais e responsáveis','Fornecedores','Prestadores de serviços','Clientes','Sócios','Matrículas','Estrutura acadêmica','Diário Escolar','Documentação','Protocolos','Relatórios','Inscrições online','Cobranças','Financeiro / ASAAS','Connect API','Instituição','Usuários e acessos','Diagnóstico e logs','Auditoria']:
             nav(label)
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
