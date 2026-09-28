@@ -17,7 +17,17 @@ from .common import output, number, audit
 from .auth import DUMMY_PASSWORD_HASH
 from .documents import validate_upload, render_pdf
 from .integration_core import connection, enqueue, admission_notification
-from .portal_access import login_school, offered_groups, public_context, today
+from .portal_access import (
+    PORTAL_DIARY_ACCESS_CONSENT_TEXT,
+    PORTAL_DIARY_ACCESS_CONSENT_VERSION,
+    active_portal_student_access,
+    login_school,
+    offered_groups,
+    portal_diary_access_summary,
+    public_context,
+    today,
+    verified_guardian_links,
+)
 
 router=APIRouter(prefix='/api/v1/portal',tags=['Portal dos responsáveis'])
 EDITABLE={'draft','changes_requested'}
@@ -119,9 +129,59 @@ def add_message(db,obj,text,kind='message',user=None,account=None,internal=False
 def parent_audit(db,request,account,action,obj,details=None):
     audit(db,request,None,'portal.'+action,obj,account.school_id,{'portal_account_id':account.id,**(details or {})})
 
+
+def current_registration_terms(db,school_id):
+    campaign=db.scalar(select(m.AdmissionCampaign).where(
+        m.AdmissionCampaign.school_id==school_id,
+    ).order_by(m.AdmissionCampaign.updated_at.desc(),m.AdmissionCampaign.id.desc()).limit(1))
+    if campaign:
+        source_version=campaign.terms_version
+        text=campaign.privacy_notice
+    else:
+        source_version='1'
+        text=s.DEFAULT_INSTITUTION_PRIVACY_NOTICE
+    version=hashlib.sha256((source_version+'\0'+text).encode('utf-8')).hexdigest()[:40]
+    return {'version':version,'source_version':source_version,'text':text}
+
+
 @router.get('/context')
 def context(db:DB):
     return public_context(db)
+
+
+@router.get('/registration-terms')
+def registration_terms(db:DB,school_id:str=Query(default='',max_length=36)):
+    school=login_school(db,school_id)
+    return current_registration_terms(db,school.id)
+
+
+@router.post('/account/register')
+def register_portal_account(data:s.PortalAccountRegistration,request:Request,response:Response,db:DB):
+    request_csrf(request)
+    email=str(data.email).lower()
+    rate_limit(db,request,'account-register',email,5)
+    school=login_school(db,data.school_id)
+    lock_school(db,school.id)
+    terms=current_registration_terms(db,school.id)
+    if data.terms_version!=terms['version']:
+        fail(409,'O aviso de privacidade foi atualizado. Leia e aceite a versão atual.')
+    if db.scalar(select(m.PortalAccount.id).where(
+        m.PortalAccount.school_id==school.id,m.PortalAccount.email==email,
+    )):
+        fail(409,'Não foi possível criar a conta. Use Entrar ou Recuperar acesso caso já tenha cadastro.')
+    account=m.PortalAccount(
+        school_id=school.id,email=email,password_hash=hash_password(data.password),
+        registration_consent={
+            'terms_version':terms['version'],'privacy_notice':terms['text'],
+            'source_terms_version':terms['source_version'],
+            'accepted_at':now().isoformat(),'source':'standalone_portal',
+        },
+        **data.model_dump(exclude={'school_id','email','password','accept_privacy','terms_version'}),
+    )
+    db.add(account);db.flush();parent_audit(db,request,account,'account.created',account,{'source':'standalone_portal'})
+    from .mfa import before_login
+    challenge=before_login(db,request,'portal',account)
+    return challenge or new_session(db,account,response)
 
 @router.get('/campaigns')
 def campaigns(db:DB):
@@ -164,6 +224,131 @@ def login(data:s.PortalLogin,request:Request,response:Response,db:DB):
 
 @router.get('/me')
 def me(account:Parent):return account_output(account)
+
+
+@router.get('/diary/access-consent')
+def diary_access_consent(account:Parent):
+    return {'version':PORTAL_DIARY_ACCESS_CONSENT_VERSION,'text':PORTAL_DIARY_ACCESS_CONSENT_TEXT}
+
+
+@router.get('/diary/access')
+def diary_access(db:DB,account:Parent):
+    return portal_diary_access_summary(db,account)
+
+
+@router.post('/diary/access')
+def grant_diary_access(data:s.PortalDiaryAccessInput,request:Request,db:DB,account:Parent):
+    if not data.accepted:
+        fail(422,'Confirme a autorização antes de ativar o acesso ao Diário.')
+    if data.consent_version != PORTAL_DIARY_ACCESS_CONSENT_VERSION:
+        fail(409,'O texto de autorização foi atualizado. Releia-o antes de continuar.')
+    lock_school(db,account.school_id)
+    eligible = verified_guardian_links(db,account)
+    if not eligible:
+        fail(409,'Não foi possível confirmar um vínculo legal com os dados já verificados. Atualize seus contatos e procure a Secretaria.')
+    current_student_ids=sorted({student.id for _link,student,_person in eligible})
+    if len(set(data.student_ids))!=len(data.student_ids):
+        fail(422,'A lista de estudantes contém duplicidades. Atualize a página e tente novamente.')
+    if sorted(data.student_ids)!=current_student_ids:
+        fail(409,'Os vínculos elegíveis mudaram. Atualize a lista de estudantes e confirme novamente a autorização.')
+    stamp = now()
+    created = 0
+    for link,student,_person in eligible:
+        access = db.scalar(select(m.PortalStudentAccess).where(
+            m.PortalStudentAccess.school_id==account.school_id,
+            m.PortalStudentAccess.account_id==account.id,
+            m.PortalStudentAccess.guardian_link_id==link.id,
+        ).with_for_update())
+        if access:
+            if access.active and access.consent_version == data.consent_version:
+                continue
+            access.active=True
+            access.revoked_at=None
+            access.consent_version=data.consent_version
+            access.consent_text=PORTAL_DIARY_ACCESS_CONSENT_TEXT
+            access.consented_at=stamp
+            access.version+=1
+        else:
+            access=m.PortalStudentAccess(
+                school_id=account.school_id,account_id=account.id,guardian_link_id=link.id,
+                student_id=student.id,consent_version=data.consent_version,
+                consent_text=PORTAL_DIARY_ACCESS_CONSENT_TEXT,consented_at=stamp,
+                active=True,
+            )
+            db.add(access)
+        created += 1
+    parent_audit(db,request,account,'diary_access.granted',account,{
+        'consent_version':data.consent_version,'student_links_activated':created,
+    })
+    return portal_diary_access_summary(db,account)
+
+
+@router.post('/diary/access/{student_id}/revoke')
+def revoke_diary_access(student_id:str,request:Request,db:DB,account:Parent):
+    lock_school(db,account.school_id)
+    matching=list(db.scalars(select(m.PortalStudentAccess).where(
+        m.PortalStudentAccess.school_id==account.school_id,
+        m.PortalStudentAccess.account_id==account.id,
+        m.PortalStudentAccess.student_id==student_id,
+        m.PortalStudentAccess.active.is_(True),
+    ).with_for_update()))
+    if not matching:
+        fail(404,'Acesso ao Diário não encontrado.')
+    stamp=now()
+    for access in matching:
+        access.active=False
+        access.revoked_at=stamp
+        access.version+=1
+    parent_audit(db,request,account,'diary_access.revoked',account,{'student_links_revoked':len(matching)})
+    return {'ok':True,'student_id':student_id}
+
+
+@router.get('/diary/communications')
+def diary_communications(db:DB,account:Parent):
+    access_rows=active_portal_student_access(db,account)
+    allowed={access.guardian_link_id:student for access,student,_person in access_rows}
+    if not allowed:
+        return []
+    rows=db.scalars(select(m.DiaryFamilyCommunication).where(
+        m.DiaryFamilyCommunication.school_id==account.school_id,
+        m.DiaryFamilyCommunication.account_id==account.id,
+        m.DiaryFamilyCommunication.guardian_link_id.in_(list(allowed)),
+    ).order_by(m.DiaryFamilyCommunication.sent_at.desc(),m.DiaryFamilyCommunication.id.desc()).limit(100)).all()
+    result=[]
+    for item in rows:
+        student=allowed.get(item.guardian_link_id)
+        if not student or student.id!=item.student_id:
+            continue
+        person=db.get(m.Person,student.person_id)
+        occurrence=db.get(m.DiaryOccurrence,item.occurrence_id) if item.occurrence_id else None
+        result.append({
+            'id':item.id,'student_id':student.id,'student_name':person.name if person else '',
+            'title':item.title,'message':item.message,'sent_at':item.sent_at.isoformat(),
+            'read_at':item.read_at.isoformat() if item.read_at else None,
+            'occurrence_title':occurrence.title if occurrence else None,
+        })
+    return result
+
+
+@router.post('/diary/communications/{communication_id}/read')
+def mark_diary_communication_read(communication_id:str,request:Request,db:DB,account:Parent):
+    item=db.scalar(select(m.DiaryFamilyCommunication).where(
+        m.DiaryFamilyCommunication.id==communication_id,
+        m.DiaryFamilyCommunication.school_id==account.school_id,
+        m.DiaryFamilyCommunication.account_id==account.id,
+    ))
+    if not item:
+        fail(404,'Comunicado não encontrado.')
+    access=next((row for row,student,_person in active_portal_student_access(db,account)
+                 if row.guardian_link_id==item.guardian_link_id and student.id==item.student_id),None)
+    if not access:
+        fail(404,'Comunicado não encontrado.')
+    if item.read_at is None:
+        item.read_at=now()
+        parent_audit(db,request,account,'diary_communication.read',item,{
+            'diary_id':item.diary_id,'occurrence_id':item.occurrence_id,
+        })
+    return {'ok':True,'id':item.id,'read_at':item.read_at.isoformat()}
 
 @router.post('/logout')
 def logout(account:Parent,request:Request,response:Response,db:DB):

@@ -1,0 +1,306 @@
+<section aria-label="Diário Escolar Digital">
+  <div v-if="state.error" class="alert error" role="alert">{{state.error}}</div>
+  <div v-if="state.notice" class="alert success" role="status">{{state.notice}}</div>
+  <fieldset :disabled="state.busy" class="portal-fieldset">
+    <section class="panel x-card">
+      <div class="x-heading">
+        <div><h2>Diário Escolar Digital</h2><p>Registro pedagógico por turma, componente curricular e professor, com frequência, planejamento, fechamento e histórico auditável.</p></div>
+        <div class="actions"><button class="btn btn-secondary" @click="load">Atualizar</button></div>
+      </div>
+      <div class="tabs">
+        <button :class="{active:state.tab==='dashboard'}" @click="state.tab='dashboard'">Pendências</button>
+        <button :class="{active:state.tab==='diaries'}" @click="state.tab='diaries'">Diários</button>
+        <button :class="{active:state.tab==='planning'}" @click="state.tab='planning'">Planejamento</button>
+        <button :class="{active:state.tab==='assessments'}" @click="state.tab='assessments'">Avaliações</button>
+        <button :class="{active:state.tab==='opinions'}" @click="state.tab='opinions'">Pareceres</button>
+        <button :class="{active:state.tab==='records'}" @click="state.tab='records'">Registros pedagógicos</button>
+        <button :class="{active:state.tab==='occurrences'}" @click="state.tab='occurrences'">Ocorrências</button>
+        <button v-if="can('communications.send')" :class="{active:state.tab==='communications'}" @click="state.tab='communications'">Comunicações</button>
+        <button v-if="can('diary.configure')" :class="{active:state.tab==='setup'}" @click="state.tab='setup'">Configuração</button>
+      </div>
+    </section>
+
+    <details class="panel x-card" open>
+      <summary><strong>Como começar no Diário · roteiro rápido</strong></summary>
+      <ol>
+        <li>Na aba <strong>Configuração</strong>, crie os períodos avaliativos e os componentes curriculares; depois abra um diário para uma turma e componente.</li>
+        <li>Em <strong>Diários</strong>, selecione a turma. Registre o planejamento e cada aula; a chamada é aberta dentro da aula registrada.</li>
+        <li>Em <strong>Avaliações</strong>, lance instrumentos e resultados. A regra de cálculo é definida pela escola e a consolidação é uma ação explícita.</li>
+        <li>Complete pareceres, registros e ocorrências. Envie o diário para revisão; após a conferência, a coordenação pode fechar o período ou o diário.</li>
+        <li>Para compartilhar uma comunicação com a família, a conta e o vínculo legal precisam estar ativos e a família precisa autorizar o acesso ao Diário no portal.</li>
+      </ol>
+      <p class="muted">Se a turma não aparecer na chamada, confira se há matrículas ativas ou suspensas nessa turma. <a href="#/help">Abrir o guia completo da aplicação</a>.</p>
+    </details>
+
+    <template v-if="state.tab==='setup' && can('diary.configure')">
+      <div class="x-grid">
+        <section class="panel x-card">
+          <h2>Períodos letivos</h2>
+          <p v-if="!state.academicYears.length" class="alert info">Cadastre um ano letivo em <a href="#/academic">Estrutura acadêmica</a> antes de criar períodos para o Diário.</p>
+          <form class="x-form" @submit.prevent="createPeriod">
+            <label>Ano letivo<select v-model="state.periodForm.academic_year_id" required><option value="">Selecione</option><option v-for="year in state.academicYears" :key="year.id" :value="year.id">{{year.name}} · {{date(year.starts_on)}} a {{date(year.ends_on)}}</option></select></label>
+            <label>Nome<input v-model="state.periodForm.name" required maxlength="80" placeholder="Ex.: 1º bimestre"></label>
+            <div class="x-grid"><label>Início<input type="date" v-model="state.periodForm.starts_on" required></label><label>Fim<input type="date" v-model="state.periodForm.ends_on" required></label></div>
+            <label>Ordem<input type="number" min="1" max="30" v-model.number="state.periodForm.order_index"></label>
+            <button class="btn btn-primary" :disabled="!state.academicYears.length">Criar período</button>
+          </form>
+          <div class="x-list"><div v-for="p in state.periods" :key="p.id" class="x-record"><strong>{{p.name}}</strong><span>{{date(p.starts_on)}} a {{date(p.ends_on)}}</span></div></div>
+        </section>
+
+        <section class="panel x-card">
+          <h2>Componentes curriculares</h2>
+          <form class="x-form" @submit.prevent="createComponent">
+            <label>Nome<input v-model="state.componentForm.name" required maxlength="120" placeholder="Ex.: Língua Portuguesa"></label>
+            <label>Código<input v-model="state.componentForm.code" maxlength="40"></label>
+            <label>Carga horária<input type="number" min="0" v-model.number="state.componentForm.workload_hours"></label>
+            <button class="btn btn-primary">Criar componente</button>
+          </form>
+          <div class="x-list"><div v-for="c in state.components" :key="c.id" class="x-record"><strong>{{c.name}}</strong><span>{{c.code||'Sem código'}} · {{c.workload_hours||0}}h</span></div></div>
+        </section>
+      </div>
+
+      <section class="panel x-card">
+        <h2>Abrir diário</h2>
+        <form class="x-form" @submit.prevent="createDiary">
+          <div class="x-grid">
+            <label>Turma<select v-model="state.diaryForm.class_group_id" required><option value="">Selecione</option><option v-for="g in state.groups" :key="g.id" :value="g.id">{{g.name}}</option></select></label>
+            <label>Componente<select v-model="state.diaryForm.component_id" required><option value="">Selecione</option><option v-for="c in state.components" :key="c.id" :value="c.id">{{c.name}}</option></select></label>
+            <label>Atribuição docente<select v-model="state.diaryForm.teacher_assignment_id"><option value="">Sem atribuição definida</option><option v-for="a in state.assignments" :key="a.id" :value="a.id">{{a.subject_name||a.id}} · {{a.class_group_id}}</option></select></label>
+          </div>
+          <p v-if="!state.groups.length || !state.components.length" class="alert info">Antes de abrir o diário, cadastre uma turma em <a href="#/academic">Estrutura acadêmica</a> e crie o componente curricular nesta aba.</p>
+          <label>Observações<textarea v-model="state.diaryForm.notes" rows="2" maxlength="4000"></textarea></label>
+          <button class="btn btn-primary" :disabled="!state.groups.length || !state.components.length">Abrir diário</button>
+        </form>
+      </section>
+    </template>
+
+    <template v-if="state.tab==='dashboard'">
+      <section class="panel x-card"><div class="x-heading"><div><h2>Pendências do Diário</h2><p>Chamadas, resultados, consolidações e revisão de ocorrências.</p></div><button class="btn btn-secondary" @click="load">Atualizar</button></div>
+        <div class="stats-grid"><div class="stat-card"><span>Diários</span><strong>{{state.dashboard.totals.diaries||0}}</strong></div><div class="stat-card"><span>Chamadas</span><strong>{{state.dashboard.totals.lessons_without_complete_attendance||0}}</strong></div><div class="stat-card"><span>Resultados</span><strong>{{state.dashboard.totals.assessment_results_pending||0}}</strong></div><div class="stat-card"><span>Consolidações</span><strong>{{state.dashboard.totals.consolidation_results_pending||0}}</strong></div><div class="stat-card"><span>Ocorrências a revisar</span><strong>{{state.dashboard.totals.occurrences_pending_review||0}}</strong></div></div>
+        <div class="x-list"><button v-for="d in state.dashboard.items" :key="d.id" class="x-record" @click="state.tab='diaries';selectDiary(d)"><div><strong>{{d.class_name}} · {{d.component_name}}</strong><span>{{d.year_name}} · {{label(d.status)}}</span></div><span>Chamada: {{d.pending.lessons_without_complete_attendance}} · Avaliação: {{d.pending.assessment_results_pending}} · Consolidação: {{d.pending.consolidation_results_pending}} · Ocorrências: {{d.pending.occurrences_pending_review}}</span></button></div>
+      </section>
+    </template>
+
+    <template v-if="state.tab==='diaries'">
+      <section v-if="!state.selected" class="panel x-card">
+        <div class="x-heading"><div><h2>Diários disponíveis</h2><p>Professores visualizam somente diários associados às próprias atribuições.</p></div></div>
+        <div v-if="!state.diaries.length" class="empty"><p>Nenhum diário disponível para esta escola.</p><p>Se você tiver permissão de configuração, crie períodos e componentes na aba <strong>Configuração</strong>. Caso contrário, solicite à coordenação que abra um diário para sua turma.</p><button v-if="can('diary.configure')" class="btn btn-secondary" @click="state.tab='setup'">Abrir configuração</button></div>
+        <div class="x-list">
+          <button v-for="d in state.diaries" :key="d.id" class="x-record" @click="selectDiary(d)">
+            <div><strong>{{d.class_name}} · {{d.component_name}}</strong><span>{{d.year_name}} · {{d.teacher_name||'Professor não definido'}}</span></div>
+            <span class="badge">{{label(d.status)}}</span><span>→</span>
+          </button>
+        </div>
+      </section>
+
+      <template v-else>
+        <section class="panel x-card">
+          <div class="x-heading">
+            <div><p class="eyebrow">{{state.selected.year_name}} · {{state.selected.class_name}}</p><h2>{{state.selected.component_name}}</h2><p>{{state.selected.teacher_name||'Professor não definido'}} · <span class="badge">{{label(state.selected.status)}}</span></p></div>
+            <div class="actions"><button class="btn btn-secondary" @click="state.selected=null;state.selectedLesson=null">← Voltar</button><button v-if="can('diary.reports')" class="btn btn-secondary" @click="report">Baixar PDF</button></div>
+          </div>
+          <div v-if="state.summary" class="stats-grid"><div class="stat-card"><span>Registros de aula</span><strong>{{state.summary.lessons}}</strong><small>{{state.summary.lesson_count}} aula(s)</small></div><div class="stat-card"><span>Alunos</span><strong>{{state.summary.roster}}</strong><small>matrículas ativas/suspensas</small></div><div class="stat-card"><span>Faltas</span><strong>{{state.summary.absences}}</strong><small>não justificadas</small></div><div class="stat-card"><span>Faltas justificadas</span><strong>{{state.summary.justified_absences}}</strong><small>registros atuais</small></div></div>
+        </section>
+
+        <section v-if="can('diary.reports')" class="panel x-card">
+          <h2>Relatórios oficiais</h2>
+          <div class="x-grid">
+            <label>Relatório<select v-model="state.reportType"><option value="class_diary">Diário da turma/componente</option><option value="lessons">Registro de aulas</option><option value="attendance">Mapa de frequência</option><option value="assessments">Mapa de avaliações/notas/conceitos</option><option value="opinions">Pareceres descritivos</option><option value="occurrences">Ocorrências pedagógicas</option><option value="communications">Comunicações à família</option><option value="student_record">Ficha individual</option><option value="period_consolidation">Consolidação por período</option><option value="closure">Relatório de fechamento</option><option value="pending">Relatório de pendências</option><option value="revision_history">Histórico de retificações</option><option value="audit_validation">Auditoria e validação</option></select></label>
+            <label v-if="['period_consolidation','class_diary','attendance','assessments','opinions','occurrences','communications','student_record'].includes(state.reportType)">Período<select v-model="state.reportPeriod"><option value="">Todos</option><option v-for="p in state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id)" :key="p.id" :value="p.id">{{p.name}}</option></select></label>
+            <label v-if="state.reportType==='student_record'">Aluno<select v-model="state.reportEnrollment"><option value="">Selecione</option><option v-for="r in state.selected.roster||[]" :key="r.enrollment_id" :value="r.enrollment_id">{{r.name}} · {{r.number}}</option></select></label>
+          </div>
+          <button class="btn btn-primary" @click="report" :disabled="(state.reportType==='period_consolidation'&&!state.reportPeriod)||(state.reportType==='student_record'&&!state.reportEnrollment)">Baixar PDF</button>
+          <p class="muted">Os PDFs usam a identidade institucional da escola. A consolidação mostra a regra e a versão calculada.</p>
+        </section>
+
+        <section v-if="state.selected.status==='open' && can('diary.write')" class="panel x-card">
+          <h2>Registrar aula</h2>
+          <form class="x-form" @submit.prevent="createLesson">
+            <div class="x-grid"><label>Data<input type="date" v-model="state.lessonForm.lesson_date" required></label><label>Quantidade de aulas<input type="number" min="1" max="20" v-model.number="state.lessonForm.lesson_count"></label><label>Período<select v-model="state.lessonForm.academic_period_id"><option value="">Sem período</option><option v-for="p in state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id)" :key="p.id" :value="p.id">{{p.name}}</option></select></label></div>
+            <label>Conteúdo ministrado<textarea v-model="state.lessonForm.content" required minlength="2" maxlength="12000" rows="3"></textarea></label>
+            <div class="x-grid"><label>Habilidades / referências<textarea v-model="state.lessonForm.skills" rows="2"></textarea></label><label>Metodologia<textarea v-model="state.lessonForm.methodology" rows="2"></textarea></label></div>
+            <div class="x-grid"><label>Atividades<textarea v-model="state.lessonForm.activities" rows="2"></textarea></label><label>Tarefa / orientação<textarea v-model="state.lessonForm.homework" rows="2"></textarea></label></div>
+            <label>Observações<textarea v-model="state.lessonForm.notes" rows="2"></textarea></label>
+            <button class="btn btn-primary">Registrar aula</button>
+          </form>
+        </section>
+
+        <section class="panel x-card">
+          <h2>Aulas registradas</h2>
+          <p v-if="!state.selected.lessons?.length" class="empty">Nenhuma aula registrada.</p>
+          <div class="table-wrap"><table><thead><tr><th>Data</th><th>Aulas</th><th>Conteúdo</th><th>Chamada</th></tr></thead><tbody><tr v-for="lesson in state.selected.lessons||[]" :key="lesson.id"><td>{{date(lesson.lesson_date)}}</td><td>{{lesson.lesson_count}}</td><td><strong>{{lesson.content}}</strong><small>{{lesson.skills}}</small></td><td><button class="btn btn-secondary small-button" @click="openAttendance(lesson)">Abrir chamada</button></td></tr></tbody></table></div>
+        </section>
+
+        <section v-if="state.selectedLesson" class="panel x-card">
+          <div class="x-heading"><div><h2>Chamada · {{date(state.selectedLesson.lesson_date)}}</h2><p>{{state.selectedLesson.content}}</p></div><button class="btn btn-secondary" @click="state.selectedLesson=null">Fechar</button></div>
+          <div class="table-wrap"><table><thead><tr><th>Aluno</th><th>Situação</th><th>Observação</th></tr></thead><tbody><tr v-for="r in state.attendance" :key="r.enrollment_id"><td><strong>{{r.name}}</strong><small>{{r.number}}</small></td><td><select v-model="r.attendance.status" :disabled="state.selected.status!=='open'||!can('diary.attendance')"><option value="present">Presente</option><option value="absent">Falta</option><option value="justified_absence">Falta justificada</option></select></td><td><input v-model="r.attendance.note" maxlength="500" :disabled="state.selected.status!=='open'||!can('diary.attendance')"></td></tr></tbody></table></div>
+          <button v-if="state.selected.status==='open' && can('diary.attendance')" class="btn btn-primary" @click="saveAttendance">Salvar chamada</button>
+        </section>
+
+        <section class="panel x-card">
+          <h2>Fluxo de revisão e integridade</h2>
+          <template v-if="state.selected.status==='open'">
+            <p>O diário está aberto para lançamentos. Envie-o para revisão quando estiver pronto.</p>
+            <button v-if="can('diary.write')" class="btn btn-primary" @click="submitDiary">Enviar para revisão</button>
+          </template>
+          <template v-else-if="state.selected.status==='submitted'">
+            <p class="alert info">Diário enviado e aguardando revisão da coordenação.</p>
+            <button v-if="can('diary.review')" class="btn btn-primary" @click="reviewDiary">Marcar como revisado</button>
+          </template>
+          <template v-else-if="state.selected.status==='reviewed'">
+            <p class="alert info">Diário revisado. Registros estão bloqueados até uma reabertura formal.</p>
+            <div v-if="can('diary.close')" class="x-form">
+              <div class="x-grid"><label>Período do fechamento<select v-model="state.closePeriod"><option value="">Diário completo</option><option v-for="p in state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id)" :key="p.id" :value="p.id">{{p.name}}</option></select></label><label>Justificativa / conferência<input v-model="state.closeReason" minlength="3" maxlength="1000"></label></div>
+              <button class="btn btn-primary" @click="closeDiary">{{state.closePeriod?'Fechar período':'Fechar diário'}}</button>
+            </div>
+          </template>
+          <p v-else-if="state.selected.status==='closed'" class="alert info">Diário fechado. Alterações exigem reabertura formal e ficam registradas no histórico.</p>
+          <div v-if="state.selected.status!=='open' && can('diary.reopen')" class="x-form">
+            <label>Motivo da reabertura<textarea v-model="state.reopenReason" minlength="10" maxlength="1000" rows="2"></textarea></label>
+            <button class="btn btn-secondary" :disabled="state.reopenReason.length<10" @click="reopenDiary">Reabrir com justificativa</button>
+          </div>
+          <h3>Histórico</h3>
+          <div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Data</th><th>Hash / motivo</th></tr></thead><tbody><tr v-for="c in state.history.closures" :key="'c'+c.id"><td>Fechamento</td><td>{{date(c.closed_at)}}</td><td><code>{{c.snapshot_hash}}</code></td></tr><tr v-for="r in state.history.revisions" :key="'r'+r.id"><td>Reabertura</td><td>{{date(r.reopened_at)}}</td><td>{{r.reason}}</td></tr></tbody></table></div>
+        </section>
+      </template>
+    </template>
+
+    <template v-if="state.tab==='planning'">
+      <section v-if="!state.selected" class="panel x-card"><p>Selecione um diário na aba <strong>Diários</strong> para registrar ou consultar o planejamento correspondente.</p></section>
+      <template v-else>
+        <section v-if="can('diary.write')" class="panel x-card">
+          <h2>Planejamento curricular · {{state.selected.class_name}} · {{state.selected.component_name}}</h2>
+          <form class="x-form" @submit.prevent="createPlan">
+            <label>Período<select v-model="state.planForm.academic_period_id"><option value="">Planejamento geral</option><option v-for="p in state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id)" :key="p.id" :value="p.id">{{p.name}}</option></select></label>
+            <label>Objetivos<textarea v-model="state.planForm.objectives" rows="2"></textarea></label>
+            <div class="x-grid"><label>Unidades temáticas<textarea v-model="state.planForm.thematic_units" rows="2"></textarea></label><label>Objetos de conhecimento<textarea v-model="state.planForm.knowledge_objects" rows="2"></textarea></label></div>
+            <label>Referências BNCC / habilidades<input v-model="state.planForm.bncc_references" placeholder="Separe códigos por espaço, vírgula ou ponto e vírgula"></label>
+            <div class="x-grid"><label>Metodologia<textarea v-model="state.planForm.methodology" rows="2"></textarea></label><label>Recursos<textarea v-model="state.planForm.resources" rows="2"></textarea></label></div>
+            <label>Estratégia de avaliação<textarea v-model="state.planForm.assessment_strategy" rows="2"></textarea></label>
+            <label>Observações<textarea v-model="state.planForm.notes" rows="2"></textarea></label>
+            <button class="btn btn-primary">Salvar planejamento</button>
+          </form>
+        </section>
+        <section class="panel x-card"><h2>Planejamentos registrados</h2><p v-if="!state.plans.length" class="empty">Nenhum planejamento registrado.</p><article v-for="p in state.plans" :key="p.id" class="x-charge"><strong>{{p.status}}</strong><p>{{p.objectives}}</p><small>{{(p.bncc_references||[]).join(', ')}}</small></article></section>
+      </template>
+    </template>
+
+    <template v-if="state.tab==='assessments'">
+      <section v-if="!state.selected" class="panel x-card"><p>Selecione um diário para lançar avaliações.</p></section>
+      <template v-else>
+        <section v-if="can('diary.configure')" class="panel x-card">
+          <h2>Regra de avaliação e consolidação</h2>
+          <form class="x-form" @submit.prevent="saveAssessmentRule">
+            <div class="x-grid"><label>Período<select v-model="state.assessmentRuleForm.period_id" @change="selectRulePeriod(state.assessmentRuleForm.period_id)" required><option value="">Selecione</option><option v-for="p in state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id)" :key="p.id" :value="p.id">{{p.name}}</option></select></label><label>Método<select v-model="state.assessmentRuleForm.method"><option value="arithmetic">Média aritmética</option><option value="weighted">Média ponderada</option><option value="concept">Conceitual por escala ordenada</option></select></label>
+            <label v-if="state.assessmentRuleForm.method!=='concept'">Escala máxima<input type="number" min="0.0001" step="0.0001" v-model="state.assessmentRuleForm.scale_max"></label><label v-if="state.assessmentRuleForm.method!=='concept'">Casas decimais<input type="number" min="0" max="4" v-model.number="state.assessmentRuleForm.decimal_places"></label></div>
+            <label v-if="state.assessmentRuleForm.method==='concept'">Conceitos em ordem<input v-model="state.assessmentRuleForm.concept_scale" placeholder="Insuficiente, Em desenvolvimento, Adequado"></label>
+            <div class="x-grid"><label v-if="state.assessmentRuleForm.method!=='concept'">Limite mínimo<input type="number" min="0" step="0.0001" v-model="state.assessmentRuleForm.minimum_score"></label><label>Recuperação<select v-model="state.assessmentRuleForm.recovery_mode"><option value="none">Ignorar na consolidação</option><option value="replace">Substituir</option><option value="higher">Manter maior resultado</option><option value="mean">Média entre resultado e recuperação</option></select></label><label>Limite de frequência (%)<input type="number" min="0" max="100" step="0.01" v-model="state.assessmentRuleForm.minimum_attendance_percent"></label>
+            <label v-if="state.assessmentRuleForm.minimum_attendance_percent">Falta justificada conta como presença?<select v-model="state.assessmentRuleForm.justified_absence_counts_as_present" required><option value="">Selecione</option><option value="true">Sim</option><option value="false">Não</option></select></label></div>
+            <label><input type="checkbox" v-model="state.assessmentRuleForm.required_opinion"> Exigir parecer final</label><button class="btn btn-primary" :disabled="!state.assessmentRuleForm.period_id">Salvar regra</button>
+          </form>
+          <p class="muted">A consolidação é explícita. A frequência usa os registros de chamada por aula registrada; não presume fórmula normativa.</p>
+          <div class="x-heading"><h3>Resultados consolidados</h3><div class="actions"><button class="btn btn-secondary" @click="loadPeriodResults" :disabled="!state.assessmentRuleForm.period_id">Consultar</button><button v-if="can('diary.review') && ['open','reviewed'].includes(state.selected.status)" class="btn btn-primary" @click="consolidatePeriod" :disabled="!state.assessmentRuleForm.period_id">Consolidar agora</button></div></div>
+          <div class="table-wrap"><table><thead><tr><th>Aluno</th><th>Resultado</th><th>Situação</th><th>Alertas</th></tr></thead><tbody><tr v-for="r in state.periodResults" :key="r.id"><td>{{r.student_name}} · {{r.student_number}}</td><td>{{r.numeric_value??r.concept_value??'—'}}</td><td>{{label(r.status)}}</td><td>{{(r.flags||[]).join(', ')||'—'}}</td></tr></tbody></table></div>
+        </section>
+
+        <section v-if="state.selected.status==='open' && can('diary.assessments')" class="panel x-card">
+          <h2>Nova avaliação</h2>
+          <form class="x-form" @submit.prevent="createAssessment">
+            <div class="x-grid">
+              <label>Título<input v-model="state.assessmentForm.title" required maxlength="160"></label>
+              <label>Tipo<input v-model="state.assessmentForm.kind" maxlength="60" placeholder="Prova, atividade, projeto..."></label>
+              <label>Data<input type="date" v-model="state.assessmentForm.assessment_date" required></label>
+              <label>Período<select v-model="state.assessmentForm.academic_period_id"><option value="">Sem período</option><option v-for="p in state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id)" :key="p.id" :value="p.id">{{p.name}}</option></select></label>
+              <label>Forma de resultado<select v-model="state.assessmentForm.value_type"><option value="numeric">Nota numérica</option><option value="concept">Conceito</option></select></label>
+              <label v-if="state.assessmentForm.value_type==='numeric'">Valor máximo<input type="number" min="0.01" step="0.01" v-model="state.assessmentForm.max_score" required></label>
+              <label>Peso informativo<input type="number" min="0.0001" step="0.0001" v-model="state.assessmentForm.weight"></label>
+            </div>
+            <label>Descrição<textarea v-model="state.assessmentForm.description" rows="2"></textarea></label>
+            <label>Habilidades avaliadas<textarea v-model="state.assessmentForm.skills" rows="2"></textarea></label>
+            <p class="muted">Nesta fase o sistema registra instrumentos e resultados, mas não presume fórmula de média ou recuperação.</p>
+            <button class="btn btn-primary">Criar avaliação</button>
+          </form>
+        </section>
+        <section class="panel x-card"><h2>Avaliações registradas</h2><div class="x-list"><button v-for="a in state.assessments" :key="a.id" class="x-record" @click="openAssessment(a)"><div><strong>{{a.title}}</strong><span>{{date(a.assessment_date)}} · {{a.value_type==='numeric'?'Numérica':'Conceitual'}} · {{a.result_count}} resultado(s)</span></div><span>→</span></button></div></section>
+        <section v-if="state.selectedAssessment" class="panel x-card">
+          <div class="x-heading"><div><h2>{{state.selectedAssessment.title}}</h2><p>{{date(state.selectedAssessment.assessment_date)}}</p></div><button class="btn btn-secondary" @click="state.selectedAssessment=null">Fechar</button></div>
+          <div class="table-wrap"><table><thead><tr><th>Aluno</th><th>Resultado</th><th>Observação</th></tr></thead><tbody><tr v-for="r in state.assessmentRoster" :key="r.enrollment_id"><td><strong>{{r.name}}</strong><small>{{r.number}}</small></td><td><input v-if="state.selectedAssessment.value_type==='numeric'" type="number" min="0" :max="state.selectedAssessment.max_score" step="0.01" v-model="r.result.numeric_score" :disabled="state.selected.status!=='open'||!can('diary.assessments')"><input v-else v-model="r.result.concept" maxlength="80" :disabled="state.selected.status!=='open'||!can('diary.assessments')"></td><td><input v-model="r.result.note" maxlength="1000" :disabled="state.selected.status!=='open'||!can('diary.assessments')"></td></tr></tbody></table></div>
+          <button v-if="state.selected.status==='open' && can('diary.assessments')" class="btn btn-primary" @click="saveAssessmentResults">Salvar resultados</button>
+        </section>
+      </template>
+    </template>
+
+    <template v-if="state.tab==='opinions'">
+      <section v-if="!state.selected" class="panel x-card"><p>Selecione um diário para registrar pareceres descritivos.</p></section>
+      <template v-else>
+        <section v-if="state.selected.status==='open' && can('diary.write')" class="panel x-card">
+          <h2>Parecer descritivo</h2>
+          <form class="x-form" @submit.prevent="saveOpinion">
+            <div class="x-grid">
+              <label>Aluno<select v-model="state.opinionForm.enrollment_id" required><option value="">Selecione</option><option v-for="r in state.selected.roster||[]" :key="r.enrollment_id" :value="r.enrollment_id">{{r.name}} · {{r.number}}</option></select></label>
+              <label>Período<select v-model="state.opinionForm.academic_period_id"><option value="">Geral</option><option v-for="p in state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id)" :key="p.id" :value="p.id">{{p.name}}</option></select></label>
+              <label>Situação<select v-model="state.opinionForm.status"><option value="draft">Rascunho</option><option v-if="can('diary.review')" value="reviewed">Revisado</option><option v-if="can('diary.review')" value="final">Final</option></select></label>
+            </div>
+            <label>Texto<textarea v-model="state.opinionForm.text" required minlength="2" maxlength="12000" rows="5"></textarea></label>
+            <button class="btn btn-primary">Salvar parecer</button>
+          </form>
+        </section>
+        <section class="panel x-card"><h2>Pareceres registrados</h2><p v-if="!state.opinions.length" class="empty">Nenhum parecer registrado.</p><article v-for="o in state.opinions" :key="o.id" class="x-charge"><div class="x-heading"><strong>{{o.status}}</strong><small>{{date(o.updated_at)}}</small></div><p class="preserve-lines">{{o.text}}</p></article></section>
+      </template>
+    </template>
+
+    <template v-if="state.tab==='records'">
+      <section v-if="!state.selected" class="panel x-card"><p>Selecione um diário para consultar registros pedagógicos complementares.</p></section>
+      <template v-else>
+        <section v-if="state.selected.status==='open' && can('diary.write')" class="panel x-card">
+          <h2>Novo registro pedagógico</h2>
+          <form class="x-form" @submit.prevent="createPedagogicalRecord">
+            <div class="x-grid">
+              <label>Aluno<select v-model="state.pedagogicalForm.enrollment_id" required><option value="">Selecione</option><option v-for="r in state.selected.roster||[]" :key="r.enrollment_id" :value="r.enrollment_id">{{r.name}} · {{r.number}}</option></select></label>
+              <label>Data<input type="date" v-model="state.pedagogicalForm.record_date" required></label>
+              <label>Tipo<select v-model="state.pedagogicalForm.kind"><option value="follow_up">Acompanhamento</option><option value="intervention">Intervenção</option><option value="recovery">Recuperação</option><option value="adaptation">Adaptação</option><option value="referral">Encaminhamento</option><option value="observation">Observação</option></select></label>
+            </div>
+            <label>Registro<textarea v-model="state.pedagogicalForm.text" required minlength="2" maxlength="12000" rows="4"></textarea></label>
+            <button class="btn btn-primary">Registrar</button>
+          </form>
+        </section>
+        <section class="panel x-card"><h2>Histórico pedagógico</h2><p v-if="!state.pedagogicalRecords.length" class="empty">Nenhum registro complementar.</p><article v-for="r in state.pedagogicalRecords" :key="r.id" class="x-charge"><div class="x-heading"><strong>{{r.kind}}</strong><small>{{date(r.record_date)}}</small></div><p class="preserve-lines">{{r.text}}</p></article></section>
+      </template>
+    </template>
+
+    <template v-if="state.tab==='occurrences'">
+      <section v-if="!state.selected" class="panel x-card"><p>Selecione um diário para registrar ocorrências.</p></section>
+      <template v-else><section v-if="state.selected.status==='open' && can('diary.write')" class="panel x-card"><h2>Nova ocorrência pedagógica</h2><form class="x-form" @submit.prevent="saveOccurrence">
+        <div class="x-grid"><label>Aluno<select v-model="state.occurrenceForm.enrollment_id" required><option value="">Selecione</option><option v-for="r in state.selected.roster||[]" :key="r.enrollment_id" :value="r.enrollment_id">{{r.name}} · {{r.number}}</option></select></label><label>Data<input type="date" v-model="state.occurrenceForm.occurrence_date" required></label><label>Período<select v-model="state.occurrenceForm.academic_period_id" required><option value="">Selecione</option><option v-for="p in state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id)" :key="p.id" :value="p.id">{{p.name}}</option></select></label><label>Tipo<select v-model="state.occurrenceForm.kind"><option value="positive">Positiva</option><option value="pedagogical">Pedagógica</option><option value="behavioral">Comportamental</option><option value="safety">Segurança</option><option value="other">Outra</option></select></label><label>Situação<select v-model="state.occurrenceForm.status"><option value="draft">Aguardando revisão</option><option v-if="can('diary.review')" value="reviewed">Revisada</option></select></label></div>
+        <label>Título<input v-model="state.occurrenceForm.title" required minlength="2" maxlength="160"></label><label>Descrição<textarea v-model="state.occurrenceForm.description" required minlength="2" maxlength="8000" rows="4"></textarea></label><p class="muted">Registre apenas informações pedagógicas necessárias. Este formulário não envia mensagem à família.</p><button class="btn btn-primary">Registrar</button>
+      </form></section>
+      <section class="panel x-card"><h2>Ocorrências</h2><p v-if="!state.occurrences.length" class="empty">Nenhuma ocorrência registrada.</p><article v-for="o in state.occurrences" :key="o.id" class="x-charge"><div class="x-heading"><strong>{{o.title}} · {{label(o.status)}}</strong><small>{{date(o.occurrence_date)}} · {{o.kind}}</small></div><p><strong>{{(state.selected.roster||[]).find(x=>x.enrollment_id===o.enrollment_id)?.name||'Aluno'}}</strong></p><p class="preserve-lines">{{o.description}}</p></article></section></template>
+    </template>
+
+    <template v-if="state.tab==='communications' && can('communications.send')">
+      <section v-if="!state.selected" class="panel x-card"><p>Selecione um diário para enviar comunicados e consultar o histórico.</p></section>
+      <template v-else>
+        <section class="panel x-card">
+          <h2>Comunicado no portal da família</h2>
+          <p>O comunicado ficará disponível apenas para os responsáveis legais que confirmaram o vínculo e autorizaram o acesso ao Diário no portal. Esta tela não envia e-mail nem WhatsApp.</p>
+          <form class="x-form" @submit.prevent="sendCommunication">
+            <div class="x-grid">
+              <label>Estudante<select v-model="state.communicationForm.enrollment_id" @change="loadCommunicationRecipients" required><option value="">Selecione</option><option v-for="r in state.selected.roster||[]" :key="r.enrollment_id" :value="r.enrollment_id">{{r.name}} · {{r.number}}</option></select></label>
+              <label>Período de referência<select v-model="state.communicationForm.academic_period_id"><option value="">Sem período específico</option><option v-for="p in state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id)" :key="p.id" :value="p.id">{{p.name}}</option></select></label>
+              <label>Ocorrência revisada (opcional)<select v-model="state.communicationForm.occurrence_id" @change="communicationOccurrenceChanged"><option value="">Sem ocorrência vinculada</option><option v-for="o in state.occurrences.filter(x=>x.enrollment_id===state.communicationForm.enrollment_id&&x.status==='reviewed')" :key="o.id" :value="o.id">{{date(o.occurrence_date)}} · {{o.title}}</option></select></label>
+            </div>
+            <fieldset class="x-form" :disabled="!state.communicationRecipients.length"><legend>Responsáveis autorizados</legend>
+              <p v-if="state.communicationForm.enrollment_id&&!state.communicationRecipients.length" class="empty">Nenhum responsável legal com acesso consentido e contato verificado para este estudante.</p>
+              <label v-for="recipient in state.communicationRecipients" :key="recipient.guardian_link_id" class="x-check"><input type="checkbox" :value="recipient.guardian_link_id" v-model="state.communicationForm.recipient_guardian_link_ids">{{recipient.name}} · {{recipient.relationship}} · {{recipient.portal_account_count}} conta(s) do portal</label>
+            </fieldset>
+            <label>Título<input v-model="state.communicationForm.title" required minlength="2" maxlength="160"></label>
+            <label>Mensagem<textarea v-model="state.communicationForm.message" required minlength="2" maxlength="8000" rows="5"></textarea></label>
+            <button class="btn btn-primary" :disabled="!state.communicationForm.recipient_guardian_link_ids.length">Disponibilizar no portal</button>
+          </form>
+        </section>
+        <section class="panel x-card"><h2>Histórico de comunicados</h2><p v-if="!state.communications.length" class="empty">Nenhum comunicado enviado por este Diário.</p><article v-for="item in state.communications" :key="item.id" class="x-charge"><div class="x-heading"><div><strong>{{item.title}}</strong><small>{{item.student_name}} · {{item.guardian_name}} · {{date(item.sent_at)}}<span v-if="item.academic_period_id"> · {{state.periods.find(p=>p.id===item.academic_period_id)?.name||'Período'}}</span></small></div><span class="badge">{{item.read_at?'Lido no portal':'Disponível no portal'}}</span></div><p v-if="item.occurrence_title" class="muted">Ocorrência: {{item.occurrence_title}}</p><p class="preserve-lines">{{item.message}}</p></article></section>
+      </template>
+    </template>
+
+  </fieldset>
+</section>

@@ -8,11 +8,11 @@ O primeiro acesso cria uma escola, uma unidade e um ano. Cadastre os demais elem
 
 ## Aluno e responsáveis
 
-Em Responsáveis, cadastre a pessoa. CPF pode ficar vazio; um CPF informado é validado e não pode repetir dentro da escola. Em Alunos, informe pelo menos nome e nascimento. A matrícula do cadastro (AL-) é distinta do número do vínculo anual (MAT-).
+Em Cadastro único, mantenha os dados pessoais da pessoa. CPF pode ficar vazio; um CPF informado é validado e não pode repetir dentro da escola. Em Alunos, informe pelo menos nome e nascimento. A matrícula do cadastro (AL-) é distinta do número do vínculo anual (MAT-).
 
 Na ficha do aluno, aba Responsáveis, use Vincular responsável. Parentesco e poderes são independentes: “Mãe/Pai/Tutor” descreve o vínculo; os indicadores Legal, Financeiro, Retirada e Principal definem suas funções. Um mesmo responsável pode cuidar de vários alunos.
 
-A mesma pessoa existente pode ganhar o papel de aluno pela API `POST /students` com `person_id`. A interface de Novo aluno cria os dados pessoais; não oferece um assistente de fusão/deduplicação de cadastros. Não confunda arquivar aluno com cancelar matrícula: o arquivamento exige que não existam matrículas em aberto.
+Antes de criar um aluno, use **Vincular pessoa existente** e pesquise por nome ou CPF. A busca começa após dois caracteres, mostra até vinte resultados e informa quando é preciso refinar. Se encontrar a pessoa, selecione-a para adicionar somente o perfil de aluno. Use **+ Novo aluno** quando a busca não localizar a identidade. A mesma pessoa pode ser aluno, responsável, professor ou funcionário; cada papel mantém seus próprios dados, enquanto nome, documentos e contatos permanecem no cadastro pessoal compartilhado. Confira homônimos antes de selecionar. Não confunda arquivar aluno com cancelar matrícula: o arquivamento exige que não existam matrículas em aberto.
 
 ## Documentação
 
@@ -53,6 +53,10 @@ O administrador cria usuários e define escolas e perfil. Secretaria opera os ca
 ## Sem conexão
 
 A PWA não é um sistema de matrícula offline. Sem conexão, a interface avisa a indisponibilidade e não confirma a gravação. Dados já abertos podem permanecer temporariamente na memória da aba, mas não são persistidos pelo service worker. Ao sair, o estado de aplicação é limpo. Não use terminais compartilhados sem políticas de sessão e proteção do dispositivo.
+
+## Guia dentro da aplicação
+
+Em qualquer tela autenticada, use **Guia de uso** para abrir a sequência recomendada: configurar a estrutura acadêmica, cadastrar ou reutilizar a identidade, criar e ativar a matrícula e operar o Diário. Na tela do Diário, o roteiro rápido explica períodos, aulas, chamada, avaliações, revisão, fechamento e autorização familiar. Mensagens de validação apontam o campo que precisa de correção; erros exibem um código de referência para suporte.
 
 
 ## Recursos adicionados na 0.2.0
