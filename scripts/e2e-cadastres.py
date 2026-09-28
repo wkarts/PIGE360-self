@@ -41,7 +41,9 @@ try:
         browser=pw.chromium.launch(headless=True,**({'executable_path':binary} if binary else {}),args=['--no-sandbox'])
         context=browser.new_context(viewport={'width':1440,'height':960},locale='pt-BR')
         page=context.new_page();page.set_default_timeout(8000)
+        route_failures=[]
         page.on('pageerror',lambda error:errors.append(str(error)))
+        page.on('response',lambda response:route_failures.append(response.url.split('?',1)[0]) if response.status==404 and '/api/v1/' in response.url else None)
         if BRIDGE:
             from ui_bridge import install
             install(page,ROOT,URL,OUT)
@@ -50,12 +52,12 @@ try:
         page.get_by_label('Senha',exact=True).fill(PASSWORD)
         page.get_by_role('button',name='Entrar na aplicação').click()
         expect(page.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible()
-        def nav(label):
+        def nav(label,heading=None):
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
             menu=page.get_by_role('button',name='Cadastros',exact=True)
             if label in ['Cadastro único','Alunos','Professores','Funcionários','Pais e responsáveis','Fornecedores','Prestadores de serviços','Clientes','Sócios'] and menu.get_attribute('aria-expanded')=='false':menu.click()
             page.locator('aside').get_by_role('link',name=label,exact=False).click()
-            expect(page.get_by_role('heading',name=label,exact=True)).to_be_visible()
+            expect(page.locator('h1')).to_have_text(heading or label)
         def dialog():return page.get_by_role('dialog')
         def field(label):
             # CNPJ is distinct from the complementary registration-status field.
@@ -94,7 +96,10 @@ try:
         assert supplier['cnpj']=='12ABC34501DE35' and supplier['street']=='Rua Sintética, Centro'
         nav('Clientes');expect(page.get_by_text('Papelaria Exemplo',exact=True)).to_have_count(0)
         page.get_by_role('button',name='Vincular pessoa existente',exact=True).click()
-        field('Pessoa cadastrada').select_option(supplier['id']);dialog().get_by_role('button',name='Salvar',exact=True).click()
+        dialog().get_by_role('searchbox',name='Filtrar pessoas').fill('Papelaria Exemplo Ltda')
+        selector=dialog().get_by_label('Pessoa cadastrada',exact=True)
+        expect(selector.locator('option',has_text='Papelaria Exemplo Ltda')).to_have_count(1)
+        selector.select_option(supplier['id']);dialog().get_by_role('button',name='Salvar',exact=True).click()
         # Reuse leads to a role-specific editor, not a new identity.
         expect(dialog().get_by_role('heading',name='Adicionar vínculo de cliente',exact=True)).to_be_visible()
         field('Categoria do cliente').fill('Venda eventual');save()
@@ -155,6 +160,33 @@ try:
         expect(dialog().get_by_role('alert')).to_contain_text('Data de nascimento')
         record('Campo obrigatório oculto direciona para a seção correta antes de enviar')
         page.keyboard.press('Escape');dialog().get_by_role('button',name='Descartar alterações',exact=True).click()
+        nav('Alunos');page.get_by_role('button',name='+ Novo aluno',exact=True).click()
+        field('Nome completo').fill('Aluno com CPF inválido — Teste')
+        field('Data de nascimento').fill('2020-05-15')
+        field('CPF').fill('111.111.111-11')
+        dialog().get_by_role('button',name='Salvar',exact=True).click()
+        expect(dialog().get_by_role('alert')).to_contain_text('cpf')
+        assert dialog().locator('#modal-field-cpf').evaluate('el=>el===document.activeElement')
+        dialog().locator('#modal-field-cpf').fill('529.982.247-25');save()
+        record('Erro 422 destaca o campo do CPF e permite corrigir o mesmo cadastro sem recomeçar')
+        nav('Pais e responsáveis');page.get_by_role('button',name='+ Novo responsável',exact=True).click()
+        field('Nome completo').fill('Responsável reutilizado — Teste');field('Data de nascimento').fill('1985-04-20');save()
+        person=client.get(base+'/persons?q=Responsável reutilizado',headers=headers).json()['items'][0]
+        people_before=client.get(base+'/persons',headers=headers).json()['total']
+        nav('Alunos');page.get_by_role('button',name='Vincular pessoa existente',exact=True).click()
+        search=dialog().get_by_label('Filtrar pessoas',exact=True);search.fill('Responsável reutilizado')
+        selector=dialog().get_by_label('Pessoa cadastrada',exact=True)
+        expect(selector.locator('option',has_text='Responsável reutilizado — Teste')).to_have_count(1)
+        selector.select_option(person['id']);dialog().get_by_role('button',name='Salvar',exact=True).click()
+        expect(dialog().get_by_role('heading',name='Adicionar aluno à pessoa',exact=True)).to_be_visible();save()
+        linked=client.get(base+'/students?q=Responsável reutilizado',headers=headers).json()['items'][0]
+        assert linked['person']['id']==person['id']
+        assert client.get(base+'/persons',headers=headers).json()['total']==people_before
+        record('Busca por nome reutiliza a identidade existente e adiciona perfil de aluno sem duplicar pessoa')
+        page.get_by_role('button',name='Guia de uso',exact=True).click()
+        expect(page.get_by_role('heading',name='Siga a ordem da rotina escolar',exact=True)).to_be_visible()
+        expect(page.get_by_text('Cadastre cada pessoa uma vez',exact=True)).to_be_visible()
+        record('Guia de uso alcançável do cabeçalho e orienta cadastro, matrícula e Diário')
         nav('Cobranças');page.get_by_role('button',name='+ Nova cobrança',exact=True).click()
         expect(dialog().get_by_role('heading',name='Nova cobrança ASAAS',exact=True)).to_be_visible()
         dialog().get_by_label('Valor de cada parcela (R$)').fill('450.00')
@@ -170,6 +202,12 @@ try:
         page.keyboard.press('Escape');dialog().get_by_role('button',name='Descartar alterações',exact=True).click()
         expect(dialog()).to_have_count(0)
         record('Lançamento em modal responsivo com resumo nominal e confirmação de descarte; sem alterar emissão')
+        page.set_viewport_size({'width':1440,'height':960})
+        for label in ['Visão geral','Cadastro único','Alunos','Professores','Funcionários','Pais e responsáveis','Fornecedores','Prestadores de serviços','Clientes','Sócios','Matrículas','Estrutura acadêmica','Diário Escolar','Documentação','Protocolos','Relatórios','Inscrições online','Cobranças','Financeiro / ASAAS','Connect API','Instituição','Usuários e acessos','Diagnóstico e logs','Auditoria']:
+            nav(label,heading='Pendências documentais' if label=='Documentação' else label)
+            expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
+        assert not route_failures,route_failures
+        record('Navegação de todas as rotas administrativas sem respostas API 404')
         assert not errors,errors
         result={'status':'passed','checks':checks,'errors':errors,'mode':'ui_api_bridge' if BRIDGE else 'http_e2e',
                 'database':'SQLite descartável','not_validated':['HTTP/cookies/CSP/PWA nativos'] if BRIDGE else [],'remote_providers':False}
