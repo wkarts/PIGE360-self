@@ -28,6 +28,12 @@ def validate_campaign(db,school,data):
     for id in data.class_group_ids:
         group=scoped(db,m.ClassGroup,id,school.id);check_group(db,group,school.id);years.add(group.academic_year_id)
     if len(years)>1:fail(422,'Crie um processo separado para cada ano letivo.')
+    if data.contract_template_id:
+        template=scoped(db,m.DocumentTemplate,data.contract_template_id,school.id)
+        if not template.active or not template.require_signature:
+            fail(422,'Selecione um modelo de contrato ativo que exija assinatura.')
+        if template.academic_year_id and template.academic_year_id not in years:
+            fail(422,'O contrato deve pertencer ao mesmo ano letivo das turmas oferecidas.')
 
 @router.post('/admission-campaigns',status_code=201)
 def create_campaign(data:s.CampaignInput,db:DB,user:Actor,school:Scope,request:Request):
@@ -119,6 +125,17 @@ def approve(id:str,data:s.Approval,db:DB,user:Actor,school:Scope,request:Request
     if obj.status not in ('submitted','under_review','waitlisted'):fail(409,'Inscrição não está pronta para aprovação.')
     campaign=db.get(m.AdmissionCampaign,obj.campaign_id)
     group=valid_group(db,campaign,data.class_group_id or obj.class_group_id)
+    if campaign.contract_template_id:
+        template=scoped(db,m.DocumentTemplate,campaign.contract_template_id,school.id)
+        if not template.active or not template.require_signature:
+            fail(409,'O contrato da campanha foi desativado ou deixou de exigir assinatura.')
+        if template.academic_year_id and template.academic_year_id!=group.academic_year_id:
+            fail(409,'O contrato da campanha não corresponde ao ano letivo da turma.')
+        revision=db.scalar(select(m.DocumentTemplateRevision).where(
+            m.DocumentTemplateRevision.school_id==school.id,
+            m.DocumentTemplateRevision.template_id==template.id,
+            m.DocumentTemplateRevision.version_number==template.version))
+        if not revision:fail(409,'A revisão do modelo de contrato está indisponível.')
     from .registry import occupancy
     if occupancy(db,group.id)>=group.capacity:fail(409,'Turma sem vagas. Utilize a lista de espera ou escolha outra turma oferecida.')
     parent=db.get(m.PortalAccount,obj.account_id)
@@ -175,6 +192,10 @@ def approve(id:str,data:s.Approval,db:DB,user:Actor,school:Scope,request:Request
         doc=m.StudentDocument(school_id=school.id,student_id=student.id,document_type_id=item.document_type_id,file_id=stored.id,status=item.review_status,validated_by=user.id if item.review_status=='validated' else None,notes='Importado da inscrição '+obj.number+'; '+item.review_note)
         db.add(doc);db.flush();item.student_document_id=doc.id
     obj.status='approved';obj.student_id=student.id;obj.enrollment_id=enrollment.id;obj.class_group_id=group.id;obj.reviewed_by=user.id;obj.version+=1
+    if campaign.contract_template_id:
+        obj.contract_template_id=template.id
+        obj.contract_template_version=revision.version_number
+        obj.contract_template_revision_sha256=revision.sha256
     # Vincula apenas cobranças deste processo, nunca as de outros alunos da família.
     for charge in db.scalars(select(m.BankCharge).where(m.BankCharge.admission_id==obj.id,m.BankCharge.school_id==school.id)):charge.enrollment_id=enrollment.id
     add_message(db,obj,'Inscrição aprovada. A Secretaria está concluindo a matrícula.','approved',user=user)
@@ -190,6 +211,7 @@ def finalize(id:str,data:s.FinalizeAdmission,db:DB,user:Actor,school:Scope,reque
     check_version(obj,data.version)
     if obj.status!='approved' or not obj.enrollment_id:fail(409,'Aprove a inscrição antes da efetivação.')
     payment_gate(db,school.id,obj.enrollment_id)
+    contract_gate(db,school.id,obj.enrollment_id)
     from .enrollments import movement
     enrollment=scoped(db,m.Enrollment,obj.enrollment_id,school.id)
     if enrollment.status!='active':
@@ -214,3 +236,28 @@ def payment_gate(db,school_id,enrollment_id):
         fail(409,'Cadastre a cobrança obrigatória antes de efetivar a matrícula.')
     if any(x.status!='received' for x in charges):
         fail(409,'Pagamento obrigatório ainda não recebido/conciliado. Confirmado não equivale a recebido.')
+
+
+def contract_gate(db, school_id, enrollment_id):
+    """O contrato vinculante é a revisão imutável fixada ao aprovar a inscrição."""
+    admission=db.scalar(select(m.Admission).where(
+        m.Admission.school_id==school_id,m.Admission.enrollment_id==enrollment_id))
+    if not admission or not admission.contract_template_id:
+        return
+    issued=db.scalar(select(m.IssuedDocument).where(
+        m.IssuedDocument.school_id==school_id,
+        m.IssuedDocument.enrollment_id==enrollment_id,
+        m.IssuedDocument.template_id==admission.contract_template_id,
+        m.IssuedDocument.template_version==str(admission.contract_template_version),
+    ).order_by(m.IssuedDocument.created_at.desc(),m.IssuedDocument.id.desc()))
+    if not issued:
+        fail(409,'Emita o contrato da revisão vinculada à inscrição antes de efetivar a matrícula.')
+    if (issued.snapshot or {}).get('template_revision_sha256') != admission.contract_template_revision_sha256:
+        fail(409,'A revisão do contrato emitido difere daquela aprovada para a inscrição.')
+    from .contract_signatures import contract_signature_ready
+    enrollment=db.get(m.Enrollment,enrollment_id)
+    guardian=db.get(m.Person,enrollment.financial_person_id) if enrollment.financial_person_id else None
+    if not guardian or not guardian.cpf:
+        fail(409,'Confirme o CPF do responsável financeiro antes da assinatura do contrato.')
+    if not contract_signature_ready(db,issued,guardian.cpf):
+        fail(409,'A matrícula aguarda assinatura validada da escola e do responsável no contrato.')

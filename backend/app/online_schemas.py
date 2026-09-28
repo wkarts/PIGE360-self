@@ -21,6 +21,7 @@ class CampaignInput(Input):
     require_verified_contact: bool = True
     require_documents: bool = False
     require_payment_before_enrollment: bool = False
+    contract_template_id: str | None = None
     @model_validator(mode='after')
     def dates(self):
         if self.closes_on < self.opens_on: raise ValueError('Data final anterior à inicial.')

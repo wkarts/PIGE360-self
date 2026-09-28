@@ -14,7 +14,8 @@ from .db import engine
 from .storage import ensure_storage
 from starlette.concurrency import run_in_threadpool
 from . import embedding, embedding_settings, mfa, dossiers, ocr, lookups, diagnostics, telemetry, diary
-from . import auth, people, registry, enrollments, documents, reports, portal, admissions, integrations, connect, banking, profiles, support, institution, business_people, account, legacy_import
+from . import auth, people, registry, enrollments, documents, contract_templates, reports, portal, admissions, integrations, connect, banking, profiles, support, institution, business_people, account, legacy_import
+from . import contract_signatures
 
 cfg = settings()
 logger = logging.getLogger('pige360')
@@ -28,7 +29,7 @@ async def lifespan(app):
     engine.dispose()
 
 app = FastAPI(title='PIGE360 Self — Gestão Educacional', version=cfg.app_version, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url='/api/v1/openapi.json')
-for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router, mfa.router, dossiers.router, ocr.router, lookups.router, diagnostics.router, diary.router, legacy_import.router]:
+for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, contract_templates.router, contract_signatures.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router, mfa.router, dossiers.router, ocr.router, lookups.router, diagnostics.router, diary.router, legacy_import.router]:
     app.include_router(router)
 
 @app.exception_handler(HTTPException)
@@ -57,16 +58,19 @@ async def security_headers(request: Request, call_next):
     origin = request.headers.get('origin')
     if request.method not in ('GET','HEAD','OPTIONS') and origin and origin.rstrip('/') != cfg.app_url.rstrip('/'):
         return JSONResponse({'detail':'Origem não autorizada.'}, status_code=403)
+    # Estas consultas abrem sessões independentes. Resolva a política antes
+    # de executar o endpoint para não disputar o pool com as conexões mantidas
+    # por requisições simultâneas (listas, fichas e fotos após a portabilidade).
+    parents = await run_in_threadpool(embedding.frame_sources)
+    hub_origins, hub_sockets = await run_in_threadpool(support.csp_sources)
     response = await call_next(request)
     response.headers['X-Request-ID'] = request.state.request_id
     response.headers['X-App-Version'] = cfg.app_version
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'same-origin'
-    parents = await run_in_threadpool(embedding.frame_sources)
     if not parents:
         response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Permissions-Policy'] = 'camera=(self), microphone=(), geolocation=()'
-    hub_origins, hub_sockets = await run_in_threadpool(support.csp_sources)
     hub_script_sources = ' '.join(hub_origins)
     # O SDK opcional do HUB injeta estilos Inter. Permissão restrita aos dois
     # hosts de fontes somente quando há um HUB ativo; a identidade da escola é local.

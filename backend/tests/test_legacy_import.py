@@ -3,6 +3,7 @@ import io
 import json
 import sqlite3
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 
 from PIL import Image
 
@@ -164,3 +165,47 @@ def test_legacy_import_preview_apply_archive_photos_and_idempotency(client, admi
     duplicate = client.post(base + "/apply", headers=admin,
                             data={"fingerprint": manifest["fingerprint"], "confirmation": "IMPORTAR"}, files=files)
     assert duplicate.status_code == 409
+
+
+def test_large_archive_remains_complete_and_student_navigation_works(client, admin, school):
+    backup, _, _ = _sample_archives()
+    with zipfile.ZipFile(io.BytesIO(backup)) as original:
+        source = sqlite3.connect(":memory:")
+        source.deserialize(original.read("school_desktop_suite/app.db"))
+    source.executemany("INSERT INTO app_logs(id, message, details_json) VALUES(?, ?, ?)",
+                       ((index, "Evento sintético", "{}") for index in range(2, 1008)))
+    source.commit()
+    with io.BytesIO() as archive_bytes:
+        with zipfile.ZipFile(archive_bytes, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("school_desktop_suite/app.db", source.serialize())
+        backup = archive_bytes.getvalue()
+    source.close()
+
+    base = f"/api/v1/schools/{school['id']}"
+    files = {"backup": ("backup.db.zip", backup, "application/zip")}
+    preview = client.post(base + "/legacy-import/preview", headers=admin, files=files)
+    assert preview.status_code == 200, preview.text
+    manifest = preview.json()
+    applied = client.post(base + "/legacy-import/apply", headers=admin,
+                          data={"fingerprint": manifest["fingerprint"], "confirmation": "IMPORTAR"}, files=files)
+    assert applied.status_code == 200, applied.text
+    result = applied.json()
+    assert result["summary"]["counts"]["source_records_archived"] == manifest["source_record_count"]
+
+    archive = client.get(base + f"/legacy-import/runs/{result['run_id']}/archive", headers=admin)
+    assert archive.status_code == 200, archive.text
+    assert len(archive.content.splitlines()) == manifest["source_record_count"] + 1
+    assert client.get(base + "/legacy-import/runs", headers=admin).status_code == 200
+
+    listed = client.get(base + "/students", headers=admin)
+    assert listed.status_code == 200, listed.text
+    student_id = listed.json()["items"][0]["id"]
+    paths = [f"/students/{student_id}", f"/students/{student_id}/documents",
+             f"/students/{student_id}/history", f"/protocols?student_id={student_id}"]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        responses = list(pool.map(lambda path: client.get(base + path, headers=admin), paths))
+    assert all(response.status_code == 200 for response in responses), [response.text for response in responses]
+    duplicate = client.post(base + "/legacy-import/apply", headers=admin,
+                            data={"fingerprint": manifest["fingerprint"], "confirmation": "IMPORTAR"}, files=files)
+    assert duplicate.status_code == 409
+    assert client.get("/health/ready").status_code == 200

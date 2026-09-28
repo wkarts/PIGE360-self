@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     legacy_import_max_mb: int = 128
     allow_sqlite: bool = False
     integration_encryption_key: str = ''
+    signature_trust_roots_dir: Path | None = Path('/data/trust-roots')
     integration_timeout_seconds: int = 15
     connect_api_base_url: str = ''
     connect_api_key: str = ''

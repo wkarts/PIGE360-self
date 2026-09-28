@@ -54,6 +54,25 @@ assert.equal(loginLink(render()).length,1,'Reativar o atalho sem mudar de tela')
 console.log('Login smoke: remoções pontuais, slogan preservado e atalho configurável OK.');
 context.state.user={id:'test-admin',name:'Administrador',role:'admin',permissions:[...new Set([...fs.readFileSync(path.join(root,'templates/app.html'),'utf8').matchAll(/can\('([^']+)'\)/g)].map(match=>match[1]))]};
 context.state.schoolId='school-test';context.state.schools=[{id:'school-test',company_id:'company-test',name:'Escola de teste'}];
+const originalObjectUrl=sandbox.PigeAPI.objectUrl;
+let activePhotos=0,maxActivePhotos=0;
+const photoRequests=[];
+sandbox.PigeAPI.objectUrl=path=>new Promise(resolve=>{
+  activePhotos++;maxActivePhotos=Math.max(maxActivePhotos,activePhotos);
+  photoRequests.push({path,done:false,finish(){activePhotos--;this.done=true;resolve('blob:synthetic-'+path);}});
+});
+for(let index=0;index<9;index++){
+  const row={photo_file_id:'photo-'+index};context.photoSrc(row);context.photoSrc(row);
+}
+await new Promise(resolve=>setTimeout(resolve,0));
+assert.equal(photoRequests.length,4,'A lista inicia no máximo quatro downloads simultâneos');
+for(let index=0;index<9;index++){
+  const request=photoRequests.find(item=>!item.done);assert.ok(request);request.finish();
+  await new Promise(resolve=>setTimeout(resolve,0));
+}
+assert.equal(photoRequests.length,9,'Cada foto é solicitada uma única vez durante re-render');
+assert.ok(maxActivePhotos<=4,'Os downloads de foto permanecem limitados durante toda a fila');
+sandbox.PigeAPI.objectUrl=originalObjectUrl;
 for(const page of Object.keys(context.pageLabels)){context.state.page=page;render();}
 context.state.page='legacy-import';context.state.legacyImport.preview={fingerprint:'a'.repeat(64),source_system:'School Desktop Suite',source_database:'app.db',source_record_count:5,table_count:5,max_package_mb:128,tables:[{name:'alunos',rows:1,destination:'alunos e pessoas'}],media:{inline_photos_convertible:1,container_files_candidate_count:0,container_unsupported_files_ignored:0,container_unsafe_or_cache_paths_ignored:0,unresolved_media_references:0,container_magento_paths_ignored:0},warnings:['Aviso de teste']};
 const legacyImportTree=render();assert.match(loginText(legacyImportTree),/Gerar prévia segura/);assert.match(loginText(legacyImportTree),/Confirme a importação/);assert.match(loginText(legacyImportTree),/alunos e pessoas/);
@@ -63,8 +82,8 @@ context.state.page='help';let guideTree=render();assert.match(loginText(guideTre
 context.state.page='students';assert.match(loginText(render()),/Pesquise antes de criar uma nova identidade/);
 const originalRequest=sandbox.PigeAPI.request;let routeCalls=[];
 sandbox.PigeAPI.request=async path=>{routeCalls.push(path);return {};};
-context.state.page='diary';await context.loadPage();context.state.page='help';await context.loadPage();
-assert.deepEqual(routeCalls,[],'Diário e Guia são carregados por seus componentes; não devem requisitar recursos /diary ou /help');
+context.state.page='diary';await context.loadPage();context.state.page='help';await context.loadPage();context.state.page='contracts';await context.loadPage();
+assert.deepEqual(routeCalls,[],'Diário, Contratos e Guia são carregados por seus componentes; não devem requisitar recursos inexistentes');
 let shortQueryCalls=0;sandbox.PigeAPI.request=async()=>{shortQueryCalls++;return {items:[],total:0};};
 context.searchPersons('a');await new Promise(resolve=>setTimeout(resolve,280));
 assert.equal(shortQueryCalls,0,'A busca de identidade exige dois caracteres antes de consultar a API');
@@ -118,6 +137,105 @@ assert.match(loginText(diaryTree),/Como começar no Diário/);
 assert.match(loginText(diaryTree),/2026/);
 sandbox.PigeAPI.request=originalRequest;
 console.log('Diary smoke: roteiro visível, ano letivo legível e endpoints da tela válidos OK.');
+
+// O kit privado é importado apenas no editor. A emissão depende de prévia sem lacunas.
+const contracts=sandbox.PigeContracts.component;
+const contractContext=contracts.setup({schoolId:'school-test',permissions:['academic.write','documents.read','documents.generate'],enrollmentId:''});
+const renderContracts=()=>contracts.render.call(contractContext,contractContext,[]);
+assert.match(loginText(renderContracts()),/Biblioteca de modelos/);
+contractContext.state.years=[{id:'year-2027',name:'Ano letivo 2027'}];
+let templateCreated=null,issueCalls=0,downloadCalls=0;
+const originalPost=sandbox.PigeAPI.post,originalDownload=sandbox.PigeAPI.download;
+const newTemplate={id:'template-1',version:1,name:'Prestação de serviços 2027',kind:'educational_contract',header:'',body:'ALUNO: {{aluno.nome}}; ANUIDADE: {{financeiro.anuidade}}',footer:'',academic_year_id:'year-2027',active:false};
+sandbox.PigeAPI.post=async(path,payload)=>{
+  if(path.endsWith('/document-templates')){templateCreated=payload;return newTemplate;}
+  if(path.endsWith('/preview'))return {content:'ALUNO: Maria; ANUIDADE: '+(payload.values['financeiro.anuidade']||'{{financeiro.anuidade}}'),header:'',footer:'',variables:{'aluno.nome':'Maria','financeiro.anuidade':payload.values['financeiro.anuidade']||''},missing_fields:payload.values['financeiro.anuidade']?[]:['financeiro.anuidade'],template_version:1};
+  if(path.endsWith('/issue')){issueCalls++;return{id:'issued-1',file_id:'file-1',template_name:'Prestação de serviços 2027'};}
+  throw new Error('POST inesperado: '+path);
+};
+sandbox.PigeAPI.request=async path=>path.includes('/document-templates?')?{items:[{...newTemplate,active:true}]}:[];
+sandbox.PigeAPI.download=async()=>{downloadCalls++;};
+const kit={name:'Prestação de serviços 2027',kind:'educational_contract',body:newTemplate.body};
+await contractContext.importJson({target:{files:[{name:'modelo-2027.json',size:400,text:async()=>JSON.stringify(kit)}],value:'kit'}});
+assert.equal(contractContext.state.draft.academic_year_id,'year-2027');
+assert.equal(contractContext.state.draft.active,false,'Kit importado aguarda revisão antes de ativar');
+assert.equal(contractContext.state.draft.require_signature,true,'Contrato exige assinatura A1 por padrão');
+assert.equal(templateCreated,null,'Importação local não publica o contrato');
+assert.match(loginText(renderContracts()),/Papel timbrado/);
+await contractContext.save();assert.equal(templateCreated.active,false);assert.equal(templateCreated.academic_year_id,'year-2027');assert.equal(templateCreated.require_signature,true);
+contractContext.state.enrollment={id:'enrollment-1',student_id:'student-1',number:'1',student_name:'Maria',year_name:'2027'};
+contractContext.state.applicable=[{...newTemplate,active:true}];contractContext.state.templateId='template-1';contractContext.state.tab='issue';
+await contractContext.preview();assert.deepEqual(Array.from(contractContext.state.preview.missing_fields),['financeiro.anuidade']);
+await contractContext.issue();assert.equal(issueCalls,0,'Emissão bloqueada com campos pendentes');
+contractContext.setValue('financeiro.anuidade',{target:{value:'1200,00'}});
+assert.equal(contractContext.state.previewStale,true);
+await contractContext.preview();await contractContext.issue();assert.equal(issueCalls,1);assert.equal(downloadCalls,1);
+sandbox.PigeAPI.post=originalPost;sandbox.PigeAPI.request=originalRequest;sandbox.PigeAPI.download=originalDownload;
+console.log('Contracts smoke: JSON privado, vigência, campos pendentes e emissão conferidos OK.');
+
+// A senha A1 nunca permanece no estado após upload; a revisão usa o documento exato.
+const signingComponent=sandbox.PigeSigning.component;
+const signing=signingComponent.setup({schoolId:'school-test',permissions:['schools.manage','documents.read','documents.validate'],role:'admin',enrollmentId:'',issuedId:''});
+let receivedA1=false,receivedValidation=false,reviewStatus='pending_validation';
+document.getElementById=()=>null;
+sandbox.PigeAPI.request=async(path,options={})=>{
+  if(path.endsWith('/signing-certificate/a1')){
+    if(options.method==='PUT'){receivedA1=true;assert.equal(options.body.get('password'),'senha-de-teste');return {subject:'CN=Escola',expires_at:'2028-12-31T00:00:00Z',certificate_sha256:'a'.repeat(64)};}
+    return{configured:receivedA1,certificate:receivedA1?{subject:'CN=Escola',expires_at:'2028-12-31T00:00:00Z',certificate_sha256:'a'.repeat(64)}:null};
+  }
+  if(path.includes('/issued-documents/signatures/pending'))return{items:[{document_id:'issued-1',student_name:'Maria',enrollment_id:'enrollment-1',signature_status:'pending_validation'}],total:1};
+  if(path.endsWith('/issued-documents/issued-1/signatures'))return{document_id:'issued-1',status:reviewStatus,file_id:'signed-1',signature_valid:true,cryptographic_valid:true,trust_status:'trusted',signatures:[],revisions:[]};
+  if(path.endsWith('/issued-documents/issued-1/validate-signature')){receivedValidation=true;reviewStatus='verified';assert.equal(options.body.get('signer_cpf'),'12345678909');return{signature_status:'verified'};}
+  throw new Error('Requisição inesperada: '+path);
+};
+await signing.load();
+const renderSigning=()=>signingComponent.render.call(signing,signing,[]);
+assert.match(loginText(renderSigning()),/Certificado A1/);
+const p12=new File(['conteúdo de teste'],'escola.p12',{type:'application/x-pkcs12'});
+signing.certificateChanged({target:{files:[p12]}});signing.state.certificatePassword='senha-de-teste';
+await signing.saveCertificate();assert.ok(receivedA1);assert.equal(signing.state.certificatePassword,'');
+await signing.openReview('issued-1');assert.match(loginText(renderSigning()),/Conferência documental/i);
+signing.reportChanged({target:{files:[new File(['%PDF-1.4'],'validar.pdf',{type:'application/pdf'})]}});
+signing.state.signerCpf='123.456.789-09';signing.state.validationReference='VALIDAR-123';signing.state.confirmedReview=true;
+await signing.validate();assert.ok(receivedValidation);assert.equal(signing.state.review.status,'verified');
+sandbox.PigeAPI.request=originalRequest;
+console.log('Signing smoke: metadados A1, segredo efêmero e decisão auditável OK.');
+
+// Campanha salva o modelo selecionado; a inscrição aprovada emite a revisão congelada.
+const expansion=sandbox.PigeExpansion.component.setup({schoolId:'school-test',page:'online',permissions:['admissions.manage','admissions.write','documents.read','documents.generate']});
+const originalPatch=sandbox.PigeAPI.patch;
+const templateChoice={id:'template-contract',version:8,name:'Contrato 2027',active:true,require_signature:true,academic_year_id:'year-2027'};
+const group={id:'group-2027',academic_year_id:'year-2027',name:'Turma A',capacity:30};
+let campaignSaved=null,frozenPreviewVersion=0,frozenIssueVersion=0,finalizeCount=0;
+const admission={id:'admission-1',version:3,number:'PRE-1',status:'approved',enrollment_id:'enrollment-1',contract_template_id:'template-contract',contract_template_version:5,contract:{required:true,template_id:'template-contract',template_version:5,issued_document_id:null,signature_status:'awaiting_school'}};
+sandbox.PigeAPI.request=async path=>{
+  if(path.endsWith('/admission-readiness'))return{ready:true,campaigns:[],issues:[]};
+  if(path.endsWith('/admission-campaigns'))return[];
+  if(path.endsWith('/class-groups'))return[group];
+  if(path.endsWith('/document-templates'))return{items:[templateChoice]};
+  if(path.endsWith('/document-templates/fields'))return{fields:[{key:'financeiro.anuidade',label:'Anuidade',source:'manual'}]};
+  if(path.includes('/admissions-summary'))return{counts:{}};
+  if(path.includes('/admissions/admission-1'))return admission;
+  if(path.includes('/bank-charges'))return{items:[],total:0};
+  if(path.includes('/admissions?'))return{items:[],total:0};
+  throw new Error('GET inesperado: '+path);
+};
+sandbox.PigeAPI.post=async(path,payload)=>{
+  if(path.endsWith('/admission-campaigns')){campaignSaved=payload;return{};}
+  if(path.endsWith('/document-templates/template-contract/preview')){frozenPreviewVersion=payload.template_version;return{header:'',content:'ALUNO Maria',footer:'',variables:{'aluno.nome':'Maria'},missing_fields:[],template_version:5};}
+  if(path.endsWith('/document-templates/template-contract/issue')){frozenIssueVersion=payload.template_version;return{id:'issued-1'};}
+  if(path.endsWith('/admissions/admission-1/finalize')){finalizeCount++;return{};}
+  throw new Error('POST inesperado: '+path);
+};
+await expansion.load();expansion.newCampaign();
+expansion.s.campaignForm.class_group_ids=['group-2027'];expansion.s.campaignForm.contract_template_id='template-contract';
+await expansion.saveCampaign();assert.equal(campaignSaved.contract_template_id,'template-contract');
+expansion.s.selected=admission;
+await expansion.previewFrozenContract();assert.equal(frozenPreviewVersion,5);
+await expansion.issueFrozenContract();assert.equal(frozenIssueVersion,5);
+await expansion.finalize();assert.equal(finalizeCount,0,'Sem revisão verificada, a matrícula não pode ser efetivada');
+sandbox.PigeAPI.request=originalRequest;sandbox.PigeAPI.post=originalPost;sandbox.PigeAPI.patch=originalPatch;
+console.log('Campaign smoke: modelo do período, revisão congelada e bloqueio da matrícula OK.');
 
 // Exercita o componente assistido e impede preenchimento fora da lista/edição atrasada.
 const target={name:'Nome preservado',cpf:''};

@@ -3,6 +3,7 @@ from sqlalchemy import create_engine, pool
 from app.config import settings
 from app.models import Base
 from app.institution import InstitutionAsset, InstitutionIdentity  # noqa: F401 — metadados dos ativos públicos
+from app.contract_signatures import SchoolSigningCertificate, IssuedDocumentSignature  # noqa: F401
 
 config = context.config
 url = settings().database_url

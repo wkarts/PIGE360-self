@@ -357,6 +357,32 @@ class StudentDocument(Record, Scoped, Base):
     validated_by: Mapped[str | None] = mapped_column(ForeignKey('users.id'))
     __table_args__ = (CheckConstraint("status IN ('received','validated','rejected','waived','archived')", name='document_status'),)
 
+class DocumentTemplate(Record, Scoped, Base):
+    """Modelo editável por escola, com vigência opcional por ano letivo."""
+    __tablename__ = 'document_templates'
+    name: Mapped[str] = mapped_column(String(160))
+    kind: Mapped[str] = mapped_column(String(40), default='educational_contract')
+    header: Mapped[str] = mapped_column(Text, default='')
+    body: Mapped[str] = mapped_column(Text)
+    footer: Mapped[str] = mapped_column(Text, default='')
+    academic_year_id: Mapped[str | None] = mapped_column(ForeignKey('academic_years.id'), index=True)
+    valid_from: Mapped[date | None] = mapped_column(Date)
+    valid_until: Mapped[date | None] = mapped_column(Date)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    require_signature: Mapped[bool] = mapped_column(Boolean, default=False)
+    letterhead_file_id: Mapped[str | None] = mapped_column(ForeignKey('files.id'))
+    __table_args__ = (CheckConstraint('valid_until IS NULL OR valid_from IS NULL OR valid_until >= valid_from', name='template_validity'),)
+
+class DocumentTemplateRevision(Record, Scoped, Base):
+    """Cópia imutável por API de cada versão do modelo antes de emitir."""
+    __tablename__ = 'document_template_revisions'
+    template_id: Mapped[str] = mapped_column(ForeignKey('document_templates.id'), index=True)
+    version_number: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    content: Mapped[dict] = mapped_column(JSON)
+    created_by: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    __table_args__ = (UniqueConstraint('template_id', 'version_number', name='uq_document_template_revision_version'),)
+
 class IssuedDocument(Record, Scoped, Base):
     __tablename__ = 'issued_documents'
     student_id: Mapped[str] = mapped_column(ForeignKey('students.id'), index=True)
@@ -366,6 +392,13 @@ class IssuedDocument(Record, Scoped, Base):
     template_version: Mapped[str] = mapped_column(String(20), default='1')
     snapshot: Mapped[dict] = mapped_column(JSON)
     created_by: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    template_id: Mapped[str | None] = mapped_column(ForeignKey('document_templates.id'), index=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(120))
+    signature_status: Mapped[str] = mapped_column(String(24), default='unsigned')
+    __table_args__ = (
+        UniqueConstraint('school_id', 'idempotency_key', name='uq_issued_document_idempotency'),
+        UniqueConstraint('school_id', 'enrollment_id', 'template_id', 'template_version', name='uq_issued_document_template_enrollment_version'),
+    )
 
 class Protocol(Record, Scoped, Base):
     __tablename__ = 'protocols'
