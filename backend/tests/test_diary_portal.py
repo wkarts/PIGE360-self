@@ -122,11 +122,11 @@ def test_diary_communications_require_consent_and_are_scoped_to_portal_access(ap
     staff_rows = api.get("/diaries/" + diary["id"] + "/communications")
     assert staff_rows[0]["read_at"]
     assert staff_rows[0]["academic_period_id"] == period["id"]
-    submitted = api.post("/diaries/" + diary["id"] + "/submit", {"version": diary["version"]})
-    reviewed = api.post("/diaries/" + diary["id"] + "/review", {"version": submitted["version"]})
+    submitted = api.post("/diaries/" + diary["id"] + "/submit", {"version": diary["version"]}, expect=200)
+    reviewed = api.post("/diaries/" + diary["id"] + "/review", {"version": submitted["version"]}, expect=200)
     closed = api.post("/diaries/" + diary["id"] + "/close", {
         "academic_period_id": period["id"], "reason": "Conferência do período", "version": reviewed["version"],
-    })
+    }, expect=200)
     with SessionLocal() as db:
         snapshot = db.get(m.DiaryClosure, closed["closure"]["id"]).snapshot
         assert len(snapshot["communications"]) == 1
