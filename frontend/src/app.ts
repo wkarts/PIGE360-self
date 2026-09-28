@@ -70,7 +70,7 @@ namespace PigeUI {
   const canonicalTypes:Record<string,string>={parent:'guardian',mother:'guardian',father:'guardian',financial_responsible:'guardian',legal_responsible:'guardian',collaborator:'employee',staff:'employee'};
   const quickTypes=['student','teacher','employee','guardian','supplier','service_provider','customer','partner','other'];
   function selectedPersonTypes():string[]{return Array.from(new Set(personTypesFrom(state.modal.form).map(t=>canonicalTypes[t]||t)));}
-  function lockedPersonType(type:string):boolean{const primary=state.modal.kind.split('-')[0];if(['student','teacher','employee','guardian'].includes(primary)&&type===primary)return true;return Boolean(PigeDossier.state.profiles[type]||(type==='guardian'&&PigeDossier.state.rows.some(r=>r.direction==='student'&&r.active&&!r.local)));}
+  function lockedPersonType(type:string):boolean{const primary=state.modal.kind.split('-')[0];if(['student','teacher','employee','guardian'].includes(primary)&&type===primary)return true;if(type==='guardian'&&PigeDossier.state.rows.some(r=>r.direction==='student'&&r.active&&!r.local))return true;return selectedPersonTypes().includes(type)&&Boolean(PigeDossier.state.profiles[type]);}
   function togglePersonType(type:string):void{if(lockedPersonType(type)||state.busy||PigeDossier.state.loading)return;const types=personTypesFrom(state.modal.form);state.modal.form.person_types=selectedPersonTypes().includes(type)?types.filter(t=>(canonicalTypes[t]||t)!==type):[...types,type];state.personTypeQuery='';}
   function availablePersonTypes():string[]{const selected=selectedPersonTypes();return quickTypes.filter(t=>!selected.includes(t)&&personTypeLabel(t).toLocaleLowerCase('pt-BR').includes(state.personTypeQuery.toLocaleLowerCase('pt-BR'))&&(state.modal.form.entity_kind!=='organization'||['supplier','service_provider','customer','partner','other'].includes(t)));}
   function familyRelevant():boolean{return PigeDossier.eligible(state.modal.kind)&&state.modal.form.entity_kind!=='organization'&&(selectedPersonTypes().some(t=>['student','guardian'].includes(t))||PigeDossier.state.rows.length>0);}
@@ -235,7 +235,16 @@ namespace PigeUI {
     state.personTypeQuery='';state.assistSource='';
     if(PigeDossier.eligible(kind)){
       const primary=kind.split('-')[0], additions:Field[]=[];
-      for(const [profile,items] of [['student',studentFields()],['teacher',teacherFields()],['employee',employeeFields()]] as [string,Field[]][]){
+      const profileGroups:[string,Field[]][]=[['student',studentFields()],['teacher',teacherFields()],['employee',employeeFields()]];
+      for(const config of Object.values(businessTypes)){
+        profileGroups.push([config.code,[
+          field('contact_name','Pessoa de contato'),
+          field('category',config.category),
+          field('reference','Referência interna'),
+          field('notes','Observações deste vínculo','textarea',false,undefined,true)
+        ]]);
+      }
+      for(const [profile,items] of profileGroups){
         if(primary===profile)continue;
         for(const item of items){const key=profile+'__'+item.key;additions.push({...item,key,label:personTypeLabel(profile)+' · '+item.label});form[key]=item.key==='employment_type'?'other':item.key==='employment_status'?'active':item.type==='number'?0:'';}
       }
