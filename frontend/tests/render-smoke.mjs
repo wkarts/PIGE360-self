@@ -18,7 +18,7 @@ for(const filename of fs.readdirSync(path.join(root,'templates')).filter(name=>n
 }
 const applications=[];
 const document={createElement:()=>({}),querySelector:()=>null,querySelectorAll:()=>[],title:''};
-const sandbox={crypto,console,document,navigator:{onLine:true},location:{hash:'',pathname:'/',origin:'http://test'},localStorage:{getItem:()=>null,setItem:()=>{}},URLSearchParams,URL,Intl,Headers,FormData,Blob,File,Event,CustomEvent,setTimeout,clearTimeout};
+const sandbox={crypto,console,document,navigator:{onLine:true},location:{hash:'',pathname:'/',origin:'http://test'},history:{replaceState(){}},localStorage:{getItem:()=>null,setItem:()=>{}},URLSearchParams,URL,Intl,Headers,FormData,Blob,File,Event,CustomEvent,setTimeout,clearTimeout};
 sandbox.window=sandbox;sandbox.addEventListener=()=>{};
 sandbox.fetch=()=>{throw new Error('O teste de renderização não pode acessar a rede.');};
 vm.createContext(sandbox);
@@ -55,6 +55,30 @@ console.log('Login smoke: remoções pontuais, slogan preservado e atalho config
 context.state.user={id:'test-admin',name:'Administrador',role:'admin',permissions:[...new Set([...fs.readFileSync(path.join(root,'templates/app.html'),'utf8').matchAll(/can\('([^']+)'\)/g)].map(match=>match[1]))]};
 context.state.schoolId='school-test';context.state.schools=[{id:'school-test',company_id:'company-test',name:'Escola de teste'}];
 for(const page of Object.keys(context.pageLabels)){context.state.page=page;render();}
+context.state.page='help';let guideTree=render();assert.match(loginText(guideTree),/Siga a ordem da rotina escolar/);assert.match(loginText(guideTree),/Cadastre cada pessoa uma vez/);
+context.state.page='students';assert.match(loginText(render()),/Pesquise antes de criar uma nova identidade/);
+const originalRequest=sandbox.PigeAPI.request;let routeCalls=[];
+sandbox.PigeAPI.request=async path=>{routeCalls.push(path);return {};};
+context.state.page='diary';await context.loadPage();context.state.page='help';await context.loadPage();
+assert.deepEqual(routeCalls,[],'Diário e Guia são carregados por seus componentes; não devem requisitar recursos /diary ou /help');
+let shortQueryCalls=0;sandbox.PigeAPI.request=async()=>{shortQueryCalls++;return {items:[],total:0};};
+context.searchPersons('a');await new Promise(resolve=>setTimeout(resolve,280));
+assert.equal(shortQueryCalls,0,'A busca de identidade exige dois caracteres antes de consultar a API');
+let pendingSearches=[];sandbox.PigeAPI.request=path=>new Promise(resolve=>pendingSearches.push({path,resolve}));
+context.searchPersons('ma');await new Promise(resolve=>setTimeout(resolve,280));
+context.searchPersons('maria');await new Promise(resolve=>setTimeout(resolve,280));
+assert.equal(pendingSearches.length,2);
+pendingSearches[1].resolve({items:[{id:'latest-person',name:'Maria'}],total:1});await new Promise(resolve=>setTimeout(resolve,0));
+pendingSearches[0].resolve({items:[{id:'stale-person',name:'Ma'}],total:1});await new Promise(resolve=>setTimeout(resolve,0));
+assert.equal(context.state.personChoices[0].id,'latest-person','Uma resposta antiga não pode substituir os resultados da busca mais recente');
+sandbox.PigeAPI.request=originalRequest;
+const adminUser=context.state.user;
+context.state.user={id:'teacher-test',name:'Professor',role:'teacher',permissions:['diary.read'],school_ids:['school-test']};
+context.state.page='dashboard';await context.navigate('help');assert.equal(context.state.page,'help');assert.match(loginText(render()),/Professores acessam somente as turmas atribuídas/);
+await context.navigate('diary');assert.equal(context.state.page,'diary','Professor com diary.read deve conseguir abrir o Diário');
+context.state.page='dashboard';context.state.user={...context.state.user,permissions:[]};await context.navigate('diary');assert.equal(context.state.page,'dashboard','Acesso ao Diário continua protegido pela permissão');
+context.state.user=adminUser;
+console.log('Route and registration smoke: Diário sem rota fantasma, Guia acessível e busca de identidade limitada e ordenada OK.');
 assert.equal(typeof context.newPerson,'function','newPerson deve ser exposta por setup()');
 context.state.page='people';context.newPerson();render();
 assert.equal(context.state.modal.kind,'person');
@@ -76,6 +100,20 @@ assert.ok(!loginText(portalTree).includes('Não há processo de matrícula abert
 const diagnosticContext=sandbox.PigeDiagnostics.component.setup();
 sandbox.PigeDiagnostics.component.render.call(diagnosticContext,diagnosticContext,[]);
 console.log('Portal vazio, falha de API e render do diagnóstico OK.');
+
+const diaryComponent=sandbox.PigeDiary.component;
+const diaryContext=diaryComponent.setup({schoolId:'school-test',permissions:['diary.read','diary.configure']});
+const renderDiary=()=>diaryComponent.render.call(diaryContext,diaryContext,[]);
+let diaryCalls=[];
+sandbox.PigeAPI.request=async path=>{diaryCalls.push(path);if(path.endsWith('/academic-years'))return[{id:'year-test',name:'2026',status:'active',starts_on:'2026-01-01',ends_on:'2026-12-31'}];if(path.endsWith('/diary-dashboard'))return{items:[],totals:{}};return[];};
+await diaryContext.load();
+assert.ok(diaryCalls.includes('/schools/school-test/academic-years'));
+assert.ok(!diaryCalls.includes('/schools/school-test/diary'));
+diaryContext.state.tab='setup';let diaryTree=renderDiary();
+assert.match(loginText(diaryTree),/Como começar no Diário/);
+assert.match(loginText(diaryTree),/2026/);
+sandbox.PigeAPI.request=originalRequest;
+console.log('Diary smoke: roteiro visível, ano letivo legível e endpoints da tela válidos OK.');
 
 // Exercita o componente assistido e impede preenchimento fora da lista/edição atrasada.
 const target={name:'Nome preservado',cpf:''};

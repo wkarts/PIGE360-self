@@ -10,7 +10,7 @@ namespace PigeDiary {
   export const component={props:['schoolId','permissions'],render:PigeRenders.diary,setup(props:Props){
     const state=Vue.reactive({
       busy:false,error:'',notice:'',tab:'diaries',
-      diaries:[] as Diary[],selected:null as Diary|null,periods:[] as Row[],components:[] as Row[],groups:[] as Row[],assignments:[] as Row[],plans:[] as Row[],
+      diaries:[] as Diary[],selected:null as Diary|null,academicYears:[] as Row[],periods:[] as Row[],components:[] as Row[],groups:[] as Row[],assignments:[] as Row[],plans:[] as Row[],
       periodForm:{academic_year_id:'',name:'',starts_on:'',ends_on:'',order_index:1,active:true},
       componentForm:{name:'',code:'',workload_hours:0,active:true},
       diaryForm:{class_group_id:'',component_id:'',teacher_assignment_id:'',notes:''},
@@ -45,11 +45,12 @@ namespace PigeDiary {
       PigeAPI.request<Diary[]>(base()+'/diaries'),
       PigeAPI.request<Row[]>(base()+'/academic-periods'),
       PigeAPI.request<Row[]>(base()+'/curriculum-components'),
+      PigeAPI.request<Row[]>(base()+'/academic-years'),
       PigeAPI.request<Row[]>(base()+'/class-groups').catch(()=>[] as Row[]),
       PigeAPI.request<Row[]>(base()+'/teacher-assignments').catch(()=>[] as Row[]),
       PigeAPI.request<any>(base()+'/diary-dashboard').catch(()=>({items:[],totals:{}}))
-    ]);state.diaries=results[0] as Diary[];state.periods=results[1] as Row[];state.components=results[2] as Row[];state.groups=results[3] as Row[];state.assignments=results[4] as Row[];state.dashboard=results[5] as {items:Row[];totals:Row};
-      if(!state.periodForm.academic_year_id&&state.groups.length)state.periodForm.academic_year_id=str(state.groups[0].academic_year_id);
+    ]);state.diaries=results[0] as Diary[];state.periods=results[1] as Row[];state.components=results[2] as Row[];state.academicYears=results[3] as Row[];state.groups=results[4] as Row[];state.assignments=results[5] as Row[];state.dashboard=results[6] as {items:Row[];totals:Row};
+      if(!state.periodForm.academic_year_id&&state.academicYears.length){const year=state.academicYears.find(x=>x.status==='active'||x.active)||state.academicYears[0];state.periodForm.academic_year_id=str(year.id);}
     }
     async function load(){await run(loadBase);}
     async function selectDiary(d:Diary){await run(async()=>{state.selected=await PigeAPI.request<Diary>(base()+'/diaries/'+d.id);state.summary=await PigeAPI.request<any>(base()+'/diaries/'+d.id+'/summary');state.history=await PigeAPI.request<any>(base()+'/diaries/'+d.id+'/history');state.plans=await PigeAPI.request<Row[]>(base()+'/curriculum-plans?class_group_id='+encodeURIComponent(d.class_group_id)+'&component_id='+encodeURIComponent(d.component_id));state.selectedLesson=null;state.attendance=[];state.selectedAssessment=null;state.assessmentRoster=[];state.planForm.class_group_id=d.class_group_id;state.planForm.component_id=d.component_id;state.planForm.teacher_assignment_id=d.teacher_assignment_id||'';state.assessments=await PigeAPI.request<Row[]>(base()+'/diaries/'+d.id+'/assessments');state.assessmentRules=await PigeAPI.request<Row[]>(base()+'/diaries/'+d.id+'/assessment-rules');state.periodResults=[];state.occurrences=await PigeAPI.request<Row[]>(base()+'/diaries/'+d.id+'/occurrences');state.occurrenceForm={academic_period_id:'',enrollment_id:'',occurrence_date:today(),kind:'pedagogical',title:'',description:'',status:'draft'};const firstPeriod=state.periods.find(p=>p.academic_year_id===d.academic_year_id);if(firstPeriod)selectRulePeriod(str(firstPeriod.id));state.opinions=await PigeAPI.request<Row[]>(base()+'/diaries/'+d.id+'/opinions');state.pedagogicalRecords=await PigeAPI.request<Row[]>(base()+'/diaries/'+d.id+'/pedagogical-records');state.communications=await PigeAPI.request<Row[]>(base()+'/diaries/'+d.id+'/communications');state.communicationRecipients=[];state.communicationForm={enrollment_id:'',academic_period_id:'',occurrence_id:'',recipient_guardian_link_ids:[],title:'',message:'',client_key:PigeOnline.newId()};});}

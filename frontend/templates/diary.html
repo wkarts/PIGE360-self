@@ -20,16 +20,29 @@
       </div>
     </section>
 
+    <details class="panel x-card" open>
+      <summary><strong>Como começar no Diário · roteiro rápido</strong></summary>
+      <ol>
+        <li>Na aba <strong>Configuração</strong>, crie os períodos avaliativos e os componentes curriculares; depois abra um diário para uma turma e componente.</li>
+        <li>Em <strong>Diários</strong>, selecione a turma. Registre o planejamento e cada aula; a chamada é aberta dentro da aula registrada.</li>
+        <li>Em <strong>Avaliações</strong>, lance instrumentos e resultados. A regra de cálculo é definida pela escola e a consolidação é uma ação explícita.</li>
+        <li>Complete pareceres, registros e ocorrências. Envie o diário para revisão; após a conferência, a coordenação pode fechar o período ou o diário.</li>
+        <li>Para compartilhar uma comunicação com a família, a conta e o vínculo legal precisam estar ativos e a família precisa autorizar o acesso ao Diário no portal.</li>
+      </ol>
+      <p class="muted">Se a turma não aparecer na chamada, confira se há matrículas ativas ou suspensas nessa turma. <a href="#/help">Abrir o guia completo da aplicação</a>.</p>
+    </details>
+
     <template v-if="state.tab==='setup' && can('diary.configure')">
       <div class="x-grid">
         <section class="panel x-card">
           <h2>Períodos letivos</h2>
+          <p v-if="!state.academicYears.length" class="alert info">Cadastre um ano letivo em <a href="#/academic">Estrutura acadêmica</a> antes de criar períodos para o Diário.</p>
           <form class="x-form" @submit.prevent="createPeriod">
-            <label>Ano letivo<select v-model="state.periodForm.academic_year_id" required><option value="">Selecione</option><option v-for="g in state.groups" :key="g.academic_year_id" :value="g.academic_year_id">{{g.academic_year_id}}</option></select></label>
+            <label>Ano letivo<select v-model="state.periodForm.academic_year_id" required><option value="">Selecione</option><option v-for="year in state.academicYears" :key="year.id" :value="year.id">{{year.name}} · {{date(year.starts_on)}} a {{date(year.ends_on)}}</option></select></label>
             <label>Nome<input v-model="state.periodForm.name" required maxlength="80" placeholder="Ex.: 1º bimestre"></label>
             <div class="x-grid"><label>Início<input type="date" v-model="state.periodForm.starts_on" required></label><label>Fim<input type="date" v-model="state.periodForm.ends_on" required></label></div>
             <label>Ordem<input type="number" min="1" max="30" v-model.number="state.periodForm.order_index"></label>
-            <button class="btn btn-primary">Criar período</button>
+            <button class="btn btn-primary" :disabled="!state.academicYears.length">Criar período</button>
           </form>
           <div class="x-list"><div v-for="p in state.periods" :key="p.id" class="x-record"><strong>{{p.name}}</strong><span>{{date(p.starts_on)}} a {{date(p.ends_on)}}</span></div></div>
         </section>
@@ -54,8 +67,9 @@
             <label>Componente<select v-model="state.diaryForm.component_id" required><option value="">Selecione</option><option v-for="c in state.components" :key="c.id" :value="c.id">{{c.name}}</option></select></label>
             <label>Atribuição docente<select v-model="state.diaryForm.teacher_assignment_id"><option value="">Sem atribuição definida</option><option v-for="a in state.assignments" :key="a.id" :value="a.id">{{a.subject_name||a.id}} · {{a.class_group_id}}</option></select></label>
           </div>
+          <p v-if="!state.groups.length || !state.components.length" class="alert info">Antes de abrir o diário, cadastre uma turma em <a href="#/academic">Estrutura acadêmica</a> e crie o componente curricular nesta aba.</p>
           <label>Observações<textarea v-model="state.diaryForm.notes" rows="2" maxlength="4000"></textarea></label>
-          <button class="btn btn-primary">Abrir diário</button>
+          <button class="btn btn-primary" :disabled="!state.groups.length || !state.components.length">Abrir diário</button>
         </form>
       </section>
     </template>
@@ -70,7 +84,7 @@
     <template v-if="state.tab==='diaries'">
       <section v-if="!state.selected" class="panel x-card">
         <div class="x-heading"><div><h2>Diários disponíveis</h2><p>Professores visualizam somente diários associados às próprias atribuições.</p></div></div>
-        <p v-if="!state.diaries.length" class="empty">Nenhum diário disponível.</p>
+        <div v-if="!state.diaries.length" class="empty"><p>Nenhum diário disponível para esta escola.</p><p>Se você tiver permissão de configuração, crie períodos e componentes na aba <strong>Configuração</strong>. Caso contrário, solicite à coordenação que abra um diário para sua turma.</p><button v-if="can('diary.configure')" class="btn btn-secondary" @click="state.tab='setup'">Abrir configuração</button></div>
         <div class="x-list">
           <button v-for="d in state.diaries" :key="d.id" class="x-record" @click="selectDiary(d)">
             <div><strong>{{d.class_name}} · {{d.component_name}}</strong><span>{{d.year_name}} · {{d.teacher_name||'Professor não definido'}}</span></div>
