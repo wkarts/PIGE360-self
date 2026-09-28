@@ -8,11 +8,13 @@
         <div class="actions"><button class="btn btn-secondary" @click="load">Atualizar</button></div>
       </div>
       <div class="tabs">
+        <button :class="{active:state.tab==='dashboard'}" @click="state.tab='dashboard'">Pendências</button>
         <button :class="{active:state.tab==='diaries'}" @click="state.tab='diaries'">Diários</button>
         <button :class="{active:state.tab==='planning'}" @click="state.tab='planning'">Planejamento</button>
         <button :class="{active:state.tab==='assessments'}" @click="state.tab='assessments'">Avaliações</button>
         <button :class="{active:state.tab==='opinions'}" @click="state.tab='opinions'">Pareceres</button>
         <button :class="{active:state.tab==='records'}" @click="state.tab='records'">Registros pedagógicos</button>
+        <button :class="{active:state.tab==='occurrences'}" @click="state.tab='occurrences'">Ocorrências</button>
         <button v-if="can('diary.configure')" :class="{active:state.tab==='setup'}" @click="state.tab='setup'">Configuração</button>
       </div>
     </section>
@@ -57,6 +59,13 @@
       </section>
     </template>
 
+    <template v-if="state.tab==='dashboard'">
+      <section class="panel x-card"><div class="x-heading"><div><h2>Pendências do Diário</h2><p>Chamadas, resultados, consolidações e revisão de ocorrências.</p></div><button class="btn btn-secondary" @click="load">Atualizar</button></div>
+        <div class="stats-grid"><div class="stat-card"><span>Diários</span><strong>{{state.dashboard.totals.diaries||0}}</strong></div><div class="stat-card"><span>Chamadas</span><strong>{{state.dashboard.totals.lessons_without_complete_attendance||0}}</strong></div><div class="stat-card"><span>Resultados</span><strong>{{state.dashboard.totals.assessment_results_pending||0}}</strong></div><div class="stat-card"><span>Consolidações</span><strong>{{state.dashboard.totals.consolidation_results_pending||0}}</strong></div><div class="stat-card"><span>Ocorrências a revisar</span><strong>{{state.dashboard.totals.occurrences_pending_review||0}}</strong></div></div>
+        <div class="x-list"><button v-for="d in state.dashboard.items" :key="d.id" class="x-record" @click="state.tab='diaries';selectDiary(d)"><div><strong>{{d.class_name}} · {{d.component_name}}</strong><span>{{d.year_name}} · {{label(d.status)}}</span></div><span>Chamada: {{d.pending.lessons_without_complete_attendance}} · Avaliação: {{d.pending.assessment_results_pending}} · Consolidação: {{d.pending.consolidation_results_pending}} · Ocorrências: {{d.pending.occurrences_pending_review}}</span></button></div>
+      </section>
+    </template>
+
     <template v-if="state.tab==='diaries'">
       <section v-if="!state.selected" class="panel x-card">
         <div class="x-heading"><div><h2>Diários disponíveis</h2><p>Professores visualizam somente diários associados às próprias atribuições.</p></div></div>
@@ -76,6 +85,17 @@
             <div class="actions"><button class="btn btn-secondary" @click="state.selected=null;state.selectedLesson=null">← Voltar</button><button v-if="can('diary.reports')" class="btn btn-secondary" @click="report">Baixar PDF</button></div>
           </div>
           <div v-if="state.summary" class="stats-grid"><div class="stat-card"><span>Registros de aula</span><strong>{{state.summary.lessons}}</strong><small>{{state.summary.lesson_count}} aula(s)</small></div><div class="stat-card"><span>Alunos</span><strong>{{state.summary.roster}}</strong><small>matrículas ativas/suspensas</small></div><div class="stat-card"><span>Faltas</span><strong>{{state.summary.absences}}</strong><small>não justificadas</small></div><div class="stat-card"><span>Faltas justificadas</span><strong>{{state.summary.justified_absences}}</strong><small>registros atuais</small></div></div>
+        </section>
+
+        <section v-if="can('diary.reports')" class="panel x-card">
+          <h2>Relatórios oficiais</h2>
+          <div class="x-grid">
+            <label>Relatório<select v-model="state.reportType"><option value="class_diary">Diário da turma/componente</option><option value="lessons">Registro de aulas</option><option value="attendance">Mapa de frequência</option><option value="assessments">Mapa de avaliações/notas/conceitos</option><option value="opinions">Pareceres descritivos</option><option value="occurrences">Ocorrências pedagógicas</option><option value="student_record">Ficha individual</option><option value="period_consolidation">Consolidação por período</option><option value="closure">Relatório de fechamento</option><option value="pending">Relatório de pendências</option><option value="revision_history">Histórico de retificações</option><option value="audit_validation">Auditoria e validação</option></select></label>
+            <label v-if="['period_consolidation','class_diary','attendance','assessments','opinions','occurrences','student_record'].includes(state.reportType)">Período<select v-model="state.reportPeriod"><option value="">Todos</option><option v-for="p in state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id)" :key="p.id" :value="p.id">{{p.name}}</option></select></label>
+            <label v-if="state.reportType==='student_record'">Aluno<select v-model="state.reportEnrollment"><option value="">Selecione</option><option v-for="r in state.selected.roster||[]" :key="r.enrollment_id" :value="r.enrollment_id">{{r.name}} · {{r.number}}</option></select></label>
+          </div>
+          <button class="btn btn-primary" @click="report" :disabled="(state.reportType==='period_consolidation'&&!state.reportPeriod)||(state.reportType==='student_record'&&!state.reportEnrollment)">Baixar PDF</button>
+          <p class="muted">Os PDFs usam a identidade institucional da escola. A consolidação mostra a regra e a versão calculada.</p>
         </section>
 
         <section v-if="state.selected.status==='open' && can('diary.write')" class="panel x-card">
@@ -153,6 +173,21 @@
     <template v-if="state.tab==='assessments'">
       <section v-if="!state.selected" class="panel x-card"><p>Selecione um diário para lançar avaliações.</p></section>
       <template v-else>
+        <section v-if="can('diary.configure')" class="panel x-card">
+          <h2>Regra de avaliação e consolidação</h2>
+          <form class="x-form" @submit.prevent="saveAssessmentRule">
+            <div class="x-grid"><label>Período<select v-model="state.assessmentRuleForm.period_id" @change="selectRulePeriod(state.assessmentRuleForm.period_id)" required><option value="">Selecione</option><option v-for="p in state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id)" :key="p.id" :value="p.id">{{p.name}}</option></select></label><label>Método<select v-model="state.assessmentRuleForm.method"><option value="arithmetic">Média aritmética</option><option value="weighted">Média ponderada</option><option value="concept">Conceitual por escala ordenada</option></select></label>
+            <label v-if="state.assessmentRuleForm.method!=='concept'">Escala máxima<input type="number" min="0.0001" step="0.0001" v-model="state.assessmentRuleForm.scale_max"></label><label v-if="state.assessmentRuleForm.method!=='concept'">Casas decimais<input type="number" min="0" max="4" v-model.number="state.assessmentRuleForm.decimal_places"></label></div>
+            <label v-if="state.assessmentRuleForm.method==='concept'">Conceitos em ordem<input v-model="state.assessmentRuleForm.concept_scale" placeholder="Insuficiente, Em desenvolvimento, Adequado"></label>
+            <div class="x-grid"><label v-if="state.assessmentRuleForm.method!=='concept'">Limite mínimo<input type="number" min="0" step="0.0001" v-model="state.assessmentRuleForm.minimum_score"></label><label>Recuperação<select v-model="state.assessmentRuleForm.recovery_mode"><option value="none">Ignorar na consolidação</option><option value="replace">Substituir</option><option value="higher">Manter maior resultado</option><option value="mean">Média entre resultado e recuperação</option></select></label><label>Limite de frequência (%)<input type="number" min="0" max="100" step="0.01" v-model="state.assessmentRuleForm.minimum_attendance_percent"></label>
+            <label v-if="state.assessmentRuleForm.minimum_attendance_percent">Falta justificada conta como presença?<select v-model="state.assessmentRuleForm.justified_absence_counts_as_present" required><option value="">Selecione</option><option value="true">Sim</option><option value="false">Não</option></select></label></div>
+            <label><input type="checkbox" v-model="state.assessmentRuleForm.required_opinion"> Exigir parecer final</label><button class="btn btn-primary" :disabled="!state.assessmentRuleForm.period_id">Salvar regra</button>
+          </form>
+          <p class="muted">A consolidação é explícita. A frequência usa os registros de chamada por aula registrada; não presume fórmula normativa.</p>
+          <div class="x-heading"><h3>Resultados consolidados</h3><div class="actions"><button class="btn btn-secondary" @click="loadPeriodResults" :disabled="!state.assessmentRuleForm.period_id">Consultar</button><button v-if="can('diary.review') && ['open','reviewed'].includes(state.selected.status)" class="btn btn-primary" @click="consolidatePeriod" :disabled="!state.assessmentRuleForm.period_id">Consolidar agora</button></div></div>
+          <div class="table-wrap"><table><thead><tr><th>Aluno</th><th>Resultado</th><th>Situação</th><th>Alertas</th></tr></thead><tbody><tr v-for="r in state.periodResults" :key="r.id"><td>{{r.student_name}} · {{r.student_number}}</td><td>{{r.numeric_value??r.concept_value??'—'}}</td><td>{{label(r.status)}}</td><td>{{(r.flags||[]).join(', ')||'—'}}</td></tr></tbody></table></div>
+        </section>
+
         <section v-if="state.selected.status==='open' && can('diary.assessments')" class="panel x-card">
           <h2>Nova avaliação</h2>
           <form class="x-form" @submit.prevent="createAssessment">
@@ -216,6 +251,15 @@
         </section>
         <section class="panel x-card"><h2>Histórico pedagógico</h2><p v-if="!state.pedagogicalRecords.length" class="empty">Nenhum registro complementar.</p><article v-for="r in state.pedagogicalRecords" :key="r.id" class="x-charge"><div class="x-heading"><strong>{{r.kind}}</strong><small>{{date(r.record_date)}}</small></div><p class="preserve-lines">{{r.text}}</p></article></section>
       </template>
+    </template>
+
+    <template v-if="state.tab==='occurrences'">
+      <section v-if="!state.selected" class="panel x-card"><p>Selecione um diário para registrar ocorrências.</p></section>
+      <template v-else><section v-if="state.selected.status==='open' && can('diary.write')" class="panel x-card"><h2>Nova ocorrência pedagógica</h2><form class="x-form" @submit.prevent="saveOccurrence">
+        <div class="x-grid"><label>Aluno<select v-model="state.occurrenceForm.enrollment_id" required><option value="">Selecione</option><option v-for="r in state.selected.roster||[]" :key="r.enrollment_id" :value="r.enrollment_id">{{r.name}} · {{r.number}}</option></select></label><label>Data<input type="date" v-model="state.occurrenceForm.occurrence_date" required></label><label>Período<select v-model="state.occurrenceForm.academic_period_id" required><option value="">Selecione</option><option v-for="p in state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id)" :key="p.id" :value="p.id">{{p.name}}</option></select></label><label>Tipo<select v-model="state.occurrenceForm.kind"><option value="positive">Positiva</option><option value="pedagogical">Pedagógica</option><option value="behavioral">Comportamental</option><option value="safety">Segurança</option><option value="other">Outra</option></select></label><label>Situação<select v-model="state.occurrenceForm.status"><option value="draft">Aguardando revisão</option><option v-if="can('diary.review')" value="reviewed">Revisada</option></select></label></div>
+        <label>Título<input v-model="state.occurrenceForm.title" required minlength="2" maxlength="160"></label><label>Descrição<textarea v-model="state.occurrenceForm.description" required minlength="2" maxlength="8000" rows="4"></textarea></label><p class="muted">Registre apenas informações pedagógicas necessárias. Este formulário não envia mensagem à família.</p><button class="btn btn-primary">Registrar</button>
+      </form></section>
+      <section class="panel x-card"><h2>Ocorrências</h2><p v-if="!state.occurrences.length" class="empty">Nenhuma ocorrência registrada.</p><article v-for="o in state.occurrences" :key="o.id" class="x-charge"><div class="x-heading"><strong>{{o.title}} · {{label(o.status)}}</strong><small>{{date(o.occurrence_date)}} · {{o.kind}}</small></div><p><strong>{{(state.selected.roster||[]).find(x=>x.enrollment_id===o.enrollment_id)?.name||'Aluno'}}</strong></p><p class="preserve-lines">{{o.description}}</p></article></section></template>
     </template>
 
   </fieldset>
