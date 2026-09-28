@@ -2,12 +2,16 @@
 # Apenas um projeto descartável pige360-ci-*. Nunca usa os volumes da instalação.
 set -Eeuo pipefail
 cd "$(dirname "$0")/../.."
-STACK_DIR="deploy/docker"
 IMAGE="${1:?Informe a imagem}"
 MODE="${2:-remote}"
 [[ "$MODE" == remote || "$MODE" == local ]]
 mkdir -p ci-evidence
-ENVFILE="$(mktemp)"
+# Bind mounts relativos pertencem ao diretorio do compose. Nunca use os
+# data-postgres/data-documents de uma instalacao real para o smoke test.
+STACK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/pige360-smoke.XXXXXXXX")"
+cp deploy/docker/compose.yaml "$STACK_DIR/compose.yaml"
+touch "$STACK_DIR/.pige360-smoke-owned"
+ENVFILE="$STACK_DIR/.env.ci"
 PROJECT="pige360-ci-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-${RANDOM}"
 export APP_IMAGE="$IMAGE" APP_PULL_POLICY=never COMPOSE_PROJECT_NAME="$PROJECT"
 export POSTGRES_IMAGE="${POSTGRES_IMAGE:-ghcr.io/wkarts/pige360-self-postgres:17-bookworm}"
@@ -26,16 +30,20 @@ cleanup() {
   code=$?
   compose ps --all > ci-evidence/docker-ps.txt 2>&1 || true
   compose logs --no-color --tail=150 > ci-evidence/docker-smoke.log 2>&1 || true
-  # Secrets gerados nunca são publicados junto aos logs.
+  # Secrets gerados nunca são publicados junto aos logs. O marker foi criado
+  # no mesmo diretorio temporario retornado pelo mktemp desta execucao.
   if [[ "$PROJECT" == pige360-ci-* ]]; then
     compose down --remove-orphans >/dev/null 2>&1 || true
-    if command -v sudo >/dev/null 2>&1; then
-      sudo rm -rf -- "$STACK_DIR/data-postgres" "$STACK_DIR/data-documents"
-    else
-      rm -rf -- "$STACK_DIR/data-postgres" "$STACK_DIR/data-documents" || true
+    if [[ -f "$STACK_DIR/.pige360-smoke-owned" ]]; then
+      if ! rm -rf -- "$STACK_DIR" 2>/dev/null; then
+        if command -v sudo >/dev/null 2>&1; then
+          sudo -n rm -rf -- "$STACK_DIR" || echo "Aviso: remova manualmente a stack temporária $STACK_DIR" >&2
+        else
+          echo "Aviso: remova manualmente a stack temporária $STACK_DIR" >&2
+        fi
+      fi
     fi
   fi
-  rm -f "$ENVFILE"
   exit "$code"
 }
 trap cleanup EXIT

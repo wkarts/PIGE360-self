@@ -15,7 +15,7 @@ Cada adaptador possui o mesmo contrato, com `compose.yaml`, `.env.develop.exampl
 
 Os bancos e arquivos usam bind mounts relativos ao diretório da própria stack: `data-postgres/` e `data-documents/`. Assim, cada adaptador e ambiente mantém seus dados no diretório que foi instalado. Não existem volumes nomeados ocultos para o operador.
 
-O serviço interno `storage-init` executa uma vez como root apenas para criar `data-documents/` e entregar sua posse ao UID 10001 da aplicação. O app e o worker continuam executando sem root; PostgreSQL mantém o próprio ajuste de permissões do diretório de dados.
+O serviço interno `storage-init` prepara `data-documents/` e continua monitorando o volume com UID 10001 e sem capabilities. O app e os workers executam sem root; PostgreSQL mantém o próprio ajuste de permissões do diretório de dados.
 
 ## Preparar um ambiente
 
@@ -28,7 +28,7 @@ python3 scripts/configure.py \
   --url https://dev.escola.exemplo.com.br
 ```
 
-Para produção, use `--channel stable`, `deploy/docker/.env.production` e a URL pública real. Depois revise `APP_IMAGE`, `ALLOWED_HOSTS`, `SMTP_*`, `TRUSTED_PROXY_IPS` e as credenciais do bucket privado, quando usado.
+Para produção, use `--channel stable`, `deploy/docker/.env.production` e a URL pública real. Para outro adaptador, use seu próprio diretório em `--env-file`; o configurador seleciona o modelo correspondente. Depois revise `APP_IMAGE`, `ALLOWED_HOSTS`, `SMTP_*`, `TRUSTED_PROXY_IPS` e as credenciais do bucket privado, quando usado. `LEGACY_IMPORT_MAX_MB` aceita 32–512 MB e controla os arquivos da importação. `SIGNATURE_TRUST_ROOTS_DIR` aponta, por padrão, para `/data/trust-roots`, no mesmo volume persistente dos documentos. Coloque ali apenas certificados de ACs raiz conferidos.
 
 ## Docker CLI
 
@@ -48,7 +48,7 @@ Crie uma stack apontando para `deploy/dockge/compose.yaml`, copie o modelo de am
 
 ## Portainer
 
-Em **Stacks → Add stack**, use o conteúdo de `deploy/portainer/compose.yaml`, carregue as variáveis do `.env.develop.example` ou `.env.production.example`, substitua os valores de exemplo e publique. Mantenha o stack name coerente com `COMPOSE_PROJECT_NAME` e não publique portas do `db` ou do `worker`.
+Em **Stacks → Add stack**, prefira uma stack a partir de Git com o diretório de trabalho controlado. Se colar o Compose no editor, substitua os dois bind mounts `./data-postgres` e `./data-documents` por caminhos absolutos persistentes do host antes de publicar. Confira os mounts reais com `docker inspect` antes de colocar dados nessa stack; o caminho relativo do editor pode pertencer ao diretório interno do Portainer. Carregue as variáveis do `.env.develop.example` ou `.env.production.example`, substitua os valores de exemplo e publique. Mantenha o stack name coerente com `COMPOSE_PROJECT_NAME` e não publique portas do `db` ou dos workers.
 
 ## CloudPanel
 
@@ -66,6 +66,8 @@ O padrão local grava os dados privados em `data-documents/`. Para S3 ou MinIO, 
 
 ## Atualização, backup e rollback
 
-Antes de atualizar, faça backup do PostgreSQL, de `data-documents/` e do `.env` do ambiente. Não execute `down -v` e não troque `COMPOSE_PROJECT_NAME`. Para rollback, restaure a referência anterior em `APP_IMAGE`, faça `pull` e execute `up -d --wait` novamente. Migrations são aplicadas pelo container da aplicação durante a inicialização.
+Antes de atualizar, registre a imagem atual por digest e faça um backup verificado do PostgreSQL e do volume `data-documents/` (inclusive `trust-roots/`) com `PIGE_STACK_DIR=deploy/ADAPTADOR sh scripts/backup.sh`. Guarde uma cópia segura do `.env` e das chaves com o mesmo ponto de recuperação. Para S3/MinIO, obtenha também um snapshot coerente do bucket; o script local não copia o bucket. Não execute `down -v` e não troque `COMPOSE_PROJECT_NAME` ou os bind mounts.
 
-Os serviços publicados são somente `app`; PostgreSQL e worker permanecem na rede interna. Confira `/health/live`, `/health/ready`, login, permissões, fotos e a saúde do worker após cada atualização.
+Revise as migrations da imagem nova, atualize as opções do `.env` com `python3 scripts/prepare-upgrade.py --env-file deploy/ADAPTADOR/.env.production`, ajuste `APP_IMAGE` para uma referência imutável e execute `docker compose --env-file deploy/ADAPTADOR/.env.production -f deploy/ADAPTADOR/compose.yaml config --quiet`, `pull` e `up -d --wait`. Confira `ps`, `logs`, `/health/ready`, login, importação, contratos e downloads. O app aplica migrations ao iniciar; voltar apenas a imagem anterior pode deixá-la incompatível com o banco atualizado. Se for necessário retornar, preserve o estado com falha, restaure **juntos** banco, arquivos, `.env`/chaves e a imagem anterior a partir do mesmo ponto de recuperação, em manutenção planejada. O `restore.sh` exige `--confirm-restore` e substitui dados.
+
+Os serviços publicados são somente `app`; PostgreSQL e workers permanecem na rede interna. Confira também a saúde do `worker-ocr` após cada atualização.

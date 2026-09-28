@@ -14,7 +14,11 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--env-file',default='deploy/docker/.env.production')
     args=parser.parse_args()
-    root=Path(__file__).resolve().parents[1];target=root/args.env_file
+    root=Path(__file__).resolve().parents[1]
+    env_path=Path(args.env_file)
+    if env_path.is_absolute() or len(env_path.parts)!=3 or env_path.parts[0]!='deploy' or env_path.parts[1] not in ('docker','dockge','portainer','cloudpanel') or '..' in env_path.parts or not env_path.name.startswith('.env') or env_path.name.endswith('.example'):
+        parser.error('--env-file deve apontar para a configuração de um adaptador em deploy/.')
+    target=root/env_path
     if not target.is_file():raise SystemExit('Instalação nova: execute python scripts/configure.py. Nenhum arquivo foi alterado.')
     text=target.read_text(encoding='utf-8');lines=text.splitlines()
     key_line=next((line.split('=',1)[1].strip().strip("\"'") for line in lines if line.startswith('INTEGRATION_ENCRYPTION_KEY=')),'')
@@ -23,12 +27,16 @@ def main():
         if len(base64.urlsafe_b64decode(new_key))!=32:raise ValueError()
     except Exception:raise SystemExit('INTEGRATION_ENCRYPTION_KEY existente inválida. Não foi substituída; confira seu backup.')
     existing={line.split('=',1)[0] for line in lines if '=' in line and not line.lstrip().startswith('#')}
-    example=(root/'deploy/docker/.env.example').read_text().splitlines()
+    channel='develop' if env_path.name.endswith('.develop') else 'production'
+    example=(root/'deploy'/env_path.parts[1]/f'.env.{channel}.example').read_text().splitlines()
+    version=(root/'VERSION').read_text().strip()
+    version_tuple=tuple(map(int,version.split('.')))
     # Preserve registry próprio e tags personalizadas; apenas a imagem local antiga é atualizada.
     updated=[]
     for line in lines:
         if line.startswith('INTEGRATION_ENCRYPTION_KEY='):line='INTEGRATION_ENCRYPTION_KEY='+new_key
-        if re.fullmatch(r'APP_IMAGE=pige360-self:0\.[12]\.0',line):line='APP_IMAGE=pige360-self:0.3.0'
+        match=re.fullmatch(r'APP_IMAGE=pige360-self:(\d+)\.(\d+)\.(\d+)',line)
+        if match and tuple(map(int,match.groups()))<version_tuple:line=f'APP_IMAGE=pige360-self:{version}'
         updated.append(line)
     additions=[]
     for line in example:
@@ -42,13 +50,13 @@ def main():
     try:
         os.chmod(tmp,0o600)
         with os.fdopen(fd,'w',encoding='utf-8',newline='\n') as f:
-            f.write('\n'.join(updated)+'\n\n# Opções adicionadas na atualização 0.3.0\n'+'\n'.join(additions)+'\n');f.flush();os.fsync(f.fileno())
+            f.write('\n'.join(updated)+(f'\n\n# Opções adicionadas na atualização {version}\n'+'\n'.join(additions) if additions else '')+'\n');f.flush();os.fsync(f.fileno())
         os.replace(tmp,target)
     finally:
         Path(tmp).unlink(missing_ok=True)
     print('Configuração preservada e opções acrescentadas. Backup protegido:',backup.name)
     print('Revise SMTP_* e CONNECT_ALLOWED_HOSTS. Guarde INTEGRATION_ENCRYPTION_KEY junto ao backup.')
-    print('Se APP_IMAGE usa registry próprio, publique/seleciona a imagem 0.3.0 pelo seu processo existente.')
+    print(f'Se APP_IMAGE usa registry próprio, publique/selecione a imagem {version} pelo seu processo existente.')
     compose=target.parent/'compose.yaml'
     print(f'Execute: docker compose --env-file {args.env_file} -f {compose} up -d --wait; docker compose --env-file {args.env_file} -f {compose} logs --tail=100 app worker')
 if __name__=='__main__':main()
