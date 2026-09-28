@@ -13,7 +13,6 @@ PHONE = "5575999990000"
 
 
 def portal_session(api):
-    secret = "diary-portal-session-secret-for-test"
     with SessionLocal.begin() as db:
         account = m.PortalAccount(
             school_id=api.school["id"], email=EMAIL, name="Responsável do Diário",
@@ -22,6 +21,7 @@ def portal_session(api):
         )
         db.add(account)
         db.flush()
+        secret = "diary-portal-session-secret-for-test-" + account.id
         session = m.PortalSession(
             account_id=account.id, token_hash=digest(secret),
             expires_at=now() + timedelta(hours=4), mfa_verified=True,
@@ -182,21 +182,19 @@ def test_diary_access_rejects_unlinked_unverified_or_mismatched_guardian(api, cl
 
 
 def test_diary_consent_cannot_expand_to_students_added_after_review(api, client):
-    catalog, _student, _guardian, _enrollment = active_student_and_guardian(api)
+    catalog, _student, guardian, _enrollment = active_student_and_guardian(api)
     second_student = api.student("Segundo estudante elegível para o Diário")
-    second_guardian = api.guardian(second_student, "Responsável legal identificado")
+    api.post("/students/" + second_student["id"] + "/guardians", {
+        "person_id": guardian["id"], "legal": True, "financial": True,
+    })
     second_enrollment = api.enroll(second_student, catalog["group"])
     with SessionLocal.begin() as db:
         db.get(m.Enrollment, second_enrollment["id"]).status = "active"
-        person = db.get(m.Person, second_guardian["id"])
-        person.cpf = CPF
-        person.email = EMAIL
-        person.phone = PHONE
 
     cookies, _account_id = portal_session(api)
     consent = portal_call(client, cookies, "GET", "/diary/access-consent")
     before = portal_call(client, cookies, "GET", "/diary/access")
-    assert before["eligible_student_count"] == 1
+    assert before["eligible_student_count"] == 2
     stale_acceptance = {
         "accepted": True,
         "consent_version": consent["version"],
@@ -204,14 +202,12 @@ def test_diary_consent_cannot_expand_to_students_added_after_review(api, client)
     }
 
     third_student = api.student("Terceiro estudante vinculado depois da confirmação")
-    third_guardian = api.guardian(third_student, "Responsável legal identificado")
+    api.post("/students/" + third_student["id"] + "/guardians", {
+        "person_id": guardian["id"], "legal": True, "financial": True,
+    })
     third_enrollment = api.enroll(third_student, catalog["group"])
     with SessionLocal.begin() as db:
         db.get(m.Enrollment, third_enrollment["id"]).status = "active"
-        person = db.get(m.Person, third_guardian["id"])
-        person.cpf = CPF
-        person.email = EMAIL
-        person.phone = PHONE
 
     portal_call(client, cookies, "POST", "/diary/access", stale_acceptance, expected=409)
     current = portal_call(client, cookies, "GET", "/diary/access")
@@ -229,7 +225,7 @@ def test_existing_families_can_create_portal_account_without_open_admission(clie
     terms = portal_call(client, {}, "GET", "/registration-terms?school_id=" + api.school["id"])
     payload = {
         "school_id": api.school["id"], "name": "Responsável sem inscrição nova",
-        "email": "conta.familiar.nova@example.test", "password": "Strong-Test-Password-2026!",
+        "email": "conta.familiar.nova@example.com", "password": "Strong-Test-Password-2026!",
         "cpf": CPF, "phone": PHONE, "address": "", "whatsapp_opt_in": False,
         "accept_privacy": True, "terms_version": terms["version"],
     }

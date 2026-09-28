@@ -143,10 +143,17 @@ def portal_diary_access_summary(db, account):
     )
     students = {}
     eligible_students = {}
-    for link, student, person in eligible:
+    student_person_ids = {student.person_id for _link, student, _person in eligible}
+    student_persons = {
+        person.id: person
+        for person in db.scalars(select(m.Person).where(m.Person.id.in_(student_person_ids)))
+    }
+    for link, student, _guardian_person in eligible:
+        student_person = student_persons.get(student.person_id)
+        student_name = student_person.name if student_person else ''
         eligible_row = eligible_students.setdefault(student.id, {
             'student_id': student.id,
-            'student_name': person.name,
+            'student_name': student_name,
             'student_number': student.number,
             'relationship': link.relationship,
             'access_active': False,
@@ -157,7 +164,7 @@ def portal_diary_access_summary(db, account):
         eligible_row['access_active'] = True
         row = students.setdefault(student.id, {
             'student_id': student.id,
-            'student_name': person.name,
+            'student_name': student_name,
             'student_number': student.number,
             'relationship': link.relationship,
             'consented_at': access.consented_at.isoformat(),
