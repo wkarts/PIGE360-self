@@ -191,3 +191,72 @@ class PedagogicalRecord(Record, Scoped, Base):
     __table_args__ = (
         CheckConstraint("kind IN ('follow_up','intervention','recovery','adaptation','referral','observation')",name="pedagogical_record_kind"),
     )
+
+
+class DiaryOccurrence(Record, Scoped, Base):
+    """Ocorrência pedagógica interna vinculada a matrícula e diário."""
+    __tablename__ = "diary_occurrences"
+    diary_id: Mapped[str] = mapped_column(ForeignKey("school_diaries.id"), index=True)
+    academic_period_id: Mapped[str] = mapped_column(ForeignKey("academic_periods.id"), index=True)
+    enrollment_id: Mapped[str] = mapped_column(ForeignKey("enrollments.id"), index=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("students.id"), index=True)
+    occurrence_date: Mapped[date] = mapped_column(Date, index=True)
+    kind: Mapped[str] = mapped_column(String(20), default="pedagogical")
+    title: Mapped[str] = mapped_column(String(160))
+    description: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), default="draft")
+    recorded_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    __table_args__ = (
+        CheckConstraint("kind IN ('positive','pedagogical','behavioral','safety','other')", name="diary_occurrence_kind"),
+        CheckConstraint("status IN ('draft','reviewed')", name="diary_occurrence_status"),
+    )
+
+
+class PeriodAssessmentRule(Record, Scoped, Base):
+    """Regra explícita de consolidação, configurada para um diário e período."""
+    __tablename__ = "period_assessment_rules"
+    diary_id: Mapped[str] = mapped_column(ForeignKey("school_diaries.id"), index=True)
+    academic_period_id: Mapped[str] = mapped_column(ForeignKey("academic_periods.id"), index=True)
+    method: Mapped[str] = mapped_column(String(16), default="arithmetic")
+    scale_max: Mapped[float] = mapped_column(Numeric(10,4), default=10)
+    decimal_places: Mapped[int] = mapped_column(Integer, default=2)
+    minimum_score: Mapped[float | None] = mapped_column(Numeric(10,4))
+    minimum_attendance_percent: Mapped[float | None] = mapped_column(Numeric(5,2))
+    justified_absence_counts_as_present: Mapped[bool | None] = mapped_column(Boolean)
+    recovery_mode: Mapped[str] = mapped_column(String(16), default="none")
+    concept_scale: Mapped[list] = mapped_column(JSON, default=list)
+    required_opinion: Mapped[bool] = mapped_column(Boolean, default=False)
+    configured_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    __table_args__ = (
+        UniqueConstraint("diary_id", "academic_period_id", name="uq_diary_period_assessment_rule"),
+        CheckConstraint("method IN ('arithmetic','weighted','concept')", name="period_rule_method"),
+        CheckConstraint("scale_max > 0", name="period_rule_scale"),
+        CheckConstraint("decimal_places BETWEEN 0 AND 4", name="period_rule_decimals"),
+        CheckConstraint("minimum_score IS NULL OR minimum_score >= 0", name="period_rule_minimum_score"),
+        CheckConstraint("minimum_attendance_percent IS NULL OR minimum_attendance_percent BETWEEN 0 AND 100", name="period_rule_attendance"),
+        CheckConstraint("recovery_mode IN ('none','replace','higher','mean')", name="period_rule_recovery"),
+    )
+
+
+class PeriodResult(Record, Scoped, Base):
+    """Último resultado consolidado. Reprocessamentos são explícitos e auditados."""
+    __tablename__ = "period_results"
+    diary_id: Mapped[str] = mapped_column(ForeignKey("school_diaries.id"), index=True)
+    academic_period_id: Mapped[str] = mapped_column(ForeignKey("academic_periods.id"), index=True)
+    enrollment_id: Mapped[str] = mapped_column(ForeignKey("enrollments.id"), index=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("students.id"), index=True)
+    rule_id: Mapped[str] = mapped_column(ForeignKey("period_assessment_rules.id"), index=True)
+    numeric_value: Mapped[float | None] = mapped_column(Numeric(10,4))
+    concept_value: Mapped[str] = mapped_column(String(80), default="")
+    status: Mapped[str] = mapped_column(String(32), default="calculated")
+    flags: Mapped[list] = mapped_column(JSON, default=list)
+    calculation: Mapped[dict] = mapped_column(JSON, default=dict)
+    source_hash: Mapped[str] = mapped_column(String(64), index=True)
+    rule_version: Mapped[int] = mapped_column(Integer)
+    calculated_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    calculated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        UniqueConstraint("diary_id", "academic_period_id", "enrollment_id", name="uq_diary_period_result"),
+        CheckConstraint("status IN ('pending','calculated','below_minimum','attendance_below_minimum','opinion_pending','concept')", name="period_result_status"),
+    )

@@ -1,7 +1,7 @@
 """API do núcleo do Diário Escolar Digital."""
 import hashlib
 import json
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import UTC, date, datetime
 from typing import Annotated
 
@@ -230,6 +230,15 @@ def _snapshot(db, diary, period_id=None):
     ).order_by(m.AssessmentResult.instrument_id,m.AssessmentResult.enrollment_id))] if instrument_ids else []
     opinions = [output(x) for x in db.scalars(opinion_stmt.order_by(m.DescriptiveOpinion.enrollment_id))]
     pedagogical = [output(x) for x in db.scalars(records_stmt.order_by(m.PedagogicalRecord.record_date,m.PedagogicalRecord.id))]
+    occurrence_stmt = select(m.DiaryOccurrence).where(m.DiaryOccurrence.diary_id == diary.id)
+    if period_id: occurrence_stmt = occurrence_stmt.where(m.DiaryOccurrence.academic_period_id == period_id)
+    occurrences = [output(x) for x in db.scalars(occurrence_stmt.order_by(m.DiaryOccurrence.occurrence_date))]
+    result_stmt = select(m.PeriodResult).where(m.PeriodResult.diary_id == diary.id)
+    if period_id: result_stmt = result_stmt.where(m.PeriodResult.academic_period_id == period_id)
+    period_results = [output(x) for x in db.scalars(result_stmt.order_by(m.PeriodResult.enrollment_id))]
+    rule_stmt = select(m.PeriodAssessmentRule).where(m.PeriodAssessmentRule.diary_id == diary.id)
+    if period_id: rule_stmt = rule_stmt.where(m.PeriodAssessmentRule.academic_period_id == period_id)
+    assessment_rules = [output(x) for x in db.scalars(rule_stmt.order_by(m.PeriodAssessmentRule.academic_period_id))]
     snapshot = {
         "diary": _diary_output(db, diary),
         "period": output(db.get(m.AcademicPeriod, period_id)) if period_id and db.get(m.AcademicPeriod, period_id) else None,
@@ -241,6 +250,9 @@ def _snapshot(db, diary, period_id=None):
         "assessment_results": results,
         "opinions": opinions,
         "pedagogical_records": pedagogical,
+        "occurrences": occurrences,
+        "period_results": period_results,
+        "assessment_rules": assessment_rules,
     }
     return _json_safe(snapshot)
 
@@ -713,6 +725,7 @@ def diary_summary(diary_id: str, db: DB, user: Actor, school: DiaryScope):
     lessons=list(db.scalars(select(m.DiaryLesson).where(m.DiaryLesson.diary_id==diary.id)))
     lesson_ids=[x.id for x in lessons]
     attendance=list(db.scalars(select(m.DiaryAttendance).where(m.DiaryAttendance.lesson_id.in_(lesson_ids)))) if lesson_ids else []
+    pending = _diary_pending_counts(db, diary)
     return {
         "lessons":len(lessons),
         "lesson_count":sum(x.lesson_count for x in lessons),
@@ -723,4 +736,417 @@ def diary_summary(diary_id: str, db: DB, user: Actor, school: DiaryScope):
         "assessments":db.scalar(select(func.count()).select_from(m.AssessmentInstrument).where(m.AssessmentInstrument.diary_id==diary.id)) or 0,
         "opinions":db.scalar(select(func.count()).select_from(m.DescriptiveOpinion).where(m.DescriptiveOpinion.diary_id==diary.id)) or 0,
         "pedagogical_records":db.scalar(select(func.count()).select_from(m.PedagogicalRecord).where(m.PedagogicalRecord.diary_id==diary.id)) or 0,
+        "occurrences":db.scalar(select(func.count()).select_from(m.DiaryOccurrence).where(m.DiaryOccurrence.diary_id==diary.id)) or 0,
+        **pending,
     }
+
+
+def _diary_pending_counts(db, diary):
+    lessons = list(db.scalars(select(m.DiaryLesson).where(m.DiaryLesson.diary_id == diary.id)))
+    incomplete = 0
+    for lesson in lessons:
+        saved = db.scalar(select(func.count()).select_from(m.DiaryAttendance).where(m.DiaryAttendance.lesson_id == lesson.id)) or 0
+        incomplete += max(0, len(_attendance_roster(db, diary, lesson.lesson_date)) - saved)
+    assessment_pending = 0
+    for item in db.scalars(select(m.AssessmentInstrument).where(
+        m.AssessmentInstrument.diary_id == diary.id,
+        m.AssessmentInstrument.status.in_(["published", "closed"]),
+    )):
+        saved = db.scalar(select(func.count()).select_from(m.AssessmentResult).where(m.AssessmentResult.instrument_id == item.id)) or 0
+        assessment_pending += max(0, len(_attendance_roster(db, diary, item.assessment_date)) - saved)
+    consolidation_pending = 0
+    for rule in db.scalars(select(m.PeriodAssessmentRule).where(m.PeriodAssessmentRule.diary_id == diary.id)):
+        period = db.get(m.AcademicPeriod, rule.academic_period_id)
+        if period:
+            expected = len(_attendance_roster(db, diary, period.ends_on))
+            saved = db.scalar(select(func.count()).select_from(m.PeriodResult).where(
+                m.PeriodResult.diary_id == diary.id, m.PeriodResult.academic_period_id == period.id
+            )) or 0
+            pending_rows = db.scalar(select(func.count()).select_from(m.PeriodResult).where(
+                m.PeriodResult.diary_id == diary.id, m.PeriodResult.academic_period_id == period.id,
+                m.PeriodResult.status == "pending"
+            )) or 0
+            consolidation_pending += max(0, expected - saved) + pending_rows
+    occurrence_pending = db.scalar(select(func.count()).select_from(m.DiaryOccurrence).where(
+        m.DiaryOccurrence.diary_id == diary.id, m.DiaryOccurrence.status == "draft"
+    )) or 0
+    return {"lessons_without_complete_attendance": incomplete, "assessment_results_pending": assessment_pending,
+            "consolidation_results_pending": consolidation_pending, "occurrences_pending_review": occurrence_pending}
+
+
+@router.get("/diary-dashboard")
+def diary_dashboard(db: DB, user: Actor, school: DiaryScope):
+    require(user, "diary.read")
+    stmt = select(m.SchoolDiary).where(m.SchoolDiary.school_id == school.id)
+    if user.role == "teacher":
+        owned = select(m.TeacherAssignment.id).where(
+            m.TeacherAssignment.school_id == school.id, m.TeacherAssignment.active.is_(True),
+            (m.TeacherAssignment.teacher_user_id == user.id) |
+            (m.TeacherAssignment.teacher_person_id == user.person_id if user.person_id else False),
+        )
+        stmt = stmt.where(m.SchoolDiary.teacher_assignment_id.in_(owned))
+    keys = ("lessons_without_complete_attendance","assessment_results_pending","consolidation_results_pending","occurrences_pending_review")
+    totals = {"diaries": 0, **{key: 0 for key in keys}}
+    items = []
+    for diary in db.scalars(stmt.order_by(m.SchoolDiary.created_at.desc())):
+        _require_diary(db, user, diary, "diary.read")
+        pending = _diary_pending_counts(db, diary)
+        totals["diaries"] += 1
+        for key in keys: totals[key] += pending[key]
+        items.append({**_diary_output(db, diary), "pending": pending})
+    return {"items": items, "totals": totals}
+
+
+def _assessment_rule_data(db, diary, period):
+    return db.scalar(select(m.PeriodAssessmentRule).where(
+        m.PeriodAssessmentRule.diary_id == diary.id,
+        m.PeriodAssessmentRule.academic_period_id == period.id,
+    ))
+
+
+@router.get("/diaries/{diary_id}/assessment-rules")
+def assessment_rules(diary_id: str, db: DB, user: Actor, school: DiaryScope):
+    diary = _scoped(db, m.SchoolDiary, diary_id, school.id)
+    _require_diary(db, user, diary, "diary.read")
+    return [output(x) for x in db.scalars(select(m.PeriodAssessmentRule).where(
+        m.PeriodAssessmentRule.diary_id == diary.id
+    ).order_by(m.PeriodAssessmentRule.academic_period_id))]
+
+
+@router.put("/diaries/{diary_id}/assessment-rules/{period_id}")
+def save_assessment_rule(diary_id: str, period_id: str, data: s.PeriodAssessmentRuleInput, db: DB, user: Actor, school: DiaryScope, request: Request):
+    diary = _scoped(db, m.SchoolDiary, diary_id, school.id)
+    _require_diary(db, user, diary, "diary.configure")
+    _require_open_diary(diary)
+    period = _period(db, school.id, period_id, diary.academic_year_id)
+    obj = _assessment_rule_data(db, diary, period)
+    values = data.model_dump(exclude={"version"})
+    if obj:
+        if data.version is None: fail(409, "Atualize a regra antes de salvar.")
+        check_version(obj, data.version)
+        before = output(obj)
+        for key, value in values.items(): setattr(obj, key, value)
+        obj.configured_by, obj.version = user.id, obj.version + 1
+    else:
+        if data.version is not None: fail(409, "A regra mudou. Atualize a tela.")
+        before = None
+        obj = m.PeriodAssessmentRule(school_id=school.id, diary_id=diary.id, academic_period_id=period.id, configured_by=user.id, **values)
+        db.add(obj)
+    db.flush()
+    audit(db, request, user, "diary.assessment_rule.saved", obj, school.id, _json_safe({"before": before, "after": output(obj)}))
+    return output(obj)
+
+
+def _aggregate_assessments(items, rule):
+    if not items: return None, [], []
+    values, trace, flags = [], [], []
+    scale = Decimal(str(rule.scale_max))
+    for instrument, result in items:
+        if rule.method == "concept":
+            concept = (result.concept or "").strip()
+            matches = [i for i, label in enumerate(rule.concept_scale or []) if label.casefold() == concept.casefold()]
+            if not matches: flags.append("conceito_fora_da_escala"); continue
+            value, weight = Decimal(matches[0]), Decimal(1)
+            trace.append({"instrument_id": instrument.id, "concept": concept, "rank": str(value)})
+        else:
+            if result.numeric_score is None or instrument.max_score is None: flags.append("resultado_numerico_ausente"); continue
+            score, maximum = Decimal(str(result.numeric_score)), Decimal(str(instrument.max_score))
+            value = score / maximum * scale
+            weight = Decimal(str(instrument.weight)) if rule.method == "weighted" and instrument.weight else Decimal(1)
+            if rule.method == "weighted" and weight <= 0: flags.append("peso_avaliativo_ausente"); continue
+            if rule.method == "weighted" and instrument.weight is None: flags.append("peso_avaliativo_ausente"); continue
+            trace.append({"instrument_id": instrument.id, "score": str(score), "maximum": str(maximum), "weight": str(weight), "normalized": str(value)})
+        values.append((value, weight))
+    if flags or not values: return None, trace, flags
+    total_weight = sum((weight for _, weight in values), Decimal(0))
+    return sum((value * weight for value, weight in values), Decimal(0)) / total_weight, trace, []
+
+
+def _concept_from_rank(rank, scale):
+    index = int(rank.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    return scale[max(0, min(index, len(scale)-1))]
+
+
+@router.post("/diaries/{diary_id}/periods/{period_id}/consolidate")
+def consolidate_period(diary_id: str, period_id: str, data: s.DiaryTransitionInput, db: DB, user: Actor, school: DiaryScope, request: Request):
+    diary = _scoped(db, m.SchoolDiary, diary_id, school.id)
+    _require_diary(db, user, diary, "diary.review")
+    check_version(diary, data.version)
+    if diary.status not in {"open", "reviewed"}: fail(409, "A consolidação exige diário aberto ou revisado.")
+    period = _period(db, school.id, period_id, diary.academic_year_id)
+    rule = _assessment_rule_data(db, diary, period)
+    if not rule: fail(409, "Configure a regra de avaliação antes de consolidar.")
+    instruments = list(db.scalars(select(m.AssessmentInstrument).where(
+        m.AssessmentInstrument.diary_id == diary.id,
+        m.AssessmentInstrument.academic_period_id == period.id,
+        m.AssessmentInstrument.status.in_(["published", "closed"]),
+    ).order_by(m.AssessmentInstrument.assessment_date)))
+    if not instruments: fail(409, "Publique ao menos uma avaliação deste período.")
+    expected = {item.id: {r["enrollment_id"]: r for r in _attendance_roster(db, diary, item.assessment_date)} for item in instruments}
+    results = {item.id: {r.enrollment_id: r for r in db.scalars(select(m.AssessmentResult).where(m.AssessmentResult.instrument_id == item.id))} for item in instruments}
+    for item in instruments:
+        if (rule.method == "concept") != (item.value_type == "concept"):
+            fail(422, "O método de consolidação e o tipo do instrumento não correspondem.")
+    lessons = list(db.scalars(select(m.DiaryLesson).where(
+        m.DiaryLesson.diary_id == diary.id, m.DiaryLesson.academic_period_id == period.id
+    ).order_by(m.DiaryLesson.lesson_date)))
+    marks = {}
+    roster_by_id = {r["enrollment_id"]: r for r in _attendance_roster(db, diary, period.ends_on)}
+    for item in instruments: roster_by_id.update(expected[item.id])
+    for lesson in lessons:
+        lesson_roster = _attendance_roster(db, diary, lesson.lesson_date)
+        marks[lesson.id] = {r.enrollment_id: r for r in db.scalars(select(m.DiaryAttendance).where(m.DiaryAttendance.lesson_id == lesson.id))}
+        if len(marks[lesson.id]) < len(lesson_roster): fail(409, "Complete a chamada das aulas do período antes de consolidar.")
+        roster_by_id.update({r["enrollment_id"]: r for r in lesson_roster})
+    opinions = {o.enrollment_id:o for o in db.scalars(select(m.DescriptiveOpinion).where(
+        m.DescriptiveOpinion.diary_id == diary.id, m.DescriptiveOpinion.academic_period_id == period.id
+    ))}
+    output_rows, pending = [], 0
+    for student in sorted(roster_by_id.values(), key=lambda r:r["number"]):
+        enrollment_id = student["enrollment_id"]
+        regular, recovery, missing, source_items = [], [], False, []
+        for instrument in instruments:
+            if enrollment_id not in expected[instrument.id]: continue
+            result = results[instrument.id].get(enrollment_id)
+            if not result:
+                missing = True; source_items.append({"instrument_id":instrument.id,"missing":True}); continue
+            source_items.append({"instrument_id":instrument.id,"result_id":result.id,"score":str(result.numeric_score) if result.numeric_score is not None else None,"concept":result.concept})
+            target = recovery if instrument.kind.strip().casefold() in {"recovery","recuperacao","recuperação"} else regular
+            target.append((instrument,result))
+        base, base_trace, flags = _aggregate_assessments(regular, rule)
+        rec, rec_trace, rec_flags = _aggregate_assessments(recovery, rule) if rule.recovery_mode != "none" else (None,[],[])
+        flags += rec_flags
+        if missing: flags.append("resultados_avaliativos_pendentes")
+        value = None
+        if not flags:
+            if base is None: value = rec
+            elif rec is None or rule.recovery_mode == "none": value = base
+            elif rule.recovery_mode == "replace": value = rec
+            elif rule.recovery_mode == "higher": value = max(base,rec)
+            else: value = (base+rec)/Decimal(2)
+            if value is None: flags.append("sem_resultado_aplicavel")
+        attendance_total = attendance_credit = 0
+        attendance_trace = []
+        for lesson in lessons:
+            if enrollment_id not in {r["enrollment_id"] for r in _attendance_roster(db, diary, lesson.lesson_date)}: continue
+            attendance_total += 1
+            mark = marks[lesson.id].get(enrollment_id)
+            if not mark: flags.append("chamada_pendente"); continue
+            credited = mark.status == "present" or (mark.status == "justified_absence" and rule.justified_absence_counts_as_present is True)
+            attendance_credit += int(credited)
+            attendance_trace.append({"lesson_id":lesson.id,"status":mark.status})
+        attendance_pct = Decimal(attendance_credit)*Decimal(100)/Decimal(attendance_total) if attendance_total else None
+        if rule.minimum_attendance_percent is not None and (attendance_pct is None or attendance_pct < Decimal(str(rule.minimum_attendance_percent))): flags.append("frequencia_abaixo_do_limite")
+        opinion = opinions.get(enrollment_id)
+        if rule.required_opinion and (not opinion or opinion.status != "final"): flags.append("parecer_final_pendente")
+        hard_pending = {"resultados_avaliativos_pendentes","sem_resultado_aplicavel","chamada_pendente","conceito_fora_da_escala","peso_avaliativo_ausente","resultado_numerico_ausente"}
+        status = "pending" if hard_pending.intersection(flags) else "calculated"
+        numeric, concept = None, ""
+        if value is not None:
+            if rule.method == "concept":
+                concept = _concept_from_rank(value, rule.concept_scale)
+                if not flags: status = "concept"
+            else:
+                numeric = value.quantize(Decimal("1").scaleb(-rule.decimal_places), rounding=ROUND_HALF_UP)
+                if rule.minimum_score is not None and numeric < Decimal(str(rule.minimum_score)): status = "below_minimum"
+            if "frequencia_abaixo_do_limite" in flags: status = "attendance_below_minimum"
+            elif "parecer_final_pendente" in flags: status = "opinion_pending"
+        if status == "pending": pending += 1
+        source = _json_safe({"rule":output(rule),"assessments":source_items,"aggregation":{"regular":base_trace,"recovery":rec_trace},"attendance":attendance_trace,"attendance_percent":str(attendance_pct) if attendance_pct is not None else None,"opinion_status":opinion.status if opinion else None})
+        canonical = json.dumps(source,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
+        digest = hashlib.sha256(canonical).hexdigest()
+        obj = db.scalar(select(m.PeriodResult).where(
+            m.PeriodResult.diary_id==diary.id,m.PeriodResult.academic_period_id==period.id,m.PeriodResult.enrollment_id==enrollment_id
+        ))
+        if obj:
+            obj.rule_id,obj.numeric_value,obj.concept_value=rule.id,numeric,concept
+            obj.status,obj.flags,obj.calculation=status,flags,source
+            obj.source_hash,obj.rule_version=digest,rule.version
+            obj.calculated_by,obj.calculated_at=user.id,datetime.now(UTC)
+            obj.version+=1
+        else:
+            obj=m.PeriodResult(school_id=school.id,diary_id=diary.id,academic_period_id=period.id,enrollment_id=enrollment_id,student_id=student["student_id"],rule_id=rule.id,numeric_value=numeric,concept_value=concept,status=status,flags=flags,calculation=source,source_hash=digest,rule_version=rule.version,calculated_by=user.id,calculated_at=datetime.now(UTC))
+            db.add(obj)
+        db.flush()
+        output_rows.append({**output(obj),"student_name":student["name"],"student_number":student["number"]})
+    audit(db,request,user,"diary.period.consolidated",diary,school.id,{"period_id":period.id,"rule_id":rule.id,"results":len(output_rows),"pending":pending,"source_hashes":[x["source_hash"] for x in output_rows]})
+    return {"academic_period_id":period.id,"method":rule.method,"results":output_rows,"pending":pending,"count":len(output_rows)}
+
+
+@router.get("/diaries/{diary_id}/periods/{period_id}/results")
+def period_results(diary_id: str, period_id: str, db: DB, user: Actor, school: DiaryScope):
+    diary=_scoped(db,m.SchoolDiary,diary_id,school.id);_require_diary(db,user,diary,"diary.read")
+    period=_period(db,school.id,period_id,diary.academic_year_id)
+    rows=list(db.scalars(select(m.PeriodResult).where(m.PeriodResult.diary_id==diary.id,m.PeriodResult.academic_period_id==period.id)))
+    items=[]
+    for row in rows:
+        student=db.get(m.Student,row.student_id);person=db.get(m.Person,student.person_id) if student else None
+        items.append({**output(row),"student_name":person.name if person else "","student_number":student.number if student else ""})
+    rule=_assessment_rule_data(db,diary,period)
+    return {"rule":output(rule) if rule else None,"items":items}
+
+
+def _student_label(db, enrollment_id):
+    enrollment=db.get(m.Enrollment,enrollment_id);student=db.get(m.Student,enrollment.student_id) if enrollment else None;person=db.get(m.Person,student.person_id) if student else None
+    return (person.name if person else "Aluno")+(" · "+student.number if student else "")
+
+
+def _report_attendance(db, snapshot):
+    students={item["enrollment_id"]:item for item in snapshot.get("roster",[])}
+    counts={}
+    for row in snapshot["attendance"]:
+        entry=counts.setdefault(row["enrollment_id"],{"present":0,"absent":0,"justified_absence":0})
+        entry[row["status"]]=entry.get(row["status"],0)+1
+        if row["enrollment_id"] not in students:
+            e=db.get(m.Enrollment,row["enrollment_id"]);st=db.get(m.Student,e.student_id) if e else None;p=db.get(m.Person,st.person_id) if st else None
+            if e and st and p:students[e.id]={"enrollment_id":e.id,"name":p.name,"number":st.number}
+    rows=[]
+    for student in students.values():
+        v=counts.get(student["enrollment_id"],{});total=sum(v.values());credited=v.get("present",0)+v.get("justified_absence",0)
+        rate=f"{credited*100/total:.1f}%" if total else "—"
+        rows.append((student["name"]+" · "+student["number"],f"Presentes: {v.get('present',0)}; faltas: {v.get('absent',0)}; justificadas: {v.get('justified_absence',0)}; frequência nos registros: {rate}"))
+    return rows
+
+
+REPORT_TITLES={"class_diary":"Diário da turma / componente","lessons":"Registro de aulas","attendance":"Mapa de frequência","assessments":"Mapa de avaliações/notas/conceitos","opinions":"Pareceres descritivos","occurrences":"Ocorrências pedagógicas","student_record":"Ficha individual do estudante","period_consolidation":"Consolidação por período","closure":"Relatório de fechamento","pending":"Relatório de pendências","revision_history":"Histórico de retificações","audit_validation":"Auditoria e validação"}
+
+
+@router.get("/diaries/{diary_id}/reports/{report_type}.pdf")
+def diary_report_family(diary_id: str, report_type: str, db: DB, user: Actor, school: DiaryScope, academic_period_id: str = "", enrollment_id: str = ""):
+    diary=_scoped(db,m.SchoolDiary,diary_id,school.id);_require_diary(db,user,diary,"diary.reports")
+    if report_type not in REPORT_TITLES:fail(404,"Tipo de relatório não encontrado.")
+    period=_period(db,school.id,academic_period_id,diary.academic_year_id) if academic_period_id else None
+    closure=None
+    if period:
+        closure=db.scalar(select(m.DiaryClosure).where(m.DiaryClosure.diary_id==diary.id,m.DiaryClosure.academic_period_id==period.id,m.DiaryClosure.active.is_(True)).order_by(m.DiaryClosure.closed_at.desc()))
+    elif diary.status=="closed":
+        closure=db.scalar(select(m.DiaryClosure).where(m.DiaryClosure.diary_id==diary.id,m.DiaryClosure.academic_period_id.is_(None),m.DiaryClosure.active.is_(True)).order_by(m.DiaryClosure.closed_at.desc()))
+    data=closure.snapshot if closure else _snapshot(db,diary,period.id if period else None)
+    rows=[("Ano letivo",data["diary"]["year_name"]),("Turma",data["diary"]["class_name"]),("Componente",data["diary"]["component_name"]),("Professor",data["diary"]["teacher_name"] or "Não vinculado"),("Situação",data["diary"]["status"])]
+    if period:rows.append(("Período",period.name))
+    if report_type in {"class_diary","lessons"}:
+        plan=data.get("plan") or {}
+        if plan:rows.extend([("Objetivos",plan.get("objectives","")),("Unidade/objetos",plan.get("thematic_units","")+" / "+plan.get("knowledge_objects","")),("Habilidades BNCC",", ".join(plan.get("bncc_references",[]))),("Metodologia",plan.get("methodology","")),("Recursos",plan.get("resources","")),("Estratégia de avaliação",plan.get("assessment_strategy",""))])
+        for i,x in enumerate(data["lessons"],1):rows.append((f"Aula {i} · {x['lesson_date']}",f"{x['lesson_count']} aula(s) — {x['content']} | Habilidades: {x.get('skills','')} | Metodologia: {x.get('methodology','')} | Atividades: {x.get('activities','')} | Tarefa: {x.get('homework','')}"))
+        if report_type=="class_diary":rows.extend(_report_attendance(db,data))
+    elif report_type=="attendance":
+        rows.extend(_report_attendance(db,data));rows.append(("Total de aulas",str(sum(int(x["lesson_count"]) for x in data["lessons"]))))
+    elif report_type=="assessments":
+        names={x["enrollment_id"]:x["name"]+" · "+x["number"] for x in data.get("roster",[])}
+        for result in data.get("assessment_results",[]):names.setdefault(result["enrollment_id"],_student_label(db,result["enrollment_id"]))
+        for inst in data.get("assessments",[]):
+            rows.append(("Avaliação · "+inst["title"],inst["assessment_date"]+" · "+inst["value_type"]+" · "+inst["status"]))
+            values={x["enrollment_id"]:x for x in data.get("assessment_results",[]) if x["instrument_id"]==inst["id"]}
+            for enrollment_id,name in sorted(names.items(),key=lambda x:x[1]):
+                result=values.get(enrollment_id);value=(str(result["numeric_score"]) if result and result.get("numeric_score") is not None else result.get("concept","") if result else "Pendente")
+                rows.append((name,value))
+        for result in data.get("period_results",[]):rows.append(("Consolidação · "+_student_label(db,result["enrollment_id"]),str(result.get("numeric_value") if result.get("numeric_value") is not None else result.get("concept_value") or "Pendente")+" · "+result["status"]))
+    elif report_type in {"opinions","occurrences"}:
+        collection=data.get("opinions" if report_type=="opinions" else "occurrences",[])
+        for x in collection:
+            if report_type=="opinions":rows.append((_student_label(db,x["enrollment_id"])+" · "+x["status"],x["text"]))
+            else:rows.append((_student_label(db,x["enrollment_id"])+" · "+x["occurrence_date"]+" · "+x["kind"]+" · "+x["status"],x["title"]+" — "+x["description"]))
+    elif report_type=="student_record":
+        if not enrollment_id:fail(422,"Selecione a matrícula para emitir a ficha individual.")
+        enrollment=_enrollment_for_diary(db,diary,enrollment_id);rows=[("Aluno",_student_label(db,enrollment.id)),*rows]
+        for lesson in data["lessons"]:
+            mark=next((x for x in data["attendance"] if x["lesson_id"]==lesson["id"] and x["enrollment_id"]==enrollment.id),None)
+            if mark:rows.append(("Frequência · "+lesson["lesson_date"],mark["status"]))
+        for instrument in data.get("assessments",[]):
+            result=next((x for x in data.get("assessment_results",[]) if x["instrument_id"]==instrument["id"] and x["enrollment_id"]==enrollment.id),None)
+            if result:rows.append(("Avaliação · "+instrument["title"],str(result.get("numeric_score") if result.get("numeric_score") is not None else result.get("concept",""))))
+        for x in data.get("opinions",[]):
+            if x["enrollment_id"]==enrollment.id:rows.append(("Parecer · "+x["status"],x["text"]))
+        for x in data.get("pedagogical_records",[]):
+            if x["enrollment_id"]==enrollment.id:rows.append(("Registro pedagógico · "+x["record_date"]+" · "+x["kind"],x["text"]))
+        for x in data.get("occurrences",[]):
+            if x["enrollment_id"]==enrollment.id:rows.append(("Ocorrência · "+x["occurrence_date"],x["title"]+" — "+x["description"]))
+    elif report_type=="period_consolidation":
+        if not period:fail(422,"Selecione o período para emitir a consolidação.")
+        rule=_assessment_rule_data(db,diary,period)
+        if rule:rows.extend([("Regra",rule.method),("Escala final",str(rule.scale_max)),("Casas decimais",str(rule.decimal_places)),("Recuperação",rule.recovery_mode),("Versão da regra",str(rule.version))])
+        for x in data.get("period_results",[]):
+            value=x.get("numeric_value") if x.get("numeric_value") is not None else x.get("concept_value") or "Pendente"
+            rows.append((_student_label(db,x["enrollment_id"]),str(value)+" · "+x["status"]+" · "+", ".join(x.get("flags") or [])))
+    elif report_type=="closure":
+        for x in db.scalars(select(m.DiaryClosure).where(m.DiaryClosure.diary_id==diary.id).order_by(m.DiaryClosure.closed_at.desc())):
+            period_row=db.get(m.AcademicPeriod,x.academic_period_id) if x.academic_period_id else None
+            rows.append(((period_row.name if period_row else "Diário completo")+" · "+x.closed_at.isoformat(),"SHA-256: "+x.snapshot_hash+"; ativo: "+str(x.active)+"; motivo: "+x.reason))
+    elif report_type=="pending":
+        rows.extend((key,str(value)) for key,value in _diary_pending_counts(db,diary).items())
+        for lesson in data["lessons"]:
+            saved=sum(1 for x in data["attendance"] if x["lesson_id"]==lesson["id"]);expected=len(_attendance_roster(db,diary,date.fromisoformat(lesson["lesson_date"])))
+            if saved<expected:rows.append(("Chamada · "+lesson["lesson_date"],f"{expected-saved} aluno(s) sem situação"))
+        for x in data.get("occurrences",[]):
+            if x["status"]=="draft":rows.append(("Ocorrência aguardando revisão · "+x["occurrence_date"],x["title"]))
+    elif report_type=="revision_history":
+        for x in db.scalars(select(m.DiaryClosure).where(m.DiaryClosure.diary_id==diary.id).order_by(m.DiaryClosure.closed_at.desc())):rows.append(("Fechamento · "+x.closed_at.isoformat(),x.snapshot_hash+" · "+x.reason))
+        for x in db.scalars(select(m.DiaryRevision).where(m.DiaryRevision.diary_id==diary.id).order_by(m.DiaryRevision.reopened_at.desc())):rows.append(("Reabertura · "+x.reopened_at.isoformat(),x.reason))
+    elif report_type=="audit_validation":
+        issues=[]
+        for lesson in data["lessons"]:
+            expected=len(_attendance_roster(db,diary,date.fromisoformat(lesson["lesson_date"])));saved=sum(1 for x in data["attendance"] if x["lesson_id"]==lesson["id"])
+            if saved<expected:issues.append(f"Chamada incompleta em {lesson['lesson_date']}: {saved}/{expected}")
+        for result in data.get("period_results",[]):
+            result_period=db.get(m.AcademicPeriod,result["academic_period_id"]);rule=_assessment_rule_data(db,diary,result_period) if result_period else None
+            if rule and result["rule_version"]!=rule.version:issues.append("Consolidação desatualizada: "+_student_label(db,result["enrollment_id"]))
+        rows.append(("Validação","Sem divergências verificadas." if not issues else f"{len(issues)} divergência(s)"))
+        rows.extend((f"Item {i}",issue) for i,issue in enumerate(issues,1))
+    note=("Snapshot de fechamento · SHA-256 "+closure.snapshot_hash) if closure else "Emitido dos registros atuais. A frequência exibida resume os registros de chamada e não presume regra normativa ou assinatura digital."
+    if report_type=="period_consolidation" and period and not data.get("period_results"):note+=" Nenhuma consolidação foi processada."
+    content=render_pdf(school.name,REPORT_TITLES[report_type],rows,note,user.name,db=db)
+    suffix="-"+period.id if period else ""
+    return Response(content,media_type="application/pdf",headers={"Content-Disposition":f'attachment; filename="diario-{report_type}-{diary.id}{suffix}.pdf"',"Cache-Control":"no-store"})
+
+
+@router.get("/diaries/{diary_id}/occurrences")
+def diary_occurrences(diary_id: str, db: DB, user: Actor, school: DiaryScope, academic_period_id: str = ""):
+    diary=_scoped(db,m.SchoolDiary,diary_id,school.id);_require_diary(db,user,diary,"diary.read")
+    stmt=select(m.DiaryOccurrence).where(m.DiaryOccurrence.diary_id==diary.id)
+    if academic_period_id:
+        _period(db,school.id,academic_period_id,diary.academic_year_id)
+        stmt=stmt.where(m.DiaryOccurrence.academic_period_id==academic_period_id)
+    return [output(x) for x in db.scalars(stmt.order_by(m.DiaryOccurrence.occurrence_date.desc()))]
+
+
+def _occurrence_period(db, school_id, diary, supplied_period, occurrence_date):
+    year=db.get(m.AcademicYear,diary.academic_year_id)
+    if occurrence_date<year.starts_on or occurrence_date>year.ends_on:fail(422,"Data da ocorrência fora do ano letivo.")
+    if supplied_period:
+        period=_period(db,school_id,supplied_period,diary.academic_year_id)
+        if occurrence_date<period.starts_on or occurrence_date>period.ends_on:fail(422,"Data da ocorrência fora do período informado.")
+        return period
+    periods=list(db.scalars(select(m.AcademicPeriod).where(m.AcademicPeriod.school_id==school_id,m.AcademicPeriod.academic_year_id==diary.academic_year_id,m.AcademicPeriod.starts_on<=occurrence_date,m.AcademicPeriod.ends_on>=occurrence_date)))
+    if len(periods)!=1:fail(422,"Selecione o período letivo da ocorrência.")
+    return periods[0]
+
+
+@router.post("/diaries/{diary_id}/occurrences",status_code=201)
+def create_diary_occurrence(diary_id: str,data: s.DiaryOccurrenceInput,db: DB,user: Actor,school: DiaryScope,request: Request):
+    diary=_scoped(db,m.SchoolDiary,diary_id,school.id);_require_diary(db,user,diary,"diary.write");_require_open_diary(diary)
+    enrollment=_enrollment_for_diary(db,diary,data.enrollment_id,data.occurrence_date)
+    period=_occurrence_period(db,school.id,diary,data.academic_period_id,data.occurrence_date)
+    if data.status=="reviewed":require(user,"diary.review")
+    obj=m.DiaryOccurrence(school_id=school.id,diary_id=diary.id,academic_period_id=period.id,enrollment_id=enrollment.id,student_id=enrollment.student_id,occurrence_date=data.occurrence_date,kind=data.kind,title=data.title,description=data.description,status=data.status,recorded_by=user.id,reviewed_by=user.id if data.status=="reviewed" else None)
+    db.add(obj);db.flush();audit(db,request,user,"diary.occurrence.created",obj,school.id,{"kind":obj.kind,"status":obj.status})
+    return output(obj)
+
+
+@router.patch("/diaries/{diary_id}/occurrences/{occurrence_id}")
+def edit_diary_occurrence(diary_id: str,occurrence_id: str,data: s.DiaryOccurrenceEdit,db: DB,user: Actor,school: DiaryScope,request: Request):
+    diary=_scoped(db,m.SchoolDiary,diary_id,school.id);_require_diary(db,user,diary,"diary.write");_require_open_diary(diary)
+    obj=_scoped(db,m.DiaryOccurrence,occurrence_id,school.id)
+    if obj.diary_id!=diary.id:fail(404,"Ocorrência não encontrada neste diário.")
+    if obj.status=="reviewed":fail(409,"Ocorrência revisada é imutável; reabra o diário e registre retificação justificada como novo lançamento.")
+    check_version(obj,data.version)
+    enrollment=_enrollment_for_diary(db,diary,data.enrollment_id,data.occurrence_date)
+    period=_occurrence_period(db,school.id,diary,data.academic_period_id,data.occurrence_date)
+    if data.status=="reviewed":require(user,"diary.review")
+    for key,value in data.model_dump(exclude={"version"}).items():
+        if key not in {"academic_period_id","enrollment_id"}:setattr(obj,key,value)
+    obj.academic_period_id,obj.enrollment_id,obj.student_id=period.id,enrollment.id,enrollment.student_id
+    obj.reviewed_by=user.id if data.status=="reviewed" else None;obj.version+=1
+    db.flush();audit(db,request,user,"diary.occurrence.updated",obj,school.id,{"status":obj.status,"version":obj.version})
+    return output(obj)
+
+
