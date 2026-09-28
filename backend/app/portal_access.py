@@ -1,7 +1,7 @@
 """Entrada do portal e diagnóstico de publicação, sem criar ofertas por suposição."""
-from datetime import date
+import hashlib
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
-from datetime import datetime
 from sqlalchemy import select
 from . import models as m
 from .security import fail
@@ -45,6 +45,132 @@ def login_school(db, school_id='', campaign_slug=''):
     if not school or not school.active:
         fail(404, 'Unidade indisponível para acesso.')
     return school
+
+
+PORTAL_DIARY_ACCESS_CONSENT_TEXT = (
+    'Autorizo esta conta a acessar os comunicados pedagógicos da escola destinados aos estudantes '
+    'para os quais consto como responsável legal ativo no cadastro escolar. O acesso exige CPF e '
+    'contato verificado compatíveis com esse cadastro. Os comunicados ficam disponíveis somente '
+    'neste portal; esta autorização não permite envio automático por WhatsApp ou e-mail. Posso '
+    'revogar o acesso a qualquer momento.'
+)
+PORTAL_DIARY_ACCESS_CONSENT_VERSION = hashlib.sha256(
+    PORTAL_DIARY_ACCESS_CONSENT_TEXT.encode('utf-8')
+).hexdigest()[:40]
+
+
+def _digits(value):
+    return ''.join(character for character in str(value or '') if character.isdigit())
+
+
+def verified_guardian_contact_matches(account, person):
+    """Require the portal identity and at least one verified, institution-recorded contact."""
+    account_cpf = _digits(account.cpf)
+    person_cpf = _digits(person.cpf)
+    if not account_cpf or account_cpf != person_cpf:
+        return False
+    email_matches = bool(
+        account.email_verified and account.email and person.email and
+        account.email.strip().casefold() == person.email.strip().casefold()
+    )
+    phone_matches = bool(
+        account.phone_verified and _digits(account.phone) and
+        _digits(account.phone) == _digits(person.phone)
+    )
+    return email_matches or phone_matches
+
+
+def verified_guardian_links(db, account):
+    """Legal student links confirmed by the portal account's verified identity."""
+    active_enrollments = select(m.Enrollment.student_id).where(
+        m.Enrollment.school_id == account.school_id,
+        m.Enrollment.status.in_(['active', 'suspended']),
+    )
+    rows = db.execute(
+        select(m.GuardianLink, m.Student, m.Person)
+        .join(m.Student, m.Student.id == m.GuardianLink.student_id)
+        .join(m.Person, m.Person.id == m.GuardianLink.person_id)
+        .where(
+            m.GuardianLink.school_id == account.school_id,
+            m.GuardianLink.active.is_(True),
+            m.GuardianLink.legal.is_(True),
+            m.Student.school_id == account.school_id,
+            m.Student.status == 'active',
+            m.Student.id.in_(active_enrollments),
+            m.Person.school_id == account.school_id,
+            m.Person.active.is_(True),
+        )
+        .order_by(m.Student.id, m.GuardianLink.id)
+    ).all()
+    return [
+        (link, student, person)
+        for link, student, person in rows
+        if verified_guardian_contact_matches(account, person)
+    ]
+
+
+def active_portal_student_access(db, account):
+    """Current opt-ins intersected with current legal links and verified contacts."""
+    eligible = {link.id: (student, person) for link, student, person in verified_guardian_links(db, account)}
+    if not eligible:
+        return []
+    accesses = db.scalars(select(m.PortalStudentAccess).where(
+        m.PortalStudentAccess.school_id == account.school_id,
+        m.PortalStudentAccess.account_id == account.id,
+        m.PortalStudentAccess.active.is_(True),
+        m.PortalStudentAccess.consent_version == PORTAL_DIARY_ACCESS_CONSENT_VERSION,
+        m.PortalStudentAccess.guardian_link_id.in_(list(eligible)),
+    ).order_by(m.PortalStudentAccess.created_at, m.PortalStudentAccess.id)).all()
+    result = []
+    for access in accesses:
+        student, person = eligible[access.guardian_link_id]
+        if access.student_id == student.id:
+            result.append((access, student, person))
+    return result
+
+
+def portal_diary_access_summary(db, account):
+    """Return only current legal links and require consent for every current link."""
+    eligible = verified_guardian_links(db, account)
+    current_by_link = {
+        access.guardian_link_id: access
+        for access, _student, _person in active_portal_student_access(db, account)
+    }
+    consent_required = any(
+        link.id not in current_by_link or
+        current_by_link[link.id].consent_version != PORTAL_DIARY_ACCESS_CONSENT_VERSION
+        for link, _student, _person in eligible
+    )
+    students = {}
+    eligible_students = {}
+    for link, student, person in eligible:
+        eligible_row = eligible_students.setdefault(student.id, {
+            'student_id': student.id,
+            'student_name': person.name,
+            'student_number': student.number,
+            'relationship': link.relationship,
+            'access_active': False,
+        })
+        access = current_by_link.get(link.id)
+        if not access or access.consent_version != PORTAL_DIARY_ACCESS_CONSENT_VERSION:
+            continue
+        eligible_row['access_active'] = True
+        row = students.setdefault(student.id, {
+            'student_id': student.id,
+            'student_name': person.name,
+            'student_number': student.number,
+            'relationship': link.relationship,
+            'consented_at': access.consented_at.isoformat(),
+        })
+        if access.consented_at > datetime.fromisoformat(row['consented_at']):
+            row['consented_at'] = access.consented_at.isoformat()
+    return {
+        'consent_version': PORTAL_DIARY_ACCESS_CONSENT_VERSION,
+        'consent_required': consent_required,
+        'eligible_student_count': len({student.id for _link, student, _person in eligible}),
+        'eligible_students': sorted(eligible_students.values(), key=lambda item: (item['student_name'].casefold(), item['student_id'])),
+        'students': sorted(students.values(), key=lambda item: (item['student_name'].casefold(), item['student_id'])),
+    }
 
 
 def readiness(db, school):

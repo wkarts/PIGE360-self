@@ -213,6 +213,27 @@ class DiaryOccurrence(Record, Scoped, Base):
     )
 
 
+class DiaryFamilyCommunication(Record, Scoped, Base):
+    """Mensagem imutável da escola, acessível somente à conta de responsável vinculada."""
+    __tablename__ = "diary_family_communications"
+    diary_id: Mapped[str] = mapped_column(ForeignKey("school_diaries.id"), index=True)
+    academic_period_id: Mapped[str | None] = mapped_column(ForeignKey("academic_periods.id"), index=True)
+    occurrence_id: Mapped[str | None] = mapped_column(ForeignKey("diary_occurrences.id"), index=True)
+    enrollment_id: Mapped[str] = mapped_column(ForeignKey("enrollments.id"), index=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("students.id"), index=True)
+    guardian_link_id: Mapped[str] = mapped_column(ForeignKey("student_guardians.id"), index=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("portal_accounts.id"), index=True)
+    title: Mapped[str] = mapped_column(String(160))
+    message: Mapped[str] = mapped_column(Text)
+    client_key: Mapped[str] = mapped_column(String(80))
+    sent_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        UniqueConstraint("account_id", "client_key", name="uq_diary_family_communication_account_key"),
+    )
+
+
 class PeriodAssessmentRule(Record, Scoped, Base):
     """Regra explícita de consolidação, configurada para um diário e período."""
     __tablename__ = "period_assessment_rules"

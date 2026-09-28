@@ -13,7 +13,8 @@ from . import diary_schemas as s, models as m
 from .common import audit, output
 from .db import now
 from .documents import render_pdf
-from .security import Actor, DB, PERMISSIONS, check_version, current_user, fail, require
+from .portal_access import PORTAL_DIARY_ACCESS_CONSENT_VERSION, verified_guardian_contact_matches
+from .security import Actor, DB, PERMISSIONS, check_version, current_user, fail, lock_school, require
 
 
 router = APIRouter(prefix="/api/v1/schools/{school_id}", tags=["Diário Escolar Digital"])
@@ -180,6 +181,62 @@ def _enrollment_for_diary(db, diary, enrollment_id: str, on_date: date | None = 
     return enrollment
 
 
+def _portal_recipients_for_student(db, school_id, student_id):
+    rows=db.execute(
+        select(m.PortalStudentAccess,m.GuardianLink,m.Person,m.PortalAccount)
+        .join(m.GuardianLink,m.GuardianLink.id==m.PortalStudentAccess.guardian_link_id)
+        .join(m.Person,m.Person.id==m.GuardianLink.person_id)
+        .join(m.Student,m.Student.id==m.GuardianLink.student_id)
+        .join(m.PortalAccount,m.PortalAccount.id==m.PortalStudentAccess.account_id)
+        .where(
+            m.PortalStudentAccess.school_id==school_id,
+            m.PortalStudentAccess.student_id==student_id,
+            m.PortalStudentAccess.active.is_(True),
+            m.PortalStudentAccess.consent_version==PORTAL_DIARY_ACCESS_CONSENT_VERSION,
+            m.GuardianLink.school_id==school_id,
+            m.GuardianLink.active.is_(True),
+            m.GuardianLink.legal.is_(True),
+            m.GuardianLink.student_id==student_id,
+            m.Person.school_id==school_id,
+            m.Person.active.is_(True),
+            m.Student.school_id==school_id,
+            m.Student.status=="active",
+            m.Student.id.in_(select(m.Enrollment.student_id).where(
+                m.Enrollment.school_id==school_id,
+                m.Enrollment.status.in_(["active","suspended"]),
+            )),
+            m.PortalAccount.school_id==school_id,
+            m.PortalAccount.active.is_(True),
+        )
+        .order_by(m.Person.name,m.GuardianLink.id,m.PortalAccount.id)
+    ).all()
+    result={}
+    for access,link,person,account in rows:
+        if not verified_guardian_contact_matches(account,person):
+            continue
+        item=result.setdefault(link.id,{'link':link,'person':person,'accounts':[]})
+        item['accounts'].append(account)
+    return result
+
+
+def _communication_output(db, item):
+    student=db.get(m.Student,item.student_id)
+    person=db.get(m.Person,student.person_id) if student else None
+    guardian=db.get(m.GuardianLink,item.guardian_link_id)
+    guardian_person=db.get(m.Person,guardian.person_id) if guardian else None
+    occurrence=db.get(m.DiaryOccurrence,item.occurrence_id) if item.occurrence_id else None
+    return {
+        'id':item.id,'enrollment_id':item.enrollment_id,'student_id':item.student_id,
+        'student_name':person.name if person else '',
+        'guardian_link_id':item.guardian_link_id,
+        'guardian_name':guardian_person.name if guardian_person else '',
+        'occurrence_id':item.occurrence_id,'title':item.title,'message':item.message,
+        'occurrence_title':occurrence.title if occurrence else None,
+        'academic_period_id':item.academic_period_id,
+        'sent_at':item.sent_at.isoformat(),'read_at':item.read_at.isoformat() if item.read_at else None,
+    }
+
+
 def _json_safe(value):
     if isinstance(value, Decimal):
         return str(value)
@@ -233,6 +290,11 @@ def _snapshot(db, diary, period_id=None):
     occurrence_stmt = select(m.DiaryOccurrence).where(m.DiaryOccurrence.diary_id == diary.id)
     if period_id: occurrence_stmt = occurrence_stmt.where(m.DiaryOccurrence.academic_period_id == period_id)
     occurrences = [output(x) for x in db.scalars(occurrence_stmt.order_by(m.DiaryOccurrence.occurrence_date))]
+    communication_stmt = select(m.DiaryFamilyCommunication).where(m.DiaryFamilyCommunication.diary_id == diary.id)
+    if period_id: communication_stmt = communication_stmt.where(m.DiaryFamilyCommunication.academic_period_id == period_id)
+    communications = [_communication_output(db, x) for x in db.scalars(
+        communication_stmt.order_by(m.DiaryFamilyCommunication.sent_at, m.DiaryFamilyCommunication.id)
+    )]
     result_stmt = select(m.PeriodResult).where(m.PeriodResult.diary_id == diary.id)
     if period_id: result_stmt = result_stmt.where(m.PeriodResult.academic_period_id == period_id)
     period_results = [output(x) for x in db.scalars(result_stmt.order_by(m.PeriodResult.enrollment_id))]
@@ -251,6 +313,7 @@ def _snapshot(db, diary, period_id=None):
         "opinions": opinions,
         "pedagogical_records": pedagogical,
         "occurrences": occurrences,
+        "communications": communications,
         "period_results": period_results,
         "assessment_rules": assessment_rules,
     }
@@ -1008,7 +1071,7 @@ def _report_attendance(db, snapshot):
     return rows
 
 
-REPORT_TITLES={"class_diary":"Diário da turma / componente","lessons":"Registro de aulas","attendance":"Mapa de frequência","assessments":"Mapa de avaliações/notas/conceitos","opinions":"Pareceres descritivos","occurrences":"Ocorrências pedagógicas","student_record":"Ficha individual do estudante","period_consolidation":"Consolidação por período","closure":"Relatório de fechamento","pending":"Relatório de pendências","revision_history":"Histórico de retificações","audit_validation":"Auditoria e validação"}
+REPORT_TITLES={"class_diary":"Diário da turma / componente","lessons":"Registro de aulas","attendance":"Mapa de frequência","assessments":"Mapa de avaliações/notas/conceitos","opinions":"Pareceres descritivos","occurrences":"Ocorrências pedagógicas","communications":"Comunicações à família","student_record":"Ficha individual do estudante","period_consolidation":"Consolidação por período","closure":"Relatório de fechamento","pending":"Relatório de pendências","revision_history":"Histórico de retificações","audit_validation":"Auditoria e validação"}
 
 
 @router.get("/diaries/{diary_id}/reports/{report_type}.pdf")
@@ -1046,6 +1109,17 @@ def diary_report_family(diary_id: str, report_type: str, db: DB, user: Actor, sc
         for x in collection:
             if report_type=="opinions":rows.append((_student_label(db,x["enrollment_id"])+" · "+x["status"],x["text"]))
             else:rows.append((_student_label(db,x["enrollment_id"])+" · "+x["occurrence_date"]+" · "+x["kind"]+" · "+x["status"],x["title"]+" — "+x["description"]))
+    elif report_type=="communications":
+        if closure:
+            records=data.get("communications",[])
+        else:
+            stmt=select(m.DiaryFamilyCommunication).where(m.DiaryFamilyCommunication.diary_id==diary.id)
+            if period:
+                stmt=stmt.where(m.DiaryFamilyCommunication.academic_period_id==period.id)
+            records=[_communication_output(db,item) for item in db.scalars(stmt.order_by(m.DiaryFamilyCommunication.sent_at,m.DiaryFamilyCommunication.id))]
+        for record in records:
+            status='Lido em '+record['read_at'] if record['read_at'] else 'Disponível no portal'
+            rows.append((record['student_name']+' · '+record['guardian_name']+' · '+record['sent_at'],record['title']+' — '+record['message']+' · '+status))
     elif report_type=="student_record":
         if not enrollment_id:fail(422,"Selecione a matrícula para emitir a ficha individual.")
         enrollment=_enrollment_for_diary(db,diary,enrollment_id);rows=[("Aluno",_student_label(db,enrollment.id)),*rows]
@@ -1109,6 +1183,83 @@ def diary_occurrences(diary_id: str, db: DB, user: Actor, school: DiaryScope, ac
     return [output(x) for x in db.scalars(stmt.order_by(m.DiaryOccurrence.occurrence_date.desc()))]
 
 
+@router.get("/diaries/{diary_id}/communication-recipients")
+def diary_communication_recipients(diary_id: str, enrollment_id: str, db: DB, user: Actor, school: DiaryScope):
+    diary=_scoped(db,m.SchoolDiary,diary_id,school.id);_require_diary(db,user,diary,"diary.read");require(user,"communications.send")
+    enrollment=_enrollment_for_diary(db,diary,enrollment_id)
+    recipients=_portal_recipients_for_student(db,school.id,enrollment.student_id)
+    return [
+        {'guardian_link_id':link_id,'name':item['person'].name,'relationship':item['link'].relationship,
+         'portal_account_count':len(item['accounts'])}
+        for link_id,item in sorted(recipients.items(),key=lambda row:(row[1]['person'].name.casefold(),row[0]))
+    ]
+
+
+@router.get("/diaries/{diary_id}/communications")
+def diary_communications(diary_id: str, db: DB, user: Actor, school: DiaryScope):
+    diary=_scoped(db,m.SchoolDiary,diary_id,school.id);_require_diary(db,user,diary,"diary.read")
+    rows=db.scalars(select(m.DiaryFamilyCommunication).where(
+        m.DiaryFamilyCommunication.school_id==school.id,
+        m.DiaryFamilyCommunication.diary_id==diary.id,
+    ).order_by(m.DiaryFamilyCommunication.sent_at.desc(),m.DiaryFamilyCommunication.id.desc()).limit(200)).all()
+    return [_communication_output(db,item) for item in rows]
+
+
+@router.post("/diaries/{diary_id}/communications",status_code=201)
+def create_diary_communications(diary_id: str,data: s.DiaryCommunicationInput,db: DB,user: Actor,school: DiaryScope,request: Request):
+    diary=_scoped(db,m.SchoolDiary,diary_id,school.id);_require_diary(db,user,diary,"diary.read");require(user,"communications.send")
+    lock_school(db,school.id)
+    enrollment=_enrollment_for_diary(db,diary,data.enrollment_id)
+    period=_period(db,school.id,data.academic_period_id,diary.academic_year_id) if data.academic_period_id else None
+    occurrence=None
+    if data.occurrence_id:
+        occurrence=_scoped(db,m.DiaryOccurrence,data.occurrence_id,school.id)
+        if occurrence.diary_id!=diary.id or occurrence.enrollment_id!=enrollment.id:
+            fail(422,"A ocorrência deve pertencer ao diário e à matrícula selecionados.")
+        if occurrence.status!="reviewed":
+            fail(409,"A ocorrência precisa ser revisada antes do envio ao responsável.")
+        if period and period.id!=occurrence.academic_period_id:
+            fail(422,"O período do comunicado precisa corresponder ao período da ocorrência.")
+        period=db.get(m.AcademicPeriod,occurrence.academic_period_id)
+    recipients=_portal_recipients_for_student(db,school.id,enrollment.student_id)
+    selected=set(data.recipient_guardian_link_ids)
+    if not selected or not selected.issubset(recipients):
+        fail(422,"Selecione somente responsáveis legais com acesso ativo ao portal.")
+    subject=data.title.strip();message=data.message.strip()
+    if len(subject)<2 or len(message)<2:
+        fail(422,"Informe um título e uma mensagem.")
+    results=[];created=0;stamp=now()
+    for link_id in sorted(selected):
+        recipient=recipients[link_id]
+        for account in recipient['accounts']:
+            previous=db.scalar(select(m.DiaryFamilyCommunication).where(
+                m.DiaryFamilyCommunication.account_id==account.id,
+                m.DiaryFamilyCommunication.client_key==data.client_key,
+            ).with_for_update())
+            if previous:
+                same=(previous.diary_id==diary.id and previous.academic_period_id==(period.id if period else None)
+                      and previous.occurrence_id==(occurrence.id if occurrence else None)
+                      and previous.enrollment_id==enrollment.id and previous.student_id==enrollment.student_id
+                      and previous.guardian_link_id==link_id and previous.title==subject and previous.message==message)
+                if not same:
+                    fail(409,"A chave desta operação já foi usada com outro comunicado.")
+                results.append(_communication_output(db,previous))
+                continue
+            item=m.DiaryFamilyCommunication(
+                school_id=school.id,diary_id=diary.id,academic_period_id=period.id if period else None,
+                occurrence_id=occurrence.id if occurrence else None,
+                enrollment_id=enrollment.id,student_id=enrollment.student_id,guardian_link_id=link_id,
+                account_id=account.id,title=subject,message=message,client_key=data.client_key,
+                sent_by=user.id,sent_at=stamp,
+            )
+            db.add(item);db.flush();created+=1
+            audit(db,request,user,"diary.family_communication.sent",item,school.id,{
+                "channel":"portal","guardian_link_id":link_id,"occurrence_id":item.occurrence_id,
+            })
+            results.append(_communication_output(db,item))
+    return {"created":created,"messages":results,"channel":"portal"}
+
+
 def _occurrence_period(db, school_id, diary, supplied_period, occurrence_date):
     year=db.get(m.AcademicYear,diary.academic_year_id)
     if occurrence_date<year.starts_on or occurrence_date>year.ends_on:fail(422,"Data da ocorrência fora do ano letivo.")
@@ -1148,5 +1299,3 @@ def edit_diary_occurrence(diary_id: str,occurrence_id: str,data: s.DiaryOccurren
     obj.reviewed_by=user.id if data.status=="reviewed" else None;obj.version+=1
     db.flush();audit(db,request,user,"diary.occurrence.updated",obj,school.id,{"status":obj.status,"version":obj.version})
     return output(obj)
-
-
