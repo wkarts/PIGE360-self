@@ -55,6 +55,10 @@ console.log('Login smoke: remoções pontuais, slogan preservado e atalho config
 context.state.user={id:'test-admin',name:'Administrador',role:'admin',permissions:[...new Set([...fs.readFileSync(path.join(root,'templates/app.html'),'utf8').matchAll(/can\('([^']+)'\)/g)].map(match=>match[1]))]};
 context.state.schoolId='school-test';context.state.schools=[{id:'school-test',company_id:'company-test',name:'Escola de teste'}];
 for(const page of Object.keys(context.pageLabels)){context.state.page=page;render();}
+context.state.page='legacy-import';context.state.legacyImport.preview={fingerprint:'a'.repeat(64),source_system:'School Desktop Suite',source_database:'app.db',source_record_count:5,table_count:5,max_package_mb:128,tables:[{name:'alunos',rows:1,destination:'alunos e pessoas'}],media:{inline_photos_convertible:1,container_files_candidate_count:0,container_unsupported_files_ignored:0,container_unsafe_or_cache_paths_ignored:0,unresolved_media_references:0,container_magento_paths_ignored:0},warnings:['Aviso de teste']};
+const legacyImportTree=render();assert.match(loginText(legacyImportTree),/Gerar prévia segura/);assert.match(loginText(legacyImportTree),/Confirme a importação/);assert.match(loginText(legacyImportTree),/alunos e pessoas/);
+assert.equal(typeof context.previewLegacyImport,'function');assert.equal(typeof context.applyLegacyImport,'function');
+context.state.legacyImport.preview=null;
 context.state.page='help';let guideTree=render();assert.match(loginText(guideTree),/Siga a ordem da rotina escolar/);assert.match(loginText(guideTree),/Cadastre cada pessoa uma vez/);
 context.state.page='students';assert.match(loginText(render()),/Pesquise antes de criar uma nova identidade/);
 const originalRequest=sandbox.PigeAPI.request;let routeCalls=[];
