@@ -137,3 +137,47 @@ class PedagogicalRecordInput(Input):
     record_date: date
     kind: Literal["follow_up","intervention","recovery","adaptation","referral","observation"] = "observation"
     text: str = Field(min_length=2,max_length=12000)
+
+
+class PeriodAssessmentRuleInput(Input):
+    method: Literal["arithmetic","weighted","concept"] = "arithmetic"
+    scale_max: Decimal = Field(default=Decimal("10"),gt=0,max_digits=10,decimal_places=4)
+    decimal_places: int = Field(default=2,ge=0,le=4)
+    minimum_score: Decimal | None = Field(default=None,ge=0,max_digits=10,decimal_places=4)
+    minimum_attendance_percent: Decimal | None = Field(default=None,ge=0,le=100,max_digits=5,decimal_places=2)
+    justified_absence_counts_as_present: bool | None = None
+    recovery_mode: Literal["none","replace","higher","mean"] = "none"
+    concept_scale: list[str] = Field(default_factory=list,max_length=30)
+    required_opinion: bool = False
+    version: int | None = Field(default=None,ge=1)
+
+    @model_validator(mode="after")
+    def validate_policy(self):
+        if self.minimum_attendance_percent is not None and self.justified_absence_counts_as_present is None:
+            raise ValueError("Defina se a falta justificada conta como presença antes de configurar limite de frequência.")
+        if self.method == "concept":
+            if self.minimum_score is not None:
+                raise ValueError("O limite mínimo numérico só se aplica à consolidação numérica.")
+            if len(self.concept_scale) < 2 or any(not item.strip() for item in self.concept_scale):
+                raise ValueError("A consolidação conceitual exige uma escala ordenada com pelo menos dois conceitos.")
+            if len({item.casefold() for item in self.concept_scale}) != len(self.concept_scale):
+                raise ValueError("A escala conceitual não pode repetir conceitos.")
+        elif self.concept_scale:
+            raise ValueError("A escala conceitual só se aplica ao método conceitual.")
+        if self.minimum_score is not None and self.minimum_score > self.scale_max:
+            raise ValueError("O limite mínimo não pode superar a escala final.")
+        return self
+
+
+class DiaryOccurrenceInput(Input):
+    academic_period_id: str | None = None
+    enrollment_id: str
+    occurrence_date: date
+    kind: Literal["positive","pedagogical","behavioral","safety","other"] = "pedagogical"
+    title: str = Field(min_length=2,max_length=160)
+    description: str = Field(min_length=2,max_length=8000)
+    status: Literal["draft","reviewed"] = "draft"
+
+
+class DiaryOccurrenceEdit(DiaryOccurrenceInput):
+    version: int = Field(ge=1)
