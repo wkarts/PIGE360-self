@@ -8,7 +8,7 @@ from fastapi import APIRouter, Query, Request, File, Form, UploadFile
 from pydantic import Field, model_validator
 from sqlalchemy import or_, select, func
 from . import models as m, schemas as s, people, business_people
-from .common import output
+from .common import output, audit
 from .security import Actor, DB, Scope, check_version, fail, lock_school, require, scoped
 from .registry import validate
 
@@ -169,8 +169,16 @@ def save_dossier(data:DossierInput,db:DB,user:Actor,school:Scope,request:Request
         change=data.profiles.get(kind)
         if not change:continue
         if kind not in desired:fail(422,'Selecione o tipo correspondente aos dados específicos.')
+        link=db.scalar(select(m.PersonTypeLink).where(
+            m.PersonTypeLink.person_id==person.id,
+            m.PersonTypeLink.school_id==school.id,
+            m.PersonTypeLink.type_code==kind))
+        before=dict(link.details or {}) if link else {}
+        was_active=bool(data.person_id and link and link.active)
         details=validate(business_people.BusinessDetails,change.data)
         business_people.save_details(db,person,kind,details)
+        audit(db,request,user,'person.business.updated' if was_active else 'person.business.created',
+              person,school.id,{'type_code':kind,'before':before,'after':details.model_dump()})
     for change in data.family:
         if data.person_id and change.link_id and not change.active:continue
         save_family(db,person,change,user,school,request)

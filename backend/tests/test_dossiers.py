@@ -1,5 +1,6 @@
 import json
 import uuid
+from sqlalchemy import select
 from app.db import SessionLocal
 from app import models as m
 
@@ -101,6 +102,11 @@ def test_unique_dossier_saves_all_business_profiles_on_one_person(api):
     person=saved['person']
     assert set(person['person_types'])==set(details)
     assert api.get('/persons')['total']==1
+    with SessionLocal() as db:
+        created_events=db.scalars(select(m.AuditEvent).where(
+            m.AuditEvent.entity_id==person['id'],
+            m.AuditEvent.action=='person.business.created')).all()
+    assert {event.details['type_code'] for event in created_events}==set(details)
     for kind,values in details.items():
         assert {key:saved['profiles'][kind][key] for key in values}==values
         assert person['business_profiles'][kind]==values
@@ -115,6 +121,13 @@ def test_unique_dossier_saves_all_business_profiles_on_one_person(api):
     assert edited['person']['id']==person['id']
     assert edited['profiles']['supplier']['category']=='Materiais de consumo'
     assert edited['profiles']['customer']['category']==details['customer']['category']
+    with SessionLocal() as db:
+        update_events=db.scalars(select(m.AuditEvent).where(
+            m.AuditEvent.entity_id==person['id'],
+            m.AuditEvent.action=='person.business.updated')).all()
+    assert len(update_events)==1 and update_events[0].details['type_code']=='supplier'
+    assert update_events[0].details['before']['category']==details['supplier']['category']
+    assert update_events[0].details['after']['category']=='Materiais de consumo'
     assert api.get('/persons?q=Pessoa com quatro vínculos')['total']==1
 
     inactive=save(api,{
