@@ -52,12 +52,12 @@ try:
         page.get_by_label('Senha',exact=True).fill(PASSWORD)
         page.get_by_role('button',name='Entrar na aplicação').click()
         expect(page.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible()
-        def nav(label):
+        def nav(label,heading=None):
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
             menu=page.get_by_role('button',name='Cadastros',exact=True)
             if label in ['Cadastro único','Alunos','Professores','Funcionários','Pais e responsáveis','Fornecedores','Prestadores de serviços','Clientes','Sócios'] and menu.get_attribute('aria-expanded')=='false':menu.click()
             page.locator('aside').get_by_role('link',name=label,exact=False).click()
-            expect(page.get_by_role('heading',name=label,exact=True)).to_be_visible()
+            expect(page.get_by_role('heading',name=heading or label,exact=True)).to_be_visible()
         def dialog():return page.get_by_role('dialog')
         def field(label):
             # CNPJ is distinct from the complementary registration-status field.
@@ -204,7 +204,7 @@ try:
         record('Lançamento em modal responsivo com resumo nominal e confirmação de descarte; sem alterar emissão')
         page.set_viewport_size({'width':1440,'height':960})
         for label in ['Visão geral','Cadastro único','Alunos','Professores','Funcionários','Pais e responsáveis','Fornecedores','Prestadores de serviços','Clientes','Sócios','Matrículas','Estrutura acadêmica','Diário Escolar','Documentação','Protocolos','Relatórios','Inscrições online','Cobranças','Financeiro / ASAAS','Connect API','Instituição','Usuários e acessos','Diagnóstico e logs','Auditoria']:
-            nav(label)
+            nav(label,heading='Pendências documentais' if label=='Documentação' else label)
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
         assert not route_failures,route_failures
         record('Navegação de todas as rotas administrativas sem respostas API 404')
