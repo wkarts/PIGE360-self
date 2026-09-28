@@ -10,6 +10,7 @@ from app.db import SessionLocal
 from app.config import settings
 from app.integration_core import unseal, IntegrationFailure
 from app.integration_worker import process_one
+from app.portal_access import today as portal_today
 from conftest import PASSWORD
 CSRF={'X-CSRF-Protection':'1'}
 CPF='52998224725'
@@ -17,7 +18,7 @@ CPF='52998224725'
 @pytest.fixture
 def online(api):
     cat=api.catalogs(capacity=3,year='2027')
-    campaign=api.post('/admission-campaigns',{'slug':'processo-'+uuid.uuid4().hex[:12],'title':'Matrículas 2027','class_group_ids':[cat['group']['id']], 'opens_on':str(date.today()-timedelta(days=1)),'closes_on':str(date.today()+timedelta(days=90)),'active':True,'require_verified_contact':False,'privacy_notice':'Dados utilizados exclusivamente no processo de matrícula e atendimento escolar, conforme o aviso institucional.'})
+    campaign=api.post('/admission-campaigns',{'slug':'processo-'+uuid.uuid4().hex[:12],'title':'Matrículas 2027','class_group_ids':[cat['group']['id']], 'opens_on':str(portal_today()-timedelta(days=1)),'closes_on':str(portal_today()+timedelta(days=90)),'active':True,'require_verified_contact':False,'privacy_notice':'Dados utilizados exclusivamente no processo de matrícula e atendimento escolar, conforme o aviso institucional.'})
     from app.main import app
     parent=TestClient(app,base_url='http://testserver')
     r=parent.post('/api/v1/portal/register',headers=CSRF,json={'campaign_slug':campaign['slug'],'name':'Responsável Teste','email':uuid.uuid4().hex+'@example.com','password':PASSWORD,'cpf':CPF,'phone':'75999990000','accept_privacy':True,'terms_version':'1','whatsapp_opt_in':True})
@@ -101,7 +102,7 @@ def test_idempotency_and_version(online):
 def test_campaign_window_and_class(online):
     o=online;data={'campaign_id':o['campaign']['id'],'class_group_id':str(uuid.uuid4()),'client_key':str(uuid.uuid4()),'student':{'name':'Aluno Teste','birth_date':'2017-03-10'}}
     pc(o,'POST','/admissions',data,422)
-    with SessionLocal() as db:c=db.get(m.AdmissionCampaign,o['campaign']['id']);c.closes_on=date.today()-timedelta(days=1);db.commit()
+    with SessionLocal() as db:c=db.get(m.AdmissionCampaign,o['campaign']['id']);c.closes_on=portal_today()-timedelta(days=1);db.commit()
     data['class_group_id']=o['cat']['group']['id'];pc(o,'POST','/admissions',data,409)
 
 def test_upload_review_import(online):
