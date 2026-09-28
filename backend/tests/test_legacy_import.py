@@ -158,8 +158,8 @@ def test_legacy_import_preview_apply_archive_photos_and_idempotency(client, admi
     lines = [json.loads(line) for line in archived.content.decode("utf-8").splitlines()]
     assert lines[0]["_record_type"] == "manifest"
     assert "cpf" in [column["name"] for column in lines[0]["summary"]["source_table_schema"]["alunos"]["columns"]]
-    assert any(row["source_table"] == "alunos" and row["mapped_entity_type"] == "Student" for row in lines)
-    assert any(row["source_table"] == "container_media" for row in lines)
+    assert any(row.get("source_table") == "alunos" and row.get("mapped_entity_type") == "Student" for row in lines)
+    assert any(row.get("source_table") == "container_media" for row in lines)
 
     duplicate = client.post(base + "/apply", headers=admin,
                             data={"fingerprint": manifest["fingerprint"], "confirmation": "IMPORTAR"}, files=files)
