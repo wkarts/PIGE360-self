@@ -54,7 +54,21 @@ namespace PigePortal {
   async function afterMFA(result:Record<string,unknown>):Promise<void>{state.account=result as unknown as Account;state.schoolId=state.account.school_id;await loadList();await loadDiaryPortal();}
   async function mfaRequest<T>(path:string,options:RequestInit={}):Promise<T>{const headers=new Headers(options.headers);headers.set('X-CSRF-Protection','1');if(options.body)headers.set('Content-Type','application/json');const r=await fetch('/api/v1'+path,{...options,headers,credentials:'same-origin',cache:'no-store'});const data=await r.json();if(!r.ok)throw new Error(data.detail||'Não foi possível confirmar a autenticação.');return data as T;}
   async function login():Promise<void>{await run(async()=>{if(!state.schoolId)throw new Error('Selecione a unidade para acessar sua conta.');const result=await post<Record<string,unknown>>('/login',{...state.login,...authContext()});state.login.password='';if(await PigeMFA.accept(result))return;await afterMFA(result);});}
-  async function register():Promise<void>{await run(async()=>{const result=state.registerPurpose==='admission'?await post<Record<string,unknown>>('/register',{...state.register,cpf:state.register.cpf||null,campaign_slug:state.slug,terms_version:state.campaign.terms_version}):await post<Record<string,unknown>>('/account/register',{...state.register,school_id:state.schoolId,terms_version:state.registrationTerms.version});state.register.password='';if(await PigeMFA.accept(result))return;await afterMFA(result);state.notice='Conta criada. Confirme um contato para validar o vínculo com o cadastro escolar.';});}
+  async function register():Promise<void>{await run(async()=>{
+    let result:Record<string,unknown>;
+    if(state.registerPurpose==='admission'){
+      const campaign=state.campaign;
+      if(!campaign?.accepting)throw new Error('Selecione um processo de matrícula aberto.');
+      result=await post<Record<string,unknown>>('/register',{...state.register,cpf:state.register.cpf||null,campaign_slug:state.slug,terms_version:campaign.terms_version});
+    }else{
+      if(!state.registrationTerms.version)throw new Error('Atualize o aviso de privacidade antes de criar a conta.');
+      result=await post<Record<string,unknown>>('/account/register',{...state.register,school_id:state.schoolId,terms_version:state.registrationTerms.version});
+    }
+    state.register.password='';
+    if(await PigeMFA.accept(result))return;
+    await afterMFA(result);
+    state.notice='Conta criada. Confirme um contato para validar o vínculo com o cadastro escolar.';
+  });}
   async function logout():Promise<void>{state.assistSource='';state.profileReadSource='';state.profileOpen=false;await run(async()=>{await post('/logout',{});state.account=null;state.rows=[];state.diaryAccess={consent_version:'',consent_required:false,eligible_student_count:0,eligible_students:[],students:[]};state.diaryCommunications=[];state.diaryConsentAccepted=false;state.selected=null;state.charges=[];state.editing=false;state.register={name:'',email:'',password:'',cpf:'',phone:'',address:'',accept_privacy:false,whatsapp_opt_in:false};state.login.password='';state.form.student=PigeOnline.person();});}
   async function verifyRequest():Promise<void>{await run(async()=>{await post('/verification/request',{channel:state.verifyChannel});state.notice='Código solicitado. Consulte o canal escolhido; a entrega depende da integração da escola.';});}
   async function verifyConfirm():Promise<void>{await run(async()=>{state.account=await post<Account>('/verification/confirm',{code:state.code});state.code='';await loadDiaryPortal();state.notice='Contato confirmado.';});}
