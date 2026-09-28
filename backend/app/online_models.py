@@ -46,6 +46,21 @@ class PortalSession(Record, Base):
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     mfa_verified: Mapped[bool] = mapped_column(Boolean, default=False)
 
+class PortalStudentAccess(Record, Scoped, Base):
+    """Responsável legal opta, por conta, por receber comunicados do Diário."""
+    __tablename__ = 'portal_student_access'
+    account_id: Mapped[str] = mapped_column(ForeignKey('portal_accounts.id'), index=True)
+    guardian_link_id: Mapped[str] = mapped_column(ForeignKey('student_guardians.id'), index=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey('students.id'), index=True)
+    consent_version: Mapped[str] = mapped_column(String(40))
+    consent_text: Mapped[str] = mapped_column(Text)
+    consented_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        UniqueConstraint('account_id', 'guardian_link_id', name='uq_portal_diary_access_account_guardian'),
+    )
+
 class PortalChallenge(Record, Base):
     __tablename__ = 'portal_challenges'
     account_id: Mapped[str] = mapped_column(ForeignKey('portal_accounts.id'), index=True)

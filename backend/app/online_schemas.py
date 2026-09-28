@@ -241,3 +241,30 @@ class PortalProfile(GuardianDetails):
     @field_validator('phone')
     @classmethod
     def valid_phone(cls,value):return Registration.phone_valid(value)
+
+
+class PortalDiaryAccessInput(Input):
+    accepted: bool
+    consent_version: str = Field(min_length=1,max_length=40)
+    student_ids: list[str] = Field(min_length=1,max_length=1000)
+
+
+class PortalAccountRegistration(Input):
+    school_id: str = Field(min_length=1,max_length=36)
+    name: str = Field(min_length=2,max_length=180)
+    email: EmailStr
+    password: str = Field(min_length=12,max_length=128)
+    cpf: str = Field(min_length=11,max_length=14)
+    phone: str = Field(default='',max_length=24)
+    address: str = Field(default='',max_length=400)
+    whatsapp_opt_in: bool = False
+    accept_privacy: Literal[True]
+    terms_version: str = Field(min_length=1,max_length=40)
+
+    @field_validator('cpf')
+    @classmethod
+    def valid_cpf(cls,value):return Registration.valid_cpf(value)
+
+    @field_validator('phone')
+    @classmethod
+    def valid_phone(cls,value):return Registration.phone_valid(value)

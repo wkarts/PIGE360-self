@@ -15,6 +15,7 @@
         <button :class="{active:state.tab==='opinions'}" @click="state.tab='opinions'">Pareceres</button>
         <button :class="{active:state.tab==='records'}" @click="state.tab='records'">Registros pedagógicos</button>
         <button :class="{active:state.tab==='occurrences'}" @click="state.tab='occurrences'">Ocorrências</button>
+        <button v-if="can('communications.send')" :class="{active:state.tab==='communications'}" @click="state.tab='communications'">Comunicações</button>
         <button v-if="can('diary.configure')" :class="{active:state.tab==='setup'}" @click="state.tab='setup'">Configuração</button>
       </div>
     </section>
@@ -90,8 +91,8 @@
         <section v-if="can('diary.reports')" class="panel x-card">
           <h2>Relatórios oficiais</h2>
           <div class="x-grid">
-            <label>Relatório<select v-model="state.reportType"><option value="class_diary">Diário da turma/componente</option><option value="lessons">Registro de aulas</option><option value="attendance">Mapa de frequência</option><option value="assessments">Mapa de avaliações/notas/conceitos</option><option value="opinions">Pareceres descritivos</option><option value="occurrences">Ocorrências pedagógicas</option><option value="student_record">Ficha individual</option><option value="period_consolidation">Consolidação por período</option><option value="closure">Relatório de fechamento</option><option value="pending">Relatório de pendências</option><option value="revision_history">Histórico de retificações</option><option value="audit_validation">Auditoria e validação</option></select></label>
-            <label v-if="['period_consolidation','class_diary','attendance','assessments','opinions','occurrences','student_record'].includes(state.reportType)">Período<select v-model="state.reportPeriod"><option value="">Todos</option><option v-for="p in state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id)" :key="p.id" :value="p.id">{{p.name}}</option></select></label>
+            <label>Relatório<select v-model="state.reportType"><option value="class_diary">Diário da turma/componente</option><option value="lessons">Registro de aulas</option><option value="attendance">Mapa de frequência</option><option value="assessments">Mapa de avaliações/notas/conceitos</option><option value="opinions">Pareceres descritivos</option><option value="occurrences">Ocorrências pedagógicas</option><option value="communications">Comunicações à família</option><option value="student_record">Ficha individual</option><option value="period_consolidation">Consolidação por período</option><option value="closure">Relatório de fechamento</option><option value="pending">Relatório de pendências</option><option value="revision_history">Histórico de retificações</option><option value="audit_validation">Auditoria e validação</option></select></label>
+            <label v-if="['period_consolidation','class_diary','attendance','assessments','opinions','occurrences','communications','student_record'].includes(state.reportType)">Período<select v-model="state.reportPeriod"><option value="">Todos</option><option v-for="p in state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id)" :key="p.id" :value="p.id">{{p.name}}</option></select></label>
             <label v-if="state.reportType==='student_record'">Aluno<select v-model="state.reportEnrollment"><option value="">Selecione</option><option v-for="r in state.selected.roster||[]" :key="r.enrollment_id" :value="r.enrollment_id">{{r.name}} · {{r.number}}</option></select></label>
           </div>
           <button class="btn btn-primary" @click="report" :disabled="(state.reportType==='period_consolidation'&&!state.reportPeriod)||(state.reportType==='student_record'&&!state.reportEnrollment)">Baixar PDF</button>
@@ -260,6 +261,31 @@
         <label>Título<input v-model="state.occurrenceForm.title" required minlength="2" maxlength="160"></label><label>Descrição<textarea v-model="state.occurrenceForm.description" required minlength="2" maxlength="8000" rows="4"></textarea></label><p class="muted">Registre apenas informações pedagógicas necessárias. Este formulário não envia mensagem à família.</p><button class="btn btn-primary">Registrar</button>
       </form></section>
       <section class="panel x-card"><h2>Ocorrências</h2><p v-if="!state.occurrences.length" class="empty">Nenhuma ocorrência registrada.</p><article v-for="o in state.occurrences" :key="o.id" class="x-charge"><div class="x-heading"><strong>{{o.title}} · {{label(o.status)}}</strong><small>{{date(o.occurrence_date)}} · {{o.kind}}</small></div><p><strong>{{(state.selected.roster||[]).find(x=>x.enrollment_id===o.enrollment_id)?.name||'Aluno'}}</strong></p><p class="preserve-lines">{{o.description}}</p></article></section></template>
+    </template>
+
+    <template v-if="state.tab==='communications' && can('communications.send')">
+      <section v-if="!state.selected" class="panel x-card"><p>Selecione um diário para enviar comunicados e consultar o histórico.</p></section>
+      <template v-else>
+        <section class="panel x-card">
+          <h2>Comunicado no portal da família</h2>
+          <p>O comunicado ficará disponível apenas para os responsáveis legais que confirmaram o vínculo e autorizaram o acesso ao Diário no portal. Esta tela não envia e-mail nem WhatsApp.</p>
+          <form class="x-form" @submit.prevent="sendCommunication">
+            <div class="x-grid">
+              <label>Estudante<select v-model="state.communicationForm.enrollment_id" @change="loadCommunicationRecipients" required><option value="">Selecione</option><option v-for="r in state.selected.roster||[]" :key="r.enrollment_id" :value="r.enrollment_id">{{r.name}} · {{r.number}}</option></select></label>
+              <label>Período de referência<select v-model="state.communicationForm.academic_period_id"><option value="">Sem período específico</option><option v-for="p in state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id)" :key="p.id" :value="p.id">{{p.name}}</option></select></label>
+              <label>Ocorrência revisada (opcional)<select v-model="state.communicationForm.occurrence_id" @change="communicationOccurrenceChanged"><option value="">Sem ocorrência vinculada</option><option v-for="o in state.occurrences.filter(x=>x.enrollment_id===state.communicationForm.enrollment_id&&x.status==='reviewed')" :key="o.id" :value="o.id">{{date(o.occurrence_date)}} · {{o.title}}</option></select></label>
+            </div>
+            <fieldset class="x-form" :disabled="!state.communicationRecipients.length"><legend>Responsáveis autorizados</legend>
+              <p v-if="state.communicationForm.enrollment_id&&!state.communicationRecipients.length" class="empty">Nenhum responsável legal com acesso consentido e contato verificado para este estudante.</p>
+              <label v-for="recipient in state.communicationRecipients" :key="recipient.guardian_link_id" class="x-check"><input type="checkbox" :value="recipient.guardian_link_id" v-model="state.communicationForm.recipient_guardian_link_ids">{{recipient.name}} · {{recipient.relationship}} · {{recipient.portal_account_count}} conta(s) do portal</label>
+            </fieldset>
+            <label>Título<input v-model="state.communicationForm.title" required minlength="2" maxlength="160"></label>
+            <label>Mensagem<textarea v-model="state.communicationForm.message" required minlength="2" maxlength="8000" rows="5"></textarea></label>
+            <button class="btn btn-primary" :disabled="!state.communicationForm.recipient_guardian_link_ids.length">Disponibilizar no portal</button>
+          </form>
+        </section>
+        <section class="panel x-card"><h2>Histórico de comunicados</h2><p v-if="!state.communications.length" class="empty">Nenhum comunicado enviado por este Diário.</p><article v-for="item in state.communications" :key="item.id" class="x-charge"><div class="x-heading"><div><strong>{{item.title}}</strong><small>{{item.student_name}} · {{item.guardian_name}} · {{date(item.sent_at)}}<span v-if="item.academic_period_id"> · {{state.periods.find(p=>p.id===item.academic_period_id)?.name||'Período'}}</span></small></div><span class="badge">{{item.read_at?'Lido no portal':'Disponível no portal'}}</span></div><p v-if="item.occurrence_title" class="muted">Ocorrência: {{item.occurrence_title}}</p><p class="preserve-lines">{{item.message}}</p></article></section>
+      </template>
     </template>
 
   </fieldset>

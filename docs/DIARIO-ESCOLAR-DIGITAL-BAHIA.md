@@ -195,11 +195,13 @@ Deve ser separado de dados médicos e de campos sensíveis que não sejam necess
 
 O Diário poderá referenciar ocorrências e comunicações, mas não duplicará o módulo de atendimento/mensageria.
 
-Fluxo proposto:
+Fluxo implementado para mensagens internas ao portal:
 
-`Diário/Turma/Aluno -> ocorrência -> comunicação opcional -> evento Connect API`
+`Diário/Turma/Aluno -> ocorrência revisada opcional -> comunicado no portal -> confirmação de leitura`
 
-O Connect API será canal de entrega; não será o repositório oficial do registro pedagógico.
+O comunicado é guardado no Diário, com autoria, data, responsável, conta destinatária e leitura. A publicação exige autorização expressa, vínculo legal ativo, estudante ativo e matrícula ativa ou suspensa, além de correspondência entre o CPF e um contato verificado da conta e o cadastro escolar. O vínculo e a autorização são reavaliados no acesso. O texto e a versão da autorização aceita ficam registrados; a versão muda quando o texto muda. A família pode revogar o acesso pelo portal. Responsáveis sem conta podem criar uma conta no portal independentemente de haver processo de matrícula aberto. A tela oferece os dois caminhos quando há processo aberto: iniciar nova pré-matrícula ou criar acesso familiar sem inscrever outro aluno. A criação isolada não cria nem altera matrícula e não libera dados do estudante antes das verificações e do consentimento do Diário.
+
+Esta entrega não dispara Connect API, e-mail ou WhatsApp. Um canal externo pode ser acrescentado posteriormente sem substituir o registro oficial no Diário e somente após definir entrega, consentimento e auditoria próprios.
 
 ### 9. Relatórios oficiais
 
@@ -259,6 +261,9 @@ Entidades novas, sempre com `school_id` quando aplicável e seguindo o padrão `
 - `PedagogicalRecord`
 - `DiaryClosure`
 - `DiaryRevision`
+- `DiaryOccurrence`
+- `DiaryFamilyCommunication`
+- `PortalStudentAccess`
 
 Não duplicar aluno, turma, professor, matrícula, unidade ou ano letivo.
 
@@ -298,6 +303,7 @@ Fase posterior: lançamento offline controlado via PWA/IndexedDB/outbox, com sin
 - `diary.reopen`
 - `diary.reports`
 - `diary.configure`
+- `communications.send` para publicar comunicado no portal
 
 Professor: somente atribuições próprias.
 Coordenação: leitura/revisão das turmas autorizadas.
@@ -319,7 +325,13 @@ Base sugerida:
 - `/api/v1/schools/{school_id}/diaries/{id}/review`
 - `/api/v1/schools/{school_id}/diaries/{id}/close`
 - `/api/v1/schools/{school_id}/diaries/{id}/reopen`
+- `/api/v1/schools/{school_id}/diaries/{id}/communication-recipients`
+- `/api/v1/schools/{school_id}/diaries/{id}/communications`
 - `/api/v1/schools/{school_id}/diaries/{id}/reports/*`
+- `/api/v1/portal/diary/access-consent`
+- `/api/v1/portal/diary/access` (consulta, ativação e revogação por estudante)
+- `/api/v1/portal/diary/communications` (consulta e confirmação de leitura)
+- `/api/v1/portal/registration-terms` e `/api/v1/portal/account/register` (criação de conta sem pré-matrícula)
 
 Eventos internos/webhook poderão incluir:
 
@@ -370,9 +382,9 @@ Para coordenação, painel por turma/professor com:
 
 ### Fase 3 — pedagógico e família
 
-**Implementados:** registros pedagógicos complementares e ocorrências vinculadas ao aluno, turma, componente, período, autoria e revisão.
+**Implementados:** registros pedagógicos complementares e ocorrências vinculadas ao aluno, turma, componente, período, autoria e revisão; criação de conta familiar sem depender de processo de matrícula aberto; vínculo de acesso por estudante mediante CPF e contato verificado compatíveis com o cadastro escolar, responsável legal ativo e matrícula ativa ou suspensa; autorização explícita com versão e texto registrados; revogação pela família; comunicados individuais ou associados a ocorrência revisada; confirmação de leitura no portal; histórico auditável e relatório PDF de comunicações. A interface não revela dados de contato dos destinatários.
 
-**Pendentes:** comunicação com responsáveis, publicação seletiva no portal e notificações via Connect API. O portal atual não mantém vínculo autorizado entre contas familiares e matrículas ativas; mensagens Connect estão ligadas a admissões. Não se deduz destinatário nem se reutiliza o fluxo de admissões para divulgar informações pedagógicas.
+**Pendente:** notificação externa por Connect API, e-mail ou WhatsApp. O destinatário não é inferido dos dados de inscrição e o fluxo de admissões não é reutilizado para divulgar dados pedagógicos. Sem vínculo e autorização vigentes, o portal não exibe os comunicados.
 
 ### Fase 4 — operação avançada
 
@@ -382,9 +394,9 @@ Para coordenação, painel por turma/professor com:
 
 ## Situação da implementação
 
-O incremento completa planejamento, aula, chamada, avaliação configurável, consolidação explícita, parecer, acompanhamento pedagógico, ocorrências, revisão, fechamento e reabertura, painel de pendências e doze tipos de relatório institucional: diário da turma/componente, aulas, frequência, avaliações, pareceres, ocorrências, ficha individual, consolidação por período, fechamento, pendências, retificações e auditoria/validação. Resultados consolidados registram hash dos dados e da regra utilizados; snapshots de fechamento incluem resultados e ocorrências.
+O Diário cobre identificação derivada da estrutura escolar, planejamento curricular com referências BNCC configuráveis, aulas, frequência, avaliação configurável, consolidação explícita, pareceres, registros pedagógicos, ocorrências, comunicados consentidos no portal, revisão, fechamento/reabertura auditáveis, painel de pendências e treze tipos de relatório institucional: diário da turma/componente, aulas, frequência, avaliações, pareceres, ocorrências, comunicações à família, ficha individual, consolidação por período, fechamento, pendências, retificações e auditoria/validação. Resultados consolidados registram hash dos dados e da regra utilizados; snapshots de fechamento incluem resultados, ocorrências e comunicados do âmbito fechado.
 
-A comunicação externa e a publicação familiar permanecem bloqueadas até existir vínculo confiável de responsáveis às matrículas. O documento-fonte não especifica fórmula legal de notas/frequência, prazos, formatos oficiais ou assinatura; o sistema exige configuração escolar e não declara conformidade normativa automática. A confirmação das regras da Bahia continua necessária antes de tratar PDFs como substitutos de documentos oficiais.
+A publicação familiar funciona no portal com as verificações e a autorização descritas acima. A comunicação externa segue pendente. O documento-fonte não especifica fórmula legal de notas/frequência, prazos, formatos oficiais ou assinatura; o sistema exige configuração escolar e não declara conformidade normativa automática. A confirmação das regras da Bahia continua necessária antes de tratar PDFs como substitutos de documentos oficiais.
 
 ## Critérios de segurança e integridade
 
@@ -419,4 +431,4 @@ O sistema será desenhado para suportar essas regras sem hardcode. A validação
 
 ## Próximos incrementos
 
-Para concluir as áreas restantes sem presumir dados ou obrigações ausentes da documentação, a próxima entrega deve estabelecer o vínculo autorizado entre conta familiar e matrícula, os canais/consentimentos de comunicação e as regras oficiais de frequência, avaliação, assinatura, guarda e exportação. A operação offline requer um fluxo de conflitos e sincronização idempotente separado; fechamento e publicação continuarão dependendo de confirmação do servidor.
+Próximos incrementos: avaliar canais externos e a respectiva política de consentimento e entrega; implementar operação offline com resolução de conflitos e sincronização idempotente; validar regras oficiais de frequência, avaliação, assinatura, guarda e exportação antes de declarar conformidade. Fechamento continua dependendo de confirmação do servidor.

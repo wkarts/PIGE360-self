@@ -406,7 +406,7 @@ class ProtocolEvent(Record, Scoped, Base):
     after: Mapped[dict] = mapped_column(JSON, default=dict)
 
 # Registro das tabelas aditivas; os modelos anteriores permanecem inalterados.
-from .online_models import (AdmissionCampaign, PortalAccount, PortalSession, PortalChallenge,
+from .online_models import (AdmissionCampaign, PortalAccount, PortalSession, PortalStudentAccess, PortalChallenge,
     Admission, AdmissionMessage, AdmissionAttachment, ConnectInstance, ConnectSchoolBinding, ConnectUnitBinding, ConnectMessageJob, IntegrationConnection,
     IntegrationJob, BankCharge, BankEvent, IntegrationWebhook)
 
@@ -447,4 +447,4 @@ class MFARecovery(Record, Base):
 from .assisted_models import OcrJob, LookupCache, LookupProvider, AssistedQuota, IntakeSettings  # noqa: F401
 
 # Registro aditivo do Diário Escolar Digital.
-from .diary_models import AcademicPeriod, CurriculumComponent, CurriculumPlan, SchoolDiary, DiaryLesson, DiaryAttendance, DiaryClosure, DiaryRevision, AssessmentInstrument, AssessmentResult, DescriptiveOpinion, PedagogicalRecord, DiaryOccurrence, PeriodAssessmentRule, PeriodResult  # noqa: F401,E402
+from .diary_models import AcademicPeriod, CurriculumComponent, CurriculumPlan, SchoolDiary, DiaryLesson, DiaryAttendance, DiaryClosure, DiaryRevision, AssessmentInstrument, AssessmentResult, DescriptiveOpinion, PedagogicalRecord, DiaryOccurrence, DiaryFamilyCommunication, PeriodAssessmentRule, PeriodResult  # noqa: F401,E402

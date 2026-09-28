@@ -181,3 +181,19 @@ class DiaryOccurrenceInput(Input):
 
 class DiaryOccurrenceEdit(DiaryOccurrenceInput):
     version: int = Field(ge=1)
+
+
+class DiaryCommunicationInput(Input):
+    enrollment_id: str
+    academic_period_id: str | None = None
+    occurrence_id: str | None = None
+    recipient_guardian_link_ids: list[str] = Field(min_length=1,max_length=20)
+    title: str = Field(min_length=2,max_length=160)
+    message: str = Field(min_length=2,max_length=8000)
+    client_key: str = Field(min_length=16,max_length=80)
+
+    @model_validator(mode="after")
+    def unique_recipients(self):
+        if len(set(self.recipient_guardian_link_ids)) != len(self.recipient_guardian_link_ids):
+            raise ValueError("O mesmo responsável não pode ser selecionado mais de uma vez.")
+        return self
