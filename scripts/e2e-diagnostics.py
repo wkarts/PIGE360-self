@@ -38,10 +38,15 @@ try:
         page.goto(URL+'/online.html',wait_until='networkidle')
         expect(page.get_by_text('Não há processo de matrícula aberto neste momento.',exact=False)).to_be_visible()
         expect(page.get_by_role('button',name='Entrar no portal',exact=True)).to_be_enabled()
-        expect(page.get_by_role('button',name='Criar minha conta',exact=True)).to_be_disabled()
+        expect(page.get_by_role('button',name='Criar minha conta',exact=True)).to_be_enabled()
         assert page.locator('select').count()==0
+        page.get_by_role('button',name='Criar minha conta',exact=True).click()
+        expect(page.get_by_role('heading',name='Criar acesso para uma família já matriculada',exact=True)).to_be_visible()
+        expect(page.get_by_text('Aviso de privacidade',exact=False).last).to_be_visible()
+        expect(page.get_by_role('button',name='Criar conta do responsável',exact=True)).to_be_enabled()
         page.screenshot(path=str(OUT/'01-portal-sem-processo.png'),full_page=True)
-        record('Portal sem processo explica indisponibilidade, não exibe seletor vazio e permite login.')
+        record('Sem campanha, responsável pode iniciar cadastro familiar com aviso vigente e sem criar pré-matrícula.')
+        page.get_by_role('button',name='Entrar',exact=True).click()
         # Criar oferta por API administrativa; publicar requer decisão explícita, não bootstrap oculto.
         def post(path,data):
             r=client.post(base+path,headers=admin,json=data);assert r.status_code==201,r.text;return r.json()
