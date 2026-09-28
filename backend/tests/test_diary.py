@@ -159,3 +159,64 @@ def test_period_must_be_inside_academic_year(api):
         "order_index": 1,
         "active": True,
     }, 422)
+
+
+def test_diary_consolidation_occurrence_dashboard_and_reports(api):
+    from decimal import Decimal
+
+    catalog = api.catalogs(capacity=30)
+    student = api.student("Aluno Consolidação")
+    enrollment = api.enroll(student, catalog["group"])
+    with SessionLocal() as db:
+        db.get(m.Enrollment, enrollment["id"]).status = "active"
+        db.commit()
+
+    period = api.post("/academic-periods", {
+        "academic_year_id": catalog["year"]["id"], "name": "Período de Consolidação",
+        "starts_on": "2026-09-01", "ends_on": "2026-12-20", "order_index": 1, "active": True,
+    })
+    component = api.post("/curriculum-components", {"name": "Matemática", "code": "MAT", "workload_hours": 120, "active": True})
+    diary = api.post("/diaries", {"class_group_id": catalog["group"]["id"], "component_id": component["id"], "teacher_assignment_id": None, "notes": ""})
+    rule = api.call("PUT", f"/diaries/{diary['id']}/assessment-rules/{period['id']}", {
+        "method": "arithmetic", "scale_max": "10", "decimal_places": 2, "minimum_score": "6",
+        "minimum_attendance_percent": None, "justified_absence_counts_as_present": None,
+        "recovery_mode": "higher", "concept_scale": [], "required_opinion": False,
+    })
+    assert rule["method"] == "arithmetic"
+
+    lesson = api.post(f"/diaries/{diary['id']}/lessons", {
+        "academic_period_id": period["id"], "lesson_date": "2026-09-22", "lesson_count": 1, "content": "Operações fundamentais",
+    })
+    roster = api.get(f"/diaries/{diary['id']}/lessons/{lesson['id']}/attendance")["roster"]
+    api.call("PUT", f"/diaries/{diary['id']}/lessons/{lesson['id']}/attendance", {
+        "items": [{"enrollment_id": roster[0]["enrollment_id"], "status": "present", "note": ""}],
+    })
+    assessment = api.post(f"/diaries/{diary['id']}/assessments", {
+        "academic_period_id": period["id"], "title": "Avaliação diagnóstica", "kind": "exam",
+        "assessment_date": "2026-09-22", "value_type": "numeric", "max_score": "10", "weight": "1", "status": "published",
+    })
+    api.call("PUT", f"/diaries/{diary['id']}/assessments/{assessment['id']}/results", {
+        "items": [{"enrollment_id": roster[0]["enrollment_id"], "numeric_score": "8.50", "concept": "", "note": ""}],
+    })
+    occurrence = api.post(f"/diaries/{diary['id']}/occurrences", {
+        "academic_period_id": period["id"], "enrollment_id": roster[0]["enrollment_id"],
+        "occurrence_date": "2026-09-22", "kind": "positive", "title": "Participação",
+        "description": "Participou da atividade coletiva.", "status": "draft",
+    })
+    assert occurrence["status"] == "draft"
+
+    consolidated = api.post(f"/diaries/{diary['id']}/periods/{period['id']}/consolidate", {"version": diary["version"]})
+    assert consolidated["count"] == 1 and consolidated["pending"] == 0
+    result = consolidated["results"][0]
+    assert Decimal(str(result["numeric_value"])) == Decimal("8.50")
+    assert result["status"] == "calculated" and len(result["source_hash"]) == 64
+    assert api.get("/diary-dashboard")["totals"]["occurrences_pending_review"] == 1
+
+    reports = [
+        *(f"/diaries/{diary['id']}/reports/{kind}.pdf" for kind in ("class_diary","lessons","attendance","assessments","opinions","occurrences","closure","pending","revision_history","audit_validation")),
+        f"/diaries/{diary['id']}/reports/student_record.pdf?enrollment_id={roster[0]['enrollment_id']}",
+        f"/diaries/{diary['id']}/reports/period_consolidation.pdf?academic_period_id={period['id']}",
+    ]
+    for path in reports:
+        response = api.call("GET", path, expect=200)
+        assert response.headers["content-type"].startswith("application/pdf")
