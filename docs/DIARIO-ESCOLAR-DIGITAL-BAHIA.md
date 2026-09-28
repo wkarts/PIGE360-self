@@ -375,30 +375,25 @@ Para coordenação, painel por turma/professor com:
 
 ### Fase 2 — avaliação
 
-- instrumentos;
-- notas/conceitos;
-- regras configuráveis;
-- consolidação;
-- recuperação;
-- parecer descritivo;
-- relatórios.
+**Implementada neste incremento:** instrumentos, notas/conceitos, regras configuráveis por diário/período, consolidação explícita e auditada, opções de recuperação, pareceres e relatórios. Os métodos disponíveis são aritmético, ponderado e conceitual por escala ordenada. Escala, arredondamento, pesos, recuperação, critérios de frequência e obrigatoriedade de parecer são configurações da escola; nenhuma média é recalculada quando uma regra muda. A consolidação de frequência usa registros de chamada por aula registrada e não é apresentada como cálculo normativo da Bahia.
 
 ### Fase 3 — pedagógico e família
 
-- registros complementares;
-- ocorrências;
-- comunicação;
-- publicação seletiva no portal;
-- notificações via Connect API.
+**Implementados:** registros pedagógicos complementares e ocorrências vinculadas ao aluno, turma, componente, período, autoria e revisão.
+
+**Pendentes:** comunicação com responsáveis, publicação seletiva no portal e notificações via Connect API. O portal atual não mantém vínculo autorizado entre contas familiares e matrículas ativas; mensagens Connect estão ligadas a admissões. Não se deduz destinatário nem se reutiliza o fluxo de admissões para divulgar informações pedagógicas.
 
 ### Fase 4 — operação avançada
 
-- offline PWA;
-- sincronização idempotente;
-- dashboards;
-- alertas de pendências;
-- exportações oficiais adicionais;
-- integrações externas.
+**Implementados neste incremento:** painel operacional de pendências para chamadas, resultados, consolidações e ocorrências aguardando revisão.
+
+**Pendentes:** outbox offline com sincronização idempotente, exportações oficiais adicionais e integrações externas. O fechamento oficial continua online e só ocorre após confirmação do servidor.
+
+## Situação da implementação
+
+O incremento completa planejamento, aula, chamada, avaliação configurável, consolidação explícita, parecer, acompanhamento pedagógico, ocorrências, revisão, fechamento e reabertura, painel de pendências e doze tipos de relatório institucional: diário da turma/componente, aulas, frequência, avaliações, pareceres, ocorrências, ficha individual, consolidação por período, fechamento, pendências, retificações e auditoria/validação. Resultados consolidados registram hash dos dados e da regra utilizados; snapshots de fechamento incluem resultados e ocorrências.
+
+A comunicação externa e a publicação familiar permanecem bloqueadas até existir vínculo confiável de responsáveis às matrículas. O documento-fonte não especifica fórmula legal de notas/frequência, prazos, formatos oficiais ou assinatura; o sistema exige configuração escolar e não declara conformidade normativa automática. A confirmação das regras da Bahia continua necessária antes de tratar PDFs como substitutos de documentos oficiais.
 
 ## Critérios de segurança e integridade
 
