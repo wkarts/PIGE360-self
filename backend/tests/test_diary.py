@@ -205,7 +205,7 @@ def test_diary_consolidation_occurrence_dashboard_and_reports(api):
     })
     assert occurrence["status"] == "draft"
 
-    consolidated = api.post(f"/diaries/{diary['id']}/periods/{period['id']}/consolidate", {"version": diary["version"]})
+    consolidated = api.call("POST", f"/diaries/{diary['id']}/periods/{period['id']}/consolidate", {"version": diary["version"]})
     assert consolidated["count"] == 1 and consolidated["pending"] == 0
     result = consolidated["results"][0]
     assert Decimal(str(result["numeric_value"])) == Decimal("8.50")
