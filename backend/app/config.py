@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     refresh_token_days: int = 7
     max_upload_mb: int = 10
     max_photo_mb: int = 5
+    legacy_import_max_mb: int = 128
     allow_sqlite: bool = False
     integration_encryption_key: str = ''
     integration_timeout_seconds: int = 15
@@ -74,6 +75,8 @@ class Settings(BaseSettings):
             raise ValueError('STORAGE_BACKEND deve ser local ou s3.')
         if self.max_upload_mb < 1 or self.max_photo_mb < 1 or self.max_photo_mb > self.max_upload_mb:
             raise ValueError('MAX_PHOTO_MB deve estar entre 1 e MAX_UPLOAD_MB.')
+        if not 32 <= self.legacy_import_max_mb <= 512:
+            raise ValueError('LEGACY_IMPORT_MAX_MB deve estar entre 32 e 512.')
         if self.storage_backend == 's3' and not self.storage_bucket.strip():
             raise ValueError('STORAGE_BUCKET é obrigatório quando STORAGE_BACKEND=s3.')
         if self.storage_endpoint_url and not urlsplit(self.storage_endpoint_url).scheme:

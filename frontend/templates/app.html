@@ -68,6 +68,7 @@
         <a v-if="can('connect.manage')" href="#/connect" :class="{active:state.page==='connect'}" :aria-current="state.page==='connect'?'page':undefined" @click.prevent="navigate('connect')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#connect"></use></svg>Connect API</a>
         <a v-if="can('schools.manage')" href="#/settings" :class="{active:state.page==='settings'}" :aria-current="state.page==='settings'?'page':undefined" @click.prevent="navigate('settings')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#school"></use></svg>Instituição</a>
         <a v-if="can('users.manage')" href="#/users" :class="{active:state.page==='users'}" :aria-current="state.page==='users'?'page':undefined" @click.prevent="navigate('users')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#access"></use></svg>Usuários e acessos</a>
+        <a v-if="state.user?.role==='admin'" href="#/legacy-import" :class="{active:state.page==='legacy-import'}" :aria-current="state.page==='legacy-import'?'page':undefined" @click.prevent="navigate('legacy-import')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#documents"></use></svg>Portabilidade de dados</a>
         <a v-if="state.user?.role==='admin'" href="#/diagnostics" :class="{active:state.page==='diagnostics'}" @click.prevent="navigate('diagnostics')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#audit"></use></svg>Diagnóstico e logs</a>
         <a v-if="can('audit.read')" href="#/audit" :class="{active:state.page==='audit'}" :aria-current="state.page==='audit'?'page':undefined" @click.prevent="navigate('audit')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#audit"></use></svg>Auditoria</a>
       </nav>
@@ -108,6 +109,39 @@
           <ol><li>Use <strong>Vincular pessoa existente</strong> e pesquise por nome ou CPF.</li><li>Se a pessoa aparecer, selecione-a para adicionar o perfil de aluno.</li><li>Use <strong>+ Novo aluno</strong> somente quando a busca não localizar a pessoa.</li></ol>
         </section>
         <div v-if="state.loading" class="loading-strip" role="status">Carregando registros…</div>
+        <section v-if="state.page==='legacy-import' && state.user?.role==='admin'" class="dashboard" aria-labelledby="legacy-import-title">
+          <section class="panel x-card">
+            <p class="eyebrow">MIGRAÇÃO ASSISTIDA</p><h2 id="legacy-import-title">Traga cadastros, fotos e documentos da aplicação anterior</h2>
+            <p>A prévia lê o banco sem gravar dados. Depois da conferência, a importação cria os cadastros compatíveis e arquiva todas as linhas da origem para reconciliação e download.</p>
+            <div class="x-grid">
+              <label>Backup ZIP ou banco SQLite
+                <input type="file" accept=".zip,.db,.sqlite,.sqlite3,application/zip,application/vnd.sqlite3" @change="legacyImportFileChange($event,'backup')">
+                <small v-if="state.legacyImport.backupName" class="muted">{{ state.legacyImport.backupName }}</small>
+              </label>
+              <label>ZIP opcional de mídia do container
+                <input type="file" accept=".zip,application/zip" @change="legacyImportFileChange($event,'media')">
+                <small v-if="state.legacyImport.mediaName" class="muted">{{ state.legacyImport.mediaName }}</small>
+              </label>
+            </div>
+            <p class="small muted">Exporte do container antigo a pasta persistente de fotos e documentos e compacte-a em ZIP. Arquivos referenciados pelo banco ou arquivos seguros da pasta serão copiados para o armazenamento privado do PIGE360. Caminhos do Magento, cache e WebView são ignorados. Limite configurado: {{ state.legacyImport.preview?.max_package_mb || 128 }} MB por pacote enviado.</p>
+            <div v-if="state.legacyImport.error" class="alert error" role="alert">{{ state.legacyImport.error }}</div>
+            <div v-if="state.legacyImport.result" class="alert success" role="status">Importação concluída. {{ state.legacyImport.result.summary.source_record_count }} linha(s) de origem arquivadas e {{ state.legacyImport.result.summary.archive_record_count }} registro(s) de portabilidade disponíveis no histórico abaixo.</div>
+            <button class="btn btn-primary" :disabled="state.legacyImport.busy || !state.legacyImport.backupName" @click="previewLegacyImport">{{ state.legacyImport.busy ? 'Analisando…' : 'Gerar prévia segura' }}</button>
+          </section>
+          <section v-if="state.legacyImport.preview" class="panel x-card" aria-labelledby="legacy-preview-title">
+            <div class="x-heading"><div><p class="eyebrow">PRÉVIA · {{ state.legacyImport.preview.source_system }}</p><h2 id="legacy-preview-title">{{ state.legacyImport.preview.source_record_count }} registro(s) em {{ state.legacyImport.preview.table_count }} tabela(s)</h2><p>Fingerprint {{ state.legacyImport.preview.fingerprint.slice(0,16) }}… · repita a prévia se trocar qualquer arquivo.</p></div></div>
+            <div class="charge-summary"><div><small>Fotos Base64 convertíveis</small><strong>{{ state.legacyImport.preview.media.inline_photos_convertible }}</strong></div><div><small>Arquivos candidatos do container</small><strong>{{ state.legacyImport.preview.media.container_files_candidate_count }}</strong></div><div><small>Arquivos recusados</small><strong>{{ state.legacyImport.preview.media.container_unsupported_files_ignored }}</strong></div><div><small>Referências de mídia sem arquivo</small><strong>{{ state.legacyImport.preview.media.unresolved_media_references }}</strong></div><div><small>Magento excluído</small><strong>{{ state.legacyImport.preview.media.container_magento_paths_ignored }}</strong></div><div><small>Caminhos de cache/pasta insegura</small><strong>{{ state.legacyImport.preview.media.container_unsafe_or_cache_paths_ignored }}</strong></div></div>
+            <div v-if="state.legacyImport.preview.warnings.length" class="alert warning"><ul><li v-for="warning in state.legacyImport.preview.warnings" :key="warning">{{ warning }}</li></ul></div>
+            <div class="panel x-card"><h3>Linhas encontradas e destino</h3><div style="overflow-x:auto"><table><thead><tr><th>Tabela de origem</th><th>Linhas</th><th>Destino</th></tr></thead><tbody><tr v-for="table in populatedImportTables()" :key="table.name"><td>{{ table.name }}</td><td>{{ table.rows }}</td><td>{{ table.destination }}</td></tr></tbody></table></div></div>
+            <p class="alert warning">Confirme a importação na escola atualmente selecionada. Cadastros existentes não serão sobrescritos; usuários legados permanecerão inativos.</p>
+            <label class="field">Digite IMPORTAR para confirmar<input v-model="state.legacyImport.confirmation" maxlength="20" autocomplete="off"></label>
+            <button class="btn btn-primary" :disabled="state.legacyImport.busy || state.legacyImport.confirmation.trim().toUpperCase()!=='IMPORTAR'" @click="applyLegacyImport">{{ state.legacyImport.busy ? 'Importando…' : 'Confirmar e importar' }}</button>
+          </section>
+          <section class="panel x-card" aria-labelledby="legacy-runs-title"><div class="x-heading"><div><p class="eyebrow">RECONCILIAÇÃO</p><h2 id="legacy-runs-title">Histórico de portabilidade</h2><p>Baixe o JSONL com os registros preservados, valores sensíveis removidos e referências aos cadastros/arquivos criados.</p></div></div>
+            <div v-if="!state.legacyImport.runs.length" class="empty"><p>Nenhuma importação concluída nesta escola.</p></div>
+            <div v-for="run in state.legacyImport.runs" :key="run.id" class="x-line"><div><strong>{{ date(run.created_at) }} · {{ run.source_system }}</strong><small class="muted">{{ run.summary.source_record_count }} linha(s) · fingerprint {{ run.fingerprint.slice(0,16) }}…</small></div><button class="btn btn-secondary" @click="downloadLegacyArchive(run)">Baixar arquivo de portabilidade</button></div>
+          </section>
+        </section>
         <diagnostics-panel v-if="state.page==='diagnostics' && state.user?.role==='admin'"></diagnostics-panel>
         <expansion-panel v-if="['online','banking','integrations','connect'].includes(state.page)" :key="state.schoolId+':'+state.page" :school-id="state.schoolId" :page="state.page" :permissions="state.user.permissions"></expansion-panel>
         <diary-panel v-if="state.page==='diary'" :key="state.schoolId+':diary'" :school-id="state.schoolId" :permissions="state.user.permissions"></diary-panel>

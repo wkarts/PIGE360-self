@@ -444,6 +444,32 @@ class MFARecovery(Record, Base):
     subject: Mapped[str] = mapped_column(ForeignKey('mfa_credentials.subject'), index=True)
     code_hash: Mapped[str] = mapped_column(String(64), unique=True)
 
+
+class LegacyImportRun(Record, Scoped, Base):
+    """Rastreabilidade de uma portabilidade legada por escola e fingerprint."""
+    __tablename__ = 'legacy_import_runs'
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    source_system: Mapped[str] = mapped_column(String(80), default='school_desktop_suite')
+    imported_by: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    __table_args__ = (UniqueConstraint('school_id', 'fingerprint', name='uq_legacy_import_run_fingerprint'),)
+
+
+class LegacyImportRecord(Record, Base):
+    """Registro original sanitizado, com referência ao cadastro materializado."""
+    __tablename__ = 'legacy_import_records'
+    run_id: Mapped[str] = mapped_column(ForeignKey('legacy_import_runs.id', ondelete='CASCADE'), index=True)
+    source_table: Mapped[str] = mapped_column(String(120), index=True)
+    source_key: Mapped[str] = mapped_column(String(160))
+    mapped_entity_type: Mapped[str] = mapped_column(String(60), default='')
+    mapped_entity_id: Mapped[str | None] = mapped_column(String(36))
+    file_id: Mapped[str | None] = mapped_column(ForeignKey('files.id'))
+    record_data: Mapped[dict] = mapped_column(JSON)
+    __table_args__ = (
+        UniqueConstraint('run_id', 'source_table', 'source_key', name='uq_legacy_import_source_record'),
+        Index('ix_legacy_import_records_run_table', 'run_id', 'source_table'),
+    )
+
 from .assisted_models import OcrJob, LookupCache, LookupProvider, AssistedQuota, IntakeSettings  # noqa: F401
 
 # Registro aditivo do Diário Escolar Digital.
