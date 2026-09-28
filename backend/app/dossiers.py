@@ -7,7 +7,7 @@ from typing import Literal
 from fastapi import APIRouter, Query, Request, File, Form, UploadFile
 from pydantic import Field, model_validator
 from sqlalchemy import or_, select, func
-from . import models as m, schemas as s, people
+from . import models as m, schemas as s, people, business_people
 from .common import output
 from .security import Actor, DB, Scope, check_version, fail, lock_school, require, scoped
 from .registry import validate
@@ -16,6 +16,7 @@ router = APIRouter(prefix='/api/v1/schools/{school_id}', tags=['Ficha única e f
 PROFILES = {'student': (m.Student,s.StudentData,s.StudentInput,people.create_student,people.update_student),
             'teacher': (m.TeacherProfile,s.TeacherData,s.TeacherInput,people.create_teacher,people.update_teacher),
             'employee': (m.EmployeeProfile,s.EmployeeData,s.EmployeeInput,people.create_employee,people.update_employee)}
+BUSINESS_PROFILES = ('supplier', 'service_provider', 'customer', 'partner')
 
 
 class ProfileEdit(s.Input):
@@ -50,7 +51,7 @@ class DossierInput(s.Input):
     person_id: str | None = None
     version: int | None = Field(default=None, ge=1)
     person: dict
-    profiles: dict[Literal['student','teacher','employee'],ProfileEdit] = Field(default_factory=dict)
+    profiles: dict[Literal['student','teacher','employee','supplier','service_provider','customer','partner'],ProfileEdit] = Field(default_factory=dict)
     family: list[FamilyEdit] = Field(default_factory=list, max_length=50)
 
 
@@ -59,6 +60,14 @@ def profile_data(db, person):
     for kind,(model,_,_,_,_) in PROFILES.items():
         obj=db.scalar(select(model).where(model.person_id==person.id,model.school_id==person.school_id))
         if obj:profiles[kind]=output(obj)
+    # Inclui também vínculos comerciais inativos para que a reativação pelo
+    # Cadastro Único recupere os dados já salvos, sem sobrescrevê-los vazios.
+    links=db.scalars(select(m.PersonTypeLink).where(
+        m.PersonTypeLink.person_id==person.id,
+        m.PersonTypeLink.school_id==person.school_id,
+        m.PersonTypeLink.type_code.in_(BUSINESS_PROFILES))).all()
+    for link in links:
+        profiles[link.type_code]={**output(link),**(link.details or {})}
     return profiles
 
 
@@ -156,6 +165,12 @@ def save_dossier(data:DossierInput,db:DB,user:Actor,school:Scope,request:Request
             if change.version is None:fail(409,'Recarregue a ficha específica antes de editar.')
             current={key:getattr(obj,key) for key in validator.model_fields}
             update_fn(obj.id,s.Edit(version=change.version,data={**current,**change.data}),db,user,school,request)
+    for kind in BUSINESS_PROFILES:
+        change=data.profiles.get(kind)
+        if not change:continue
+        if kind not in desired:fail(422,'Selecione o tipo correspondente aos dados específicos.')
+        details=validate(business_people.BusinessDetails,change.data)
+        business_people.save_details(db,person,kind,details)
     for change in data.family:
         if data.person_id and change.link_id and not change.active:continue
         save_family(db,person,change,user,school,request)

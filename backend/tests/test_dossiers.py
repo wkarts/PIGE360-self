@@ -88,3 +88,52 @@ def test_bad_photo_rolls_back_new_person_and_relatives(api):
     result=api.client.post(api.base+'/person-dossiers/with-photo',headers=api.headers,data={'payload':json.dumps(payload)},files={'file':('photo.png',b'not-an-image','image/png')})
     assert result.status_code in (415,422),result.text
     assert api.get('/persons?q=rollback')['total']==0
+
+def test_unique_dossier_saves_all_business_profiles_on_one_person(api):
+    details={
+        'supplier':{'contact_name':'Contato compras','category':'Material escolar','reference':'FOR-001','notes':'Entrega mensal'},
+        'service_provider':{'contact_name':'Contato técnico','category':'Manutenção','reference':'PRE-002','notes':'Atendimento agendado'},
+        'customer':{'contact_name':'Contato financeiro','category':'Pessoa física','reference':'CLI-003','notes':'Cobrança por e-mail'},
+        'partner':{'contact_name':'Contato societário','category':'Sócio fundador','reference':'SOC-004','notes':'Participação administrativa'},
+    }
+    profiles={kind:{'data':values} for kind,values in details.items()}
+    saved=save(api,{'person':{'name':'Pessoa com quatro vínculos','person_types':list(details)},'profiles':profiles})
+    person=saved['person']
+    assert set(person['person_types'])==set(details)
+    assert api.get('/persons')['total']==1
+    for kind,values in details.items():
+        assert {key:saved['profiles'][kind][key] for key in values}==values
+        assert person['business_profiles'][kind]==values
+
+    loaded=api.get('/persons/'+person['id']+'/dossier')
+    changed_supplier={**details['supplier'],'category':'Materiais de consumo'}
+    edited=save(api,{
+        'person_id':person['id'],'version':person['version'],
+        'person':{'phone':'5575999991234','person_types':['supplier','service_provider','customer','partner']},
+        'profiles':{'supplier':{'version':loaded['profiles']['supplier']['version'],'data':changed_supplier}},
+    })
+    assert edited['person']['id']==person['id']
+    assert edited['profiles']['supplier']['category']=='Materiais de consumo'
+    assert edited['profiles']['customer']['category']==details['customer']['category']
+    assert api.get('/persons?q=Pessoa com quatro vínculos')['total']==1
+
+    inactive=save(api,{
+        'person_id':edited['person']['id'],'version':edited['person']['version'],
+        'person':{'person_types':['service_provider','customer','partner']},
+    })
+    assert 'supplier' not in inactive['person']['person_types']
+    assert inactive['profiles']['supplier']['category']=='Materiais de consumo'
+    reactivated=save(api,{
+        'person_id':inactive['person']['id'],'version':inactive['person']['version'],
+        'person':{'person_types':['supplier','service_provider','customer','partner']},
+    })
+    assert reactivated['profiles']['supplier']['category']=='Materiais de consumo'
+
+
+def test_unique_dossier_rejects_business_data_for_unselected_type_and_rolls_back(api):
+    save(api,{
+        'person':{'name':'Vínculo comercial incompatível','person_types':['supplier']},
+        'profiles':{'customer':{'data':{'category':'Não deve ser salvo'}}},
+    },422)
+    assert api.get('/persons?q=Vínculo comercial incompatível')['total']==0
+
