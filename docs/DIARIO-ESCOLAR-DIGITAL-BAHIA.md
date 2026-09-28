@@ -362,16 +362,7 @@ Para coordenação, painel por turma/professor com:
 
 ### Fase 1 — núcleo oficial
 
-- períodos letivos;
-- componentes curriculares;
-- diário;
-- planejamento;
-- aula;
-- frequência;
-- RBAC;
-- auditoria;
-- fechamento e reabertura auditada;
-- relatório básico do diário.
+**Implementada nas PRs anteriores do Diário:** períodos letivos, componentes curriculares, diário, planejamento, aula, frequência, RBAC, auditoria, fechamento/reabertura auditada e relatório institucional básico.
 
 ### Fase 2 — avaliação
 
@@ -426,21 +417,6 @@ O documento de origem não detalha:
 
 O sistema será desenhado para suportar essas regras sem hardcode. A validação normativa da Bahia deve ocorrer em uma etapa própria antes de afirmar conformidade completa.
 
-## Primeiro incremento recomendado
+## Próximos incrementos
 
-Começar pelo **núcleo do diário e frequência**, porque ambos estruturam os demais módulos e não exigem definir uma fórmula de notas prematuramente.
-
-O primeiro incremento funcional deve permitir:
-
-1. criar períodos;
-2. estruturar componentes;
-3. abrir diário por turma/componente/professor;
-4. registrar aula;
-5. fazer chamada;
-6. revisar pendências;
-7. fechar um período com snapshot;
-8. emitir relatório institucional;
-9. reabrir somente com justificativa e permissão;
-10. consultar histórico completo de alterações.
-
-Essa base permite acrescentar avaliação, parecer e comunicação sem refazer o modelo.
+Para concluir as áreas restantes sem presumir dados ou obrigações ausentes da documentação, a próxima entrega deve estabelecer o vínculo autorizado entre conta familiar e matrícula, os canais/consentimentos de comunicação e as regras oficiais de frequência, avaliação, assinatura, guarda e exportação. A operação offline requer um fluxo de conflitos e sincronização idempotente separado; fechamento e publicação continuarão dependendo de confirmação do servidor.
