@@ -4083,7 +4083,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                         }, "Recibo da inscrição", 8, ["onClick"]))
                       : _createCommentVNode("", true)])]), (state.selected.enrollment)
                       ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Matrícula " + _toDisplayString(state.selected.enrollment.number) + " · " + _toDisplayString(label(state.selected.enrollment.status)), 1))
-                      : _createCommentVNode("", true), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.selected.issued_documents.filter(item=>item.template_id!==state.selected?.contract?.template_id), (d) => {
+                      : _createCommentVNode("", true), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.selected.issued_documents.filter(item=>!state.selected?.contract?.template_id || item.template_id!==state.selected.contract.template_id), (d) => {
                       return (_openBlock(), _createElementBlock("div", {
                         key: d.id,
                         class: "x-heading"
