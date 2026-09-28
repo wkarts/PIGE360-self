@@ -833,7 +833,7 @@ def save_assessment_rule(diary_id: str, period_id: str, data: s.PeriodAssessment
         obj = m.PeriodAssessmentRule(school_id=school.id, diary_id=diary.id, academic_period_id=period.id, configured_by=user.id, **values)
         db.add(obj)
     db.flush()
-    audit(db, request, user, "diary.assessment_rule.saved", obj, school.id, {"before": before, "after": output(obj)})
+    audit(db, request, user, "diary.assessment_rule.saved", obj, school.id, _json_safe({"before": before, "after": output(obj)}))
     return output(obj)
 
 
