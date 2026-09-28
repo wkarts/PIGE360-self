@@ -952,8 +952,8 @@ def consolidate_period(diary_id: str, period_id: str, data: s.DiaryTransitionInp
             if "frequencia_abaixo_do_limite" in flags: status = "attendance_below_minimum"
             elif "parecer_final_pendente" in flags: status = "opinion_pending"
         if status == "pending": pending += 1
-        source = {"rule":output(rule),"assessments":source_items,"aggregation":{"regular":base_trace,"recovery":rec_trace},"attendance":attendance_trace,"attendance_percent":str(attendance_pct) if attendance_pct is not None else None,"opinion_status":opinion.status if opinion else None}
-        canonical = json.dumps(_json_safe(source),ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
+        source = _json_safe({"rule":output(rule),"assessments":source_items,"aggregation":{"regular":base_trace,"recovery":rec_trace},"attendance":attendance_trace,"attendance_percent":str(attendance_pct) if attendance_pct is not None else None,"opinion_status":opinion.status if opinion else None})
+        canonical = json.dumps(source,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
         digest = hashlib.sha256(canonical).hexdigest()
         obj = db.scalar(select(m.PeriodResult).where(
             m.PeriodResult.diary_id==diary.id,m.PeriodResult.academic_period_id==period.id,m.PeriodResult.enrollment_id==enrollment_id
