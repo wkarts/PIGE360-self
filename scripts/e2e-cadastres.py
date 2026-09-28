@@ -57,7 +57,7 @@ try:
             menu=page.get_by_role('button',name='Cadastros',exact=True)
             if label in ['Cadastro único','Alunos','Professores','Funcionários','Pais e responsáveis','Fornecedores','Prestadores de serviços','Clientes','Sócios'] and menu.get_attribute('aria-expanded')=='false':menu.click()
             page.locator('aside').get_by_role('link',name=label,exact=False).click()
-            expect(page.get_by_role('heading',name=heading or label,exact=True)).to_be_visible()
+            expect(page.locator('h1')).to_have_text(heading or label)
         def dialog():return page.get_by_role('dialog')
         def field(label):
             # CNPJ is distinct from the complementary registration-status field.
