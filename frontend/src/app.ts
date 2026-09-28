@@ -692,10 +692,10 @@ namespace PigeUI {
       else await loadPage();
       if(modal.kind==='protocol-note')await viewProtocol(target!.id);
       if(modal.kind==='draft-edit')await viewEnrollment(target!.id);
-    }catch(error){modal.error=error instanceof Error?error.message:String(error);
+    }catch(error){state.busy=false;modal.error=error instanceof Error?error.message:String(error);
       const errors=(error as {fields?:{field:string}[]})?.fields||[];
       const key=errors[0]?.field.split('.').at(-1);const field=modal.fields.find(f=>f.key===key||f.key==='business_'+key);
-      if(field){state.modalSection=fieldSection(field);await Vue.nextTick();const input=document.getElementById('modal-field-'+field.key);const details=input?.closest('details');if(details)details.open=true;input?.focus();}
+      if(field){state.modalSection=fieldSection(field);await Vue.nextTick();const input=document.getElementById('modal-field-'+field.key);const details=input?.closest('details');if(details)details.open=true;await Vue.nextTick();input?.focus();}
       if(state.modal!==modal)notify(error);
     }
     finally{state.busy=false;}
