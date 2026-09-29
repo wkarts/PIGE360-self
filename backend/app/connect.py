@@ -40,8 +40,18 @@ def _remote_call(call):
             "CONNECT_API_DNS_UNAVAILABLE",
             "CONNECT_API_PRIVATE_ADDRESS_BLOCKED",
             "CONNECT_API_NETWORK_ERROR",
+            "DNS_UNAVAILABLE",
+            "CONNECT_PRIVATE_ADDRESS_BLOCKED",
+            "CONNECT_ADDRESS_BLOCKED",
+            "CONNECT_HOST_NOT_ALLOWED",
+            "PROVIDER_NETWORK_ERROR",
+            "PROVIDER_TIMEOUT",
         } else 502
-        fail(status, f"Connect API: {error.code}.")
+        if error.code == "PROVIDER_TIMEOUT":
+            fail(status, "WhatsApp: a solicitação excedeu o tempo de espera. Confira a conexão da instância e tente novamente. (PROVIDER_TIMEOUT)")
+        if error.code == "PROVIDER_NETWORK_ERROR":
+            fail(status, "WhatsApp: não foi possível alcançar o provedor. Confira a URL, a rede e tente novamente. (PROVIDER_NETWORK_ERROR)")
+        fail(status, f"WhatsApp: {error.code}.")
 
 
 def _instance(db, school, instance_id):
@@ -51,7 +61,7 @@ def _instance(db, school, instance_id):
         m.ConnectInstance.company_id == company.id,
     ))
     if not obj:
-        fail(404, "Instância Connect API não encontrada nesta empresa.")
+        fail(404, "Instância de WhatsApp não encontrada nesta empresa.")
     return obj
 
 
@@ -140,8 +150,9 @@ def _set_unit_preferred(db, school, unit, obj):
 
 def _state_from_response(obj, response):
     status, state = _remote_status(response)
-    obj.status = status
-    obj.connection_state = state
+    if state:
+        obj.status = status
+        obj.connection_state = state
     obj.last_synced_at = datetime.now(UTC)
     obj.last_error = ""
     obj.version += 1
@@ -248,7 +259,7 @@ def adopt_connect_instance(
     response = _remote_call(lambda: ConnectApiClient().fetch_instance(data.instance_name))
     rows = [row for row in _remote_rows(response) if row["name"] == data.instance_name]
     if not rows:
-        fail(404, "Instância não encontrada na Connect API configurada.")
+        fail(404, "Instância não encontrada no provedor de WhatsApp configurado.")
     row = rows[0]
     obj = db.scalar(select(m.ConnectInstance).where(
         m.ConnectInstance.company_id == company.id,
@@ -357,7 +368,7 @@ def create_connect_instance(
         fail(409, "Já existe uma instância local com este nome.")
     response = _remote_call(lambda: ConnectApiClient().create_instance(name))
     if isinstance(response, dict) and response.get("error") is True:
-        fail(502, "A Connect API não criou a instância.")
+        fail(502, "O provedor de WhatsApp não criou a instância.")
     status, state = _remote_status(response)
     obj = m.ConnectInstance(
         company_id=company.id,
@@ -386,7 +397,7 @@ def create_connect_instance(
         "primary": primary,
         "phone_configured": True,
     })
-    return {"instance": _instance_output(obj), **connect_response(response)}
+    return {"instance": _instance_output(obj), **connect_response(response, "qr")}
 
 
 @router.post("/connect/instances/{instance_id}/sync")
@@ -394,6 +405,8 @@ def sync_connect_instance(instance_id: str, db: DB, user: Actor, school: Scope, 
     require(user, "connect.manage")
     obj = _instance(db, school, instance_id)
     response = _remote_call(lambda: ConnectApiClient().connection_state(obj.name))
+    if not _remote_status(response)[1]:
+        fail(502, "WhatsApp: o provedor não informou o estado da instância. Tente novamente.")
     _state_from_response(obj, response)
     audit(db, request, user, "connect.instance.synced", obj, school.id, {"state": obj.connection_state})
     return {"instance": _instance_output(obj), **connect_response(response)}
@@ -411,7 +424,7 @@ def update_connect_instance_phone(
     require(user, "connect.manage")
     obj = _instance(db, school, instance_id)
     if obj.source != "pige360":
-        fail(409, "O telefone de uma instância preexistente é administrado na Connect API de origem.")
+        fail(409, "O telefone de uma instância preexistente é administrado no provedor de WhatsApp de origem.")
     obj.phone = data.number
     obj.version += 1
     audit(db, request, user, "connect.instance.phone_updated", obj, school.id, {"phone_configured": True})
@@ -426,11 +439,13 @@ def connect_instance_qr(instance_id: str, db: DB, user: Actor, school: Scope, re
         fail(409, "Instância preexistente: conexão remota não é administrada pelo PIGE360.")
     response = _remote_call(lambda: ConnectApiClient().connect(obj.name, ""))
     status, state = _remote_status(response)
-    obj.status, obj.connection_state, obj.last_error = status, state, ""
+    if state:
+        obj.status, obj.connection_state = status, state
+    obj.last_error = ""
     obj.last_synced_at = datetime.now(UTC)
     obj.version += 1
     audit(db, request, user, "connect.instance.qr_requested", obj, school.id, {"state": state})
-    return {"instance": _instance_output(obj), **connect_response(response)}
+    return {"instance": _instance_output(obj), **connect_response(response, "qr")}
 
 
 @router.post("/connect/instances/{instance_id}/pairing-code")
@@ -443,11 +458,13 @@ def connect_instance_pairing_code(instance_id: str, db: DB, user: Actor, school:
         fail(409, "Cadastre o telefone da instância antes de solicitar o código de pareamento.")
     response = _remote_call(lambda: ConnectApiClient().connect(obj.name, obj.phone))
     status, state = _remote_status(response)
-    obj.status, obj.connection_state, obj.last_error = status, state, ""
+    if state:
+        obj.status, obj.connection_state = status, state
+    obj.last_error = ""
     obj.last_synced_at = datetime.now(UTC)
     obj.version += 1
     audit(db, request, user, "connect.instance.pairing_requested", obj, school.id, {"state": state, "phone_configured": True})
-    return {"instance": _instance_output(obj), **connect_response(response)}
+    return {"instance": _instance_output(obj), **connect_response(response, "pairing")}
 
 
 @router.post("/connect/instances/{instance_id}/connect")
@@ -466,11 +483,13 @@ def connect_instance(
         fail(422, "Informe o telefone internacional com DDD para gerar o pairing code.")
     response = _remote_call(lambda: ConnectApiClient().connect(obj.name, number))
     status, state = _remote_status(response)
-    obj.status, obj.connection_state, obj.last_error = status, state, ""
+    if state:
+        obj.status, obj.connection_state = status, state
+    obj.last_error = ""
     obj.last_synced_at = datetime.now(UTC)
     obj.version += 1
     audit(db, request, user, "connect.instance.connected", obj, school.id, {"state": state, "pairing": bool(number)})
-    return {"instance": _instance_output(obj), **connect_response(response)}
+    return {"instance": _instance_output(obj), **connect_response(response, "pairing" if number else "qr")}
 
 
 @router.post("/connect/instances/{instance_id}/logout")
@@ -519,7 +538,7 @@ def test_connect(db: DB, user: Actor, school: Scope, request: Request):
     return {
         "ok": True,
         "code": "CONNECT_API_REACHED",
-        "message": "Connect API respondeu.",
+        "message": "O provedor de WhatsApp respondeu.",
         "response": connect_response(response),
     }
 
@@ -551,7 +570,7 @@ def retry_connect_job(job_id: str, data: s.Reason, db: DB, user: Actor, school: 
     lock_school(db, school.id)
     job = scoped(db, m.ConnectMessageJob, job_id, school.id)
     if job.status not in ("failed", "retry"):
-        fail(409, "Resultado incerto não é reenviado automaticamente. Confira a Connect API antes de tentar novamente.")
+        fail(409, "Resultado incerto não é reenviado automaticamente. Confira o provedor de WhatsApp antes de tentar novamente.")
     job.status, job.attempts, job.error_code, job.lease_until = "pending", 0, "", None
     job.available_at = datetime.now(UTC)
     audit(db, request, user, "connect.job.retry", job, school.id, {"reason": data.reason})

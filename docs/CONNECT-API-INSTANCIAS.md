@@ -15,6 +15,8 @@ Por padrão, a instalação usa:
 
 `CONNECT_ALLOWED_HOSTS` é opcional. Quando vazio, somente o hostname exato de `CONNECT_API_BASE_URL` é aceito. Quando preenchido, funciona como allowlist explícita adicional.
 
+`CONNECT_PAIRING_TIMEOUT_SECONDS` controla a espera por QR Code ou código de pareamento (padrão: 75 s; limite: 15–90 s). O provedor pode aguardar até 60 s pela autenticação. Ajuste o timeout de leitura dos proxies HTTPS à frente do PIGE360 e da Connect API acima desse limite, por exemplo 90 s. `INTEGRATION_TIMEOUT_SECONDS` continua independente para as demais chamadas.
+
 ## Instâncias
 
 Há dois tipos:
@@ -68,6 +70,12 @@ A implementação usa o contrato nativo:
 - `POST /message/sendText/{instance}`
 
 A chave global não é enviada ao navegador.
+
+O endpoint de conexão pode devolver `code`, `base64` e `pairingCode` diretamente no corpo JSON. HTTP 200 sem o valor solicitado significa que o código ainda não está disponível; a tela orienta nova tentativa sem anunciar sucesso. O telefone internacional cadastrado é enviado como `number` ao pedir o código de pareamento.
+
+## Atualização da instalação
+
+A correção precisa estar na imagem que a stack executa. Um pacote de distribuição 1.1.2 de arquitetura anterior não substitui a imagem atual do PIGE360 Self. Depois que a alteração for integrada a `develop` e a imagem daquele commit for publicada, faça backup e atualize o `APP_IMAGE` da stack para um digest ou tag imutável correspondente. Recrie `app` e `worker` com `docker compose pull` e `docker compose up -d --wait` usando o mesmo arquivo Compose e `.env` da instalação. Consulte o build exibido no rodapé, `/build-info.json` e os logs da API para confirmar a versão efetiva. Um cache antigo da PWA também pode manter rótulos anteriores até a atualização do service worker/reabertura da aplicação. Não interrompa a stack apenas para renovar o QR Code.
 
 ## Segurança
 

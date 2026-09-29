@@ -245,6 +245,36 @@ def test_connect_qr_and_pairing_code_are_separate_actions(online, monkeypatch):
     assert ('connect',instance['name'],'5575999990000') in calls
 
 
+def test_connect_pending_keeps_open_status_and_does_not_report_code(online, monkeypatch):
+    instance, fake = connect(online, monkeypatch)
+    sync = online['api'].post('/connect/instances/' + instance['id'] + '/sync', {}, 200)
+    assert sync['instance']['status'] == 'open'
+    monkeypatch.setattr(fake, 'connect', lambda self, name, number='': {})
+    response = online['api'].post('/connect/instances/' + instance['id'] + '/pairing-code', {}, 200)
+    assert response['pending'] is True and response['qrcode'] == {}
+    assert response['instance']['status'] == 'open'
+    assert response['instance']['connection_state'] == 'open'
+
+
+def test_connect_sync_without_remote_state_fails_without_overwriting_open(online, monkeypatch):
+    instance, fake = connect(online, monkeypatch)
+    before = online['api'].post('/connect/instances/' + instance['id'] + '/sync', {}, 200)['instance']
+    monkeypatch.setattr(fake, 'connection_state', lambda self, name: {})
+    response = online['api'].post('/connect/instances/' + instance['id'] + '/sync', {}, 502)
+    assert 'não informou o estado' in response['detail']
+    after = next(item for item in online['api'].get('/connect')['items'] if item['id'] == instance['id'])
+    assert after['status'] == 'open' and after['version'] == before['version']
+
+
+def test_connect_endpoint_accepts_top_level_pairing_and_qr(online, monkeypatch):
+    instance, fake = connect(online, monkeypatch)
+    monkeypatch.setattr(fake, 'connect', lambda self, name, number='': {'pairingCode': 'EFGH-5678'} if number else {'base64': 'data:image/png;base64,TEST-QR'})
+    pairing = online['api'].post('/connect/instances/' + instance['id'] + '/pairing-code', {}, 200)
+    qr = online['api'].post('/connect/instances/' + instance['id'] + '/qr', {}, 200)
+    assert pairing['qrcode'] == {'pairingCode': 'EFGH-5678'}
+    assert qr['qrcode'] == {'base64': 'data:image/png;base64,TEST-QR'}
+
+
 def test_connect_requires_company_cnpj(online):
     o=online
     with SessionLocal() as db:
@@ -359,5 +389,3 @@ def test_http_transport_error_safety(monkeypatch,status):
     with pytest.raises(IntegrationFailure) as error:call_json('asaas','https://api-sandbox.asaas.com/v3','/payments',method='POST',api_key='test-only-key',data={})
     assert str(error.value)==f'PROVIDER_HTTP_{status}'
     assert error.value.uncertain is (status>=500)
-
-

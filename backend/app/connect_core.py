@@ -3,11 +3,16 @@
 A chave é global por instalação e fica exclusivamente no ambiente. As
 instâncias WhatsApp pertencem à empresa/tenant, não à integração bancária.
 """
+import base64
+import io
 import ipaddress
 import re
 import socket
 import unicodedata
 from urllib.parse import urlsplit
+
+import qrcode
+from qrcode.exceptions import DataOverflowError
 
 from sqlalchemy import select
 
@@ -27,7 +32,7 @@ def _normalise_slug(value: str) -> str:
 def _cnpj_digits(value: str | None) -> str:
     digits = re.sub(r"\D", "", value or "")
     if len(digits) != 14:
-        fail(422, "Cadastre um CNPJ válido na empresa antes de criar a instância Connect API.")
+        fail(422, "Cadastre um CNPJ válido na empresa antes de criar a instância de WhatsApp.")
     return digits
 
 
@@ -75,7 +80,7 @@ class ConnectApiClient:
     def __init__(self):
         self.base, self.key = _connect_config()
 
-    def request(self, path: str, method: str = "GET", data=None, params=None):
+    def request(self, path: str, method: str = "GET", data=None, params=None, *, timeout_seconds=None, accept_list=False):
         response = call_json(
             "connect_api",
             self.base,
@@ -85,6 +90,8 @@ class ConnectApiClient:
             header="apikey",
             data=data,
             params=params,
+            timeout_seconds=timeout_seconds,
+            accept_list=accept_list,
         )
         if isinstance(response, dict) and response.get("error") is True:
             raise IntegrationFailure("CONNECT_API_REJECTED")
@@ -94,10 +101,10 @@ class ConnectApiClient:
         return self.request("/health")
 
     def fetch_instances(self):
-        return self.request("/instance/fetchInstances")
+        return self.request("/instance/fetchInstances", accept_list=True)
 
     def fetch_instance(self, name: str):
-        return self.request("/instance/fetchInstances", params={"instanceName": name})
+        return self.request("/instance/fetchInstances", params={"instanceName": name}, accept_list=True)
 
     def create_instance(self, name: str):
         return self.request(
@@ -115,7 +122,7 @@ class ConnectApiClient:
 
     def connect(self, name: str, number: str = ""):
         params = {"number": number} if number else None
-        return self.request(f"/instance/connect/{name}", params=params)
+        return self.request(f"/instance/connect/{name}", params=params, timeout_seconds=settings().connect_pairing_timeout_seconds)
 
     def restart(self, name: str):
         return self.request(f"/instance/restart/{name}", method="POST")
@@ -151,20 +158,36 @@ class ConnectApiClient:
         return str(value)[:160]
 
 
-def _qr_output(response):
-    qr = response.get("qrcode") if isinstance(response, dict) else None
-    if not isinstance(qr, dict):
+def _qr_output(response, mode=""):
+    if not isinstance(response, dict):
         return {}
-    return {
-        key: str(qr[key])[:1_000_000]
-        for key in ("code", "base64", "pairingCode")
-        if isinstance(qr.get(key), str) and qr[key]
-    }
+    nested = response.get("qrcode") if isinstance(response.get("qrcode"), dict) else {}
+    result = {}
+    keys = ("pairingCode",) if mode == "pairing" else ("code", "base64") if mode == "qr" else ("code", "base64", "pairingCode")
+    for key in keys:
+        value = nested.get(key) or response.get(key)
+        if isinstance(value, str) and value:
+            result[key] = value[:1_000_000]
+    if mode == "qr" and result.get("code") and not result.get("base64") and len(result["code"]) <= 3_000:
+        try:
+            image = io.BytesIO()
+            qrcode.make(result["code"]).save(image, format="PNG")
+            result["base64"] = "data:image/png;base64," + base64.b64encode(image.getvalue()).decode("ascii")
+        except (ValueError, OverflowError, DataOverflowError):
+            # O código bruto ainda segue para o cliente; nenhuma resposta de erro remoto é exposta.
+            pass
+    return result
 
 
-def connect_response(response):
+def connect_response(response, mode=""):
     """Retorna somente estado e QR; nunca devolve hash/token da Connect API."""
-    result = {"qrcode": _qr_output(response)}
+    result = {"qrcode": _qr_output(response, mode)}
+    if mode:
+        _, state = _remote_status(response)
+        if state == "open":
+            result["connected"] = True
+        elif not result["qrcode"]:
+            result["pending"] = True
     remote = response.get("instance") if isinstance(response, dict) else None
     if isinstance(remote, dict):
         result["remote"] = {
@@ -174,16 +197,17 @@ def connect_response(response):
         }
     if isinstance(response, dict) and response.get("error") is True:
         result["error"] = True
-        result["message"] = str(response.get("message", "Connect API rejeitou a operação"))[:300]
+        result["message"] = "O provedor de WhatsApp rejeitou a operação."
     return result
 
 
 def _remote_status(response) -> tuple[str, str]:
     remote = response.get("instance") if isinstance(response, dict) else None
-    if not isinstance(remote, dict):
+    payload = remote if isinstance(remote, dict) else response if isinstance(response, dict) else {}
+    state = str(payload.get("state") or payload.get("connectionStatus") or payload.get("status") or "").lower()
+    if state not in ("open", "connecting", "close", "closed", "created"):
         return "created", ""
-    state = str(remote.get("state") or remote.get("status") or "created").lower()
-    status = "open" if state == "open" else "connecting" if state == "connecting" else "close" if state == "close" else "created"
+    status = "open" if state == "open" else "connecting" if state == "connecting" else "close" if state in ("close", "closed") else "created"
     return status, state
 
 
@@ -218,7 +242,7 @@ def connect_instance_for_school(db, school_id: str, required: bool = True, unit_
     if obj is None:
         obj = db.scalar(query.order_by(m.ConnectInstance.created_at))
     if required and obj is None:
-        fail(409, "Crie e conecte uma instância Connect API para esta empresa.")
+        fail(409, "Crie e conecte uma instância de WhatsApp para esta empresa.")
     return obj
 
 
