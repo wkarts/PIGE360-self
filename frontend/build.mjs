@@ -20,7 +20,7 @@ const decodeEntities=(value)=>value.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|a
 const sandbox={console,document:{createElement(){return {textContent:'',get innerHTML(){return this.textContent},set innerHTML(value){this.textContent=decodeEntities(value);this.children=[{getAttribute(){return decodeEntities(value.slice(10,-2))}}]}}}}};vm.createContext(sandbox);vm.runInContext(source,sandbox);
 execFileSync(compiler,['-p',path.join(root,'tsconfig.portal.json')],{stdio:'inherit'});
 const renders={};
-for(const name of ['app','portal','expansion','assist','diagnostics','diary']){
+for(const name of ['app','portal','expansion','assist','diagnostics','diary','contracts','signing']){
  const fragment=key=>fs.readFileSync(path.join(root,'templates',key+'.html'),'utf8');
  const template=fs.readFileSync(path.join(root,'templates',name+'.html'),'utf8').replaceAll('<!-- MFA-MANAGE -->',fragment('mfa-manage')).replaceAll('<!-- MFA-CHALLENGE -->',fragment('mfa-challenge')).replaceAll('<!-- FAMILY -->',fragment('family')).replaceAll('<!-- FORM-FIELDS -->',fragment('form-fields'));
  const errors=[];
@@ -64,4 +64,5 @@ self.addEventListener('fetch',event=>{
 fs.writeFileSync(path.join(dist,'sw.js'),sw);
 fs.writeFileSync(path.join(dist,'build-info.json'),JSON.stringify({product:'PIGE360 Self',version,vue:'3.5.13',build_id:hash,pipeline:'typescript-vue-precompiled',external_cdn:false},null,2)+'\n');
 execFileSync(process.execPath,[path.join(root,'tests/render-smoke.mjs')],{stdio:'inherit'});
+execFileSync(process.execPath,[path.join(root,'tests/integration-navigation.mjs')],{stdio:'inherit'});
 console.log('PWA compilada:',hash);

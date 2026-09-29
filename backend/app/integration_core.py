@@ -101,13 +101,13 @@ def validate_target(url, provider):
             raise IntegrationFailure('CONNECT_PRIVATE_ADDRESS_BLOCKED')
         if ip.is_unspecified or ip.is_multicast: raise IntegrationFailure('CONNECT_ADDRESS_BLOCKED')
 
-def call_json(provider, base, path, *, method='GET', api_key='', header='access_token', auth_scheme='', data=None, params=None, request_key=''):
+def call_json(provider, base, path, *, method='GET', api_key='', header='access_token', auth_scheme='', data=None, params=None, request_key='', timeout_seconds=None, accept_list=False):
     if not path.startswith('/') or path.startswith('//'): raise IntegrationFailure('INVALID_PROVIDER_PATH')
     validate_target(base,provider)
     headers={header:(auth_scheme+' ' if auth_scheme else '')+api_key,'User-Agent':'PIGE360-Self/0.3.0','Accept':'application/json'}
     if request_key: headers['Idempotency-Key']=request_key  # Correlação; não presumir garantia do servidor.
     try:
-        with httpx.Client(timeout=httpx.Timeout(settings().integration_timeout_seconds),follow_redirects=False,trust_env=False) as client:
+        with httpx.Client(timeout=httpx.Timeout(timeout_seconds if timeout_seconds is not None else settings().integration_timeout_seconds),follow_redirects=False,trust_env=False) as client:
             with client.stream(method,base+path,headers=headers,json=data,params=params) as response:
                 status=response.status_code
                 if status>=500 or status==429:
@@ -119,8 +119,11 @@ def call_json(provider, base, path, *, method='GET', api_key='', header='access_
                     if len(content)>2_000_000: raise IntegrationFailure('PROVIDER_RESPONSE_TOO_LARGE',uncertain=method!='GET')
                 if not content: return {}
                 result=json.loads(content)
-                if not isinstance(result,dict): raise IntegrationFailure('PROVIDER_INVALID_RESPONSE',uncertain=method!='GET')
+                if not isinstance(result,dict) and not (accept_list and isinstance(result,list)):
+                    raise IntegrationFailure('PROVIDER_INVALID_RESPONSE',uncertain=method!='GET')
                 return result
+    except httpx.TimeoutException:
+        raise IntegrationFailure('PROVIDER_TIMEOUT',uncertain=method!='GET',retryable=method=='GET')
     except httpx.HTTPError:
         raise IntegrationFailure('PROVIDER_NETWORK_ERROR',uncertain=method!='GET',retryable=method=='GET')
     except (json.JSONDecodeError,UnicodeDecodeError):

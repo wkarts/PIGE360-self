@@ -24,10 +24,13 @@ info=json.loads((root/'frontend/dist/build-info.json').read_text())
 assert re.fullmatch(r'\d+\.\d+\.\d+(?:-[\w.-]+)?',info['version'])
 for f in (root/'scripts/ci').glob('*.sh'):subprocess.run(['bash','-n',str(f)],check=True)
 adapters=('docker','dockge','portainer','cloudpanel')
+reference_compose=(root/'deploy/docker/compose.yaml').read_text()
+required_variables=set(re.findall(r'\$\{([A-Z][A-Z0-9_]*):\?', reference_compose))
 for adapter in adapters:
     compose=(root/'deploy'/adapter/'compose.yaml')
     assert compose.is_file(),compose
     compose_text=compose.read_text()
+    assert compose_text==reference_compose,f'Compose divergente de deploy/docker: {compose}'
     assert 'build:' not in compose_text,compose
     assert compose_text.count('ports:')==1,compose
     assert './data-postgres:/var/lib/postgresql/data' in compose_text,compose
@@ -44,6 +47,8 @@ for adapter in adapters:
         env=root/'deploy'/adapter/f'.env.{channel}.example'
         assert env.is_file(),env
         env_text=env.read_text()
+        env_variables=set(re.findall(r'^([A-Z][A-Z0-9_]*)=',env_text,re.MULTILINE))
+        assert not (required_variables-env_variables),f'Variáveis obrigatórias ausentes em {env}: {sorted(required_variables-env_variables)}'
         assert 'APP_SECRET_KEY=' in env_text and 'POSTGRES_PASSWORD=' in env_text,env
         assert f'APP_PORT={"58081" if channel=="develop" else "58080"}' in env_text,env
 print('Workflows sem hospedagem externa; PWA, scripts e quatro adaptadores image-only conferidos.')

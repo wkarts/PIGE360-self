@@ -25,14 +25,15 @@ def main():
     if any(c in args.url for c in ['\n','\r','$','#','"',"'"]):parser.error('URL inválida para .env.')
     root=Path(__file__).resolve().parents[1]
     env_path=Path(args.env_file)
-    if env_path.is_absolute() or '..' in env_path.parts or len(env_path.parts)<2 or env_path.parts[0]!='deploy' or not env_path.name.startswith('.env') or env_path.name.endswith('.example'):
+    if env_path.is_absolute() or '..' in env_path.parts or len(env_path.parts)!=3 or env_path.parts[0]!='deploy' or env_path.parts[1] not in ('docker','dockge','portainer','cloudpanel') or not env_path.name.startswith('.env') or env_path.name.endswith('.example'):
         parser.error('--env-file deve apontar para um arquivo real dentro de deploy/ (por exemplo deploy/docker/.env.develop)')
     destination=root/env_path
-    template=root/'deploy/docker/.env.example'
-    if not template.is_file():
-        parser.error('Modelo de ambiente não encontrado em deploy/docker/.env.example')
-    text=template.read_text()
     adapter=env_path.parts[1]
+    template=root/'deploy'/adapter/('.env.develop.example' if args.channel=='develop' else '.env.production.example') if args.channel!='local' else root/'deploy/docker/.env.example'
+    if not template.is_file():
+        parser.error(f'Modelo de ambiente não encontrado: {template.relative_to(root)}')
+    text=template.read_text()
+    version=(root/'VERSION').read_text().strip()
     project=f'pige360-self-{adapter}-'+('develop' if args.channel=='develop' else 'production' if args.channel=='stable' else 'local')
     values={'APP_URL':args.url.rstrip('/'),'APP_PORT':str(args.port),'APP_BIND':args.bind,
             'COOKIE_SECURE':'true' if url.scheme=='https' else 'false',
@@ -40,7 +41,7 @@ def main():
             'APP_SECRET_KEY':secrets.token_urlsafe(48),'SETUP_TOKEN':secrets.token_urlsafe(32),
             'INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(),
             'POSTGRES_PASSWORD':secrets.token_urlsafe(36),
-            'APP_IMAGE':{'local':'pige360-self:0.3.0','stable':'ghcr.io/wkarts/pige360-self:latest','develop':'ghcr.io/wkarts/pige360-self:develop'}[args.channel],
+            'APP_IMAGE':{'local':f'pige360-self:{version}','stable':'ghcr.io/wkarts/pige360-self:latest','develop':'ghcr.io/wkarts/pige360-self:develop'}[args.channel],
             'APP_ENV':'development' if args.channel=='develop' else 'production',
             'APP_PULL_POLICY':'never' if args.channel=='local' else 'always',
             'POSTGRES_DB':'pige360_develop' if args.channel=='develop' else 'pige360',

@@ -20,6 +20,7 @@ class AdmissionCampaign(Record, Scoped, Base):
     require_verified_contact: Mapped[bool] = mapped_column(Boolean, default=True)
     require_documents: Mapped[bool] = mapped_column(Boolean, default=False)
     require_payment_before_enrollment: Mapped[bool] = mapped_column(Boolean, default=False)
+    contract_template_id: Mapped[str | None] = mapped_column(ForeignKey('document_templates.id'), index=True)
     __table_args__ = (CheckConstraint('closes_on >= opens_on', name='campaign_dates'),)
 
 class PortalAccount(Record, Scoped, Base):
@@ -88,6 +89,11 @@ class Admission(Record, Scoped, Base):
     reviewed_by: Mapped[str | None] = mapped_column(ForeignKey('users.id'))
     student_id: Mapped[str | None] = mapped_column(ForeignKey('students.id'))
     enrollment_id: Mapped[str | None] = mapped_column(ForeignKey('enrollments.id'), unique=True)
+    # O modelo e a revisão pertencem ao ato de aprovação; futuras edições da campanha
+    # ou do texto não alteram o documento que este responsável deverá assinar.
+    contract_template_id: Mapped[str | None] = mapped_column(ForeignKey('document_templates.id'), index=True)
+    contract_template_version: Mapped[int | None] = mapped_column(Integer)
+    contract_template_revision_sha256: Mapped[str | None] = mapped_column(String(64))
     __table_args__ = (UniqueConstraint('school_id','number'), UniqueConstraint('account_id','client_key'), CheckConstraint("status IN ('draft','submitted','under_review','changes_requested','waitlisted','approved','enrolled','rejected','withdrawn')", name='admission_status'))
 
 class AdmissionMessage(Record, Scoped, Base):

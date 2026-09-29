@@ -5,12 +5,17 @@ namespace PigeUI {
   interface Option { value: string; label: string }
   interface Field { key: string; label: string; type: string; required?: boolean; options?: Option[]; wide?: boolean; help?: string }
   interface Modal { kind: string; title: string; fields: Field[]; form: PigeAPI.FormDataMap; target: Row | null; action: string; error: string }
+  interface LegacyImportTable { name: string; rows: number; destination: string }
+  interface LegacyImportPreview { fingerprint: string; source_system: string; source_database: string; source_record_count: number; table_count: number; max_package_mb:number; tables: LegacyImportTable[]; media: Record<string, number>; warnings: string[] }
+  interface LegacyImportRun { id: string; created_at: string; source_system: string; fingerprint: string; summary: Record<string, unknown> }
+  interface LegacyImportResult { run_id: string; fingerprint: string; summary: Record<string, unknown> }
   const text = (value: unknown): string => value === null || value === undefined ? '' : String(value);
   const statusLabels: Record<string,string> = {active:'Ativo', archived:'Arquivado', draft:'Rascunho', suspended:'Suspenso', transferred:'Transferido', cancelled:'Cancelado', completed:'Concluído', pending:'Pendente', received:'Recebido', validated:'Validado', rejected:'Rejeitado', expired:'Vencido', waived:'Dispensado', open:'Aberto', in_progress:'Em atendimento', waiting:'Aguardando', closed:'Fechado', admin:'Administrador', direction:'Direção', coordination:'Coordenação', secretary:'Secretaria', teacher:'Professor', student:'Aluno', guardian:'Responsável', viewer:'Consulta', leave:'Afastado', inactive:'Inativo', clt:'CLT', public:'Serviço público', temporary:'Temporário', substitute:'Substituto', intern:'Estágio', outsourced:'Terceirizado', other:'Outro'};
   const catalogLabels: Record<string,string> = {'units':'Unidades','academic-years':'Anos letivos','grades':'Séries e etapas','shifts':'Turnos','class-groups':'Turmas','document-types':'Tipos de documento'};
   const registryPages=['people','students','teachers','employees','guardians','suppliers','providers','customers','partners'];
   const businessTypes:Record<string,{code:string;singular:string;category:string}>={suppliers:{code:'supplier',singular:'fornecedor',category:'Categoria de fornecimento'},providers:{code:'service_provider',singular:'prestador de serviços',category:'Especialidade / serviço'},customers:{code:'customer',singular:'cliente',category:'Categoria do cliente'},partners:{code:'partner',singular:'sócio',category:'Vínculo societário'}};
-  const pageLabels: Record<string,string> = {diagnostics:'Diagnóstico e logs',online:'Inscrições online',banking:'Cobranças',integrations:'Financeiro / ASAAS',connect:'Connect API',dashboard:'Visão geral',help:'Guia de uso',people:'Cadastro único',students:'Alunos',teachers:'Professores',employees:'Funcionários',guardians:'Pais e responsáveis',suppliers:'Fornecedores',providers:'Prestadores de serviços',customers:'Clientes',partners:'Sócios',academic:'Estrutura acadêmica',diary:'Diário Escolar',enrollments:'Matrículas',documents:'Pendências documentais',protocols:'Protocolos',reports:'Relatórios',settings:'Instituição',users:'Usuários e acessos',audit:'Auditoria'};
+  const pageLabels: Record<string,string> = {diagnostics:'Diagnóstico e logs',online:'Inscrições online',banking:'Cobranças',integrations:'Bancária',connect:'WhatsApp',email:'E-mail / SMTP',dashboard:'Visão geral',help:'Guia de uso',people:'Cadastro único',students:'Alunos',teachers:'Professores',employees:'Funcionários',guardians:'Pais e responsáveis',suppliers:'Fornecedores',providers:'Prestadores de serviços',customers:'Clientes',partners:'Sócios',academic:'Estrutura acadêmica',diary:'Diário Escolar',enrollments:'Matrículas',documents:'Pendências documentais',contracts:'Modelos e contratos',protocols:'Protocolos',reports:'Relatórios',settings:'Instituição',users:'Usuários e acessos',audit:'Auditoria','legacy-import':'Portabilidade de dados'};
+  const integrationPages=['connect','email','integrations'];
   const blankModal = (): Modal => ({kind:'',title:'',fields:[],form:{},target:null,action:'',error:''});
   const state = Vue.reactive({
     embeddingProbe:{busy:false,message:'',frame_policy:'',x_frame_options:''},
@@ -19,23 +24,31 @@ namespace PigeUI {
     error:'', success:'', menuOpen:false, user:null as PigeAPI.User|null, userPhotoUrl:'', profilePhotoPreview:'',
     schools:[] as PigeAPI.School[], schoolId:'', page:'dashboard', q:'', pageNumber:1, total:0,
     rows:[] as Row[], dashboard:{} as Row, catalogs:{} as Record<string,Row[]>, catalog:'class-groups',
-    selectedStudent:null as Student|null, studentTab:'cadastro', profileContext:{} as Row, studentDocs:{items:[],checklist:[],issued:[]} as {items:Row[];checklist:Row[];issued:Row[]}, history:[] as Row[],
+    selectedStudent:null as Student|null, studentTab:'cadastro', contractEnrollmentId:'', contractReviewIssuedId:'', profileContext:{} as Row, studentDocs:{items:[],checklist:[],issued:[]} as {items:Row[];checklist:Row[];issued:Row[]}, history:[] as Row[],
     studentChoices:[] as Student[], personChoices:[] as Row[], studentSearchQuery:'',studentSearchBusy:false,studentSearchMessage:'Digite ao menos 2 caracteres para pesquisar.',personSearchQuery:'',personSearchBusy:false,personSearchMessage:'Digite ao menos 2 caracteres para pesquisar.',photoUrls:{} as Record<string,string>, companies:[] as Row[], reportClass:'', reportRows:[] as Row[],
     supportHub:{id:'',company_id:'',enabled:false,base_url:'',position:'left',widget_type:'expanded_bubble',launcher_title:'Suporte',token_configured:false,version:1} as Row,
-    personTypeQuery:'',cadastresOpen:true, registryFilter:{type_code:'',entity_kind:'',active:''}, modalSection:'identification', discardChanges:false, modalInitial:'', reuseTarget:'',
+    personTypeQuery:'',cadastresOpen:true,integrationsOpen:true,emailStatus:'idle' as 'idle'|'configured'|'missing'|'unavailable', registryFilter:{type_code:'',entity_kind:'',active:''}, modalSection:'identification', discardChanges:false, modalInitial:'', reuseTarget:'',
     modal:blankModal(), login:{email:'',password:''}, setup:{token:'',admin_name:'',admin_email:'',admin_password:'',company_name:'',company_document:'',school_name:'',unit_name:'Unidade principal',academic_year:new Date().getFullYear()},
     filters:{status:'',academic_year_id:'',class_group_id:'',document_type_id:'',document_status:'',overdue:false},
     pendencySummary:{truncated:false,total_documents:0,scanned_students:0,total_students:0},
     studentProtocols:[] as Row[], studentProtocolTotal:0,
     canInstall:false, updateAvailable:false,
+    legacyImport:{busy:false,backupName:'',mediaName:'',confirmation:'',error:'',preview:null as LegacyImportPreview|null,result:null as LegacyImportResult|null,runs:[] as LegacyImportRun[]},
   });
   let selectedFile: File|null = null;
+  let legacyBackupFile: File|null = null;
+  let legacyMediaFile: File|null = null;
   let identityFiles: {logo?:File;font?:File} = {};
   let sequence = 0;
   let personSearchSequence=0,studentSearchSequence=0;
   let personSearchTimer=0,studentSearchTimer=0;
   let installEvent: (Event & {prompt:()=>Promise<void>})|null = null;
   let waitingWorker: ServiceWorker|null = null;
+  const photoDownloadLimit=4;
+  const photoPending=new Map<string,Promise<void>>();
+  const photoRetryAfter=new Map<string,number>();
+  const photoWaiters:Array<()=>void>=[];
+  let activePhotoDownloads=0,photoEpoch=0;
   function resetFilters():void { state.filters={status:'',academic_year_id:'',class_group_id:'',document_type_id:'',document_status:'',overdue:false}; }
   function filteredClasses():Option[] { return options('class-groups').filter(o=>!state.filters.academic_year_id||state.catalogs['class-groups']?.find(c=>c.id===o.value)?.academic_year_id===state.filters.academic_year_id); }
   function filterQuery():string {
@@ -48,6 +61,15 @@ namespace PigeUI {
   async function yearChanged():Promise<void>{state.filters.class_group_id='';await search();}
   function base(): string { return '/schools/' + state.schoolId; }
   function can(permission: string): boolean { return Boolean(state.user?.permissions.includes(permission)); }
+  function pageAllowed(page:string):boolean {
+    if(isProfileRole())return page==='dashboard'||page==='help'||(page==='diary'&&can('diary.read'));
+    if(page==='legacy-import'||page==='diagnostics'||page==='email')return state.user?.role==='admin';
+    if(page==='contracts')return can('documents.read');
+    if(page==='connect')return can('connect.manage');
+    if(page==='integrations')return can('integrations.manage');
+    return true;
+  }
+  function contractDirty():boolean { return state.page==='contracts'&&PigeContracts.hasUnsavedChanges(); }
   function isProfileRole(): boolean { return ['teacher','student','guardian'].includes(text(state.user?.role)); }
   function school(): PigeAPI.School|undefined { return state.schools.find(s=>s.id===state.schoolId); }
   function label(value: unknown): string { const key=text(value); return statusLabels[key] || key || '—'; }
@@ -118,9 +140,36 @@ namespace PigeUI {
     field('profile_notes','Observações funcionais','textarea',false,undefined,true)
   ]; }
   function photoFileId(row:unknown):string { return text((row as {photo_file_id?:unknown})?.photo_file_id); }
+  function clearPhotos():void{
+    photoEpoch++;
+    photoRetryAfter.clear();
+    for(const url of Object.values(state.photoUrls))URL.revokeObjectURL(url);
+    state.photoUrls={};
+  }
+  async function acquirePhotoSlot():Promise<void>{
+    if(activePhotoDownloads<photoDownloadLimit){activePhotoDownloads++;return;}
+    await new Promise<void>(resolve=>photoWaiters.push(resolve));
+  }
+  function releasePhotoSlot():void{
+    const next=photoWaiters.shift();if(next)next();else activePhotoDownloads--;
+  }
   async function hydratePhoto(row:unknown):Promise<void> {
     const id=photoFileId(row);if(!id||state.photoUrls[id])return;
-    try{state.photoUrls[id]=await PigeAPI.objectUrl(base()+'/files/'+id+'/download');}catch{/* A listagem continua utilizável se a foto foi removida. */}
+    const schoolId=state.schoolId,epoch=photoEpoch,key=epoch+':'+id;
+    if((photoRetryAfter.get(key)||0)>Date.now())return;
+    const pending=photoPending.get(key);if(pending)return pending;
+    const task=(async()=>{
+      await acquirePhotoSlot();
+      try{
+        if(epoch!==photoEpoch||schoolId!==state.schoolId||state.photoUrls[id])return;
+        const url=await PigeAPI.objectUrl('/schools/'+schoolId+'/files/'+id+'/download');
+        if(epoch===photoEpoch&&schoolId===state.schoolId)state.photoUrls[id]=url;
+        else URL.revokeObjectURL(url);
+      }catch{if(epoch===photoEpoch)photoRetryAfter.set(key,Date.now()+30000);}
+      finally{releasePhotoSlot();}
+    })();
+    photoPending.set(key,task);
+    try{await task;}finally{photoPending.delete(key);}
   }
   function photoSrc(row:unknown):string { const id=photoFileId(row);if(id&&!state.photoUrls[id])void hydratePhoto(row);return id?state.photoUrls[id]||'':''; }
   async function hydratePhotos(rows:unknown[]):Promise<void>{await Promise.all(rows.map(row=>hydratePhoto(row)));}
@@ -158,12 +207,14 @@ namespace PigeUI {
     state.schools=await PigeAPI.request<PigeAPI.School[]>('/schools');
     let saved:string|null=null;try{saved=localStorage.getItem('pige-school');}catch{/* Navegador pode restringir armazenamento no iframe. */}state.schoolId=state.schools.some(s=>s.id===saved)?saved!:state.schools[0]?.id||'';
     const hash=location.hash.replace(/^#\/?/,'');
-    state.page=isProfileRole()?(hash==='help'?'help':hash==='diary'&&can('diary.read')?'diary':'dashboard'):(pageLabels[hash]?hash:'dashboard');
+    state.page=pageLabels[hash]&&pageAllowed(hash)?hash:'dashboard';
+    if(state.page!==hash)history.replaceState({},'', '#/dashboard');
     if(state.schoolId) await changeSchool();
     else state.error='Nenhuma escola está vinculada ao seu usuário. Solicite acesso ao administrador.';
   }
   async function changeSchool():Promise<void>{
-    resetFilters();state.studentProtocols=[];state.studentProtocolTotal=0;state.photoUrls={};try{localStorage.setItem('pige-school',state.schoolId);}catch{/* Contexto incorporado sem localStorage. */}state.selectedStudent=null;state.studentDocs={items:[],checklist:[],issued:[]};state.rows=[];state.catalogs={};state.reportRows=[];state.reportClass='';state.q='';state.pageNumber=1;
+    resetFilters();state.studentProtocols=[];state.studentProtocolTotal=0;clearPhotos();try{localStorage.setItem('pige-school',state.schoolId);}catch{/* Contexto incorporado sem localStorage. */}state.selectedStudent=null;state.contractEnrollmentId='';state.contractReviewIssuedId='';state.studentDocs={items:[],checklist:[],issued:[]};state.rows=[];state.catalogs={};state.reportRows=[];state.reportClass='';state.q='';state.pageNumber=1;
+    legacyBackupFile=null;legacyMediaFile=null;state.emailStatus='idle';state.legacyImport={busy:false,backupName:'',mediaName:'',confirmation:'',error:'',preview:null,result:null,runs:[]};
     await safe(async()=>{if(!isProfileRole()&&state.page!=='academic')await Promise.all([loadCatalogs(),loadPage()]);else await loadPage();});
      void PigeSupport.load(state.schoolId);
   }
@@ -180,8 +231,13 @@ namespace PigeUI {
   }
   async function navigate(page:string):Promise<void>{
     if(state.busy||state.modal.kind||document.querySelector('.modal-backdrop'))return;
-    if(isProfileRole() && page!=='dashboard' && page!=='help' && !(page==='diary'&&can('diary.read'))){state.page='dashboard';history.replaceState({},'', '#/dashboard');return;}
-    resetFilters();state.registryFilter={type_code:'',entity_kind:'',active:''};if(registryPages.includes(page))state.cadastresOpen=true;state.page=page;state.pageNumber=1;state.q='';state.selectedStudent=null;state.error='';state.menuOpen=false;
+    if(!pageAllowed(page)){
+      state.error=page==='legacy-import'?'A portabilidade está disponível somente para o administrador da instalação.':page==='contracts'?'Seu perfil não possui acesso aos documentos da escola.':integrationPages.includes(page)?'Seu perfil não possui acesso a esta integração.':'Seu perfil não possui acesso a esta página.';
+      if(location.hash!==`#/${state.page}`)history.replaceState({},'',`#/${state.page}`);
+      return;
+    }
+    if(page!=='contracts'&&contractDirty()&&!window.confirm('Descartar as alterações não salvas no modelo?'))return;
+    resetFilters();state.registryFilter={type_code:'',entity_kind:'',active:''};if(registryPages.includes(page))state.cadastresOpen=true;state.page=page;state.pageNumber=1;state.q='';state.selectedStudent=null;state.error='';state.menuOpen=false;if(page!=='contracts'){state.contractEnrollmentId='';state.contractReviewIssuedId='';}
     history.replaceState({},'',`#/${page}`);await safe(loadPage);
   }
   async function loadPage():Promise<void>{
@@ -189,7 +245,18 @@ namespace PigeUI {
     const current=++sequence,sid=state.schoolId;state.loading=true;state.rows=[];
     try{
       const query=`page=${state.pageNumber}&page_size=30&q=${encodeURIComponent(state.q)}&${filterQuery()}`;
-      if(['online','banking','integrations','connect','diagnostics','diary','help'].includes(state.page)){
+      if(state.page==='legacy-import'){
+        if(state.user?.role!=='admin'){state.page='dashboard';return;}
+        state.legacyImport.runs=await PigeAPI.request<LegacyImportRun[]>(base()+'/legacy-import/runs');state.total=state.legacyImport.runs.length;
+      }else if(state.page==='email'){
+        state.total=0;state.emailStatus='idle';
+        try{
+          const summary=await PigeAPI.request<{configuration?:{smtp_configured?:boolean}}>('/diagnostics/summary');
+          if(current===sequence)state.emailStatus=summary.configuration?.smtp_configured?'configured':'missing';
+        }catch{
+          if(current===sequence)state.emailStatus='unavailable';
+        }
+      }else if(['online','banking','integrations','connect','diagnostics','diary','contracts','help'].includes(state.page)){
         state.total=0;
       }else if(state.page==='dashboard'){
         if(isProfileRole()){
@@ -222,6 +289,40 @@ namespace PigeUI {
   }
   async function setCatalog(kind:string):Promise<void>{state.catalog=kind;await safe(loadPage);}
   async function search():Promise<void>{state.pageNumber=1;await safe(loadPage);}
+  function legacyImportFileChange(event:Event,kind:'backup'|'media'):void{
+    const input=event.target as HTMLInputElement;const file=input.files?.[0]||null;
+    if(kind==='backup'){legacyBackupFile=file;state.legacyImport.backupName=file?.name||'';}
+    else{legacyMediaFile=file;state.legacyImport.mediaName=file?.name||'';}
+    state.legacyImport.preview=null;state.legacyImport.result=null;state.legacyImport.confirmation='';state.legacyImport.error='';
+  }
+  function legacyImportForm():FormData{
+    const form=new FormData();if(legacyBackupFile)form.append('backup',legacyBackupFile);
+    if(legacyMediaFile)form.append('container_media',legacyMediaFile);return form;
+  }
+  async function previewLegacyImport():Promise<void>{
+    state.legacyImport.error='';state.legacyImport.result=null;
+    if(!legacyBackupFile){state.legacyImport.error='Selecione o backup ZIP ou o banco SQLite antes de gerar a prévia.';return;}
+    state.legacyImport.busy=true;
+    try{state.legacyImport.preview=await PigeAPI.request<LegacyImportPreview>(base()+'/legacy-import/preview',{method:'POST',body:legacyImportForm()});state.legacyImport.confirmation='';}
+    catch(error){state.legacyImport.error=error instanceof Error?error.message:String(error);}
+    finally{state.legacyImport.busy=false;}
+  }
+  async function applyLegacyImport():Promise<void>{
+    const preview=state.legacyImport.preview;
+    if(!preview||!legacyBackupFile){state.legacyImport.error='Gere uma prévia atualizada antes de importar.';return;}
+    if(state.legacyImport.confirmation.trim().toUpperCase()!=='IMPORTAR'){state.legacyImport.error='Digite IMPORTAR para confirmar a gravação.';return;}
+    state.legacyImport.busy=true;state.legacyImport.error='';
+    try{
+      const form=legacyImportForm();form.append('fingerprint',preview.fingerprint);form.append('confirmation',state.legacyImport.confirmation);
+      state.legacyImport.result=await PigeAPI.request<LegacyImportResult>(base()+'/legacy-import/apply',{method:'POST',body:form});
+      legacyBackupFile=null;legacyMediaFile=null;state.legacyImport.backupName='';state.legacyImport.mediaName='';state.legacyImport.confirmation='';state.legacyImport.preview=null;
+      await loadLegacyImportRuns();
+    }catch(error){state.legacyImport.error=error instanceof Error?error.message:String(error);}
+    finally{state.legacyImport.busy=false;}
+  }
+  async function loadLegacyImportRuns():Promise<void>{state.legacyImport.runs=await PigeAPI.request<LegacyImportRun[]>(base()+'/legacy-import/runs');}
+  function populatedImportTables():LegacyImportTable[]{return(state.legacyImport.preview?.tables||[]).filter(table=>table.rows>0);}
+  async function downloadLegacyArchive(run:LegacyImportRun):Promise<void>{await safe(()=>PigeAPI.download(base()+'/legacy-import/runs/'+run.id+'/archive','pige360-portabilidade-'+run.id.slice(0,8)+'.jsonl'));}
   async function page(delta:number):Promise<void>{state.pageNumber+=delta;await safe(loadPage);}
   async function viewStudent(id:string):Promise<void>{
     const sid=state.schoolId;state.loading=true;state.error='';
@@ -412,6 +513,7 @@ namespace PigeUI {
     openModal('enrollment','Nova matrícula',fields,{student_id:selected?.id||'',enrolled_on:new Date().toISOString().slice(0,10),enrollment_type:'new'});
   });}
   async function viewEnrollment(id:string):Promise<void>{await safe(async()=>{const data=await PigeAPI.request<Row>(base()+'/enrollments/'+id);openModal('enrollment-detail','Matrícula '+text(data.number),[],{},data);});}
+  async function contractsForEnrollment(id:string,issuedId=''):Promise<void>{state.modal=blankModal();state.contractEnrollmentId=id;state.contractReviewIssuedId=issuedId;await navigate('contracts');}
   function editDraft():void{
     const target=state.modal.target;if(!target||target.status!=='draft')return;
     const groups=options('class-groups').filter(o=>state.catalogs['class-groups'].find(c=>c.id===o.value)?.academic_year_id===target.academic_year_id);
@@ -706,7 +808,7 @@ namespace PigeUI {
   async function logout():Promise<void>{
     try{await PigeAPI.post('/auth/logout',{});}catch{/* Limpar a interface mesmo sem rede. */}
     if(state.userPhotoUrl)URL.revokeObjectURL(state.userPhotoUrl);state.userPhotoUrl='';clearProfilePreview();
-    PigeAPI.clear();state.user=null;state.page='dashboard';history.replaceState(null,'','#/dashboard');state.selectedStudent=null;state.rows=[];state.dashboard={} as Row;state.studentDocs={items:[],checklist:[],issued:[]};state.history=[];state.studentProtocols=[];state.studentProtocolTotal=0;resetFilters();state.personChoices=[];state.studentChoices=[];state.photoUrls={};state.catalogs={};state.reportRows=[];state.companies=[];state.schools=[];state.supportHub={id:'',company_id:'',enabled:false,base_url:'',position:'left',widget_type:'expanded_bubble',launcher_title:'Suporte',token_configured:false,version:1};state.modal=blankModal();state.error='';state.login.password='';
+    PigeAPI.clear();state.user=null;state.page='dashboard';history.replaceState(null,'','#/dashboard');state.selectedStudent=null;state.contractEnrollmentId='';state.rows=[];state.dashboard={} as Row;state.studentDocs={items:[],checklist:[],issued:[]};state.history=[];state.studentProtocols=[];state.studentProtocolTotal=0;resetFilters();state.personChoices=[];state.studentChoices=[];clearPhotos();state.catalogs={};state.reportRows=[];state.companies=[];state.schools=[];state.supportHub={id:'',company_id:'',enabled:false,base_url:'',position:'left',widget_type:'expanded_bubble',launcher_title:'Suporte',token_configured:false,version:1};state.modal=blankModal();state.error='';state.login.password='';
   }
   async function install():Promise<void>{if(installEvent){await installEvent.prompt();installEvent=null;state.canInstall=false;}}
   function updateApp():void{if(waitingWorker&&!state.modal.kind)waitingWorker.postMessage({type:'SKIP_WAITING'});}
@@ -724,5 +826,5 @@ namespace PigeUI {
     }
     window.addEventListener('beforeunload',event=>{if(state.modal.kind&&modalDirty()){event.preventDefault();event.returnValue='';}});
   }
-  Vue.createApp({components:{'diagnostics-panel':PigeDiagnostics.component,'expansion-panel':PigeExpansion.component,'diary-panel':PigeDiary.component,'assist-panel':PigeAssist.component},render:PigeRenders.app,setup(){Vue.onMounted(()=>{PigeMFA.init(PigeAPI.request,afterMFA,logout);PigeDialogs.install();setupPWA();void initialize();});return{state,base,familyAssistFields,assistRequest,assistFields,assistEligible,assistCompany,setupCompany,setupCompanyFields,companyExtra,setupLookup,readStudentDocument,readResponsibleDocument,editIntake,mfa:PigeMFA,dossier:PigeDossier,selectedPersonTypes,availablePersonTypes,togglePersonType,lockedPersonType,familyRelevant,manageMFA,editMFAPolicy,editEmbedding,probeEmbedding,editMyProfile,myPhotoChange,profilePassword,registryPages,businessTypes,isBusiness,newBusiness,reusePerson,personDocument,modalSections,modalTab,visibleSection,modalFieldLabel,modalFieldRelevant,advancedPersonField,isPersonModal,personTypeOptions,personTypeLabel,modalDirty,identity:PigeInstitution.state,supportStatus:PigeSupport.status,editIdentity,identityFileChange,manageUnits,editMaintainer,text,can,isProfileRole,school,label,date,cpf,initials,photoSrc,getName,options,pageLabels,catalogLabels,configure,login,logout,navigate,changeSchool,setCatalog,search,page,loadPage,viewStudent,newPerson,newStudent,editStudent,newGuardian,newTeacher,editTeacher,newEmployee,editEmployee,editPerson,newCatalog,newEnrollment,viewEnrollment,startMovement,reenroll,newLink,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,editSupportHub,newUser,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,protocolReceipt,exportPendencies,install,updateApp};}}).mount('#app');
+  Vue.createApp({components:{'diagnostics-panel':PigeDiagnostics.component,'expansion-panel':PigeExpansion.component,'diary-panel':PigeDiary.component,'contracts-panel':PigeContracts.component,'signing-panel':PigeSigning.component,'assist-panel':PigeAssist.component},render:PigeRenders.app,setup(){Vue.onMounted(()=>{PigeMFA.init(PigeAPI.request,afterMFA,logout);PigeDialogs.install();setupPWA();void initialize();});return{state,base,familyAssistFields,assistRequest,assistFields,assistEligible,assistCompany,setupCompany,setupCompanyFields,companyExtra,setupLookup,readStudentDocument,readResponsibleDocument,editIntake,mfa:PigeMFA,dossier:PigeDossier,selectedPersonTypes,availablePersonTypes,togglePersonType,lockedPersonType,familyRelevant,manageMFA,editMFAPolicy,editEmbedding,probeEmbedding,editMyProfile,myPhotoChange,profilePassword,registryPages,integrationPages,businessTypes,isBusiness,newBusiness,reusePerson,personDocument,modalSections,modalTab,visibleSection,modalFieldLabel,modalFieldRelevant,advancedPersonField,isPersonModal,personTypeOptions,personTypeLabel,modalDirty,contractDirty,identity:PigeInstitution.state,supportStatus:PigeSupport.status,editIdentity,identityFileChange,manageUnits,editMaintainer,text,can,isProfileRole,school,label,date,cpf,initials,photoSrc,getName,options,pageLabels,catalogLabels,configure,login,logout,navigate,changeSchool,setCatalog,search,page,loadPage,legacyImportFileChange,previewLegacyImport,applyLegacyImport,populatedImportTables,downloadLegacyArchive,viewStudent,newPerson,newStudent,editStudent,newGuardian,newTeacher,editTeacher,newEmployee,editEmployee,editPerson,newCatalog,newEnrollment,viewEnrollment,contractsForEnrollment,startMovement,reenroll,newLink,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,editSupportHub,newUser,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,protocolReceipt,exportPendencies,install,updateApp};}}).mount('#app');
 }

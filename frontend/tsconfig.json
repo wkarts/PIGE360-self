@@ -25,6 +25,8 @@
     "src/assist.ts",
     "src/diagnostics.ts",
     "src/diary.ts",
+    "src/contracts.ts",
+    "src/signing.ts",
     "src/app.ts"
   ]
 }
