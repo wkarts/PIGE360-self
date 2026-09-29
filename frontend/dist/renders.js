@@ -477,35 +477,69 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                           focusable: "false"
                         }, [_createElementVNode("use", { href: "/ui-icons.svg#billing" })])), _createTextVNode("Cobranças")], 10, ["aria-current", "onClick"]))
                       : _createCommentVNode("", true),
-                    (can('integrations.manage'))
-                      ? (_openBlock(), _createElementBlock("a", {
+                    (can('connect.manage') || can('integrations.manage') || state.user?.role==='admin')
+                      ? (_openBlock(), _createElementBlock("div", {
                           key: 2,
-                          href: "#/integrations",
-                          class: _normalizeClass({active:state.page==='integrations'}),
-                          "aria-current": state.page==='integrations'?'page':undefined,
-                          onClick: _withModifiers($event => (navigate('integrations')), ["prevent"])
+                          class: _normalizeClass(["nav-group", {selected:integrationPages.includes(state.page)}])
+                        }, [_createElementVNode("button", {
+                          type: "button",
+                          class: "nav-group-toggle",
+                          "aria-label": "Integrações",
+                          onClick: $event => (state.integrationsOpen=!state.integrationsOpen),
+                          "aria-expanded": state.integrationsOpen,
+                          "aria-controls": "integrations-menu"
                         }, [(_openBlock(), _createElementBlock("svg", {
                           class: "nav-icon",
                           "aria-hidden": "true",
                           focusable: "false"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#bank" })])), _createTextVNode("Financeiro / ASAAS")], 10, ["aria-current", "onClick"]))
-                      : _createCommentVNode("", true),
-                    (can('connect.manage'))
-                      ? (_openBlock(), _createElementBlock("a", {
-                          key: 3,
-                          href: "#/connect",
-                          class: _normalizeClass({active:state.page==='connect'}),
-                          "aria-current": state.page==='connect'?'page':undefined,
-                          onClick: _withModifiers($event => (navigate('connect')), ["prevent"])
-                        }, [(_openBlock(), _createElementBlock("svg", {
-                          class: "nav-icon",
+                        }, [_createElementVNode("use", { href: "/ui-icons.svg#connect" })])), _createElementVNode("span", null, "Integrações"), (_openBlock(), _createElementBlock("svg", {
+                          class: _normalizeClass(["nav-chevron ui-icon", {expanded:state.integrationsOpen}]),
                           "aria-hidden": "true",
                           focusable: "false"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#connect" })])), _createTextVNode("Connect API")], 10, ["aria-current", "onClick"]))
+                        }, [_createElementVNode("use", { href: "/ui-icons.svg#chevron" })], 2))], 8, ["onClick", "aria-expanded"]), _withDirectives(_createElementVNode("div", {
+                          id: "integrations-menu",
+                          class: "nav-group-items"
+                        }, [(can('connect.manage'))
+                          ? (_openBlock(), _createElementBlock("a", {
+                              key: 0,
+                              href: "#/connect",
+                              class: _normalizeClass({active:state.page==='connect'}),
+                              "aria-current": state.page==='connect'?'page':undefined,
+                              onClick: _withModifiers($event => (navigate('connect')), ["prevent"])
+                            }, [(_openBlock(), _createElementBlock("svg", {
+                              class: "nav-icon",
+                              "aria-hidden": "true",
+                              focusable: "false"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#connect" })])), _createTextVNode("WhatsApp")], 10, ["aria-current", "onClick"]))
+                          : _createCommentVNode("", true), (state.user?.role==='admin')
+                          ? (_openBlock(), _createElementBlock("a", {
+                              key: 1,
+                              href: "#/email",
+                              class: _normalizeClass({active:state.page==='email'}),
+                              "aria-current": state.page==='email'?'page':undefined,
+                              onClick: _withModifiers($event => (navigate('email')), ["prevent"])
+                            }, [(_openBlock(), _createElementBlock("svg", {
+                              class: "nav-icon",
+                              "aria-hidden": "true",
+                              focusable: "false"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#online" })])), _createTextVNode("E-mail / SMTP")], 10, ["aria-current", "onClick"]))
+                          : _createCommentVNode("", true), (can('integrations.manage'))
+                          ? (_openBlock(), _createElementBlock("a", {
+                              key: 2,
+                              href: "#/integrations",
+                              class: _normalizeClass({active:state.page==='integrations'}),
+                              "aria-current": state.page==='integrations'?'page':undefined,
+                              onClick: _withModifiers($event => (navigate('integrations')), ["prevent"])
+                            }, [(_openBlock(), _createElementBlock("svg", {
+                              class: "nav-icon",
+                              "aria-hidden": "true",
+                              focusable: "false"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#bank" })])), _createTextVNode("Bancária")], 10, ["aria-current", "onClick"]))
+                          : _createCommentVNode("", true)], 512), [[_vShow, state.integrationsOpen]])], 2))
                       : _createCommentVNode("", true),
                     (can('schools.manage'))
                       ? (_openBlock(), _createElementBlock("a", {
-                          key: 4,
+                          key: 3,
                           href: "#/settings",
                           class: _normalizeClass({active:state.page==='settings'}),
                           "aria-current": state.page==='settings'?'page':undefined,
@@ -518,7 +552,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       : _createCommentVNode("", true),
                     (can('users.manage'))
                       ? (_openBlock(), _createElementBlock("a", {
-                          key: 5,
+                          key: 4,
                           href: "#/users",
                           class: _normalizeClass({active:state.page==='users'}),
                           "aria-current": state.page==='users'?'page':undefined,
@@ -531,7 +565,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       : _createCommentVNode("", true),
                     (state.user?.role==='admin')
                       ? (_openBlock(), _createElementBlock("a", {
-                          key: 6,
+                          key: 5,
                           href: "#/legacy-import",
                           class: _normalizeClass({active:state.page==='legacy-import'}),
                           "aria-current": state.page==='legacy-import'?'page':undefined,
@@ -544,7 +578,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       : _createCommentVNode("", true),
                     (state.user?.role==='admin')
                       ? (_openBlock(), _createElementBlock("a", {
-                          key: 7,
+                          key: 6,
                           href: "#/diagnostics",
                           class: _normalizeClass({active:state.page==='diagnostics'}),
                           onClick: _withModifiers($event => (navigate('diagnostics')), ["prevent"])
@@ -555,7 +589,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       : _createCommentVNode("", true),
                     (can('audit.read'))
                       ? (_openBlock(), _createElementBlock("a", {
-                          key: 8,
+                          key: 7,
                           href: "#/audit",
                           class: _normalizeClass({active:state.page==='audit'}),
                           "aria-current": state.page==='audit'?'page':undefined,
@@ -665,7 +699,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                     "aria-label": "Fechar aviso"
                   }, "×", 8, ["onClick"])]))
                 : _createCommentVNode("", true),
-              _createElementVNode("div", { class: "page-header" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "breadcrumb" }, _toDisplayString(registryPages.includes(state.page)?'Cadastros':'Secretaria') + " / " + _toDisplayString(pageLabels[state.page]), 1), _createElementVNode("h1", null, _toDisplayString(state.selectedStudent ? state.selectedStudent.person.name : pageLabels[state.page]), 1), _createElementVNode("p", { class: "page-subtitle" }, _toDisplayString(state.selectedStudent ? 'Ficha do aluno · '+state.selectedStudent.number : 'Informação organizada para cuidar de cada etapa da vida escolar.'), 1)]), _createElementVNode("div", { class: "actions" }, [
+              _createElementVNode("div", { class: "page-header" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "breadcrumb" }, _toDisplayString(registryPages.includes(state.page)?'Cadastros':integrationPages.includes(state.page)?'Integrações':'Secretaria') + " / " + _toDisplayString(pageLabels[state.page]), 1), _createElementVNode("h1", null, _toDisplayString(state.selectedStudent ? state.selectedStudent.person.name : pageLabels[state.page]), 1), _createElementVNode("p", { class: "page-subtitle" }, _toDisplayString(state.selectedStudent ? 'Ficha do aluno · '+state.selectedStudent.number : 'Informação organizada para cuidar de cada etapa da vida escolar.'), 1)]), _createElementVNode("div", { class: "actions" }, [
                 (state.page!=='help')
                   ? (_openBlock(), _createElementBlock("button", {
                       key: 0,
@@ -881,6 +915,35 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
               (state.page==='diagnostics' && state.user?.role==='admin')
                 ? (_openBlock(), _createBlock(_component_diagnostics_panel, { key: 7 }))
                 : _createCommentVNode("", true),
+              (state.page==='email' && state.user?.role==='admin')
+                ? (_openBlock(), _createElementBlock("section", {
+                    key: 8,
+                    class: "panel x-card",
+                    "aria-labelledby": "smtp-title"
+                  }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "INTEGRAÇÕES · E-MAIL"), _createElementVNode("h2", { id: "smtp-title" }, "Envio por SMTP"), _createElementVNode("p", null, "A escola utiliza as configurações da stack para mensagens transacionais e notificações.")])]), (state.emailStatus==='configured')
+                    ? (_openBlock(), _createElementBlock("p", {
+                        key: 0,
+                        class: "alert success",
+                        role: "status"
+                      }, "SMTP configurado na instalação."))
+                    : (state.emailStatus==='missing')
+                      ? (_openBlock(), _createElementBlock("p", {
+                          key: 1,
+                          class: "alert warning",
+                          role: "status"
+                        }, "SMTP não configurado. Informe SMTP_HOST e SMTP_FROM no ambiente da stack."))
+                      : (state.emailStatus==='unavailable')
+                        ? (_openBlock(), _createElementBlock("p", {
+                            key: 2,
+                            class: "alert warning",
+                            role: "status"
+                          }, "Não foi possível consultar a configuração de SMTP. Tente novamente mais tarde."))
+                        : (_openBlock(), _createElementBlock("p", {
+                            key: 3,
+                            class: "muted",
+                            role: "status"
+                          }, "Consultando configuração de SMTP…")), _createElementVNode("p", { class: "muted" }, "Configure SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM e SMTP_SECURITY no .env da stack. Reinicie os serviços para aplicar as alterações.")]))
+                : _createCommentVNode("", true),
               (['online','banking','integrations','connect'].includes(state.page))
                 ? (_openBlock(), _createBlock(_component_expansion_panel, {
                     key: state.schoolId+':'+state.page,
@@ -908,7 +971,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                 : _createCommentVNode("", true),
               (state.page==='help')
                 ? (_openBlock(), _createElementBlock("section", {
-                    key: 11,
+                    key: 12,
                     class: "dashboard",
                     "aria-labelledby": "guide-title"
                   }, [(!isProfileRole())
@@ -1003,7 +1066,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                 : _createCommentVNode("", true),
               (state.page==='dashboard' && !isProfileRole())
                 ? (_openBlock(), _createElementBlock("section", {
-                    key: 12,
+                    key: 13,
                     class: "dashboard"
                   }, [_createElementVNode("div", { class: "welcome-card" }, [_createElementVNode("div", null, [
                     _createElementVNode("p", { class: "eyebrow" }, "ROTINA ESCOLAR EM DIA"),
@@ -1096,7 +1159,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                 : _createCommentVNode("", true),
               (state.page==='dashboard' && isProfileRole())
                 ? (_openBlock(), _createElementBlock("section", {
-                    key: 13,
+                    key: 14,
                     class: "dashboard"
                   }, [(state.user.role==='teacher')
                     ? (_openBlock(), _createElementBlock("div", { key: 0 }, [_createElementVNode("div", { class: "welcome-card" }, [_createElementVNode("div", null, [
@@ -1222,7 +1285,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                 : _createCommentVNode("", true),
               (state.page==='students' && state.selectedStudent)
                 ? (_openBlock(), _createElementBlock("section", {
-                    key: 14,
+                    key: 15,
                     class: "student-detail"
                   }, [
                     _createElementVNode("div", { class: "student-banner" }, [
@@ -1571,7 +1634,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                   ]))
                 : _createCommentVNode("", true),
               (['people','students','teachers','employees','guardians','suppliers','providers','customers','partners','academic','enrollments','documents','protocols','users','audit'].includes(state.page) && !state.selectedStudent)
-                ? (_openBlock(), _createElementBlock("section", { key: 15 }, [
+                ? (_openBlock(), _createElementBlock("section", { key: 16 }, [
                     (state.page==='academic')
                       ? (_openBlock(), _createElementBlock("div", {
                           key: 0,
@@ -2130,7 +2193,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                 : _createCommentVNode("", true),
               (state.page==='reports')
                 ? (_openBlock(), _createElementBlock("section", {
-                    key: 16,
+                    key: 17,
                     class: "panel"
                   }, [_createElementVNode("div", { class: "panel-header" }, [_createElementVNode("h2", null, "Relação de alunos por turma"), _createElementVNode("button", {
                     class: "btn btn-secondary",
@@ -2168,7 +2231,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                     : _createCommentVNode("", true)])]))
                 : _createCommentVNode("", true),
               (state.page==='settings')
-                ? (_openBlock(), _createElementBlock("section", { key: 17 }, [
+                ? (_openBlock(), _createElementBlock("section", { key: 18 }, [
                     _createElementVNode("div", { class: "section-actions" }, [_createElementVNode("h2", null, "Minha escola e suas unidades"), _createElementVNode("div", { class: "actions" }, [(state.user.role==='admin')
                       ? (_openBlock(), _createElementBlock("button", {
                           key: 0,
@@ -4521,7 +4584,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                         _createElementVNode("label", { class: "x-check" }, [_withDirectives(_createElementVNode("input", {
                           type: "checkbox",
                           "onUpdate:modelValue": $event => ((s.campaignForm.require_verified_contact) = $event)
-                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, s.campaignForm.require_verified_contact]]), _createTextVNode("Exigir e-mail ou telefone verificado para envio (configure SMTP ou Connect API)")]),
+                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, s.campaignForm.require_verified_contact]]), _createTextVNode("Exigir e-mail ou telefone verificado para envio (configure SMTP ou WhatsApp)")]),
                         _createElementVNode("label", { class: "x-check" }, [_withDirectives(_createElementVNode("input", {
                           type: "checkbox",
                           "onUpdate:modelValue": $event => ((s.campaignForm.require_documents) = $event)
@@ -4834,7 +4897,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                                     class: "btn btn-secondary",
                                     onClick: whatsapp,
                                     disabled: !s.message
-                                  }, "Enviar este texto por Connect API", 8, ["onClick", "disabled"]))
+                                  }, "Enviar este texto via WhatsApp", 8, ["onClick", "disabled"]))
                                 : _createCommentVNode("", true)]),
                               _createElementVNode("p", { class: "muted" }, "Envios por WhatsApp exigem consentimento e telefone verificado. Prefira avisos curtos com acesso ao portal.")
                             ], 40, ["onSubmit"]))
@@ -4844,7 +4907,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
             ], 64))
           : _createCommentVNode("", true),
         (props.page==='banking')
-          ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("p", null, "Cobranças de matrícula e mensalidades via ASAAS. Valores nominais; não é saldo bancário nem escrituração contábil."), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+          ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("p", null, "Cobranças de matrícula e mensalidades via integração bancária. Valores nominais; não é saldo bancário nem escrituração contábil."), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
               class: "btn btn-secondary",
               onClick: $event => (run(load))
             }, "Atualizar", 8, ["onClick"]), (can('banking.write'))
@@ -4875,7 +4938,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                 ? (_openBlock(), _createElementBlock("p", {
                     key: 0,
                     class: "empty"
-                  }, "Nenhuma cobrança encontrada. Configure ASAAS em Integrações e selecione uma matrícula ou inscrição."))
+                  }, "Nenhuma cobrança encontrada. Configure o provedor bancário em Integrações e selecione uma matrícula ou inscrição."))
                 : _createCommentVNode("", true),
               _createElementVNode("div", { class: "x-list" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.charges, (c) => {
                 return (_openBlock(), _createElementBlock("button", {
@@ -4908,7 +4971,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
             }, [_createElementVNode("header", { class: "modal-header" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, _toDisplayString(identity.display_name) + " · FINANCEIRO", 1), _createElementVNode("h2", {
               id: "charge-modal-title",
               "data-dialog-title": ""
-            }, "Nova cobrança ASAAS")]), _createElementVNode("button", {
+            }, "Nova cobrança")]), _createElementVNode("button", {
               type: "button",
               class: "icon-button",
               "data-dialog-close": "",
@@ -5052,7 +5115,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                     class: "btn btn-secondary",
                     target: "_blank",
                     rel: "noopener"
-                  }, "Abrir cobrança ASAAS", 8, ["href"]))
+                  }, "Abrir cobrança", 8, ["href"]))
                 : _createCommentVNode("", true), (safeLink(s.selectedCharge.bank_slip_url))
                 ? (_openBlock(), _createElementBlock("a", {
                     key: 1,
@@ -5096,7 +5159,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                     class: "btn btn-primary",
                     onClick: $event => (chargeAction('sync')),
                     disabled: s.bankReason.length<5
-                  }, "Conciliar com ASAAS", 8, ["onClick", "disabled"]), (['queued','pending','overdue'].includes(s.selectedCharge.status))
+                  }, "Conciliar cobrança", 8, ["onClick", "disabled"]), (['queued','pending','overdue'].includes(s.selectedCharge.status))
                     ? (_openBlock(), _createElementBlock("button", {
                         key: 0,
                         class: "btn btn-secondary",
@@ -5109,10 +5172,10 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                         class: "btn btn-secondary",
                         onClick: $event => (chargeAction('authorize-reissue')),
                         disabled: s.bankReason.length<10
-                      }, "Conferi a ausência no ASAAS: autorizar reemissão", 8, ["onClick", "disabled"]))
+                      }, "Conferi a ausência no provedor: autorizar reemissão", 8, ["onClick", "disabled"]))
                     : _createCommentVNode("", true)]))
                 : _createCommentVNode("", true),
-              _createElementVNode("p", { class: "muted" }, "Resultado incerto não é reenviado automaticamente. Antes de autorizar reemissão, confira a conta ASAAS. Pagamentos recebidos não são estornados por este botão."),
+              _createElementVNode("p", { class: "muted" }, "Resultado incerto não é reenviado automaticamente. Antes de autorizar reemissão, confira a conta do provedor bancário. Pagamentos recebidos não são estornados por este botão."),
               _createElementVNode("h3", null, "Histórico de conciliação"),
               _createElementVNode("div", { class: "x-timeline" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.bankEvents, (e) => {
                 return (_openBlock(), _createElementBlock("article", { key: e.id }, [_createElementVNode("small", null, _toDisplayString(date(e.created_at)) + " · " + _toDisplayString(e.source), 1), _createElementVNode("p", null, _toDisplayString(label(e.previous_status)) + " → " + _toDisplayString(label(e.status)), 1)]))
@@ -5121,74 +5184,82 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
           : _createCommentVNode("", true)])),
         (props.page==='connect')
           ? (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [
-              _createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Connect API"), _createElementVNode("p", null, "Canal operacional da instituição para automações, notificações, API, webhook e eventos. Atendimento e conversação permanecem fora deste módulo.")]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
-                class: "btn btn-secondary",
-                onClick: connectTest
-              }, "Testar API", 8, ["onClick"]), _createElementVNode("button", {
-                class: "btn btn-secondary",
-                onClick: $event => (run(load))
-              }, "Atualizar", 8, ["onClick"])])]), (!s.connect.configured)
-                ? (_openBlock(), _createElementBlock("div", {
-                    key: 0,
-                    class: "alert warning"
-                  }, [
-                    _createTextVNode("Configure no ambiente da instalação "),
-                    _createElementVNode("code", null, "CONNECT_API_BASE_URL"),
-                    _createTextVNode(" e "),
-                    _createElementVNode("code", null, "CONNECT_API_KEY"),
-                    _createTextVNode(". "),
-                    _createElementVNode("code", null, "CONNECT_ALLOWED_HOSTS"),
-                    _createTextVNode(" é opcional para restringir ainda mais o hostname; quando vazio, somente o host exato da URL configurada é aceito.")
-                  ]))
-                : (_openBlock(), _createElementBlock("div", {
-                    key: 1,
-                    class: "alert info"
-                  }, "API configurada em " + _toDisplayString(s.connect.base_url) + " · chave global presente · host efetivo " + _toDisplayString(s.connect.effective_host) + " · prefixo de instância " + _toDisplayString(s.connect.instance_prefix), 1)), _createElementVNode("div", { class: "x-grid" }, [_createElementVNode("form", {
-                class: "x-form",
-                onSubmit: _withModifiers(connectCreate, ["prevent"])
-              }, [
-                _createElementVNode("h3", null, "Criar nova instância"),
-                _createElementVNode("label", null, [_createTextVNode("Telefone da instância"), _withDirectives(_createElementVNode("input", {
-                  "onUpdate:modelValue": $event => ((s.connectCreatePhone) = $event),
-                  inputmode: "tel",
-                  autocomplete: "tel",
-                  minlength: "10",
-                  maxlength: "24",
-                  required: "",
-                  placeholder: "+5575999990000"
-                }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.connectCreatePhone]])]),
-                _createElementVNode("label", null, [_createTextVNode("Rótulo adicional (opcional)"), _withDirectives(_createElementVNode("input", {
-                  "onUpdate:modelValue": $event => ((s.connectLabel) = $event),
-                  maxlength: "40",
-                  placeholder: "Ex.: Secretaria 2"
-                }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.connectLabel]])]),
-                _createElementVNode("label", { class: "x-check" }, [_withDirectives(_createElementVNode("input", {
-                  type: "checkbox",
-                  "onUpdate:modelValue": $event => ((s.connectPrimary) = $event)
-                }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, s.connectPrimary]]), _createTextVNode("Usar como preferencial desta escola")]),
-                _createElementVNode("p", { class: "muted" }, "O telefone é obrigatório e ficará associado à instância para geração do código de pareamento. A instância recebe nome padronizado com empresa e CNPJ."),
-                _createElementVNode("button", {
-                  class: "btn btn-primary",
-                  disabled: !s.connect.configured||s.connectCreatePhone.replace(/\D/g,'').length<10
-                }, "Criar instância", 8, ["disabled"])
-              ], 40, ["onSubmit"]), _createElementVNode("div", { class: "x-form" }, [_createElementVNode("h3", null, "Usar instância existente"), _createElementVNode("p", null, "Consulte as instâncias já disponíveis na Connect API configurada e vincule uma delas a esta escola. O PIGE360 não exclui, reinicia nem desloga automaticamente instâncias preexistentes."), _createElementVNode("button", {
-                type: "button",
-                class: "btn btn-secondary",
-                onClick: connectInventory,
-                disabled: !s.connect.configured
-              }, "Buscar instâncias existentes", 8, ["onClick", "disabled"])])])]),
+              _createElementVNode("section", { class: "panel x-card" }, [
+                _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "WhatsApp"), _createElementVNode("p", null, "Instâncias e fila de mensagens da instituição. Atendimento e conversação permanecem fora deste módulo.")]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                  class: "btn btn-secondary",
+                  onClick: connectTest
+                }, "Testar conexão", 8, ["onClick"]), _createElementVNode("button", {
+                  class: "btn btn-secondary",
+                  onClick: $event => (run(load))
+                }, "Atualizar", 8, ["onClick"])])]),
+                _createElementVNode("label", null, [_createTextVNode("Provedor de WhatsApp"), _createElementVNode("select", {
+                  disabled: "",
+                  "aria-label": "Provedor de WhatsApp"
+                }, [_createElementVNode("option", { value: "connect_api" }, "Connect API")])]),
+                (!s.connect.configured)
+                  ? (_openBlock(), _createElementBlock("div", {
+                      key: 0,
+                      class: "alert warning"
+                    }, [
+                      _createTextVNode("Configure o provedor no ambiente da instalação com "),
+                      _createElementVNode("code", null, "CONNECT_API_BASE_URL"),
+                      _createTextVNode(" e "),
+                      _createElementVNode("code", null, "CONNECT_API_KEY"),
+                      _createTextVNode(". "),
+                      _createElementVNode("code", null, "CONNECT_ALLOWED_HOSTS"),
+                      _createTextVNode(" é opcional para restringir ainda mais o hostname; quando vazio, somente o host exato da URL configurada é aceito.")
+                    ]))
+                  : (_openBlock(), _createElementBlock("div", {
+                      key: 1,
+                      class: "alert info"
+                    }, "Provedor configurado em " + _toDisplayString(s.connect.base_url) + " · chave global presente · host efetivo " + _toDisplayString(s.connect.effective_host) + " · prefixo de instância " + _toDisplayString(s.connect.instance_prefix), 1)),
+                _createElementVNode("div", { class: "x-grid" }, [_createElementVNode("form", {
+                  class: "x-form",
+                  onSubmit: _withModifiers(connectCreate, ["prevent"])
+                }, [
+                  _createElementVNode("h3", null, "Criar nova instância"),
+                  _createElementVNode("label", null, [_createTextVNode("Telefone da instância"), _withDirectives(_createElementVNode("input", {
+                    "onUpdate:modelValue": $event => ((s.connectCreatePhone) = $event),
+                    inputmode: "tel",
+                    autocomplete: "tel",
+                    minlength: "10",
+                    maxlength: "24",
+                    required: "",
+                    placeholder: "+5575999990000"
+                  }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.connectCreatePhone]])]),
+                  _createElementVNode("label", null, [_createTextVNode("Rótulo adicional (opcional)"), _withDirectives(_createElementVNode("input", {
+                    "onUpdate:modelValue": $event => ((s.connectLabel) = $event),
+                    maxlength: "40",
+                    placeholder: "Ex.: Secretaria 2"
+                  }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.connectLabel]])]),
+                  _createElementVNode("label", { class: "x-check" }, [_withDirectives(_createElementVNode("input", {
+                    type: "checkbox",
+                    "onUpdate:modelValue": $event => ((s.connectPrimary) = $event)
+                  }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, s.connectPrimary]]), _createTextVNode("Usar como preferencial desta escola")]),
+                  _createElementVNode("p", { class: "muted" }, "O telefone é obrigatório e ficará associado à instância para geração do código de pareamento. A instância recebe nome padronizado com empresa e CNPJ."),
+                  _createElementVNode("button", {
+                    class: "btn btn-primary",
+                    disabled: s.busy||!s.connect.configured||s.connectCreatePhone.replace(/\D/g,'').length<10
+                  }, _toDisplayString(s.connectOperation.kind==='create'?'Criando instância…':'Criar instância'), 9, ["disabled"])
+                ], 40, ["onSubmit"]), _createElementVNode("div", { class: "x-form" }, [_createElementVNode("h3", null, "Usar instância existente"), _createElementVNode("p", null, "Consulte as instâncias já disponíveis no provedor configurado e vincule uma delas a esta escola. O PIGE360 não exclui, reinicia nem desloga automaticamente instâncias preexistentes."), _createElementVNode("button", {
+                  type: "button",
+                  class: "btn btn-secondary",
+                  onClick: connectInventory,
+                  disabled: !s.connect.configured
+                }, "Buscar instâncias existentes", 8, ["onClick", "disabled"])])])
+              ]),
               (s.connectInventoryLoaded)
                 ? (_openBlock(), _createElementBlock("section", {
                     key: 0,
                     class: "panel x-card"
-                  }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Instâncias disponíveis na API"), _createElementVNode("p", null, "Inventário remoto. Vincular não transfere propriedade nem remove o uso por outros sistemas.")]), _createElementVNode("button", {
+                  }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Instâncias disponíveis no provedor"), _createElementVNode("p", null, "Inventário remoto. Vincular não transfere propriedade nem remove o uso por outros sistemas.")]), _createElementVNode("button", {
                     class: "btn btn-secondary",
                     onClick: connectInventory
                   }, "Atualizar inventário", 8, ["onClick"])]), (!s.connectRemote.length)
                     ? (_openBlock(), _createElementBlock("p", {
                         key: 0,
                         class: "empty"
-                      }, "Nenhuma instância retornada pela Connect API."))
+                      }, "Nenhuma instância retornada pelo provedor."))
                     : (_openBlock(), _createElementBlock("div", {
                         key: 1,
                         class: "table-wrap"
@@ -5222,7 +5293,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                         ]))
                       }), 128))])])]))]))
                 : _createCommentVNode("", true),
-              _createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("h2", null, "Instâncias vinculadas"), _createElementVNode("span", null, _toDisplayString(s.connectInstances.length) + " ativa(s)", 1)]), (!s.connectInstances.length)
+              _createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("h2", null, "Instâncias da empresa"), _createElementVNode("span", null, _toDisplayString(s.connectInstances.length) + " cadastrada(s)", 1)]), (!s.connectInstances.length)
                 ? (_openBlock(), _createElementBlock("p", {
                     key: 0,
                     class: "empty"
@@ -5231,64 +5302,80 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                 return (_openBlock(), _createElementBlock("article", {
                   key: i.id,
                   class: "x-charge"
-                }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [
-                  _createElementVNode("p", { class: "eyebrow" }, _toDisplayString(i.preferred_for_school?'PREFERENCIAL DESTA ESCOLA':(i.managed_by_pige360?'CRIADA PELO PIGE360':'PREEXISTENTE')), 1),
-                  _createElementVNode("h3", null, _toDisplayString(i.display_name), 1),
-                  _createElementVNode("code", { class: "x-url" }, _toDisplayString(i.name), 1),
-                  _createElementVNode("p", null, [
-                    _createElementVNode("span", { class: "badge" }, _toDisplayString(i.managed_by_pige360?'Gerenciada':'Vinculada'), 1),
-                    _createTextVNode(" · Estado: "),
-                    _createElementVNode("span", { class: "badge" }, _toDisplayString(label(i.connection_state||i.status)), 1),
-                    _createTextVNode(" · " + _toDisplayString(i.remote_configured?'API pronta':'API não configurada'), 1)
-                  ]),
-                  (i.last_synced_at)
-                    ? (_openBlock(), _createElementBlock("small", { key: 0 }, "Última consulta: " + _toDisplayString(date(i.last_synced_at)), 1))
-                    : _createCommentVNode("", true)
-                ]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
-                  class: "btn btn-secondary",
-                  onClick: $event => (connectSync(i))
-                }, "Consultar estado", 8, ["onClick"]), (!i.preferred_for_school)
-                  ? (_openBlock(), _createElementBlock("button", {
-                      key: 0,
-                      class: "btn btn-secondary",
-                      onClick: $event => (connectPrefer(i))
-                    }, "Tornar preferencial", 8, ["onClick"]))
-                  : _createCommentVNode("", true), (i.managed_by_pige360)
-                  ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
-                      _createElementVNode("button", {
-                        class: "btn btn-primary",
-                        onClick: $event => (connectQr(i))
-                      }, "Gerar QR Code", 8, ["onClick"]),
-                      _createElementVNode("button", {
+                }, [
+                  _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [
+                    _createElementVNode("p", { class: "eyebrow" }, _toDisplayString(i.preferred_for_school?'PREFERENCIAL DESTA ESCOLA':(i.managed_by_pige360?'CRIADA PELO PIGE360':'PREEXISTENTE')), 1),
+                    _createElementVNode("h3", null, _toDisplayString(i.display_name), 1),
+                    _createElementVNode("code", { class: "x-url" }, _toDisplayString(i.name), 1),
+                    _createElementVNode("p", null, [
+                      _createElementVNode("span", { class: "badge" }, _toDisplayString(i.managed_by_pige360?'Gerenciada':'Vinculada'), 1),
+                      _createTextVNode(" · Estado: "),
+                      _createElementVNode("span", { class: "badge" }, _toDisplayString(label(i.connection_state||i.status)), 1),
+                      _createTextVNode(" · " + _toDisplayString(i.remote_configured?'API pronta':'API não configurada'), 1)
+                    ]),
+                    (i.last_synced_at)
+                      ? (_openBlock(), _createElementBlock("small", { key: 0 }, "Última consulta: " + _toDisplayString(date(i.last_synced_at)), 1))
+                      : _createCommentVNode("", true)
+                  ]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                    class: "btn btn-secondary",
+                    onClick: $event => (connectSync(i)),
+                    disabled: s.busy
+                  }, "Consultar estado", 8, ["onClick", "disabled"]), (!i.preferred_for_school)
+                    ? (_openBlock(), _createElementBlock("button", {
+                        key: 0,
                         class: "btn btn-secondary",
-                        onClick: $event => (connectPairingCode(i)),
-                        disabled: !i.phone
-                      }, "Obter código de pareamento", 8, ["onClick", "disabled"]),
-                      _createElementVNode("button", {
+                        onClick: $event => (connectPrefer(i)),
+                        disabled: s.busy
+                      }, "Tornar preferencial", 8, ["onClick", "disabled"]))
+                    : _createCommentVNode("", true), (i.managed_by_pige360)
+                    ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
+                        _createElementVNode("button", {
+                          class: "btn btn-primary",
+                          onClick: $event => (connectQr(i)),
+                          disabled: s.busy
+                        }, _toDisplayString(s.connectOperation.instanceId===i.id&&s.connectOperation.kind==='qr'?'Aguardando QR Code…':'Gerar QR Code'), 9, ["onClick", "disabled"]),
+                        _createElementVNode("button", {
+                          class: "btn btn-secondary",
+                          onClick: $event => (connectPairingCode(i)),
+                          disabled: s.busy||!i.phone
+                        }, _toDisplayString(s.connectOperation.instanceId===i.id&&s.connectOperation.kind==='pairing'?'Aguardando código…':'Obter código de pareamento'), 9, ["onClick", "disabled"]),
+                        _createElementVNode("button", {
+                          class: "btn btn-secondary",
+                          onClick: $event => (connectRestart(i)),
+                          disabled: s.busy
+                        }, "Reiniciar", 8, ["onClick", "disabled"]),
+                        _createElementVNode("button", {
+                          class: "btn btn-secondary",
+                          onClick: $event => (connectLogout(i)),
+                          disabled: s.busy
+                        }, "Deslogar", 8, ["onClick", "disabled"]),
+                        _createElementVNode("button", {
+                          class: "btn btn-secondary",
+                          onClick: $event => (connectDelete(i)),
+                          disabled: s.busy
+                        }, "Excluir", 8, ["onClick", "disabled"])
+                      ], 64))
+                    : (_openBlock(), _createElementBlock("button", {
+                        key: 2,
                         class: "btn btn-secondary",
-                        onClick: $event => (connectRestart(i))
-                      }, "Reiniciar", 8, ["onClick"]),
-                      _createElementVNode("button", {
-                        class: "btn btn-secondary",
-                        onClick: $event => (connectLogout(i))
-                      }, "Deslogar", 8, ["onClick"]),
-                      _createElementVNode("button", {
-                        class: "btn btn-secondary",
-                        onClick: $event => (connectDelete(i))
-                      }, "Excluir", 8, ["onClick"])
-                    ], 64))
-                  : (_openBlock(), _createElementBlock("button", {
-                      key: 2,
-                      class: "btn btn-secondary",
-                      onClick: $event => (connectDelete(i))
-                    }, "Desvincular", 8, ["onClick"]))])]), (i.last_error)
-                  ? (_openBlock(), _createElementBlock("p", {
-                      key: 0,
-                      class: "alert error"
-                    }, _toDisplayString(i.last_error), 1))
-                  : _createCommentVNode("", true), (i.managed_by_pige360)
-                  ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
-                      _createElementVNode("div", { class: "x-grid" }, [_createElementVNode("label", null, [_createTextVNode("Telefone da instância"), _withDirectives(_createElementVNode("input", {
+                        onClick: $event => (connectDelete(i)),
+                        disabled: s.busy
+                      }, "Desvincular", 8, ["onClick", "disabled"]))])]),
+                  (s.connectOperation.instanceId===i.id&&['qr','pairing'].includes(s.connectOperation.kind))
+                    ? (_openBlock(), _createElementBlock("p", {
+                        key: 0,
+                        class: "alert info",
+                        role: "status"
+                      }, "Aguardando a resposta do provedor. A geração pode levar até cerca de 75 segundos."))
+                    : _createCommentVNode("", true),
+                  (i.last_error)
+                    ? (_openBlock(), _createElementBlock("p", {
+                        key: 1,
+                        class: "alert error"
+                      }, _toDisplayString(i.last_error), 1))
+                    : _createCommentVNode("", true),
+                  (i.managed_by_pige360)
+                    ? (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [_createElementVNode("div", { class: "x-grid" }, [_createElementVNode("label", null, [_createTextVNode("Telefone da instância"), _withDirectives(_createElementVNode("input", {
                         "onUpdate:modelValue": $event => ((s.connectPhoneDrafts[i.id]) = $event),
                         inputmode: "tel",
                         autocomplete: "tel",
@@ -5300,34 +5387,45 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                         type: "button",
                         class: "btn btn-secondary",
                         onClick: $event => (connectSavePhone(i)),
-                        disabled: (s.connectPhoneDrafts[i.id]||'').replace(/\D/g,'').length<10
-                      }, "Salvar telefone", 8, ["onClick", "disabled"])])]),
-                      (!i.phone)
+                        disabled: s.busy||(s.connectPhoneDrafts[i.id]||'').replace(/\D/g,'').length<10
+                      }, "Salvar telefone", 8, ["onClick", "disabled"])])]), (!i.phone)
                         ? (_openBlock(), _createElementBlock("p", {
                             key: 0,
                             class: "alert warning"
                           }, "Esta instância foi cadastrada antes da exigência de telefone. Informe e salve o número para habilitar o código de pareamento."))
-                        : _createCommentVNode("", true),
-                      (s.connectQr.base64)
-                        ? (_openBlock(), _createElementBlock("div", {
-                            key: 1,
-                            class: "x-pix"
-                          }, [_createElementVNode("img", {
-                            src: s.connectQr.base64,
-                            alt: "QR Code da Connect API"
-                          }, null, 8, ["src"]), _createElementVNode("button", {
-                            class: "btn btn-secondary",
-                            onClick: clearConnectQr
-                          }, "Fechar QR", 8, ["onClick"])]))
-                        : _createCommentVNode("", true),
-                      (s.connectQr.pairingCode||s.connectQr.code)
-                        ? (_openBlock(), _createElementBlock("div", {
-                            key: 2,
-                            class: "alert info"
-                          }, [_createElementVNode("strong", null, _toDisplayString(s.connectQr.pairingCode?'Código de pareamento':'Código QR'), 1), _createElementVNode("code", { class: "x-url" }, _toDisplayString(s.connectQr.pairingCode||s.connectQr.code), 1)]))
-                        : _createCommentVNode("", true)
-                    ], 64))
-                  : _createCommentVNode("", true)]))
+                        : _createCommentVNode("", true), (s.connectQr.instanceId===i.id)
+                        ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [(s.connectQr.connected)
+                            ? (_openBlock(), _createElementBlock("p", {
+                                key: 0,
+                                class: "alert info",
+                                role: "status"
+                              }, "WhatsApp conectado. Não é necessário parear novamente."))
+                            : (s.connectQr.pending)
+                              ? (_openBlock(), _createElementBlock("p", {
+                                  key: 1,
+                                  class: "alert warning",
+                                  role: "status"
+                                }, _toDisplayString(s.connectQr.kind==='qr'&&s.connectQr.code?'O provedor devolveu somente o texto do QR, sem imagem para escanear. Aguarde e tente novamente.':'O provedor respondeu, mas ainda não disponibilizou '+(s.connectQr.kind==='pairing'?'o código de pareamento':'o QR Code')+'. Aguarde alguns instantes e tente novamente.'), 1))
+                              : _createCommentVNode("", true), (s.connectQr.base64)
+                            ? (_openBlock(), _createElementBlock("div", {
+                                key: 2,
+                                class: "x-pix"
+                              }, [_createElementVNode("img", {
+                                src: s.connectQr.base64,
+                                alt: "QR Code de conexão do WhatsApp"
+                              }, null, 8, ["src"]), _createElementVNode("button", {
+                                class: "btn btn-secondary",
+                                onClick: $event => (clearConnectQr(i.id))
+                              }, "Fechar QR", 8, ["onClick"])]))
+                            : _createCommentVNode("", true), (s.connectQr.pairingCode||s.connectQr.code)
+                            ? (_openBlock(), _createElementBlock("div", {
+                                key: 3,
+                                class: "alert info"
+                              }, [_createElementVNode("strong", null, _toDisplayString(s.connectQr.pairingCode?'Código de pareamento':'Código QR'), 1), _createElementVNode("code", { class: "x-url" }, _toDisplayString(s.connectQr.pairingCode||s.connectQr.code), 1)]))
+                            : _createCommentVNode("", true)], 64))
+                        : _createCommentVNode("", true)], 64))
+                    : _createCommentVNode("", true)
+                ]))
               }), 128))]),
               (s.connectUnits.length)
                 ? (_openBlock(), _createElementBlock("section", {
@@ -5349,7 +5447,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                   }), 128))])]))
                 : _createCommentVNode("", true),
               _createElementVNode("section", { class: "panel x-card" }, [
-                _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Fila operacional Connect API"), _createElementVNode("p", null, "Mensagens e notificações geradas pelo PIGE360. Este módulo não implementa caixa de entrada nem interface de conversação.")]), _createElementVNode("button", {
+                _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Fila operacional do WhatsApp"), _createElementVNode("p", null, "Mensagens e notificações geradas pelo PIGE360. Este módulo não implementa caixa de entrada nem interface de conversação.")]), _createElementVNode("button", {
                   class: "btn btn-secondary",
                   onClick: connectJobs
                 }, "Atualizar fila", 8, ["onClick"])]),
@@ -5392,14 +5490,14 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
             ], 64))
           : _createCommentVNode("", true),
         (props.page==='integrations')
-          ? (_openBlock(), _createElementBlock(_Fragment, { key: 3 }, [_createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Conexões desta escola"), _createElementVNode("p", null, "Credenciais criptografadas no servidor. Nenhuma integração está ativa até ser configurada e habilitada.")]), _createElementVNode("button", {
+          ? (_openBlock(), _createElementBlock(_Fragment, { key: 3 }, [_createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Integração bancária"), _createElementVNode("p", null, "Credenciais criptografadas no servidor. Nenhuma integração está ativa até ser configurada e habilitada.")]), _createElementVNode("button", {
               class: "btn btn-secondary",
               onClick: $event => (run(load))
-            }, "Atualizar", 8, ["onClick"])]), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(['asaas'], (provider) => {
+            }, "Atualizar", 8, ["onClick"])]), _createElementVNode("p", { class: "muted" }, "Provedores bancários são configurados nesta área. Atualmente, ASAAS é o provedor disponível."), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(['asaas'], (provider) => {
               return (_openBlock(), _createElementBlock("article", {
                 key: provider,
                 class: "x-charge"
-              }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h3", null, _toDisplayString(provider==='asaas'?'ASAAS · Pix e boleto':'ARGWS Connect API · WhatsApp'), 1), _createElementVNode("p", null, _toDisplayString(connectionFor(provider)?.enabled?'Habilitada':'Desabilitada / não configurada') + " · " + _toDisplayString(connectionFor(provider)?.environment||'—'), 1), (connectionFor(provider)?.last_test_at)
+              }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h3", null, "Provedor: " + _toDisplayString(provider==='asaas'?'ASAAS':provider) + " · Pix e boleto", 1), _createElementVNode("p", null, _toDisplayString(connectionFor(provider)?.enabled?'Habilitada':'Desabilitada / não configurada') + " · " + _toDisplayString(connectionFor(provider)?.environment||'—'), 1), (connectionFor(provider)?.last_test_at)
                 ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Último teste HTTP: " + _toDisplayString(date(connectionFor(provider)?.last_test_at||'')) + " · " + _toDisplayString(connectionFor(provider)?.last_test_ok?'Respondido':'Falhou'), 1))
                 : _createCommentVNode("", true)]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
                 class: "btn btn-primary",
@@ -5414,13 +5512,13 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                 ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createElementVNode("label", null, [_createTextVNode("URL do webhook"), _createElementVNode("input", {
                     readonly: "",
                     value: origin+connectionFor(provider)?.webhook_path
-                  }, null, 8, ["value"])]), _createElementVNode("small", null, _toDisplayString(provider==='asaas'?'Header de autenticação: asaas-access-token':'Header: x-connect-webhook-token · consulte o contrato do callback em docs/INTEGRACOES.md'), 1)], 64))
+                  }, null, 8, ["value"])]), _createElementVNode("small", null, "Header de autenticação do provedor: asaas-access-token")], 64))
                 : _createCommentVNode("", true)]))
             }), 128))]), (s.editingConnection)
               ? (_openBlock(), _createElementBlock("section", {
                   key: 0,
                   class: "panel x-card"
-                }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("h2", null, "Configurar " + _toDisplayString(s.provider==='asaas'?'ASAAS':'Connect API'), 1), _createElementVNode("button", {
+                }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("h2", null, "Configurar provedor bancário: " + _toDisplayString(s.provider.toUpperCase()), 1), _createElementVNode("button", {
                   class: "btn btn-secondary",
                   onClick: $event => {s.editingConnection=false;s.connectionForm.api_key='';s.connectionForm.webhook_token=''}
                 }, "Fechar", 8, ["onClick"])]), _createElementVNode("form", {

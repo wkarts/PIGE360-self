@@ -237,6 +237,64 @@ await expansion.finalize();assert.equal(finalizeCount,0,'Sem revisão verificada
 sandbox.PigeAPI.request=originalRequest;sandbox.PigeAPI.post=originalPost;sandbox.PigeAPI.patch=originalPatch;
 console.log('Campaign smoke: modelo do período, revisão congelada e bloqueio da matrícula OK.');
 
+// QR e pareamento pertencem à instância solicitada; resposta vazia não anuncia código pronto.
+const connectExpansion=sandbox.PigeExpansion.component.setup({schoolId:'school-test',page:'connect',permissions:['connect.manage']});
+const connectA={id:'instance-a',name:'PG360-A',display_name:'Escola A',phone:'+5575999990000',managed_by_pige360:true,preferred_for_school:true,status:'created',connection_state:'created',remote_configured:true};
+const connectB={...connectA,id:'instance-b',name:'PG360-B',display_name:'Escola B',preferred_for_school:false};
+connectExpansion.s.connect.configured=true;
+connectExpansion.s.connectInstances=[connectA,connectB];
+let refreshFails=false,adoptCalls=0,inventoryCalls=0,alreadyConnected=false,delayedQr=null;
+sandbox.PigeAPI.request=async path=>{
+  if(path.endsWith('/connect')){if(refreshFails)throw new Error('Falha sintética na atualização');return{config:connectExpansion.s.connect,items:[connectA,connectB],units:[]};}
+  if(path.includes('/connect/jobs'))return{items:[],total:0};
+  if(path.endsWith('/connect/remote-instances')){inventoryCalls++;return{items:[]};}
+  throw new Error('GET inesperado: '+path);
+};
+sandbox.PigeAPI.post=async path=>{
+  if(path.endsWith('/instance-a/qr'))return delayedQr||{instance:connectA,qrcode:{},pending:!alreadyConnected,connected:alreadyConnected};
+  if(path.endsWith('/instance-b/pairing-code'))return{instance:connectB,qrcode:{pairingCode:'ABCD-1234'},pending:false};
+  if(path.endsWith('/connect/instances'))return{instance:{...connectB,id:'instance-c',name:'PG360-C'},qrcode:{base64:'data:image/png;base64,AAAA'},pending:false};
+  if(path.endsWith('/connect/instances/adopt')){adoptCalls++;return{instance:connectA};}
+  throw new Error('POST inesperado: '+path);
+};
+let releaseQr;
+delayedQr=new Promise(resolve=>{releaseQr=resolve;});
+const pendingQrRequest=connectExpansion.connectQr(connectA);
+const renderConnect=()=>sandbox.PigeExpansion.component.render.call(connectExpansion,connectExpansion,[]);
+assert.equal(connectExpansion.s.connectOperation.instanceId,'instance-a');
+assert.match(loginText(renderConnect()),/Aguardando QR Code…/);
+releaseQr({instance:connectA,qrcode:{},pending:true});
+await pendingQrRequest;delayedQr=null;
+assert.equal(connectExpansion.s.connectQr.instanceId,'instance-a');
+assert.equal(connectExpansion.s.connectQr.pending,true);
+assert.match(connectExpansion.s.notice,/Ainda não há QR Code/);
+assert.doesNotMatch(connectExpansion.s.notice,/pronto/);
+assert.match(loginText(renderConnect()),/O provedor respondeu, mas ainda não disponibilizou o QR Code/);
+delayedQr={instance:connectA,qrcode:{code:'texto-sem-imagem'}};
+await connectExpansion.connectQr(connectA);
+assert.equal(connectExpansion.s.connectQr.pending,true,'O texto bruto não é um QR escaneável');
+assert.match(connectExpansion.s.notice,/somente o texto do QR/);
+assert.match(loginText(renderConnect()),/sem imagem para escanear/);
+delayedQr=null;
+alreadyConnected=true;await connectExpansion.connectQr(connectA);
+assert.equal(connectExpansion.s.connectQr.pending,false);
+assert.equal(connectExpansion.s.connectQr.connected,true);
+assert.match(connectExpansion.s.notice,/já conectado/);
+await connectExpansion.connectPairingCode(connectB);
+assert.equal(connectExpansion.s.connectQr.instanceId,'instance-b');
+assert.equal(connectExpansion.s.connectQr.pairingCode,'ABCD-1234');
+assert.equal(connectExpansion.s.connectQr.pending,false);
+assert.equal(loginText(renderConnect()).split('ABCD-1234').length,2,'Código aparece somente na instância solicitada');
+refreshFails=true;await connectExpansion.connectCreate();
+assert.equal(connectExpansion.s.connectQr.instanceId,'instance-c');
+assert.equal(connectExpansion.s.connectQr.base64,'data:image/png;base64,AAAA');
+assert.ok(connectExpansion.s.connectInstances.some(item=>item.id==='instance-c'),'Criação permanece visível quando recarga falha');
+assert.match(connectExpansion.s.error,/não foi possível atualizar a lista/);
+refreshFails=false;await connectExpansion.connectAdopt({name:'PG360-EXISTENTE'});
+assert.equal(adoptCalls,1);assert.equal(inventoryCalls,1,'Inventário é recarregado sem execução aninhada bloqueada');
+sandbox.PigeAPI.request=originalRequest;sandbox.PigeAPI.post=originalPost;
+console.log('WhatsApp smoke: QR por instância, resposta pendente, criação resiliente e inventário após vínculo OK.');
+
 // Exercita o componente assistido e impede preenchimento fora da lista/edição atrasada.
 const target={name:'Nome preservado',cpf:''};
 const assistProps={target,fields:['name','cpf'],request:sandbox.fetch,root:'/test',lookupRoot:'',ocr:true,cnpj:true,cep:true,mapping:{},label:'Pessoa de teste',source:''};

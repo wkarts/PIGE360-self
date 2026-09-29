@@ -56,6 +56,8 @@ try:
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
             menu=page.get_by_role('button',name='Cadastros',exact=True)
             if label in ['Cadastro único','Alunos','Professores','Funcionários','Pais e responsáveis','Fornecedores','Prestadores de serviços','Clientes','Sócios'] and menu.get_attribute('aria-expanded')=='false':menu.click()
+            integrations=page.get_by_role('button',name='Integrações',exact=True)
+            if label in ['WhatsApp','E-mail / SMTP','Bancária'] and integrations.get_attribute('aria-expanded')=='false':integrations.click()
             page.locator('aside').get_by_role('link',name=label,exact=False).click()
             expect(page.locator('h1')).to_have_text(heading or label)
         def dialog():return page.get_by_role('dialog')
@@ -188,7 +190,7 @@ try:
         expect(page.get_by_text('Cadastre cada pessoa uma vez',exact=True)).to_be_visible()
         record('Guia de uso alcançável do cabeçalho e orienta cadastro, matrícula e Diário')
         nav('Cobranças');page.get_by_role('button',name='+ Nova cobrança',exact=True).click()
-        expect(dialog().get_by_role('heading',name='Nova cobrança ASAAS',exact=True)).to_be_visible()
+        expect(dialog().get_by_role('heading',name='Nova cobrança',exact=True)).to_be_visible()
         dialog().get_by_label('Valor de cada parcela (R$)').fill('450.00')
         dialog().get_by_label('Quantidade mensal (1 = avulsa)').fill('3')
         expect(dialog().locator('.charge-summary')).to_contain_text('1.350,00')
@@ -203,7 +205,7 @@ try:
         expect(dialog()).to_have_count(0)
         record('Lançamento em modal responsivo com resumo nominal e confirmação de descarte; sem alterar emissão')
         page.set_viewport_size({'width':1440,'height':960})
-        for label in ['Visão geral','Cadastro único','Alunos','Professores','Funcionários','Pais e responsáveis','Fornecedores','Prestadores de serviços','Clientes','Sócios','Matrículas','Estrutura acadêmica','Diário Escolar','Documentação','Protocolos','Relatórios','Inscrições online','Cobranças','Financeiro / ASAAS','Connect API','Instituição','Usuários e acessos','Diagnóstico e logs','Auditoria']:
+        for label in ['Visão geral','Cadastro único','Alunos','Professores','Funcionários','Pais e responsáveis','Fornecedores','Prestadores de serviços','Clientes','Sócios','Matrículas','Estrutura acadêmica','Diário Escolar','Documentação','Protocolos','Relatórios','Inscrições online','Cobranças','WhatsApp','E-mail / SMTP','Bancária','Instituição','Usuários e acessos','Diagnóstico e logs','Auditoria']:
             nav(label,heading='Pendências documentais' if label=='Documentação' else label)
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
         assert not route_failures,route_failures

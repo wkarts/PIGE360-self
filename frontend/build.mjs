@@ -64,4 +64,5 @@ self.addEventListener('fetch',event=>{
 fs.writeFileSync(path.join(dist,'sw.js'),sw);
 fs.writeFileSync(path.join(dist,'build-info.json'),JSON.stringify({product:'PIGE360 Self',version,vue:'3.5.13',build_id:hash,pipeline:'typescript-vue-precompiled',external_cdn:false},null,2)+'\n');
 execFileSync(process.execPath,[path.join(root,'tests/render-smoke.mjs')],{stdio:'inherit'});
+execFileSync(process.execPath,[path.join(root,'tests/integration-navigation.mjs')],{stdio:'inherit'});
 console.log('PWA compilada:',hash);

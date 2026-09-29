@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     integration_encryption_key: str = ''
     signature_trust_roots_dir: Path | None = Path('/data/trust-roots')
     integration_timeout_seconds: int = 15
+    connect_pairing_timeout_seconds: int = 75
     connect_api_base_url: str = ''
     connect_api_key: str = ''
     connect_allowed_hosts: str = ''
@@ -90,6 +91,8 @@ class Settings(BaseSettings):
             raise ValueError('SMTP_SECURITY deve ser starttls ou ssl; envio sem TLS não permitido.')
         if not 3 <= self.integration_timeout_seconds <= 30 or not 1 <= self.worker_poll_seconds <= 60:
             raise ValueError('Timeout/intervalo do worker fora do limite permitido.')
+        if not 15 <= self.connect_pairing_timeout_seconds <= 90:
+            raise ValueError('CONNECT_PAIRING_TIMEOUT_SECONDS deve estar entre 15 e 90 segundos.')
         if len(self.app_secret_key) < 32 or len(self.setup_token) < 24:
             raise ValueError('Gere APP_SECRET_KEY e SETUP_TOKEN com scripts/configure.py.')
         if self.database_url.startswith('sqlite') and not self.allow_sqlite:

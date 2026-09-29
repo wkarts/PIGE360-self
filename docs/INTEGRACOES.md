@@ -4,7 +4,7 @@
 
 O código HTTP, persistência, telas, criptografia, fila e tratamento de respostas estão implementados. Os testes externos usaram transportes controlados: nenhuma mensagem, cobrança ou pagamento real foi executado na construção deste pacote.
 
-**ASAAS** utiliza operações da API v3 consultadas na documentação oficial. **Connect API** utiliza um contrato JSON parametrizável porque o contrato HTTP/OpenAPI da instalação ARGWS Connect API não estava disponível nos anexos consultados. Configurar nomes de rotas não equivale a comprovar compatibilidade. O operador deve confrontar campos, autenticação, resposta e callbacks com sua documentação real antes de habilitar. Não foram copiados endpoints da Evolution como se fossem os da Connect.
+**ASAAS** utiliza operações da API v3 consultadas na documentação oficial. O módulo de instâncias WhatsApp usa as rotas nativas identificadas no código público da ARGWS Connect API. A configuração antiga de envio por contrato JSON parametrizável continua separada e requer conferência dos caminhos e callbacks da instalação antes de ser habilitada; configurar nomes de rotas não comprova a compatibilidade do envio.
 
 ## Segredos e worker
 
@@ -19,7 +19,7 @@ docker compose --env-file deploy/docker/.env.production -f deploy/docker/compose
 
 ## ASAAS
 
-No painel **Integrações → ASAAS**, escolha sandbox/produção, informe a API key e um token exclusivo de webhook com pelo menos 32 caracteres. API key e token de webhook precisam ser diferentes. Habilite explicitamente a conexão e use Testar. Um teste HTTP acessível não certifica emissão/recebimento completos.
+No painel **Integrações → Bancária**, escolha o provedor ASAAS, sandbox/produção, informe a API key e um token exclusivo de webhook com pelo menos 32 caracteres. API key e token de webhook precisam ser diferentes. Habilite explicitamente a conexão e use Testar. Um teste HTTP acessível não certifica emissão/recebimento completos.
 
 Endpoints fixos do adaptador:
 
@@ -64,6 +64,12 @@ Antes de criar, consulta referência externa. Salva checkpoints antes de chamada
 
 Uma conexão ASAAS que já possui cobranças não pode alternar sandbox/produção. Use escola/instalação de homologação separada. Renegociação, transferências, Pix de saída, CNAB, OFX, NFS-e e múltiplos provedores bancários não foram incluídos.
 
+## Menu Integrações
+
+O menu agrupa **WhatsApp**, **E-mail / SMTP** e **Bancária**. A Connect API é o provedor implementado para WhatsApp e aparece na configuração do canal; as ações de envio são apresentadas como envio por WhatsApp. Na área bancária, ASAAS é o provedor implementado nesta versão. Cada novo provedor exigirá um adaptador e homologação próprios.
+
+A tela E-mail / SMTP mostra ao administrador se os parâmetros básicos estão presentes e orienta a configuração no ambiente da stack. Ela não exibe senha nem altera o SMTP pela interface.
+
 ## ARGWS Connect API
 
 A Connect API é um módulo independente do financeiro. ASAAS continua sendo configurado por escola em Integrações e usa a fila bancária; a Connect API usa uma chave global da instalação, uma instância principal por empresa e uma fila própria de mensagens.
@@ -74,12 +80,13 @@ Configure no arquivo de ambiente da instalação, em cada stack de deploy:
     CONNECT_API_KEY=chave-global-da-connect-api
     CONNECT_ALLOWED_HOSTS=connect.seudominio.com.br
     CONNECT_ALLOW_PRIVATE=false
+    CONNECT_PAIRING_TIMEOUT_SECONDS=75
 
 Os segredos nunca são enviados ao navegador. O servidor exige HTTPS, allowlist do hostname e bloqueia endereços privados por padrão.
 
 ### Ciclo de vida da instância
 
-Na tela **Connect API**, a aplicação:
+Na tela **Integrações → WhatsApp**, a aplicação:
 
 - gera o nome no formato `PG360-NOME-DA-EMPRESA-CNPJ`;
 - cria a instância na ARGWS Connect API com o provider `WHATSAPP-BAILEYS`;
