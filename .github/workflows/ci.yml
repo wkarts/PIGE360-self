@@ -127,10 +127,9 @@ jobs:
           assert packaged['build_id'] == tested['build_id'], (packaged, tested)
           PY
       - name: Evidências desta execução
-        if: always()
-        # A indisponibilidade/cota do armazenamento de artifacts não invalida
-        # testes, build, E2E, PostgreSQL ou smoke Docker já concluídos.
-        continue-on-error: true
+        # Evidências binárias são opt-in para não acoplar a validade do CI
+        # à cota externa de armazenamento do GitHub Actions.
+        if: always() && vars.CI_UPLOAD_EVIDENCE == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ci-${{ github.run_id }}-${{ github.run_attempt }}
