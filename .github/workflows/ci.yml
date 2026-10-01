@@ -128,9 +128,13 @@ jobs:
           PY
       - name: Evidências desta execução
         if: always()
+        # A indisponibilidade/cota do armazenamento de artifacts não invalida
+        # testes, build, E2E, PostgreSQL ou smoke Docker já concluídos.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: ci-${{ github.run_id }}-${{ github.run_attempt }}
           path: ci-evidence/
-          retention-days: 14
+          retention-days: 3
+          compression-level: 9
           if-no-files-found: warn
