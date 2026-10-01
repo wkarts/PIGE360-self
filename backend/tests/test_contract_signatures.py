@@ -172,6 +172,11 @@ def test_a1_automatic_issuance_portal_reimport_and_review(api, tmp_path, monkeyp
     assert rejected.json()['download_file_id'] == second_status['file_id']
     second_status = api.get(f"/issued-documents/{second['id']}/signatures")
     assert second_status['status'] == 'rejected' and second_status['file_id'] == rejected.json()['download_file_id']
+    rejected_validation = api.client.post(api.base + f"/issued-documents/{second['id']}/validate-signature",
+        headers=api.headers, data={'signer_cpf': '12345678901', 'validation_reference': 'ITI-REJECTED-001'},
+        files={'report': ('relatorio.pdf', blank_pdf(), 'application/pdf')})
+    assert rejected_validation.status_code == 409
+    assert api.get(f"/issued-documents/{second['id']}/signatures")['status'] == 'rejected'
     rejected_repeat = api.client.post(api.base + f"/issued-documents/{second['id']}/signed-external",
                                       headers=api.headers, files={'file': ('documento.pdf', first_try)})
     assert rejected_repeat.status_code == 409

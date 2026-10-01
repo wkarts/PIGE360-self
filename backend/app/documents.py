@@ -191,35 +191,9 @@ def render_pdf(school_name, title, rows, note='', issuer='', db=None):
 @router.post('/students/{student_id}/issued-documents', status_code=201)
 def issue(student_id: str, data: s.IssueInput, db: DB, user: Actor, school: Scope, request: Request):
     require(user, 'documents.write')
-    student = scoped(db, m.Student, student_id, school.id); person = db.get(m.Person, student.person_id)
-    rows = [('Aluno', person.name), ('Número do aluno', student.number), ('Data de nascimento', person.birth_date.strftime('%d/%m/%Y'))]
-    snapshot = {'school': output(school), 'person': output(person), 'student': output(student), 'issuer': user.name, 'template_version':'3', 'brand':school.name}
-    if data.enrollment_id:
-        selected_enrollment = scoped(db, m.Enrollment, data.enrollment_id, school.id)
-        if selected_enrollment.student_id != student.id: fail(422, 'A matrícula pertence a outro aluno.')
-    note = ''
-    if data.kind != 'student_record':
-        if not data.enrollment_id: fail(422, 'Selecione a matrícula para emitir este documento.')
-        enrollment = scoped(db, m.Enrollment, data.enrollment_id, school.id)
-        if enrollment.student_id != student.id: fail(422, 'A matrícula pertence a outro aluno.')
-        if data.kind != 'enrollment_form' and enrollment.status != 'active': fail(409, 'Comprovantes e declarações exigem matrícula ativa.')
-        group = db.get(m.ClassGroup, enrollment.class_group_id)
-        year = db.get(m.AcademicYear, enrollment.academic_year_id)
-        grade = db.get(m.Grade, group.grade_id); shift = db.get(m.Shift, group.shift_id); unit = db.get(m.Unit, group.unit_id)
-        rows += [('Matrícula', enrollment.number), ('Ano letivo', year.name), ('Série / etapa', grade.name), ('Turma', group.name), ('Turno', shift.name), ('Unidade', unit.name), ('Data da matrícula', enrollment.enrolled_on.strftime('%d/%m/%Y'))]
-        if data.kind == 'enrollment_form':
-            labels = {'draft':'Pré-matrícula / rascunho', 'active':'Ativa', 'suspended':'Suspensa', 'transferred':'Transferida', 'cancelled':'Cancelada', 'completed':'Concluída'}
-            rows += [('Situação', labels[enrollment.status]), ('Observações', enrollment.notes)]
-            note = 'Ficha administrativa. A situação acima deve ser observada; este documento não substitui a declaração de matrícula ativa.'
-        snapshot.update({'enrollment': output(enrollment), 'class_group': output(group), 'year': output(year), 'grade': output(grade), 'shift': output(shift), 'unit': output(unit)})
-        if data.kind == 'enrollment_declaration':
-            note = f'Declaramos que {person.name} possui matrícula ativa nesta instituição no período letivo {year.name}, conforme os dados acima registrados.'
-    else:
-        rows += [('CPF', ('***.' + person.cpf[3:6] + '.' + person.cpf[6:9] + '-**') if person.cpf else 'Não informado'), ('Contato', person.phone), ('Endereço', person.address), ('Escola anterior', student.previous_school)]
-    from .institution import public_identity
-    snapshot['institution_identity'] = public_identity(db)
-    snapshot['brand'] = snapshot['institution_identity']['display_name']
-    content = render_pdf(school.name, PDF_TITLES[data.kind], rows, note, user.name, db=db)
+    student = scoped(db, m.Student, student_id, school.id); person = scoped(db, m.Person, student.person_id, school.id)
+    from .student_reports import compose_student_document
+    content, snapshot = compose_student_document(db, school, student, person, data.enrollment_id, data.kind, user.name, PDF_TITLES[data.kind])
     stored = write_file(db, school.id, user.id, f'{data.kind}-{student.number}.pdf', 'application/pdf', content)
     obj = m.IssuedDocument(school_id=school.id, student_id=student.id, enrollment_id=data.enrollment_id, kind=data.kind, file_id=stored.id, snapshot=snapshot, created_by=user.id, template_version='3')
     db.add(obj); db.flush(); audit(db, request, user, 'document.issued', obj, school.id, {'sha256': stored.sha256, 'kind': data.kind})

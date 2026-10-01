@@ -6,7 +6,7 @@ from datetime import date,timedelta
 import httpx
 from playwright.sync_api import sync_playwright,expect
 ROOT=Path(__file__).resolve().parents[1]
-OUT=ROOT/'evidence/0.3.0/diagnostics';OUT.mkdir(parents=True,exist_ok=True)
+OUT=Path(os.getenv('PIGE_E2E_OUT', str(ROOT/'evidence/0.3.0/diagnostics')));OUT.mkdir(parents=True,exist_ok=True)
 TEMP=Path(tempfile.mkdtemp(prefix='school-diagnostics-'))
 with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
 URL=f'http://127.0.0.1:{port}';password='Synthetic-Diagnostics-Password-2026!'
@@ -61,7 +61,7 @@ try:
         page.get_by_label('E-mail',exact=True).fill('parent@example.com');page.get_by_label('Senha',exact=True).fill(password);page.get_by_role('button',name='Entrar no portal',exact=True).click()
         expect(page.get_by_role('heading',name='Minhas inscrições',exact=True)).to_be_visible()
         record('Conta existente entra sem processo aberto e mantém o acesso a suas inscrições.')
-        page.get_by_role('button',name='Sair',exact=True).click()
+        page.get_by_role('button',name='Minha conta',exact=False).click();page.get_by_role('button',name='Sair',exact=True).click()
         page.goto(URL+'/',wait_until='networkidle')
         page.get_by_label('E-mail',exact=True).fill('admin@example.com');page.get_by_label('Senha',exact=True).fill(password);page.get_by_role('button',name='Entrar na aplicação',exact=False).click()
         page.get_by_role('link',name='Inscrições online',exact=True).click()

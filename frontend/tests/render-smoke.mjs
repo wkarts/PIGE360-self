@@ -74,12 +74,26 @@ assert.equal(photoRequests.length,9,'Cada foto é solicitada uma única vez dura
 assert.ok(maxActivePhotos<=4,'Os downloads de foto permanecem limitados durante toda a fila');
 sandbox.PigeAPI.objectUrl=originalObjectUrl;
 for(const page of Object.keys(context.pageLabels)){context.state.page=page;render();}
-context.state.page='legacy-import';context.state.legacyImport.preview={fingerprint:'a'.repeat(64),source_system:'School Desktop Suite',source_database:'app.db',source_record_count:5,table_count:5,max_package_mb:128,tables:[{name:'alunos',rows:1,destination:'alunos e pessoas'}],media:{inline_photos_convertible:1,container_files_candidate_count:0,container_unsupported_files_ignored:0,container_unsafe_or_cache_paths_ignored:0,unresolved_media_references:0,container_magento_paths_ignored:0},warnings:['Aviso de teste']};
-const legacyImportTree=render();assert.match(loginText(legacyImportTree),/Gerar prévia segura/);assert.match(loginText(legacyImportTree),/Confirme a importação/);assert.match(loginText(legacyImportTree),/alunos e pessoas/);
-assert.equal(typeof context.previewLegacyImport,'function');assert.equal(typeof context.applyLegacyImport,'function');
-context.state.legacyImport.preview=null;
+context.state.page='legacy-import';
+assert.ok(nodes(render()).some(n=>n.type==='legacy-import-panel'||n.type===sandbox.PigeLegacyImport.component),'Importação monta componente seletivo');
+const importContext=sandbox.PigeLegacyImport.component.setup({schoolId:'school-test',schoolName:'Escola de teste',units:[]});
+const importRender=()=>sandbox.PigeRenders.legacyImport.call(importContext,importContext,[]);
+assert.match(loginText(importRender()),/Analisar arquivo/);
+importContext.state.inventory={tables:[{name:'alunos',rows:2,selected_rows:0,destination:'Alunos'}],records:{}};
+importContext.toggleTable('alunos');
+assert.deepEqual(Array.from(importContext.state.selection.tables),['alunos']);
+assert.match(loginText(importRender()),/Escolher registros/);
+importContext.state.preview={can_apply:true,selected_record_count:2,destination:{school_name:'Escola de teste'},tables:[{name:'alunos',selected_rows:2,destination:'Alunos'}],issues:[],warnings:[]};
+assert.match(loginText(importRender()),/Confira antes de importar/);
+importContext.toggleTable('alunos');assert.equal(importContext.state.preview,null,'Mudar seleção invalida a confirmação');
+const reportContext=sandbox.PigeReports.component.setup({schoolId:'school-test',catalogs:{}});
+const reportRender=()=>sandbox.PigeRenders.reports.call(reportContext,reportContext,[]);
+reportContext.period();assert.ok(reportContext.state.dateFrom<reportContext.state.dateTo);
+assert.match(loginText(reportRender()),/Últimos três meses completos/);
+reportContext.state.result={title:'Matrículas',period:{label:'Teste',date_from:'2026-07-01',date_to:'2026-09-30'},summary:[{key:'total',label:'Total',value:1,type:'integer'}],filters:[],columns:[{key:'name',label:'Aluno',type:'text'}],items:[{name:'Aluno Sintético'}],total:1,page_size:30,monthly:[],notes:[]};
+assert.match(loginText(reportRender()),/Aluno Sintético/);
 context.state.page='help';let guideTree=render();assert.match(loginText(guideTree),/Siga a ordem da rotina escolar/);assert.match(loginText(guideTree),/Cadastre cada pessoa uma vez/);
-context.state.page='students';assert.match(loginText(render()),/Pesquise antes de criar uma nova identidade/);
+context.state.page='students';assert.match(loginText(render()),/Novo aluno/);assert.ok(!loginText(render()).includes('Pesquise antes de criar uma nova identidade'),'Orientação redundante removida da listagem');
 const originalRequest=sandbox.PigeAPI.request;let routeCalls=[];
 sandbox.PigeAPI.request=async path=>{routeCalls.push(path);return {};};
 context.state.page='diary';await context.loadPage();context.state.page='help';await context.loadPage();context.state.page='contracts';await context.loadPage();
@@ -133,7 +147,7 @@ await diaryContext.load();
 assert.ok(diaryCalls.includes('/schools/school-test/academic-years'));
 assert.ok(!diaryCalls.includes('/schools/school-test/diary'));
 diaryContext.state.tab='setup';let diaryTree=renderDiary();
-assert.match(loginText(diaryTree),/Como começar no Diário/);
+assert.match(loginText(diaryTree),/Como usar o Diário/);
 assert.match(loginText(diaryTree),/2026/);
 sandbox.PigeAPI.request=originalRequest;
 console.log('Diary smoke: roteiro visível, ano letivo legível e endpoints da tela válidos OK.');
@@ -183,6 +197,7 @@ sandbox.PigeAPI.request=async(path,options={})=>{
     if(options.method==='PUT'){receivedA1=true;assert.equal(options.body.get('password'),'senha-de-teste');return {subject:'CN=Escola',expires_at:'2028-12-31T00:00:00Z',certificate_sha256:'a'.repeat(64)};}
     return{configured:receivedA1,certificate:receivedA1?{subject:'CN=Escola',expires_at:'2028-12-31T00:00:00Z',certificate_sha256:'a'.repeat(64)}:null};
   }
+  if(path.includes('/issued-documents/signatures/unsigned'))return{items:[],total:0};
   if(path.includes('/issued-documents/signatures/pending'))return{items:[{document_id:'issued-1',student_name:'Maria',enrollment_id:'enrollment-1',signature_status:'pending_validation'}],total:1};
   if(path.endsWith('/issued-documents/issued-1/signatures'))return{document_id:'issued-1',status:reviewStatus,file_id:'signed-1',signature_valid:true,cryptographic_valid:true,trust_status:'trusted',signatures:[],revisions:[]};
   if(path.endsWith('/issued-documents/issued-1/validate-signature')){receivedValidation=true;reviewStatus='verified';assert.equal(options.body.get('signer_cpf'),'12345678909');return{signature_status:'verified'};}
@@ -212,6 +227,9 @@ sandbox.PigeAPI.request=async path=>{
   if(path.endsWith('/admission-readiness'))return{ready:true,campaigns:[],issues:[]};
   if(path.endsWith('/admission-campaigns'))return[];
   if(path.endsWith('/class-groups'))return[group];
+  if(path.endsWith('/academic-years'))return[{id:'year-2027',name:'2027',status:'active'}];
+  if(path.endsWith('/units'))return[];
+  if(path.endsWith('/academic-years'))return[{id:'year-2027',name:'2027'}];
   if(path.endsWith('/document-templates'))return{items:[templateChoice]};
   if(path.endsWith('/document-templates/fields'))return{fields:[{key:'financeiro.anuidade',label:'Anuidade',source:'manual'}]};
   if(path.includes('/admissions-summary'))return{counts:{}};
@@ -228,6 +246,8 @@ sandbox.PigeAPI.post=async(path,payload)=>{
   throw new Error('POST inesperado: '+path);
 };
 await expansion.load();expansion.newCampaign();
+await expansion.saveCampaign();assert.equal(campaignSaved,null,'Sem turma, o processo não deve ser enviado');assert.match(expansion.s.error,/Selecione pelo menos uma turma/);
+Object.assign(expansion.s.campaignForm,{title:'Matrículas 2027',slug:'matriculas-2027',opens_on:'2027-01-01',closes_on:'2027-03-31'});
 expansion.s.campaignForm.class_group_ids=['group-2027'];expansion.s.campaignForm.contract_template_id='template-contract';
 await expansion.saveCampaign();assert.equal(campaignSaved.contract_template_id,'template-contract');
 expansion.s.selected=admission;
@@ -324,3 +344,24 @@ assert.equal(ran,1);await sandbox.PigeSupport.load();assert.equal(elements.lengt
 config={...config,enabled:false};await sandbox.PigeSupport.load();assert.equal(elements.length,0);
 assert.equal(context.state.modal.kind,'');
 console.log('Support smoke: falha do SDK isolada, carga idempotente e descarte do script OK.');
+
+// Consultar a fila não exige permissões financeiras nem leitura de contratos.
+const admissionReader=sandbox.PigeExpansion.component.setup({schoolId:'school-test',page:'online',permissions:['admissions.read']});
+const beforeReader=sandbox.PigeAPI.request;
+const readerCalls=[];
+sandbox.PigeAPI.request=async path=>{
+  readerCalls.push(path);
+  if(path.endsWith('/admission-readiness'))return{ready:true,campaigns:[],issues:[]};
+  if(path.endsWith('/admission-campaigns'))return[];
+  if(path.endsWith('/admissions-summary'))return{counts:{}};
+  if(path.includes('/admissions?'))return{items:[],total:0};
+  if(path.endsWith('/admissions/readonly-one'))return{id:'readonly-one',status:'submitted'};
+  throw new Error('Consulta fora das permissões: '+path);
+};
+await admissionReader.load();await admissionReader.view('readonly-one');
+assert.equal(admissionReader.s.error,'');
+assert.equal(admissionReader.s.selected.id,'readonly-one');
+assert.ok(!readerCalls.some(path=>path.includes('bank-charges')||path.includes('document-templates')));
+assert.deepEqual(Array.from(admissionReader.admissionActions(),item=>item.value),['review','request_changes','waitlist','reject','withdraw']);
+sandbox.PigeAPI.request=beforeReader;
+console.log('Admissões: fila somente leitura não depende de contratos ou cobranças e ações acompanham o estado.');

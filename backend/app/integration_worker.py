@@ -25,11 +25,11 @@ from .config import settings
 from .security import utc
 from .integration_core import AsaasProvider, ConnectProvider, IntegrationFailure, unseal, enqueue
 from .connect_core import ConnectApiClient
-from .banking import apply_remote
+from .banking import apply_remote, queue_charge_sync
 
 LOG = logging.getLogger('pige360.worker')
 HEARTBEAT = Path('/tmp/pige360-worker-heartbeat')
-SAFE_KINDS = {'bank_sync'}
+SAFE_KINDS = {'bank_sync', 'mailbox_provision'}
 
 def refresh_pix(db, charge, provider):
     if charge.billing_type != 'PIX' or charge.status not in ('pending', 'overdue'):
@@ -160,6 +160,9 @@ def execute(db, job):
     if job.kind == 'connect_text':
         if not conn or conn.provider != 'connect_api': raise IntegrationFailure('CONNECT_NOT_CONFIGURED')
         return ConnectProvider(conn).send(payload['number'], payload['text'], job.dedupe_key)
+    if job.kind == 'mailbox_provision':
+        from .mailcow import provision_job
+        return provision_job(db, job, payload)
     if job.kind == 'smtp_email': return send_email(payload)
     raise IntegrationFailure('UNKNOWN_JOB_KIND')
 
@@ -310,7 +313,7 @@ def schedule_reconciliations():
         ).order_by(m.BankCharge.last_synced_at.asc(),m.BankCharge.created_at).limit(25)))
         for charge in rows:
             key=f'bank-periodic:{charge.id}:{int(now().timestamp())//interval}'
-            enqueue(db,charge.school_id,'bank_sync',{'charge_id':charge.id},key,charge.connection_id)
+            queue_charge_sync(db,charge,key)
         db.commit()
 
 def main():

@@ -1,17 +1,25 @@
-<section class="contract-signatures" aria-label="Assinaturas de contratos">
+<section class="contract-signatures" aria-label="Assinaturas de documentos">
   <div v-if="state.error" class="alert error" role="alert">{{state.error}}</div>
   <div v-if="state.notice" class="alert success" role="status">{{state.notice}}</div>
   <div v-if="state.loading" class="loading-strip" role="status">Carregando assinaturas…</div>
   <section v-if="can('schools.manage')" class="panel x-card">
-    <div class="x-heading"><div><p class="eyebrow">ASSINATURA DA ESCOLA</p><h3>Certificado A1</h3><p>Certificado da própria escola para assinar PDFs de modelos configurados com assinatura obrigatória. As credenciais não são exibidas após o envio.</p></div><span class="badge" :class="certificateExpired()?'expired':state.configured?'active':'pending'">{{certificateExpired()?'Vencido':state.configured?'Configurado':'Não configurado'}}</span></div>
-    <div v-if="state.certificate" class="contract-certificate-metadata"><div><small>Sujeito</small><strong>{{state.certificate.subject}}</strong></div><div><small>Validade</small><strong>{{date(state.certificate.expires_at)}}</strong></div><div><small>Impressão digital SHA-256</small><strong class="mono">{{state.certificate.certificate_sha256}}</strong></div></div>
+    <div class="x-heading"><div><p class="eyebrow">ASSINATURA DA ESCOLA</p><h3>Certificado A1</h3><p>Assine contratos, declarações, fichas e outros documentos emitidos pela escola.</p></div><span class="badge" :class="certificateExpired()?'expired':state.configured?'active':'pending'">{{certificateExpired()?'Vencido':state.configured?'Configurado':'Não configurado'}}</span></div>
+    <div v-if="state.certificate" class="contract-certificate-metadata"><div><small>Sujeito</small><strong>{{state.certificate.subject}}</strong></div><div><small>Validade</small><strong>{{date(state.certificate.expires_at)}}</strong></div><details><summary>Identificação técnica</summary><small>Impressão digital SHA-256</small><strong class="mono">{{state.certificate.certificate_sha256}}</strong></details></div>
     <p v-else class="alert info">Modelos que exigem assinatura da escola somente poderão ser emitidos após a configuração do A1.</p>
     <form v-if="canManageA1()" class="contract-certificate-form" autocomplete="off" @submit.prevent="saveCertificate">
       <label class="field">{{state.configured?'Rotacionar certificado':'Cadastrar certificado'}} P12/PFX (até 1 MB)<input id="a1-certificate-file" type="file" accept=".p12,.pfx,application/x-pkcs12" @change="certificateChanged" required></label>
       <label class="field">Senha do arquivo A1<input v-model="state.certificatePassword" type="password" autocomplete="off" maxlength="256" required placeholder="Senha do P12/PFX"></label>
-      <div class="actions"><button class="btn btn-primary" :disabled="state.busy || !state.certificateName || !state.certificatePassword">{{state.busy?'Enviando…':'Salvar certificado'}}</button><button v-if="state.configured" type="button" class="btn btn-secondary" :disabled="state.busy" @click="removeCertificate">Desativar para futuras emissões</button></div>
+      <div class="actions"><button class="btn btn-primary" :disabled="state.busy || !state.certificateName || !state.certificatePassword">{{state.busy?'Enviando…':'Salvar certificado'}}</button><button v-if="state.configured" type="button" class="btn btn-secondary" :disabled="state.busy" @click="state.removeCertificateOpen=true">Desativar certificado</button></div>
     </form>
+    <div v-if="state.removeCertificateOpen" class="alert warning"><p>Desativar o certificado para futuras assinaturas? Os documentos já assinados serão preservados.</p><div class="actions"><button type="button" class="btn btn-secondary" @click="state.removeCertificateOpen=false">Manter certificado</button><button type="button" class="btn btn-danger" :disabled="state.busy" @click="removeCertificate">Desativar</button></div></div>
     <p class="small muted">A rotação não modifica os PDFs já assinados. O certificado e a senha são enviados ao servidor apenas ao salvar; não são guardados no armazenamento deste navegador.</p>
+  </section>
+
+  <section v-if="can('documents.read')" class="panel x-card">
+    <div class="x-heading"><div><p class="eyebrow">DOCUMENTOS DA ESCOLA</p><h3>Prontos para assinatura</h3><p>Confira o PDF e assine com o certificado A1 cadastrado.</p></div><button type="button" class="btn btn-secondary" :disabled="state.busy" @click="loadUnsigned">Atualizar</button></div>
+    <p v-if="!state.unsigned.length && !state.loading" class="empty-state">Nenhum documento aguardando assinatura.</p>
+    <div v-for="item in state.unsigned" :key="item.document_id" class="contract-queue-row"><div><strong>{{item.student_name}}</strong><small>{{({enrollment:'Comprovante de matrícula',declaration:'Declaração escolar',student_record:'Ficha do aluno',template:'Documento personalizado'})[item.kind]||'Documento escolar'}} · {{date(item.created_at)}}</small></div><div class="actions"><button type="button" class="btn btn-secondary small-button" @click="download(item.file_id,'documento-original.pdf')">Conferir PDF</button><button v-if="canManageA1()" type="button" class="btn btn-primary small-button" :disabled="state.busy || !state.configured || certificateExpired()" @click="signDocument(item)">Assinar com A1</button></div></div>
+    <div v-if="state.unsignedTotal>state.limit" class="pagination"><span>{{state.unsignedTotal}} documentos</span><button type="button" class="btn btn-secondary small-button" :disabled="state.unsignedOffset===0 || state.busy" @click="unsignedPage(-1)">Anterior</button><button type="button" class="btn btn-secondary small-button" :disabled="state.unsignedOffset+state.limit>=state.unsignedTotal || state.busy" @click="unsignedPage(1)">Próxima</button></div>
   </section>
 
   <section v-if="state.enrollmentIssued.length" class="panel x-card">

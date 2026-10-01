@@ -10,3 +10,24 @@ h1,h2,h3{font-family:var(--institution-font,inherit)}
 .modal-account{width:min(820px,calc(100vw - 32px))}.account-summary{display:flex;align-items:center;gap:20px;padding:0 0 22px;margin-bottom:24px;border-bottom:1px solid var(--border)}
 .account-summary p,.account-summary small{color:var(--muted);font-size:12px;line-height:1.6}.account-photo{width:88px;height:88px;border-radius:50%;overflow:hidden;background:var(--teal-soft);color:var(--primary);display:grid;place-items:center;flex:none;font-size:28px}.account-photo img{width:100%;height:100%;object-fit:cover}
 @media(max-width:600px){.modal-account{width:100%}.account-summary{gap:12px}.account-photo{width:64px;height:64px}.account-summary>div{min-width:0;overflow-wrap:anywhere}}
+
+/* Marca da instituição com proporção livre e limite de área, inclusive brasões verticais. */
+.official-brand { min-width: 0; }
+.official-brand > img { width: auto; max-width: min(100%, 300px); max-height: 112px; }
+.institution-name { color: var(--ink); font-weight: 650; }
+.sidebar .institution-name { font-size: 18px; }
+.institution-splash { padding: 24px; text-align: center; }
+.institution-splash img { max-width: 160px; max-height: 100px; }
+.institution-splash span { max-width: 46ch; line-height: 1.6; }
+.user-avatar { box-shadow: 0 0 0 3px var(--surface, #fff), 0 0 0 4px var(--border); }
+.account-summary { padding-bottom: 24px; gap: 22px; }
+.account-summary p, .account-summary small { font-size: 13px; }
+.account-summary h3 { font-size: 19px; }
+.account-photo { width: 80px; height: 80px; border: 3px solid var(--surface, #fff); box-shadow: 0 0 0 1px var(--border); }
+@media (max-width: 800px) {
+  .official-brand > img { max-width: min(60vw, 210px); max-height: 76px; }
+}
+@media (max-width: 600px) {
+  .account-summary { gap: 16px; }
+  .account-photo { width: 64px; height: 64px; }
+}

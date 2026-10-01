@@ -148,18 +148,31 @@ class CatalogAndRetentionTests(unittest.TestCase):
             self.assertNotIn('vercel',file.read_text().lower())
 
 class PackageLockTests(unittest.TestCase):
+    def test_source_checkpoint_excludes_previous_release_image_references(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);(root/'deploy').mkdir();(root/'VERSION').write_text('0.10.0\n')
+            (root/'deploy/images.env').write_text('APP_IMAGE=previous-release\n')
+            (root/'deploy/images.lock.json').write_text('{}')
+            with patch.object(pack.subprocess,'check_output',return_value=b'VERSION\x00deploy/images.env\x00deploy/images.lock.json\x00'),redirect_stdout(io.StringIO()):
+                pack.package(root,root/'test.zip','0.10.0','a'*40)
+            with zipfile.ZipFile(root/'test.zip') as archive:
+                self.assertNotIn('pige360-self/deploy/images.env',archive.namelist())
+                self.assertNotIn('pige360-self/deploy/images.lock.json',archive.namelist())
+
     def test_checkpoint_keeps_base_lock_and_excludes_secrets(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);(root/'ci-evidence').mkdir();(root/'VERSION').write_text('0.3.0\n')
             (root/'.env').write_text('SECRET=do-not-publish');(root/'font.ttf').write_bytes(b'not-a-font')
+            (root/'evidence').mkdir();(root/'evidence/server.log').write_text('Synthetic private operational log')
             lock={'schema_version':1,'images':{k:{'ref':'ghcr.io/wkarts/pige360-self-'+k+'@sha256:'+'a'*64} for k in ('node','python','postgres')}}
             (root/'ci-evidence/base-images.lock.json').write_text(json.dumps(lock))
             image='ghcr.io/wkarts/pige360-self@sha256:'+'b'*64
-            with patch.object(pack.subprocess,'check_output',return_value=b'VERSION\x00.env\x00font.ttf\x00'),redirect_stdout(io.StringIO()):
+            with patch.object(pack.subprocess,'check_output',return_value=b'VERSION\x00.env\x00font.ttf\x00evidence/server.log\x00'),redirect_stdout(io.StringIO()):
                 pack.package(root,root/'test.zip','0.3.0','a'*40,image)
             with zipfile.ZipFile(root/'test.zip') as archive:
                 self.assertIn('pige360-self/deploy/images.lock.json',archive.namelist())
                 self.assertNotIn('pige360-self/.env',archive.namelist());self.assertNotIn('pige360-self/font.ttf',archive.namelist())
+                self.assertNotIn('pige360-self/evidence/server.log',archive.namelist())
                 self.assertIn(image,archive.read('pige360-self/deploy/images.env').decode())
 
 if __name__=='__main__':unittest.main()

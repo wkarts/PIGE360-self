@@ -1,0 +1,18 @@
+<section class="learning-workspace" aria-label="Boletim e frequência" :aria-busy="state.busy">
+  <section class="panel x-card">
+    <div class="x-heading"><div><p class="eyebrow">VIDA ESCOLAR</p><h2>Boletim e frequência</h2><p>Resultados publicados pela escola para acompanhar o aprendizado.</p></div><button class="btn btn-secondary" :disabled="state.busy" @click="load">Atualizar</button></div>
+    <div v-if="state.error" class="alert error" role="alert">{{ state.error }}</div>
+    <p v-if="state.busy" class="muted" role="status">Carregando informações escolares…</p>
+    <div v-if="state.students.length" class="x-grid">
+      <label>Aluno<select v-model="state.studentId" @change="selectStudent" :disabled="state.busy"><option v-for="item in state.students" :key="item.student_id" :value="item.student_id">{{ item.student_name }}</option></select></label>
+      <label>Matrícula<select v-model="state.enrollmentId" :disabled="state.busy"><option v-for="item in student()?.enrollments || []" :key="item.enrollment_id" :value="item.enrollment_id">{{ item.year_name }} · {{ item.class_name }} · {{ item.number }}</option></select></label>
+    </div>
+    <div v-if="!state.students.length && !state.busy && !state.error" class="empty-state"><h3>Nenhum aluno vinculado</h3><p>Solicite à Secretaria a conferência do seu vínculo com o cadastro escolar.</p></div>
+  </section>
+  <section v-if="enrollment()" class="panel">
+    <div class="panel-header"><div><h2>{{ student()?.student_name }}</h2><p class="muted small">{{ student()?.school_name }} · {{ enrollment().class_name }} · {{ enrollment().year_name }}</p></div><button class="btn btn-primary" :disabled="state.busy || !rows().length" @click="download">Baixar boletim PDF</button></div>
+    <div v-if="rows().length" class="table-scroll"><table><thead><tr><th scope="col">Componente curricular</th><th scope="col">Período</th><th scope="col">Nota / conceito</th><th scope="col">Situação</th><th scope="col">Frequência</th><th scope="col">Faltas</th></tr></thead><tbody><tr v-for="item in rows()" :key="item.diary_id+'-'+item.period_id"><td><strong>{{ item.component_name }}</strong></td><td>{{ item.period_name }}</td><td><strong>{{ item.grade_display || '—' }}</strong></td><td>{{ item.result_label }}</td><td>{{ percent(item.attendance.percentage) }}<small v-if="item.attendance.unrecorded">{{ item.attendance.unrecorded }} aula(s) sem registro</small></td><td>{{ item.attendance.absent }}<small v-if="item.attendance.justified_absence">{{ item.attendance.justified_absence }} justificada(s)</small></td></tr></tbody></table></div>
+    <div v-else class="empty-state"><h3>Resultados ainda não publicados</h3><p>As notas e a frequência aparecerão após a conferência e publicação pela escola.</p></div>
+    <div v-if="state.note" class="panel-footer"><p class="muted small">{{ state.note }}</p></div>
+  </section>
+</section>

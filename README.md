@@ -1,13 +1,25 @@
 > **Fluxo GitHub/GHCR:** veja [desenvolvimento, releases, limpeza e implantação self-hosted](docs/ci-cd/FLUXO-GITHUB-GHCR.md). Os deploys ficam em `deploy/`, separados por Docker, Dockge, Portainer e CloudPanel, com ambientes develop e produção. Nenhum deploy externo é executado automaticamente.
 
-# PIGE360 Self 0.3.0
-## Gestão educacional modular, Secretaria e matrícula online
+# PIGE360 Self 0.10.0
+## Gestão escolar, portais e integrações
 
-Aplicação self-hosted em **FastAPI + Vue 3**, exclusivamente Web/PWA. O pacote contém a aplicação, o frontend compilado, migrations, testes, documentação e evidências. **Não contém mais o template original nem um ZIP de template de referência.** O branding oficial da entrega anterior foi preservado.
+Aplicação self-hosted em **FastAPI + Vue 3**, exclusivamente Web/PWA, para a instituição e suas unidades. O pacote contém a aplicação, o frontend compilado, migrations, testes e documentação, preservando a identidade configurada pela escola.
 
-Esta versão acrescenta um portal separado de responsáveis e o fluxo integrado de inscrição → análise → matrícula. A Secretaria existente continua disponível. A integração bancária implementada é ASAAS (Pix convencional e boleto); a Connect API possui adaptador HTTP configurável, ainda dependente da conferência do contrato da instalação real.
+Esta versão amplia os relatórios e as fichas, oferece importação seletiva do legado, melhora cadastros e matrícula online, integra boletins/frequência aos portais, notícias e eventos, provisionamento Mailcow e assinaturas A1. A operação bancária implementada usa Asaas (Pix e boleto). A3 utiliza PDF assinado externamente; o retorno integrado GOV.BR depende das credenciais oficiais.
+
+Veja [escopo, critérios de aceitação e atualização 0.10.0](docs/ENTREGA-0.10.0.md), [Mailcow](docs/MAILCOW.md) e [assinaturas digitais](docs/ASSINATURAS-DIGITAIS.md). Este checkpoint é de código-fonte; a versão 0.10.0 precisa de uma imagem construída deste código ou publicada pelo fluxo de release. O canal `stable` abaixo instala a imagem estável efetivamente publicada.
 
 ## Instalação nova
+
+Para validar este código em uma instalação nova antes da release, construa a imagem local e gere um ambiente próprio:
+
+```bash
+docker build --build-arg APP_VERSION=0.10.0 -t pige360-self:0.10.0 .
+python3 scripts/configure.py --channel local --env-file deploy/docker/.env.local --url http://localhost:58080
+docker compose --env-file deploy/docker/.env.local -f deploy/docker/compose.yaml up -d --wait
+```
+
+Em uma instalação existente, preserve o `.env`, as chaves e os dados; siga o procedimento em [ENTREGA-0.10.0.md](docs/ENTREGA-0.10.0.md). As instruções a seguir usam o canal estável publicado.
 
 Pré-requisitos: Docker com Compose, Python 3 para gerar a configuração, armazenamento persistente e acesso aos registries/pacotes na construção da imagem. Não é um instalador air-gapped. Node.js não é necessário no host: o Docker compila a PWA no estágio Node da imagem. O checkpoint também inclui `frontend/dist` para inspeção local.
 

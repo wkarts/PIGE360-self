@@ -15,7 +15,7 @@ from .storage import ensure_storage
 from starlette.concurrency import run_in_threadpool
 from . import embedding, embedding_settings, mfa, dossiers, ocr, lookups, diagnostics, telemetry, diary
 from . import auth, people, registry, enrollments, documents, contract_templates, reports, portal, admissions, integrations, connect, banking, profiles, support, institution, business_people, account, legacy_import
-from . import contract_signatures
+from . import contract_signatures, personal_signing, mailcow, school_community
 
 cfg = settings()
 logger = logging.getLogger('pige360')
@@ -29,7 +29,7 @@ async def lifespan(app):
     engine.dispose()
 
 app = FastAPI(title='PIGE360 Self — Gestão Educacional', version=cfg.app_version, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url='/api/v1/openapi.json')
-for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, contract_templates.router, contract_signatures.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router, mfa.router, dossiers.router, ocr.router, lookups.router, diagnostics.router, diary.router, legacy_import.router]:
+for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, contract_templates.router, contract_signatures.router, personal_signing.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router, mfa.router, dossiers.router, ocr.router, lookups.router, diagnostics.router, diary.router, legacy_import.router, mailcow.router, school_community.router]:
     app.include_router(router)
 
 @app.exception_handler(HTTPException)
@@ -38,7 +38,8 @@ async def http_error(request, exc):
 
 @app.exception_handler(RequestValidationError)
 async def validation_error(request, exc):
-    errors = [{'field':'.'.join(str(p) for p in e['loc']), 'message':e['msg']} for e in exc.errors()]
+    from .validation_messages import message
+    errors = [{'field':'.'.join(str(p) for p in e['loc']), 'message':message(e)} for e in exc.errors()]
     return JSONResponse({'detail':'Revise os campos informados.', 'errors':errors, 'request_id':getattr(request.state,'request_id','')}, status_code=422)
 
 @app.exception_handler(IntegrityError)
@@ -89,7 +90,7 @@ async def security_headers(request: Request, call_next):
         "object-src 'none'; base-uri 'self'; form-action 'self'; "
         + ("frame-ancestors 'self' " + ' '.join(parents) if parents else "frame-ancestors 'none'")
     )
-    if request.url.path.startswith('/api') or request.url.path in ('/','/index.html','/online.html','/sw.js','/manifest.webmanifest'):
+    if request.url.path.startswith('/api') or request.url.path in ('/','/index.html','/online.html','/news.html','/sw.js','/manifest.webmanifest'):
         response.headers['Cache-Control'] = 'no-store'
     # Cache público somente dos ativos de identidade; jamais sessão, perfil ou foto pessoal.
     public_asset = request.url.path.startswith('/api/v1/institution/assets/')
@@ -173,7 +174,7 @@ def frontend(path: str, request: Request, db: auth.DB):
         requested = root / 'index.html'
     if not requested.is_file():
         raise HTTPException(503, 'Frontend ainda não compilado. Execute node frontend/build.mjs.')
-    if requested.name in ('index.html', 'online.html'):
+    if requested.name in ('index.html', 'online.html', 'news.html'):
         from .branding import branded_html
         content = branded_html(requested, db)
         headers = {'Cache-Control':'no-store', 'Content-Length':str(len(content.encode('utf-8')))}

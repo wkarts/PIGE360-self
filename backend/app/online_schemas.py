@@ -54,6 +54,12 @@ class Registration(Input):
         if not 12 <= len(digits) <= 15: raise ValueError('Informe país, DDD e número válidos.')
         return digits
 
+    @model_validator(mode='after')
+    def whatsapp_contact(self):
+        if self.whatsapp_opt_in and not self.phone:
+            raise ValueError('Informe um telefone para receber avisos por WhatsApp.')
+        return self
+
 class PortalLogin(Input):
     campaign_slug: str = Field(default="", max_length=80)
     school_id: str = Field(default="", max_length=36)
@@ -243,6 +249,11 @@ class PortalProfile(GuardianDetails):
     @classmethod
     def valid_phone(cls,value):return Registration.phone_valid(value)
 
+    @model_validator(mode='after')
+    def whatsapp_contact(self):
+        if self.whatsapp_opt_in and not self.phone:
+            raise ValueError('Informe um telefone para receber avisos por WhatsApp.')
+        return self
 
 class PortalDiaryAccessInput(Input):
     accepted: bool
@@ -269,3 +280,9 @@ class PortalAccountRegistration(Input):
     @field_validator('phone')
     @classmethod
     def valid_phone(cls,value):return Registration.phone_valid(value)
+
+    @model_validator(mode='after')
+    def whatsapp_contact(self):
+        if self.whatsapp_opt_in and not self.phone:
+            raise ValueError('Informe um telefone para receber avisos por WhatsApp.')
+        return self

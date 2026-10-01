@@ -36,7 +36,7 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
       - name: Preparar evidências limpas
         run: |
-          rm -rf ci-evidence evidence/0.3.0
+          rm -rf ci-evidence evidence/0.3.0 evidence/0.10.0
           mkdir -p ci-evidence
       - uses: actions/setup-python@v6
         with:
@@ -80,6 +80,8 @@ jobs:
           python -m playwright install --with-deps chromium
           python scripts/e2e.py
           python scripts/e2e-online.py
+          python scripts/e2e-management.py
+          python scripts/e2e-community.py
           python scripts/e2e-cadastres.py
           python scripts/e2e-workspace.py
           python scripts/e2e-whitelabel.py
@@ -91,6 +93,7 @@ jobs:
         run: |
           mkdir -p ci-evidence/browser
           if [[ -d evidence/0.3.0 ]]; then cp -a evidence/0.3.0/. ci-evidence/browser/; fi
+          if [[ -d evidence/0.10.0 ]]; then cp -a evidence/0.10.0/. ci-evidence/browser/; fi
           # Checkpoint sanitizado do código efetivamente testado; sem .env real ou fontes.
           python scripts/ci/package.py --version "$(cat VERSION)" --commit "$(git rev-parse HEAD)" --output ci-evidence/checkpoint/PIGE360-Self-source.zip
       - name: Docker Compose e teste de inicialização
@@ -124,10 +127,13 @@ jobs:
           assert packaged['build_id'] == tested['build_id'], (packaged, tested)
           PY
       - name: Evidências desta execução
-        if: always()
+        # Evidências binárias são opt-in para não acoplar a validade do CI
+        # à cota externa de armazenamento do GitHub Actions.
+        if: always() && vars.CI_UPLOAD_EVIDENCE == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ci-${{ github.run_id }}-${{ github.run_attempt }}
           path: ci-evidence/
-          retention-days: 14
+          retention-days: 3
+          compression-level: 9
           if-no-files-found: warn

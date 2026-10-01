@@ -85,5 +85,5 @@ await secretary.context.navigate('integrations');assert.equal(secretary.context.
 
 const missing=await boot('#/email','admin',[],false);
 assert.equal(missing.context.state.emailStatus,'missing');
-assert.match(content(missing.render()),/SMTP não configurado/);
+assert.match(content(missing.render()),/envio de e-mail ainda não está configurado/);
 console.log('Integrações: grupo e permissões por rota, deep links e estado SMTP OK.');

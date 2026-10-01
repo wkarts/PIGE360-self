@@ -27,6 +27,11 @@
     "src/diary.ts",
     "src/contracts.ts",
     "src/signing.ts",
+    "src/reports.ts",
+    "src/legacy-import.ts",
+    "src/learning.ts",
+    "src/community.ts",
+    "src/mailcow.ts",
     "src/app.ts"
   ]
 }

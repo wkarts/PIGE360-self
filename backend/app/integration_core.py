@@ -144,9 +144,15 @@ class AsaasProvider:
         if len(matches)>1 or result.get('hasMore'): raise IntegrationFailure('DUPLICATE_REMOTE_REFERENCE')
         return matches[0] if matches else None
     def customer(self,payer,reference):
-        return self.request('/customers','POST',{'name':payer['name'],'cpfCnpj':payer['cpf'],
-            'email':payer.get('email',''),'mobilePhone':payer.get('phone','').removeprefix('55'),
-            'externalReference':reference,'notificationDisabled':True})
+        phone = re.sub(r'\D', '', str(payer.get('phone') or ''))
+        # DDD 55 não é código do país em números nacionais de 10/11 dígitos.
+        if len(phone) in (12, 13) and phone.startswith('55'):
+            phone = phone[2:]
+        data = {'name':payer['name'],'cpfCnpj':payer['cpf'],
+            'externalReference':reference,'notificationDisabled':True}
+        if payer.get('email'): data['email'] = payer['email']
+        if phone: data['mobilePhone'] = phone
+        return self.request('/customers','POST',data)
     def create_payment(self,charge):
         return self.request('/payments','POST',{'customer':charge.remote_customer_id,'billingType':charge.billing_type,
             'value':float(charge.amount),'dueDate':charge.due_on.isoformat(),'description':charge.description,

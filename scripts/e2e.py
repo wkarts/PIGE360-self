@@ -7,7 +7,7 @@ import httpx
 from playwright.sync_api import sync_playwright, expect
 
 ROOT=Path(__file__).resolve().parents[1]
-OUT=ROOT/'evidence/0.3.0';OUT.mkdir(parents=True,exist_ok=True)
+OUT=Path(os.getenv('PIGE_E2E_OUT', str(ROOT/'evidence/0.3.0')));OUT.mkdir(parents=True,exist_ok=True)
 TEMP=Path(tempfile.mkdtemp(prefix='pige360-e2e-'))
 with socket.socket() as s:s.bind(('127.0.0.1',0));PORT=s.getsockname()[1]
 URL=f'http://127.0.0.1:{PORT}'
@@ -167,12 +167,14 @@ try:
             with page.expect_download() as downloaded:dialog().get_by_role('button',name='Gerar e baixar PDF',exact=True).click()
             downloaded.value.save_as(str(OUT/'comprovante-exemplo.pdf'))
         expect(dialog()).to_have_count(0);checks.append('PDF emitido pela UI e bytes conferidos no harness' if BRIDGE else 'PDF emitido e baixado pelo navegador')
-        nav('Relatórios');page.get_by_label('Turma do relatório').select_option(index=1)
+        nav('Relatórios');page.get_by_label('Relatório',exact=True).select_option('students');page.get_by_label('Período',exact=True).select_option('month')
+        page.get_by_text('Mais filtros',exact=True).click();page.get_by_label('Turma',exact=False).select_option(index=1)
+        page.get_by_role('button',name='Gerar relatório',exact=True).click()
         expect(page.get_by_text('Lucas Almeida — Teste',exact=True)).to_be_visible()
         if BRIDGE:
-            page.get_by_role('button',name='Gerar PDF da turma').click();page.wait_for_function("window.__downloads.includes('alunos-da-turma.pdf')");shutil.copyfile(OUT/'alunos-da-turma.pdf',OUT/'turma-exemplo.pdf')
+            page.get_by_role('button',name='Baixar PDF',exact=True).click();page.wait_for_function("window.__downloads.some(name=>name.startsWith('relatorio-students-')&&name.endsWith('.pdf'))");shutil.copyfile(next(OUT.glob('relatorio-students-*.pdf')),OUT/'turma-exemplo.pdf')
         else:
-            with page.expect_download() as down:page.get_by_role('button',name='Gerar PDF da turma').click()
+            with page.expect_download() as down:page.get_by_role('button',name='Baixar PDF',exact=True).click()
             down.value.save_as(str(OUT/'turma-exemplo.pdf'))
         checks.append('Relatório por turma com PDF')
         nav('Visão geral');page.screenshot(path=str(OUT/'02-dashboard.png'),full_page=True)

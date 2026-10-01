@@ -12,11 +12,11 @@ RUN if cmp -s frontend/package.json /opt/pige360/frontend/package.json \
     else npm ci --prefix frontend --ignore-scripts --no-audit --no-fund; fi
 COPY VERSION ./VERSION
 COPY frontend/ ./frontend/
-ARG APP_VERSION=0.3.0
+ARG APP_VERSION=0.10.0
 RUN APP_VERSION="$APP_VERSION" node frontend/build.mjs
 
 FROM ${PYTHON_BASE_IMAGE} AS runtime
-ARG APP_VERSION=0.3.0
+ARG APP_VERSION=0.10.0
 ARG SOURCE_REVISION=local
 ARG PYTHON_BASE_IMAGE
 ARG NODE_BASE_IMAGE

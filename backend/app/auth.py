@@ -187,9 +187,20 @@ def create_user(data: UserInput, db: DB, user: Actor, request: Request):
     db.add(obj); db.flush()
     for sid in set(data.school_ids):
         db.add(SchoolAccess(user_id=obj.id, school_id=sid))
+    mailbox = None
+    if data.create_mailbox:
+        if user.role != 'admin':
+            fail(403, 'Somente o administrador pode criar uma caixa institucional.')
+        if not data.mailbox_school_id or data.mailbox_school_id not in data.school_ids:
+            fail(422, 'Selecione a escola que fornecerá a caixa de e-mail e vincule o usuário a ela.')
+        from .mailcow import queue_mailbox, mailbox_output
+        mailbox = queue_mailbox(db, data.mailbox_school_id, obj, data.mailbox_local_part, data.mailbox_quota_mb)
     audit(db, request, user, 'users.created', obj, details={'role': obj.role})
     db.flush()
-    return user_output(db, obj)
+    result = user_output(db, obj)
+    if mailbox:
+        result['mailbox'] = mailbox_output(db, mailbox)
+    return result
 
 @router.patch('/users/{user_id}')
 def edit_user(user_id: str, data: UserEdit, db: DB, user: Actor, request: Request):

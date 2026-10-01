@@ -418,6 +418,41 @@ def pending_signatures(db: DB, user: Actor, school: Scope,
     } for doc, name in rows], 'total': total, 'limit': limit, 'offset': offset}
 
 
+@router.get('/issued-documents/signatures/unsigned')
+def unsigned_documents(db: DB, user: Actor, school: Scope, limit: int = 30, offset: int = 0):
+    require(user, 'documents.read')
+    if not 1 <= limit <= 100 or not 0 <= offset <= 10000:
+        fail(422, 'Paginação inválida.')
+    filters = (m.IssuedDocument.school_id == school.id,
+               m.IssuedDocument.signature_status == 'unsigned')
+    total = db.scalar(select(func.count()).select_from(m.IssuedDocument).where(*filters))
+    rows = db.execute(select(m.IssuedDocument, m.Person.name).join(
+        m.Student, m.Student.id == m.IssuedDocument.student_id).join(
+        m.Person, m.Person.id == m.Student.person_id).where(*filters).order_by(
+        m.IssuedDocument.created_at.desc(), m.IssuedDocument.id.desc()).limit(limit).offset(offset)).all()
+    return {'items': [{'document_id': doc.id, 'student_name': name, 'kind': doc.kind,
+                      'enrollment_id': doc.enrollment_id, 'student_id': doc.student_id,
+                      'file_id': doc.file_id, 'signature_status': doc.signature_status,
+                      'created_at': doc.created_at.isoformat()} for doc, name in rows],
+            'total': total, 'limit': limit, 'offset': offset}
+
+
+@router.post('/issued-documents/{document_id}/sign/a1')
+def sign_school_document(document_id: str, db: DB, user: Actor, school: Scope, request: Request):
+    require(user, 'documents.generate')
+    if user.role not in {'admin', 'direction'}:
+        fail(403, 'Somente direção ou administração pode assinar em nome da escola.')
+    lock_school(db, school.id)
+    issued = scoped(db, m.IssuedDocument, document_id, school.id)
+    previous = _company_revision(db, issued)
+    if previous:
+        return {'document_id': issued.id, 'signature_status': issued.signature_status,
+                'file_id': latest_signed_file(db, issued).id}
+    revision = auto_sign_issued_document(db, issued, user.id, request)
+    return {'document_id': issued.id, 'signature_status': issued.signature_status,
+            'file_id': revision.file_id}
+
+
 @router.get('/issued-documents/{document_id}/signatures')
 def signatures(document_id: str, db: DB, user: Actor, school: Scope):
     require(user, 'documents.read')
@@ -460,8 +495,8 @@ def validate_external_signature(document_id: str, db: DB, user: Actor, school: S
     lock_school(db, school.id)
     issued = scoped(db, m.IssuedDocument, document_id, school.id)
     row = _latest(db, issued)
-    if not row or row.source != 'external_portal':
-        fail(409, 'Envie a via assinada pelo responsável antes de validar.')
+    if issued.signature_status != 'pending_validation' or not row or row.source != 'external_portal':
+        fail(409, 'Somente uma assinatura pendente pode ser validada. Solicite novo envio se ela foi devolvida.')
     cpf = _digits(signer_cpf)
     if len(cpf) != 11 or not re.fullmatch(r'[A-Za-z0-9._/-]{6,120}', validation_reference):
         fail(422, 'Informe CPF do responsável e referência do relatório de validação.')

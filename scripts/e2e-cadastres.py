@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Cadastros PF/PJ, vínculos, seções e diálogos. Dados sintéticos; sem provedores externos."""
-import json, os, shutil, socket, subprocess, sys, tempfile, time
+import base64, json, os, shutil, socket, subprocess, sys, tempfile, time
 from pathlib import Path
 import httpx
 from playwright.sync_api import sync_playwright, expect
@@ -16,7 +16,8 @@ BRIDGE=os.getenv('PIGE_UI_BRIDGE')=='1'
 env={**os.environ,'PYTHONPATH':str(ROOT/'backend'),'DATABASE_URL':'sqlite:///'+str(TEMP/'e2e.db'),
      'ALLOW_SQLITE':'true','APP_ENV':'test','APP_URL':URL,'ALLOWED_HOSTS':'127.0.0.1,localhost',
      'APP_SECRET_KEY':'test-only-cadastres-secret-01234567890123456789','SETUP_TOKEN':'test-only-setup-01234567890123456789',
-     'STORAGE_PATH':str(TEMP/'files'),'FRONTEND_PATH':str(ROOT/'frontend/dist'),'COOKIE_SECURE':'false'}
+     'STORAGE_PATH':str(TEMP/'files'),'FRONTEND_PATH':str(ROOT/'frontend/dist'),'COOKIE_SECURE':'false',
+     'INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(b'0'*32).decode()}
 subprocess.run([sys.executable,'-m','alembic','upgrade','head'],cwd=ROOT/'backend',env=env,check=True)
 log=(OUT/'server.log').open('w')
 proc=subprocess.Popen([sys.executable,'-m','uvicorn','app.main:app','--host','127.0.0.1','--port',str(port)],cwd=ROOT/'backend',env=env,stdout=log,stderr=log)
@@ -167,7 +168,7 @@ try:
         field('Data de nascimento').fill('2020-05-15')
         field('CPF').fill('111.111.111-11')
         dialog().get_by_role('button',name='Salvar',exact=True).click()
-        expect(dialog().get_by_role('alert')).to_contain_text('cpf')
+        expect(dialog().get_by_role('alert')).to_contain_text('CPF inválido')
         assert dialog().locator('#modal-field-cpf').evaluate('el=>el===document.activeElement')
         dialog().locator('#modal-field-cpf').fill('529.982.247-25');save()
         record('Erro 422 destaca o campo do CPF e permite corrigir o mesmo cadastro sem recomeçar')
@@ -189,7 +190,14 @@ try:
         expect(page.get_by_role('heading',name='Siga a ordem da rotina escolar',exact=True)).to_be_visible()
         expect(page.get_by_text('Cadastre cada pessoa uma vez',exact=True)).to_be_visible()
         record('Guia de uso alcançável do cabeçalho e orienta cadastro, matrícula e Diário')
-        nav('Cobranças');page.get_by_role('button',name='+ Nova cobrança',exact=True).click()
+        nav('Cobranças')
+        expect(page.get_by_role('button',name='+ Nova cobrança',exact=True)).to_be_disabled()
+        response=client.post(base+'/integrations/asaas',headers=headers,json={
+            'enabled':True,'environment':'sandbox','api_key':'test-only-cadastres-synthetic-api-key'})
+        assert response.status_code==200,response.text
+        # Configuration is local and real; no worker or provider is called in this modal test.
+        page.reload();expect(page.get_by_role('heading',name='Cobranças',exact=True)).to_be_visible()
+        page.get_by_role('button',name='+ Nova cobrança',exact=True).click()
         expect(dialog().get_by_role('heading',name='Nova cobrança',exact=True)).to_be_visible()
         dialog().get_by_label('Valor de cada parcela (R$)').fill('450.00')
         dialog().get_by_label('Quantidade mensal (1 = avulsa)').fill('3')
