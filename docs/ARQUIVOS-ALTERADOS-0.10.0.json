@@ -179,6 +179,10 @@
       "path": "backend/tests/test_management_reports.py"
     },
     {
+      "status": "M",
+      "path": "backend/tests/test_mfa.py"
+    },
+    {
       "status": "A",
       "path": "backend/tests/test_personal_signing.py"
     },
