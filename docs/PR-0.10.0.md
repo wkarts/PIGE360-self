@@ -79,7 +79,7 @@ Regressões de importação seletiva/idempotência, cálculos e filtros dos rela
 
 ## Testes executados
 
-Resultado reproduzível registrado em `VALIDACAO-0.10.0.json`. Suíte backend: 326 testes e 5 subtests passaram; 1 teste de lock PostgreSQL não executado localmente. Políticas de CI: 96 testes passaram. Build Vue/TypeScript e validação estrutural passaram. E2Es HTTP em Chromium usam somente bancos, contas e arquivos sintéticos. As migrations completas foram aplicadas nos bancos temporários.
+Resultado reproduzível registrado em `VALIDACAO-0.10.0.json`. Suíte backend: 326 testes e 5 subtests passaram; 1 teste de lock PostgreSQL não executado localmente. Políticas de CI: 97 testes passaram. Build Vue/TypeScript e validação estrutural passaram. E2Es HTTP em Chromium usam somente bancos, contas e arquivos sintéticos. As migrations completas foram aplicadas nos bancos temporários.
 
 ## Testes recomendados
 

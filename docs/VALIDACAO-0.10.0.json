@@ -25,7 +25,7 @@
   },
   "ci_policies": {
     "command": "python -m unittest discover -s tests/ci -v",
-    "passed": 96
+    "passed": 97
   },
   "frontend": {
     "command": "npm run build --prefix frontend",

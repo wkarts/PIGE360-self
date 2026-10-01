@@ -148,6 +148,17 @@ class CatalogAndRetentionTests(unittest.TestCase):
             self.assertNotIn('vercel',file.read_text().lower())
 
 class PackageLockTests(unittest.TestCase):
+    def test_source_checkpoint_excludes_previous_release_image_references(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);(root/'deploy').mkdir();(root/'VERSION').write_text('0.10.0\n')
+            (root/'deploy/images.env').write_text('APP_IMAGE=previous-release\n')
+            (root/'deploy/images.lock.json').write_text('{}')
+            with patch.object(pack.subprocess,'check_output',return_value=b'VERSION\x00deploy/images.env\x00deploy/images.lock.json\x00'),redirect_stdout(io.StringIO()):
+                pack.package(root,root/'test.zip','0.10.0','a'*40)
+            with zipfile.ZipFile(root/'test.zip') as archive:
+                self.assertNotIn('pige360-self/deploy/images.env',archive.namelist())
+                self.assertNotIn('pige360-self/deploy/images.lock.json',archive.namelist())
+
     def test_checkpoint_keeps_base_lock_and_excludes_secrets(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);(root/'ci-evidence').mkdir();(root/'VERSION').write_text('0.3.0\n')
