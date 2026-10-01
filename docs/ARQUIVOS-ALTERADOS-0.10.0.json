@@ -1,0 +1,550 @@
+{
+  "base": "develop",
+  "base_commit": "a11bf732d105fe8212d2fc28f5703027621aca37",
+  "changes": [
+    {
+      "status": "M",
+      "path": ".github/workflows/ci.yml"
+    },
+    {
+      "status": "M",
+      "path": ".gitignore"
+    },
+    {
+      "status": "M",
+      "path": "Dockerfile"
+    },
+    {
+      "status": "M",
+      "path": "README.md"
+    },
+    {
+      "status": "M",
+      "path": "VERSION"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/auth.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/banking.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/config.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/contract_signatures.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/diary.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/diary_schemas.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/documents.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/app/govbr_login.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/integration_core.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/integration_worker.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/integrations.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/app/learning_portal.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/legacy_import.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/app/mailcow.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/main.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/app/management_reports.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/online_schemas.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/app/personal_signing.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/portal.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/portal_access.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/profiles.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/reports.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/schemas.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/app/school_community.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/app/school_reports.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/app/student_reports.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/app/validation_messages.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/migrations/env.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/migrations/versions/0025_signature_sessions.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/migrations/versions/0026_mailcow.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/migrations/versions/0027_school_community.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/pyproject.toml"
+    },
+    {
+      "status": "A",
+      "path": "backend/tests/test_banking_operations.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/tests/test_contract_signatures.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/tests/test_diary_operations.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/tests/test_learning_portal.py"
+    },
+    {
+      "status": "M",
+      "path": "backend/tests/test_legacy_import.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/tests/test_mailcow.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/tests/test_management_reports.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/tests/test_personal_signing.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/tests/test_portal_admission_flow.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/tests/test_school_community.py"
+    },
+    {
+      "status": "A",
+      "path": "backend/tests/test_validation_messages.py"
+    },
+    {
+      "status": "M",
+      "path": "deploy/cloudpanel/.env.develop.example"
+    },
+    {
+      "status": "M",
+      "path": "deploy/cloudpanel/.env.production.example"
+    },
+    {
+      "status": "M",
+      "path": "deploy/cloudpanel/compose.yaml"
+    },
+    {
+      "status": "M",
+      "path": "deploy/docker/.env.develop.example"
+    },
+    {
+      "status": "M",
+      "path": "deploy/docker/.env.example"
+    },
+    {
+      "status": "M",
+      "path": "deploy/docker/.env.production.example"
+    },
+    {
+      "status": "M",
+      "path": "deploy/docker/compose.yaml"
+    },
+    {
+      "status": "M",
+      "path": "deploy/dockge/.env.develop.example"
+    },
+    {
+      "status": "M",
+      "path": "deploy/dockge/.env.production.example"
+    },
+    {
+      "status": "M",
+      "path": "deploy/dockge/compose.yaml"
+    },
+    {
+      "status": "M",
+      "path": "deploy/portainer/.env.develop.example"
+    },
+    {
+      "status": "M",
+      "path": "deploy/portainer/.env.production.example"
+    },
+    {
+      "status": "M",
+      "path": "deploy/portainer/compose.yaml"
+    },
+    {
+      "status": "A",
+      "path": "docs/ARQUIVOS-ALTERADOS-0.10.0.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/ASSINATURAS-DIGITAIS.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/ENTREGA-0.10.0.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/MAILCOW.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/PR-0.10.0.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/VALIDACAO-0.10.0.json"
+    },
+    {
+      "status": "M",
+      "path": "docs/openapi.json"
+    },
+    {
+      "status": "M",
+      "path": "frontend/build.mjs"
+    },
+    {
+      "status": "M",
+      "path": "frontend/dist/app.css"
+    },
+    {
+      "status": "M",
+      "path": "frontend/dist/app.js"
+    },
+    {
+      "status": "M",
+      "path": "frontend/dist/build-info.json"
+    },
+    {
+      "status": "A",
+      "path": "frontend/dist/community.css"
+    },
+    {
+      "status": "M",
+      "path": "frontend/dist/dossier.css"
+    },
+    {
+      "status": "M",
+      "path": "frontend/dist/index.html"
+    },
+    {
+      "status": "M",
+      "path": "frontend/dist/institution-layout.css"
+    },
+    {
+      "status": "A",
+      "path": "frontend/dist/news.html"
+    },
+    {
+      "status": "A",
+      "path": "frontend/dist/news.js"
+    },
+    {
+      "status": "M",
+      "path": "frontend/dist/online.html"
+    },
+    {
+      "status": "A",
+      "path": "frontend/dist/portal.css"
+    },
+    {
+      "status": "M",
+      "path": "frontend/dist/portal.js"
+    },
+    {
+      "status": "M",
+      "path": "frontend/dist/renders.js"
+    },
+    {
+      "status": "M",
+      "path": "frontend/dist/sw.js"
+    },
+    {
+      "status": "M",
+      "path": "frontend/dist/workspace.css"
+    },
+    {
+      "status": "M",
+      "path": "frontend/package-lock.json"
+    },
+    {
+      "status": "M",
+      "path": "frontend/package.json"
+    },
+    {
+      "status": "A",
+      "path": "frontend/public/community.css"
+    },
+    {
+      "status": "M",
+      "path": "frontend/public/dossier.css"
+    },
+    {
+      "status": "M",
+      "path": "frontend/public/index.html"
+    },
+    {
+      "status": "M",
+      "path": "frontend/public/institution-layout.css"
+    },
+    {
+      "status": "A",
+      "path": "frontend/public/news.html"
+    },
+    {
+      "status": "M",
+      "path": "frontend/public/online.html"
+    },
+    {
+      "status": "A",
+      "path": "frontend/public/portal.css"
+    },
+    {
+      "status": "M",
+      "path": "frontend/public/workspace.css"
+    },
+    {
+      "status": "M",
+      "path": "frontend/src/api.ts"
+    },
+    {
+      "status": "M",
+      "path": "frontend/src/app.css"
+    },
+    {
+      "status": "M",
+      "path": "frontend/src/app.ts"
+    },
+    {
+      "status": "A",
+      "path": "frontend/src/community.ts"
+    },
+    {
+      "status": "M",
+      "path": "frontend/src/diary.ts"
+    },
+    {
+      "status": "M",
+      "path": "frontend/src/expansion.ts"
+    },
+    {
+      "status": "A",
+      "path": "frontend/src/learning.ts"
+    },
+    {
+      "status": "A",
+      "path": "frontend/src/legacy-import.ts"
+    },
+    {
+      "status": "A",
+      "path": "frontend/src/mailcow.ts"
+    },
+    {
+      "status": "A",
+      "path": "frontend/src/news.ts"
+    },
+    {
+      "status": "M",
+      "path": "frontend/src/portal.ts"
+    },
+    {
+      "status": "A",
+      "path": "frontend/src/reports.ts"
+    },
+    {
+      "status": "M",
+      "path": "frontend/src/signing.ts"
+    },
+    {
+      "status": "M",
+      "path": "frontend/src/vue-globals.d.ts"
+    },
+    {
+      "status": "M",
+      "path": "frontend/templates/app.html"
+    },
+    {
+      "status": "A",
+      "path": "frontend/templates/community.html"
+    },
+    {
+      "status": "M",
+      "path": "frontend/templates/diary.html"
+    },
+    {
+      "status": "M",
+      "path": "frontend/templates/expansion.html"
+    },
+    {
+      "status": "M",
+      "path": "frontend/templates/form-fields.html"
+    },
+    {
+      "status": "A",
+      "path": "frontend/templates/learning.html"
+    },
+    {
+      "status": "A",
+      "path": "frontend/templates/legacyImport.html"
+    },
+    {
+      "status": "A",
+      "path": "frontend/templates/mailcow.html"
+    },
+    {
+      "status": "A",
+      "path": "frontend/templates/news.html"
+    },
+    {
+      "status": "M",
+      "path": "frontend/templates/portal.html"
+    },
+    {
+      "status": "A",
+      "path": "frontend/templates/reports.html"
+    },
+    {
+      "status": "M",
+      "path": "frontend/templates/signing.html"
+    },
+    {
+      "status": "A",
+      "path": "frontend/tests/diary-flow.mjs"
+    },
+    {
+      "status": "M",
+      "path": "frontend/tests/integration-navigation.mjs"
+    },
+    {
+      "status": "M",
+      "path": "frontend/tests/render-smoke.mjs"
+    },
+    {
+      "status": "M",
+      "path": "frontend/tsconfig.json"
+    },
+    {
+      "status": "A",
+      "path": "frontend/tsconfig.news.json"
+    },
+    {
+      "status": "M",
+      "path": "frontend/tsconfig.portal.json"
+    },
+    {
+      "status": "M",
+      "path": "scripts/ci/package.py"
+    },
+    {
+      "status": "M",
+      "path": "scripts/e2e-assisted.py"
+    },
+    {
+      "status": "M",
+      "path": "scripts/e2e-cadastres.py"
+    },
+    {
+      "status": "A",
+      "path": "scripts/e2e-community.py"
+    },
+    {
+      "status": "M",
+      "path": "scripts/e2e-diagnostics.py"
+    },
+    {
+      "status": "A",
+      "path": "scripts/e2e-management.py"
+    },
+    {
+      "status": "M",
+      "path": "scripts/e2e-online.py"
+    },
+    {
+      "status": "A",
+      "path": "scripts/e2e-portal-polished.py"
+    },
+    {
+      "status": "M",
+      "path": "scripts/e2e.py"
+    },
+    {
+      "status": "M",
+      "path": "tests/ci/test_base_images.py"
+    }
+  ]
+}

@@ -5,3 +5,43 @@
 .dossier-fieldset{border:0;min-width:0;margin:0;padding:0}
 
 .person-complements{margin-top:20px;border-top:1px solid var(--border,#dce5ed);padding-top:16px}.person-complements summary{cursor:pointer;padding:8px 0;font-weight:600}.person-complements .form-grid{margin-top:16px}
+
+/* Ficha da pessoa: vínculos e perfis seguem a mesma hierarquia dos cadastros. */
+.modal-header .person-type-picker { margin-inline: 16px; gap: 7px; }
+.person-type-picker > small { color: var(--muted); font-size: 12px; }
+.person-type-chip { min-height: 32px; padding: 6px 11px; font-size: 12px; background: var(--surface-subtle, #f7f9fb); border-radius: 8px; }
+.person-type-chip:disabled { opacity: 1; }
+.person-type-picker summary { min-height: 34px; padding: 7px 10px; color: var(--primary); font-size: 12px; font-weight: 600; }
+.person-type-options { border-radius: 12px; width: 280px; box-shadow: 0 12px 32px #172b4724; }
+.person-type-options input { border: 1px solid var(--field-border, #bdcbd6); border-radius: 8px; margin-bottom: 8px; }
+.person-type-options button { border-radius: 7px; min-height: 42px; font-size: 13px; }
+.family-editor { gap: 20px; }
+.family-draft { padding: 20px; border-radius: 12px; background: var(--surface-subtle, #f7f9fb); gap: 18px; }
+.family-flags { gap: 12px 20px; padding: 15px 0 0; border-top: 1px solid var(--border); font-size: 13px; }
+.family-flags label { gap: 9px; cursor: pointer; line-height: 1.5; }
+.family-flags input[type=checkbox] { flex: 0 0 18px; width: 18px; height: 18px; }
+.family-row { padding: 18px; border-radius: 12px; background: var(--surface, #fff); gap: 18px; }
+.family-row strong { font-size: 14px; }
+.family-row span, .family-row small { color: var(--muted); line-height: 1.6; }
+.family-row .actions { justify-content: flex-end; }
+.family-row.inactive { opacity: .75; background: var(--surface-subtle, #f7f9fb); }
+.family-matches { display: grid; gap: 7px; }
+.family-matches button { padding: 13px 15px; border-radius: 8px; font-size: 13px; line-height: 1.5; }
+.family-editor input:not([type=checkbox]), .family-editor select { min-height: 44px; border-color: var(--field-border, #bdcbd6); border-radius: 9px; font-size: 14px; background: var(--surface, #fff); color: var(--ink); }
+.family-editor .form-grid { gap: 18px 20px; }
+.person-complements { padding: 0; margin-top: 24px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface, #fff); }
+.person-complements > summary { padding: 15px 18px; font-size: 13px; color: var(--ink); }
+.person-complements[open] { padding: 0 18px 20px; }
+.person-complements[open] > summary { margin: 0 -18px 16px; border-bottom: 1px solid var(--border); }
+.person-complements > p { font-size: 12px; line-height: 1.65; }
+.person-complements .form-grid { margin-top: 18px; }
+@media (max-width: 760px) {
+  .family-editor input:not([type=checkbox]), .family-editor select { font-size: 16px; }
+  .modal-header .person-type-picker { margin-inline: 0; }
+}
+@media (max-width: 700px) {
+  .family-draft, .family-row { padding: 17px; }
+  .family-row .actions { width: 100%; justify-content: flex-start; }
+  .family-row .actions .btn { flex: 1; }
+  .family-flags { gap: 14px; }
+}

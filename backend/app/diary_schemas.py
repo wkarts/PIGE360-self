@@ -66,6 +66,7 @@ class AttendanceItem(Input):
     enrollment_id: str
     status: Literal["present","absent","justified_absence"] = "present"
     note: str = Field(default="",max_length=500)
+    version: int | None = Field(default=None,ge=1)
 
 
 class AttendanceInput(Input):
@@ -116,9 +117,14 @@ class AssessmentInstrumentInput(Input):
 
 class AssessmentResultItem(Input):
     enrollment_id: str
-    numeric_score: Decimal | None = Field(default=None,max_digits=10,decimal_places=2)
+    numeric_score: Decimal | None = Field(default=None,ge=0,max_digits=10,decimal_places=2)
     concept: str = Field(default="",max_length=80)
     note: str = Field(default="",max_length=1000)
+    version: int | None = Field(default=None,ge=1)
+
+
+class AssessmentInstrumentEdit(AssessmentInstrumentInput):
+    version: int = Field(ge=1)
 
 
 class AssessmentResultsInput(Input):

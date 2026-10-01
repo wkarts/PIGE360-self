@@ -30,7 +30,8 @@ namespace PigeAPI {
   async function error(response: Response): Promise<Error> {
     let data: { detail?: string; errors?: { field: string; message: string }[]; request_id?: string } = {};
     try { data = await response.json(); } catch { /* A origem pode estar indisponível. */ }
-    const fields = data.errors?.map(e => `${e.field.replace(/^body\./, '')}: ${e.message}`).join('\n');
+    const captions:Record<string,string>={name:'Nome',social_name:'Nome social',email:'E-mail',password:'Senha',phone:'Telefone',cpf:'CPF',cnpj:'CNPJ',birth_date:'Data de nascimento',student_id:'Aluno',person_id:'Pessoa',guardian_id:'Responsável',academic_year_id:'Ano letivo',class_group_id:'Turma',unit_id:'Unidade',grade_id:'Série',shift_id:'Turno',enrolled_on:'Data da matrícula',due_date:'Vencimento',amount:'Valor',description:'Descrição',postal_code:'CEP',street:'Endereço',address_number:'Número',district:'Bairro',city:'Cidade',state:'Estado',capacity:'Vagas',starts_on:'Data inicial',ends_on:'Data final',date_from:'Data inicial',date_to:'Data final',file:'Arquivo',status:'Situação',reason:'Motivo',title:'Título',legal:'Responsável legal',financial:'Responsável financeiro'};
+    const fields = data.errors?.map(e => {const key=e.field.split('.').at(-1)||'';return `${captions[key]||'Campo informado'}: ${e.message}`;}).join('\n');
     const reference = data.request_id || response.headers.get('X-Request-ID') || '';
     const failure = new Error((fields || data.detail || `Falha de comunicação (${response.status}).`) + (reference ? ' · Referência: '+reference : ''));
     Object.assign(failure, { status: response.status, fields: data.errors || [] });

@@ -13,7 +13,7 @@ def package(root, output, version, commit, image=''):
     files={}
     for name in filter(None,names):
         p=Path(name)
-        if any(part in ('.git','node_modules','.venv','__pycache__','reference','ci-evidence','checkpoints','release') for part in p.parts):continue
+        if any(part in ('.git','node_modules','.venv','__pycache__','reference','evidence','ci-evidence','checkpoints','release') for part in p.parts):continue
         if p.name.startswith('.env') and not p.name.endswith('.example'):continue
         if p.suffix.lower() in ('.ttf','.otf','.woff','.woff2','.pem','.key','.p12','.pfx','.db'):continue
         if name in ('SHA256SUMS','TREE.txt','MANIFEST.json'):continue

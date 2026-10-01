@@ -60,7 +60,8 @@ var PigeAPI;
             data = await response.json();
         }
         catch { /* A origem pode estar indisponível. */ }
-        const fields = data.errors?.map(e => `${e.field.replace(/^body\./, '')}: ${e.message}`).join('\n');
+        const captions = { name: 'Nome', social_name: 'Nome social', email: 'E-mail', password: 'Senha', phone: 'Telefone', cpf: 'CPF', cnpj: 'CNPJ', birth_date: 'Data de nascimento', student_id: 'Aluno', person_id: 'Pessoa', guardian_id: 'Responsável', academic_year_id: 'Ano letivo', class_group_id: 'Turma', unit_id: 'Unidade', grade_id: 'Série', shift_id: 'Turno', enrolled_on: 'Data da matrícula', due_date: 'Vencimento', amount: 'Valor', description: 'Descrição', postal_code: 'CEP', street: 'Endereço', address_number: 'Número', district: 'Bairro', city: 'Cidade', state: 'Estado', capacity: 'Vagas', starts_on: 'Data inicial', ends_on: 'Data final', date_from: 'Data inicial', date_to: 'Data final', file: 'Arquivo', status: 'Situação', reason: 'Motivo', title: 'Título', legal: 'Responsável legal', financial: 'Responsável financeiro' };
+        const fields = data.errors?.map(e => { const key = e.field.split('.').at(-1) || ''; return `${captions[key] || 'Campo informado'}: ${e.message}`; }).join('\n');
         const reference = data.request_id || response.headers.get('X-Request-ID') || '';
         const failure = new Error((fields || data.detail || `Falha de comunicação (${response.status}).`) + (reference ? ' · Referência: ' + reference : ''));
         Object.assign(failure, { status: response.status, fields: data.errors || [] });
@@ -272,7 +273,7 @@ var PigeExpansion;
     const emptyCampaign = () => ({ id: '', version: 1, slug: '', title: '', instructions: defaultGuardianInstructions, privacy_notice: defaultPrivacyNotice, terms_version: '1', class_group_ids: [], opens_on: new Date().toISOString().slice(0, 10), closes_on: '', active: false, require_verified_contact: true, require_documents: false, require_payment_before_enrollment: false, contract_template_id: '' });
     const connectConfig = () => ({ base_url: '', instance: '', send_text_path: '', connection_state_path: '', api_key_header: 'apikey', auth_scheme: '', number_field: 'number', text_field: 'text', message_id_path: 'key.id', contract_confirmed: false });
     PigeExpansion.component = { props: ['schoolId', 'page', 'permissions'], render: PigeRenders.expansion, setup(props) {
-            const s = Vue.reactive({ readiness: null, busy: false, error: '', notice: '', q: '', status: '', page: 1, total: 0, tab: 'queue', rows: [], selected: null, campaigns: [], campaignForm: emptyCampaign(), editingCampaign: false, groups: [], contractTemplates: [], contractFields: [], contractPreview: null, contractValues: {}, contractPreviewStale: false, counts: {}, reason: '', action: 'review', identity: false, existingStudent: '', existingGuardian: '', matchQ: '', studentMatches: [], guardianMatches: [], message: '', internal: false, charges: [], bankSummary: [], selectedCharge: null, bankEvents: [], bankReason: '', chargeOpen: false, chargeInitial: '', discardCharge: false, chargeForm: { admission_id: '', enrollment_id: '', amount: '', due_on: '', description: '', billing_type: 'PIX', client_key: PigeOnline.newId(), installment_count: 1, required_for_enrollment: false }, enrollmentQ: '', enrollmentMatches: [], connections: [], jobs: [], jobTotal: 0, jobPage: 1, jobStatus: '', provider: 'asaas', connectionForm: { version: undefined, enabled: false, environment: 'sandbox', api_key: '', webhook_token: '', config: connectConfig() }, editingConnection: false, connect: { configured: false, base_url: '', api_key_configured: false, instance_prefix: 'PG360', host_policy: 'base_url', effective_host: '' }, connectInstances: [], connectRemote: [], connectInventoryLoaded: false, connectUnits: [], connectJobs: [], connectJobTotal: 0, connectJobPage: 1, connectJobStatus: '', connectLabel: '', connectPrimary: false, connectCreatePhone: '', connectPhoneDrafts: {}, connectOperation: { instanceId: '', kind: '' }, connectQr: { instanceId: '', base64: '', code: '', pairingCode: '', pending: false, connected: false, kind: '' } });
+            const s = Vue.reactive({ readiness: null, busy: false, error: '', notice: '', q: '', status: '', page: 1, total: 0, tab: 'queue', rows: [], selected: null, campaigns: [], campaignForm: emptyCampaign(), editingCampaign: false, groups: [], campaignYears: [], campaignUnits: [], contractTemplates: [], contractFields: [], contractPreview: null, contractValues: {}, contractPreviewStale: false, counts: {}, reason: '', action: 'review', identity: false, existingStudent: '', existingGuardian: '', matchQ: '', studentMatches: [], guardianMatches: [], message: '', internal: false, charges: [], bankSummary: [], bankDueFrom: '', bankDueTo: '', bankingStatus: null, webhookEmail: '', showBankOperations: false, selectedCharge: null, bankEvents: [], bankReason: '', chargeOpen: false, chargeInitial: '', discardCharge: false, chargeForm: { admission_id: '', enrollment_id: '', amount: '', due_on: '', description: '', billing_type: 'PIX', client_key: PigeOnline.newId(), installment_count: 1, required_for_enrollment: false }, enrollmentQ: '', enrollmentMatches: [], connections: [], jobs: [], jobTotal: 0, jobPage: 1, jobStatus: '', provider: 'asaas', connectionForm: { version: undefined, enabled: false, environment: 'sandbox', api_key: '', webhook_token: '', config: connectConfig() }, editingConnection: false, connect: { configured: false, base_url: '', api_key_configured: false, instance_prefix: 'PG360', host_policy: 'base_url', effective_host: '' }, connectInstances: [], connectRemote: [], connectInventoryLoaded: false, connectUnits: [], connectJobs: [], connectJobTotal: 0, connectJobPage: 1, connectJobStatus: '', connectLabel: '', connectPrimary: false, connectCreatePhone: '', connectPhoneDrafts: {}, connectOperation: { instanceId: '', kind: '' }, connectQr: { instanceId: '', base64: '', code: '', pairingCode: '', pending: false, connected: false, kind: '' } });
             const base = () => '/schools/' + props.schoolId;
             const can = (p) => props.permissions.includes(p);
             const str = (v) => v == null ? '' : String(v);
@@ -334,7 +335,26 @@ var PigeExpansion;
                 });
             }
             async function queue() { const result = await PigeAPI.request(base() + `/admissions?page=${s.page}&q=${encodeURIComponent(s.q)}&status=${s.status}`); s.rows = result.items; s.total = result.total; const summary = await PigeAPI.request(base() + '/admissions-summary'); s.counts = summary.counts; }
-            async function bankList() { const result = await PigeAPI.request(base() + `/bank-charges?page=${s.page}&q=${encodeURIComponent(s.q)}&status=${s.status}`); s.charges = result.items; s.total = result.total; s.bankSummary = (await PigeAPI.request(base() + '/bank-summary')).items; }
+            function bankFilters() { return new URLSearchParams({ q: s.q, status: s.status, ...(s.bankDueFrom ? { due_from: s.bankDueFrom } : {}), ...(s.bankDueTo ? { due_to: s.bankDueTo } : {}) }).toString(); }
+            async function bankHealth() { s.bankingStatus = await PigeAPI.request(base() + '/banking-status'); }
+            async function bankList() {
+                const [result, summary] = await Promise.all([PigeAPI.request(base() + `/bank-charges?page=${s.page}&${bankFilters()}`), PigeAPI.request(base() + '/bank-summary?' + bankFilters())]);
+                s.charges = result.items;
+                s.total = result.total;
+                s.bankSummary = summary.items;
+            }
+            function bankCards() {
+                return [
+                    { title: 'A receber', states: ['queued', 'pending', 'confirmed'] }, { title: 'Recebido no banco', states: ['received'] },
+                    { title: 'Em atraso', states: ['overdue'] }, { title: 'Exigem atenção', states: ['failed', 'uncertain', 'disputed', 'awaiting_review'] },
+                ].map(card => { const items = s.bankSummary.filter(item => card.states.includes(item.status)); return { title: card.title, amount: (items.reduce((total, item) => total + Math.round(Number(item.amount) * 100), 0) / 100).toFixed(2), count: items.reduce((total, item) => total + item.count, 0) }; });
+            }
+            async function bankPeriod(months) { const today = new Date(), year = today.getFullYear(), month = today.getMonth(); const iso = (value) => [value.getFullYear(), String(value.getMonth() + 1).padStart(2, '0'), String(value.getDate()).padStart(2, '0')].join('-'); s.bankDueFrom = months ? iso(new Date(year, month - months + 1, 1)) : ''; s.bankDueTo = months ? iso(new Date(year, month + 1, 0)) : ''; s.page = 1; await run(bankList); }
+            async function reconcileBank() { await run(async () => { const result = await PigeAPI.post(base() + '/bank-charges/reconcile?' + bankFilters(), { reason: 'Conciliação das cobranças selecionadas no painel financeiro.' }); await bankHealth(); s.notice = result.count ? result.message : 'Não há cobranças emitidas pendentes de conciliação neste filtro.'; }); }
+            function bankError(code) { return { PROVIDER_HTTP_401: 'Chave da API inválida ou expirada.', PROVIDER_HTTP_403: 'A conta não autorizou esta operação.', PROVIDER_HTTP_400: 'O banco recusou os dados. Confira CPF, valor e vencimento.', PROVIDER_HTTP_429: 'O banco limitou as consultas. A próxima tentativa será programada.', PROVIDER_TIMEOUT: 'O banco demorou a responder. Confira a conciliação antes de reenviar.', PROVIDER_NETWORK_ERROR: 'Não foi possível comunicar com o banco.', API_KEY_MISSING: 'Cadastre a chave da conta bancária.', PAYMENT_POST_REQUIRES_RECONCILIATION: 'Confira a emissão no banco antes de tentar novamente.', CUSTOMER_POST_REQUIRES_RECONCILIATION: 'Confira o cadastro do pagador no banco antes de tentar novamente.', REMOTE_PAYMENT_NOT_FOUND: 'A cobrança ainda não foi localizada no banco.', BANK_VALUE_MISMATCH: 'O valor no banco diverge do lançamento. Confira a cobrança.', INTEGRATION_DISABLED: 'A integração bancária está desabilitada.', DUPLICATE_BANK_WEBHOOK: 'Há mais de um retorno com o mesmo endereço. Confira a configuração na conta.' }[code] || 'A operação precisa ser conferida pela administração.'; }
+            function bankOperation(kind) { return { bank_issue: 'Emissão de cobrança', bank_sync: 'Conciliação', bank_cancel: 'Cancelamento', smtp_email: 'Envio de e-mail', connect_text: 'Mensagem WhatsApp' }[kind] || 'Operação da integração'; }
+            async function activateBankWebhook() { await run(async () => { const result = await PigeAPI.post(base() + '/integrations/asaas/webhook', { email: s.webhookEmail }); if (!result.ok)
+                throw new Error(result.message + (result.code ? ' ' + bankError(result.code) : '')); await load(); s.notice = result.message; }); }
             async function jobs() { const result = await PigeAPI.request(base() + `/integration-jobs?page=${s.jobPage}&status=${s.jobStatus}`); s.jobs = result.items; s.jobTotal = result.total; }
             async function connectJobs() { const result = await PigeAPI.request(base() + `/connect/jobs?page=${s.connectJobPage}&status=${s.connectJobStatus}`); s.connectJobs = result.items; s.connectJobTotal = result.total; }
             async function connectLoad() { const result = await PigeAPI.request(base() + '/connect'); s.connect = result.config; s.connectInstances = result.items; s.connectUnits = result.units || []; for (const i of result.items) {
@@ -435,38 +455,57 @@ var PigeExpansion;
             async function connectRetry(job) { await run(async () => { await PigeAPI.post(base() + '/connect/jobs/' + job.id + '/retry', { reason: s.reason }); await connectJobs(); s.notice = 'Mensagem devolvida à fila do WhatsApp.'; }); }
             async function load() {
                 if (props.page === 'online') {
-                    const [readiness, campaigns, groups, templates, fields] = await Promise.all([
+                    const [readiness, campaigns, groups, templates, fields, years, units] = await Promise.all([
                         PigeAPI.request(base() + '/admission-readiness'), PigeAPI.request(base() + '/admission-campaigns'),
-                        PigeAPI.request(base() + '/class-groups'), PigeAPI.request(base() + '/document-templates'),
-                        PigeAPI.request(base() + '/document-templates/fields')
+                        can('admissions.manage') ? PigeAPI.request(base() + '/class-groups') : Promise.resolve([]),
+                        can('documents.read') ? PigeAPI.request(base() + '/document-templates') : Promise.resolve({ items: [] }),
+                        can('documents.read') ? PigeAPI.request(base() + '/document-templates/fields') : Promise.resolve({ fields: [] }),
+                        can('admissions.manage') ? PigeAPI.request(base() + '/academic-years') : Promise.resolve([]),
+                        can('admissions.manage') ? PigeAPI.request(base() + '/units') : Promise.resolve([])
                     ]);
                     s.readiness = readiness;
                     s.campaigns = campaigns;
                     s.groups = groups;
                     s.contractTemplates = templates.items;
                     s.contractFields = fields.fields;
+                    s.campaignYears = years;
+                    s.campaignUnits = units;
                     await queue();
                 }
                 else if (props.page === 'banking') {
-                    await bankList();
+                    await Promise.all([bankList(), bankHealth()]);
                 }
                 else if (props.page === 'connect') {
                     await connectLoad();
                 }
                 else {
                     s.connections = await PigeAPI.request(base() + '/integrations');
-                    await jobs();
+                    await Promise.all([jobs(), bankHealth()]);
                 }
             }
             async function search() { s.page = 1; await run(() => props.page === 'online' ? queue() : bankList()); }
             async function paginate(n) { s.page += n; await run(() => props.page === 'online' ? queue() : bankList()); }
             async function paginateJobs(n) { s.jobPage += n; await run(jobs); }
+            function campaignSlug() { if (!s.campaignForm.id && !s.campaignForm.slug)
+                s.campaignForm.slug = s.campaignForm.title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80); }
+            function campaignGroupLabel(group) { const year = s.campaignYears.find(item => item.id === group.academic_year_id); const unit = s.campaignUnits.find(item => item.id === group.unit_id); return [group.name, year?.name, unit?.name].filter(Boolean).join(' · '); }
+            function campaignGroups() { return s.groups.filter(group => s.campaignForm.class_group_ids.includes(group.id) || (group.active && s.campaignYears.some(year => year.id === group.academic_year_id && year.status === 'active'))); }
+            function admissionActions() {
+                const status = s.selected?.status || '';
+                return [{ value: 'review', label: 'Iniciar análise', from: ['submitted', 'waitlisted'] }, { value: 'request_changes', label: 'Solicitar correção', from: ['submitted', 'under_review', 'waitlisted'] }, { value: 'waitlist', label: 'Colocar na lista de espera', from: ['submitted', 'under_review'] }, { value: 'reject', label: 'Indeferir inscrição', from: ['submitted', 'under_review', 'waitlisted', 'changes_requested'] }, { value: 'withdraw', label: 'Registrar desistência', from: ['draft', 'submitted', 'under_review', 'waitlisted', 'changes_requested'] }].filter(item => item.from.includes(status));
+            }
             function newCampaign() { s.tab = 'campaigns'; s.campaignForm = emptyCampaign(); s.editingCampaign = true; }
             function editCampaign(c) { const { id, version, slug, title, instructions, privacy_notice, terms_version, class_group_ids, opens_on, closes_on, active, require_verified_contact, require_documents, require_payment_before_enrollment, contract_template_id } = c; s.campaignForm = { id, version, slug, title, instructions, privacy_notice, terms_version, class_group_ids: [...class_group_ids], opens_on, closes_on, active, require_verified_contact, require_documents, require_payment_before_enrollment, contract_template_id: contract_template_id || '' }; s.editingCampaign = true; }
             async function saveCampaign() {
                 await run(async () => {
                     const { id, version, ...data } = s.campaignForm;
-                    if (data.contract_template_id && (!campaignYearId() || !eligibleContractTemplates().some(template => template.id === data.contract_template_id)))
+                    if (!data.class_group_ids.length)
+                        throw new Error('Selecione pelo menos uma turma para o processo.');
+                    if (!campaignYearId())
+                        throw new Error('Selecione turmas de um único ano letivo.');
+                    if (data.closes_on < data.opens_on)
+                        throw new Error('O encerramento deve ser igual ou posterior ao início.');
+                    if (can('documents.read') && data.contract_template_id && (!campaignYearId() || !eligibleContractTemplates().some(template => template.id === data.contract_template_id)))
                         throw new Error('Selecione um contrato ativo que exige assinatura e seja válido para o ano letivo das turmas.');
                     const payload = { ...data, contract_template_id: data.contract_template_id || null };
                     if (id)
@@ -475,10 +514,16 @@ var PigeExpansion;
                         await PigeAPI.post(base() + '/admission-campaigns', payload);
                     s.editingCampaign = false;
                     await load();
-                    s.notice = 'Processo salvo. Divulgue somente processos ativos com prazos e ofertas conferidos.';
+                    s.notice = data.active ? 'Processo salvo e publicado. O link está disponível na lista de processos.' : 'Processo salvo como rascunho. Publique quando estiver pronto para receber inscrições.';
                 });
             }
-            async function openAdmission(id) { s.selected = await PigeAPI.request(base() + '/admissions/' + id); s.identity = false; s.studentMatches = []; s.guardianMatches = []; s.existingStudent = ''; s.existingGuardian = ''; s.contractPreview = null; s.contractValues = {}; s.contractPreviewStale = false; s.charges = (await PigeAPI.request(base() + '/bank-charges?admission_id=' + id)).items; }
+            async function openAdmission(id) { if (s.selected?.id !== id) {
+                s.reason = '';
+                s.message = '';
+                s.internal = false;
+                s.matchQ = '';
+            } s.selected = await PigeAPI.request(base() + '/admissions/' + id); s.identity = false; s.studentMatches = []; s.guardianMatches = []; s.existingStudent = ''; s.existingGuardian = ''; s.contractPreview = null; s.contractValues = {}; s.contractPreviewStale = false; s.charges = can('banking.read') ? (await PigeAPI.request(base() + '/bank-charges?admission_id=' + id)).items : []; if (!admissionActions().some(item => item.value === s.action))
+                s.action = admissionActions()[0]?.value || ''; }
             async function view(id) { await run(() => openAdmission(id)); }
             async function action() { await run(async () => { const a = s.selected; if (!a)
                 return; await PigeAPI.post(base() + '/admissions/' + a.id + '/actions', { version: a.version, action: s.action, reason: s.reason }); await openAdmission(a.id); await queue(); s.reason = ''; }); }
@@ -514,22 +559,22 @@ var PigeExpansion;
             async function createCharge() { await run(async () => { const f = s.chargeForm; await PigeAPI.post(base() + '/bank-charges', { ...f, admission_id: f.admission_id || null, enrollment_id: f.enrollment_id || null, installment_count: Number(f.installment_count) }); s.chargeOpen = false; if (props.page === 'banking')
                 await bankList();
             else if (s.selected)
-                await openAdmission(s.selected.id); s.notice = 'Cobrança(s) enfileirada(s). Emissão e atualização serão processadas pelo worker.'; }); }
-            async function inspectCharge(c) { await run(async () => { s.selectedCharge = c; s.bankReason = ''; s.bankEvents = await PigeAPI.request(base() + '/bank-charges/' + c.id + '/events'); }); }
+                await openAdmission(s.selected.id); s.notice = 'Cobrança enviada para emissão. Acompanhe o andamento e abra os detalhes para acessar o pagamento.'; }); }
+            async function inspectCharge(c) { await run(async () => { const [charge, events] = await Promise.all([PigeAPI.request(base() + '/bank-charges/' + c.id), PigeAPI.request(base() + '/bank-charges/' + c.id + '/events')]); s.selectedCharge = charge; s.bankReason = ''; s.bankEvents = events; }); }
             async function chargeAction(action) { await run(async () => { const c = s.selectedCharge; if (!c)
-                return; await PigeAPI.post(base() + '/bank-charges/' + c.id + '/' + action, { reason: s.bankReason }); s.selectedCharge = null; if (props.page === 'banking')
+                return; await PigeAPI.post(base() + '/bank-charges/' + c.id + '/' + action, { reason: s.bankReason || (action === 'sync' ? 'Consulta de pagamento solicitada no painel financeiro.' : '') }); s.selectedCharge = null; if (props.page === 'banking')
                 await bankList();
             else if (s.selected)
                 await openAdmission(s.selected.id); s.notice = action === 'authorize-reissue' ? 'Reemissão autorizada após conferência. Acompanhe a fila.' : 'Solicitação registrada. Aguarde o processamento e atualize a consulta.'; }); }
             function configure(provider) { s.provider = provider; const c = s.connections.find(c => c.provider === provider); s.connectionForm = { version: c?.version, enabled: c?.enabled || false, environment: c?.environment || 'sandbox', api_key: '', webhook_token: '', config: { ...connectConfig(), ...c?.config } }; s.editingConnection = true; }
-            async function saveConnection() { await run(async () => { const f = s.connectionForm; await PigeAPI.post(base() + '/integrations/' + s.provider, { ...f, config: s.provider === 'asaas' ? {} : f.config }); f.api_key = ''; f.webhook_token = ''; s.editingConnection = false; await load(); s.notice = 'Configuração salva. O teste HTTP não substitui a homologação de mensagens e cobranças.'; }); }
+            async function saveConnection() { await run(async () => { const f = s.connectionForm; await PigeAPI.post(base() + '/integrations/' + s.provider, { ...f, config: s.provider === 'asaas' ? {} : f.config }); f.api_key = ''; f.webhook_token = ''; s.editingConnection = false; await load(); s.notice = 'Configuração salva. Teste a conexão e ative as atualizações de pagamento.'; }); }
             async function testConnection(provider) { await run(async () => { const r = await PigeAPI.post(base() + '/integrations/' + provider + '/test', {}); await load(); if (!r.ok)
-                throw new Error(r.message + ' Código: ' + r.code); s.notice = r.message; }); }
+                throw new Error(bankError(r.code)); s.notice = r.message; }); }
             async function retry(job) { await run(async () => { await PigeAPI.post(base() + '/integration-jobs/' + job.id + '/retry', { reason: s.reason }); await jobs(); }); }
             async function copy(value) { await run(async () => { await navigator.clipboard.writeText(value); s.notice = 'Copiado.'; }); }
             const connectionFor = (provider) => s.connections.find(c => c.provider === provider);
             Vue.onMounted(() => { void run(load); });
-            return { s, props, identity: PigeInstitution.state, closeCharge, chargeTotal, can, str, run, load, search, paginate, paginateJobs, newCampaign, editCampaign, saveCampaign, campaignYearId, eligibleContractTemplates, templateName, selectedContractVersion, contractStatus, contractPreviewKeys, contractFieldLabel, contractValue, contractAutomatic, setContractValue, previewFrozenContract, previewFrozenPdf, issueFrozenContract, downloadSignedContract, view, action, match, approve, finalize, reviewDoc, message, whatsapp, download, newCharge, findEnrollments, createCharge, inspectCharge, chargeAction, configure, saveConnection, testConnection, retry, copy, connectionFor, jobs, connectLoad, connectJobs, connectInventory, connectAdopt, connectPrefer, connectPreferUnit, connectRestart, connectCreate, connectSync, connectQr, connectPairingCode, connectSavePhone, connectLogout, connectDelete, connectTest, connectRetry, clearConnectQr, label: PigeOnline.label, date: PigeOnline.date, money: PigeOnline.money, publicURL: PigeOnline.publicURL, safeLink: PigeOnline.safeLink, origin: location.origin, statuses: PigeOnline.statuses };
+            return { s, props, campaignSlug, campaignGroupLabel, campaignGroups, admissionActions, bankCards, bankPeriod, reconcileBank, bankError, bankOperation, activateBankWebhook, identity: PigeInstitution.state, closeCharge, chargeTotal, can, str, run, load, search, paginate, paginateJobs, newCampaign, editCampaign, saveCampaign, campaignYearId, eligibleContractTemplates, templateName, selectedContractVersion, contractStatus, contractPreviewKeys, contractFieldLabel, contractValue, contractAutomatic, setContractValue, previewFrozenContract, previewFrozenPdf, issueFrozenContract, downloadSignedContract, view, action, match, approve, finalize, reviewDoc, message, whatsapp, download, newCharge, findEnrollments, createCharge, inspectCharge, chargeAction, configure, saveConnection, testConnection, retry, copy, connectionFor, jobs, connectLoad, connectJobs, connectInventory, connectAdopt, connectPrefer, connectPreferUnit, connectRestart, connectCreate, connectSync, connectQr, connectPairingCode, connectSavePhone, connectLogout, connectDelete, connectTest, connectRetry, clearConnectQr, label: PigeOnline.label, date: PigeOnline.date, money: PigeOnline.money, publicURL: PigeOnline.publicURL, safeLink: PigeOnline.safeLink, origin: location.origin, statuses: PigeOnline.statuses };
         } };
 })(PigeExpansion || (PigeExpansion = {}));
 var PigeDialogs;
@@ -1296,7 +1341,7 @@ var PigeDiagnostics;
 })(PigeDiagnostics || (PigeDiagnostics = {}));
 var PigeDiary;
 (function (PigeDiary) {
-    const today = () => new Date().toISOString().slice(0, 10);
+    const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bahia', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
     PigeDiary.component = { props: ['schoolId', 'permissions'], render: PigeRenders.diary, setup(props) {
             const state = Vue.reactive({
                 busy: false, error: '', notice: '', tab: 'diaries',
@@ -1307,8 +1352,8 @@ var PigeDiary;
                 planForm: { class_group_id: '', component_id: '', academic_period_id: '', teacher_assignment_id: '', objectives: '', thematic_units: '', knowledge_objects: '', bncc_references: '', methodology: '', resources: '', assessment_strategy: '', notes: '', status: 'draft' },
                 lessonForm: { academic_period_id: '', lesson_date: today(), lesson_count: 1, content: '', skills: '', methodology: '', activities: '', homework: '', notes: '' },
                 selectedLesson: null, attendance: [],
-                assessments: [], selectedAssessment: null, assessmentRoster: [],
-                assessmentForm: { academic_period_id: '', title: '', kind: 'activity', assessment_date: today(), value_type: 'numeric', max_score: '10', weight: '1', description: '', skills: '', status: 'draft' },
+                assessments: [], assessmentEditing: null, selectedAssessment: null, assessmentRoster: [],
+                assessmentForm: { academic_period_id: '', title: '', kind: 'activity', assessment_date: today(), value_type: 'numeric', max_score: '10', weight: '1', description: '', skills: '', status: 'published' },
                 opinions: [], opinionForm: { academic_period_id: '', enrollment_id: '', text: '', status: 'draft' },
                 pedagogicalRecords: [], pedagogicalForm: { enrollment_id: '', record_date: today(), kind: 'observation', text: '' },
                 closePeriod: '', closeReason: 'Fechamento pedagógico conferido.', reopenReason: '',
@@ -1328,7 +1373,7 @@ var PigeDiary;
             const can = (p) => props.permissions.includes(p);
             const str = (v) => v == null ? '' : String(v);
             const date = (v) => { const x = str(v); return x ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(new Date(x.length === 10 ? x + 'T12:00:00Z' : x)) : '—'; };
-            const labels = { open: 'Aberto', draft: 'Rascunho', submitted: 'Enviado', reviewed: 'Revisado', closed: 'Fechado', present: 'Presente', absent: 'Falta', justified_absence: 'Falta justificada', active: 'Ativo', suspended: 'Suspenso' };
+            const labels = { open: 'Aberto', draft: 'Rascunho', submitted: 'Enviado', reviewed: 'Revisado', closed: 'Fechado', present: 'Presente', absent: 'Falta', justified_absence: 'Falta justificada', active: 'Ativo', suspended: 'Suspenso', published: 'Publicada', final: 'Final', pending: 'Pendente', calculated: 'Calculado', below_minimum: 'Abaixo da média', attendance_below_minimum: 'Frequência abaixo do mínimo', opinion_pending: 'Parecer pendente', concept: 'Conceito', follow_up: 'Acompanhamento', intervention: 'Intervenção', recovery: 'Recuperação', adaptation: 'Adaptação', referral: 'Encaminhamento', observation: 'Observação', positive: 'Positiva', pedagogical: 'Pedagógica', behavioral: 'Comportamental', safety: 'Segurança', other: 'Outra', resultados_avaliativos_pendentes: 'Há notas pendentes', sem_resultado_aplicavel: 'Sem resultado aplicável', chamada_pendente: 'Chamada pendente', conceito_fora_da_escala: 'Conceito fora da escala', peso_avaliativo_ausente: 'Peso não definido', resultado_numerico_ausente: 'Nota não informada', frequencia_abaixo_do_limite: 'Frequência abaixo do mínimo', parecer_final_pendente: 'Parecer final pendente' };
             const label = (v) => labels[str(v)] || str(v) || '—';
             async function run(action) { if (state.busy)
                 return; state.busy = true; state.error = ''; state.notice = ''; try {
@@ -1345,10 +1390,10 @@ var PigeDiary;
                     PigeAPI.request(base() + '/diaries'),
                     PigeAPI.request(base() + '/academic-periods'),
                     PigeAPI.request(base() + '/curriculum-components'),
-                    PigeAPI.request(base() + '/academic-years'),
-                    PigeAPI.request(base() + '/class-groups').catch(() => []),
-                    PigeAPI.request(base() + '/teacher-assignments').catch(() => []),
-                    PigeAPI.request(base() + '/diary-dashboard').catch(() => ({ items: [], totals: {} }))
+                    can('diary.configure') ? PigeAPI.request(base() + '/academic-years') : Promise.resolve([]),
+                    can('diary.configure') ? PigeAPI.request(base() + '/class-groups') : Promise.resolve([]),
+                    can('diary.configure') ? PigeAPI.request(base() + '/teacher-assignments') : Promise.resolve([]),
+                    PigeAPI.request(base() + '/diary-dashboard')
                 ]);
                 state.diaries = results[0];
                 state.periods = results[1];
@@ -1363,15 +1408,57 @@ var PigeDiary;
                 }
             }
             async function load() { await run(loadBase); }
-            async function selectDiary(d) { await run(async () => { state.selected = await PigeAPI.request(base() + '/diaries/' + d.id); state.summary = await PigeAPI.request(base() + '/diaries/' + d.id + '/summary'); state.history = await PigeAPI.request(base() + '/diaries/' + d.id + '/history'); state.plans = await PigeAPI.request(base() + '/curriculum-plans?class_group_id=' + encodeURIComponent(d.class_group_id) + '&component_id=' + encodeURIComponent(d.component_id)); state.selectedLesson = null; state.attendance = []; state.selectedAssessment = null; state.assessmentRoster = []; state.planForm.class_group_id = d.class_group_id; state.planForm.component_id = d.component_id; state.planForm.teacher_assignment_id = d.teacher_assignment_id || ''; state.assessments = await PigeAPI.request(base() + '/diaries/' + d.id + '/assessments'); state.assessmentRules = await PigeAPI.request(base() + '/diaries/' + d.id + '/assessment-rules'); state.periodResults = []; state.occurrences = await PigeAPI.request(base() + '/diaries/' + d.id + '/occurrences'); state.occurrenceForm = { academic_period_id: '', enrollment_id: '', occurrence_date: today(), kind: 'pedagogical', title: '', description: '', status: 'draft' }; const firstPeriod = state.periods.find(p => p.academic_year_id === d.academic_year_id); if (firstPeriod)
-                selectRulePeriod(str(firstPeriod.id)); state.opinions = await PigeAPI.request(base() + '/diaries/' + d.id + '/opinions'); state.pedagogicalRecords = await PigeAPI.request(base() + '/diaries/' + d.id + '/pedagogical-records'); state.communications = await PigeAPI.request(base() + '/diaries/' + d.id + '/communications'); state.communicationRecipients = []; state.communicationForm = { enrollment_id: '', academic_period_id: '', occurrence_id: '', recipient_guardian_link_ids: [], title: '', message: '', client_key: PigeOnline.newId() }; }); }
+            async function loadDiary(d) {
+                const endpoint = base() + '/diaries/' + d.id;
+                const [selected, summary, history, plans, assessments, rules, occurrences, opinions, records, communications] = await Promise.all([
+                    PigeAPI.request(endpoint), PigeAPI.request(endpoint + '/summary'),
+                    PigeAPI.request(endpoint + '/history'),
+                    PigeAPI.request(base() + '/curriculum-plans?class_group_id=' + encodeURIComponent(d.class_group_id) + '&component_id=' + encodeURIComponent(d.component_id)),
+                    PigeAPI.request(endpoint + '/assessments'), PigeAPI.request(endpoint + '/assessment-rules'),
+                    PigeAPI.request(endpoint + '/occurrences'), PigeAPI.request(endpoint + '/opinions'),
+                    PigeAPI.request(endpoint + '/pedagogical-records'), PigeAPI.request(endpoint + '/communications')
+                ]);
+                const changed = state.selected?.id !== d.id;
+                state.selected = selected;
+                state.summary = summary;
+                state.history = history;
+                state.plans = plans;
+                state.assessments = assessments;
+                state.assessmentRules = rules;
+                state.occurrences = occurrences;
+                state.opinions = opinions;
+                state.pedagogicalRecords = records;
+                state.communications = communications;
+                state.selectedLesson = null;
+                state.attendance = [];
+                state.assessmentEditing = null;
+                state.selectedAssessment = null;
+                state.assessmentRoster = [];
+                state.periodResults = [];
+                if (changed) {
+                    state.planForm = { class_group_id: d.class_group_id, component_id: d.component_id, academic_period_id: '', teacher_assignment_id: d.teacher_assignment_id || '', objectives: '', thematic_units: '', knowledge_objects: '', bncc_references: '', methodology: '', resources: '', assessment_strategy: '', notes: '', status: 'draft' };
+                    state.lessonForm = { academic_period_id: '', lesson_date: today(), lesson_count: 1, content: '', skills: '', methodology: '', activities: '', homework: '', notes: '' };
+                    state.assessmentForm = { academic_period_id: '', title: '', kind: 'activity', assessment_date: today(), value_type: 'numeric', max_score: '10', weight: '1', description: '', skills: '', status: 'published' };
+                    state.opinionForm = { academic_period_id: '', enrollment_id: '', text: '', status: 'draft' };
+                    state.pedagogicalForm = { enrollment_id: '', record_date: today(), kind: 'observation', text: '' };
+                    state.reportPeriod = '';
+                    state.reportEnrollment = '';
+                    state.closePeriod = '';
+                }
+                state.occurrenceForm = { academic_period_id: '', enrollment_id: '', occurrence_date: today(), kind: 'pedagogical', title: '', description: '', status: 'draft' };
+                const firstPeriod = state.periods.find(p => p.academic_year_id === d.academic_year_id);
+                selectRulePeriod(firstPeriod ? str(firstPeriod.id) : '');
+                state.communicationRecipients = [];
+                state.communicationForm = { enrollment_id: '', academic_period_id: '', occurrence_id: '', recipient_guardian_link_ids: [], title: '', message: '', client_key: PigeOnline.newId() };
+            }
+            async function selectDiary(d) { await run(() => loadDiary(d)); }
             function selectRulePeriod(periodId) { const rule = state.assessmentRules.find(x => x.academic_period_id === periodId); state.assessmentRuleForm = { period_id: periodId, method: str(rule?.method) || 'arithmetic', scale_max: str(rule?.scale_max) || '10', decimal_places: Number(rule?.decimal_places ?? 2), minimum_score: str(rule?.minimum_score), minimum_attendance_percent: str(rule?.minimum_attendance_percent), justified_absence_counts_as_present: rule?.justified_absence_counts_as_present == null ? '' : String(rule.justified_absence_counts_as_present), recovery_mode: str(rule?.recovery_mode) || 'none', concept_scale: Array.isArray(rule?.concept_scale) ? rule.concept_scale.join(', ') : '', required_opinion: Boolean(rule?.required_opinion), version: rule?.version == null ? null : Number(rule.version) }; }
             async function saveAssessmentRule() { if (!state.selected || !state.assessmentRuleForm.period_id)
-                return; await run(async () => { const f = state.assessmentRuleForm; const body = { method: f.method, scale_max: f.scale_max, decimal_places: f.decimal_places, minimum_score: f.minimum_score || null, minimum_attendance_percent: f.minimum_attendance_percent || null, justified_absence_counts_as_present: f.minimum_attendance_percent ? (f.justified_absence_counts_as_present === 'true') : null, recovery_mode: f.recovery_mode, concept_scale: f.method === 'concept' ? f.concept_scale.split(/[,;]+/).map(x => x.trim()).filter(Boolean) : [], required_opinion: f.required_opinion, version: f.version }; const saved = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/assessment-rules/' + f.period_id, { method: 'PUT', body: JSON.stringify(body) }); state.assessmentRules = state.assessmentRules.filter(x => x.academic_period_id !== f.period_id).concat(saved); selectRulePeriod(f.period_id); state.notice = 'Regra salva; os resultados mudam apenas após consolidação explícita.'; }); }
+                return; await run(async () => { const f = state.assessmentRuleForm; const body = { method: f.method, scale_max: f.scale_max, decimal_places: f.decimal_places, minimum_score: f.minimum_score || null, minimum_attendance_percent: f.minimum_attendance_percent || null, justified_absence_counts_as_present: f.minimum_attendance_percent ? (f.justified_absence_counts_as_present === 'true') : null, recovery_mode: f.recovery_mode, concept_scale: f.method === 'concept' ? f.concept_scale.split(/[,;]+/).map(x => x.trim()).filter(Boolean) : [], required_opinion: f.required_opinion, version: f.version }; const saved = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/assessment-rules/' + f.period_id, { method: 'PUT', body: JSON.stringify(body) }); state.assessmentRules = state.assessmentRules.filter(x => x.academic_period_id !== f.period_id).concat(saved); selectRulePeriod(f.period_id); state.notice = 'Regra salva. Consolide o período para atualizar os resultados.'; }); }
             async function loadPeriodResults() { if (!state.selected || !state.assessmentRuleForm.period_id)
                 return; await run(async () => { const r = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/periods/' + state.assessmentRuleForm.period_id + '/results'); state.periodResults = r.items; }); }
             async function consolidatePeriod() { if (!state.selected || !state.assessmentRuleForm.period_id)
-                return; await run(async () => { const r = await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/periods/' + state.assessmentRuleForm.period_id + '/consolidate', { version: state.selected.version }); state.periodResults = r.results; state.notice = 'Consolidação auditada; ' + r.pending + ' resultado(s) pendente(s).'; await loadBase(); }); }
+                return; await run(async () => { const r = await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/periods/' + state.assessmentRuleForm.period_id + '/consolidate', { version: state.selected.version }); state.periodResults = r.results; state.notice = 'Período consolidado. ' + r.pending + ' resultado(s) pendente(s).'; await loadBase(); }); }
             async function saveOccurrence() { if (!state.selected)
                 return; await run(async () => { const f = state.occurrenceForm; await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/occurrences', { ...f, academic_period_id: f.academic_period_id || null }); state.occurrences = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/occurrences'); state.occurrenceForm = { academic_period_id: f.academic_period_id, enrollment_id: '', occurrence_date: today(), kind: 'pedagogical', title: '', description: '', status: 'draft' }; state.notice = 'Ocorrência registrada no Diário.'; }); }
             async function loadCommunicationRecipients() { if (!state.selected || !state.communicationForm.enrollment_id) {
@@ -1385,39 +1472,78 @@ var PigeDiary;
                 return; await run(async () => { const f = state.communicationForm; const result = await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/communications', { ...f, academic_period_id: f.academic_period_id || null, occurrence_id: f.occurrence_id || null }); state.communications = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/communications'); state.communicationForm = { ...f, occurrence_id: '', recipient_guardian_link_ids: [], title: '', message: '', client_key: PigeOnline.newId() }; state.communicationRecipients = []; state.notice = result.created ? 'Comunicado disponibilizado no portal para ' + result.created + ' conta(s).' : 'Esta operação já havia sido processada; nenhum comunicado duplicado foi criado.'; }); }
             async function createPeriod() { await run(async () => { await PigeAPI.post(base() + '/academic-periods', state.periodForm); state.periodForm = { academic_year_id: state.periodForm.academic_year_id, name: '', starts_on: '', ends_on: '', order_index: state.periodForm.order_index + 1, active: true }; await loadBase(); state.notice = 'Período letivo criado.'; }); }
             async function createComponent() { await run(async () => { await PigeAPI.post(base() + '/curriculum-components', state.componentForm); state.componentForm = { name: '', code: '', workload_hours: 0, active: true }; await loadBase(); state.notice = 'Componente curricular criado.'; }); }
-            async function createDiary() { await run(async () => { const body = { ...state.diaryForm, teacher_assignment_id: state.diaryForm.teacher_assignment_id || null }; const d = await PigeAPI.post(base() + '/diaries', body); state.diaryForm = { class_group_id: '', component_id: '', teacher_assignment_id: '', notes: '' }; await loadBase(); await selectDiary(d); state.notice = 'Diário aberto.'; }); }
+            async function createDiary() { await run(async () => { const body = { ...state.diaryForm, teacher_assignment_id: state.diaryForm.teacher_assignment_id || null }; const d = await PigeAPI.post(base() + '/diaries', body); state.diaryForm = { class_group_id: '', component_id: '', teacher_assignment_id: '', notes: '' }; await loadBase(); await loadDiary(d); state.tab = 'diaries'; state.notice = 'Diário aberto.'; }); }
             async function createPlan() { if (!state.selected)
                 return; await run(async () => { const f = state.planForm; await PigeAPI.post(base() + '/curriculum-plans', { ...f, academic_period_id: f.academic_period_id || null, teacher_assignment_id: f.teacher_assignment_id || null, bncc_references: f.bncc_references.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean) }); state.plans = await PigeAPI.request(base() + '/curriculum-plans?class_group_id=' + encodeURIComponent(state.selected.class_group_id) + '&component_id=' + encodeURIComponent(state.selected.component_id)); state.notice = 'Planejamento registrado.'; }); }
             async function createLesson() { if (!state.selected)
-                return; await run(async () => { await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/lessons', { ...state.lessonForm, academic_period_id: state.lessonForm.academic_period_id || null }); state.lessonForm = { academic_period_id: state.lessonForm.academic_period_id, lesson_date: today(), lesson_count: 1, content: '', skills: '', methodology: '', activities: '', homework: '', notes: '' }; await selectDiary(state.selected); state.notice = 'Aula registrada.'; }); }
+                return; await run(async () => { await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/lessons', { ...state.lessonForm, academic_period_id: state.lessonForm.academic_period_id || null }); state.lessonForm = { academic_period_id: state.lessonForm.academic_period_id, lesson_date: today(), lesson_count: 1, content: '', skills: '', methodology: '', activities: '', homework: '', notes: '' }; await loadDiary(state.selected); state.notice = 'Aula registrada.'; }); }
             async function openAttendance(lesson) { if (!state.selected)
                 return; await run(async () => { const result = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/lessons/' + lesson.id + '/attendance'); state.selectedLesson = result.lesson; state.attendance = result.roster.map(r => ({ ...r, attendance: r.attendance || { status: 'present', note: '' } })); }); }
             async function saveAttendance() { if (!state.selected || !state.selectedLesson)
-                return; await run(async () => { await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/lessons/' + state.selectedLesson.id + '/attendance', { method: 'PUT', body: JSON.stringify({ items: state.attendance.map(r => ({ enrollment_id: r.enrollment_id, status: r.attendance?.status || 'present', note: r.attendance?.note || '' })) }) }); state.notice = 'Chamada salva.'; await selectDiary(state.selected); }); }
-            async function createAssessment() { if (!state.selected)
-                return; await run(async () => { const f = state.assessmentForm; await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/assessments', { ...f, academic_period_id: f.academic_period_id || null, max_score: f.value_type === 'numeric' ? (f.max_score || null) : null, weight: f.weight || null }); state.assessmentForm = { academic_period_id: f.academic_period_id, title: '', kind: 'activity', assessment_date: today(), value_type: f.value_type, max_score: '10', weight: '1', description: '', skills: '', status: 'draft' }; state.assessments = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/assessments'); state.notice = 'Avaliação criada.'; }); }
+                return; await run(async () => { await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/lessons/' + state.selectedLesson.id + '/attendance', { method: 'PUT', body: JSON.stringify({ items: state.attendance.map(r => ({ enrollment_id: r.enrollment_id, status: r.attendance?.status || 'present', note: r.attendance?.note || '', version: r.attendance?.version ?? null })) }) }); state.notice = 'Chamada salva.'; await loadDiary(state.selected); }); }
+            function editAssessment(assessment) {
+                state.assessmentEditing = assessment;
+                state.assessmentForm = { academic_period_id: str(assessment.academic_period_id), title: str(assessment.title), kind: str(assessment.kind), assessment_date: str(assessment.assessment_date), value_type: str(assessment.value_type), max_score: str(assessment.max_score), weight: str(assessment.weight), description: str(assessment.description), skills: str(assessment.skills), status: str(assessment.status) };
+                state.tab = 'assessments';
+            }
+            function cancelAssessmentEdit() {
+                state.assessmentEditing = null;
+                state.assessmentForm = { academic_period_id: state.assessmentForm.academic_period_id, title: '', kind: 'activity', assessment_date: today(), value_type: 'numeric', max_score: '10', weight: '1', description: '', skills: '', status: 'published' };
+            }
+            async function createAssessment() {
+                if (!state.selected)
+                    return;
+                await run(async () => {
+                    const f = state.assessmentForm;
+                    const body = { ...f, academic_period_id: f.academic_period_id || null, max_score: f.value_type === 'numeric' ? (f.max_score || null) : null, weight: f.weight || null };
+                    const path = base() + '/diaries/' + state.selected.id + '/assessments';
+                    const editing = state.assessmentEditing;
+                    if (editing)
+                        await PigeAPI.request(path + '/' + editing.id, { method: 'PATCH', body: JSON.stringify({ ...body, version: editing.version }) });
+                    else
+                        await PigeAPI.post(path, body);
+                    cancelAssessmentEdit();
+                    state.assessments = await PigeAPI.request(path);
+                    state.notice = editing ? 'Avaliação atualizada. Consolide o período para atualizar o boletim.' : 'Avaliação criada.';
+                });
+            }
             async function openAssessment(a) { if (!state.selected)
                 return; await run(async () => { const result = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/assessments/' + a.id + '/results'); state.selectedAssessment = result.instrument; state.assessmentRoster = result.roster.map(r => ({ ...r, result: r.result || { numeric_score: null, concept: '', note: '' } })); }); }
-            async function saveAssessmentResults() { if (!state.selected || !state.selectedAssessment)
-                return; await run(async () => { await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/assessments/' + state.selectedAssessment.id + '/results', { method: 'PUT', body: JSON.stringify({ items: state.assessmentRoster.map(r => ({ enrollment_id: r.enrollment_id, numeric_score: state.selectedAssessment.value_type === 'numeric' ? (r.result?.numeric_score ?? null) : null, concept: state.selectedAssessment.value_type === 'concept' ? str(r.result?.concept) : '', note: str(r.result?.note) })) }) }); state.notice = 'Resultados salvos.'; await selectDiary(state.selected); }); }
+            async function saveAssessmentResults() {
+                if (!state.selected || !state.selectedAssessment)
+                    return;
+                await run(async () => {
+                    const numeric = state.selectedAssessment.value_type === 'numeric';
+                    const filled = (r) => numeric ? r.result?.numeric_score !== null && r.result?.numeric_score !== undefined && str(r.result.numeric_score).trim() !== '' : Boolean(str(r.result?.concept).trim());
+                    if (state.assessmentRoster.some(r => r.result?.id && !filled(r)))
+                        throw new Error('Para corrigir uma nota já salva, informe o novo resultado.');
+                    const rows = state.assessmentRoster.filter(filled);
+                    if (!rows.length)
+                        throw new Error('Informe ao menos uma nota ou conceito para salvar.');
+                    const assessment = state.selectedAssessment;
+                    await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/assessments/' + assessment.id + '/results', { method: 'PUT', body: JSON.stringify({ items: rows.map(r => ({ enrollment_id: r.enrollment_id, numeric_score: numeric ? r.result.numeric_score : null, concept: numeric ? '' : str(r.result?.concept).trim(), note: str(r.result?.note), version: r.result?.version ?? null })) }) });
+                    await loadDiary(state.selected);
+                    state.notice = rows.length + ' resultado(s) salvo(s).';
+                });
+            }
             async function saveOpinion() { if (!state.selected)
                 return; await run(async () => { await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/opinions', { ...state.opinionForm, academic_period_id: state.opinionForm.academic_period_id || null }); state.opinionForm = { academic_period_id: state.opinionForm.academic_period_id, enrollment_id: '', text: '', status: 'draft' }; state.opinions = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/opinions'); state.notice = 'Parecer salvo.'; }); }
             async function createPedagogicalRecord() { if (!state.selected)
                 return; await run(async () => { await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/pedagogical-records', state.pedagogicalForm); state.pedagogicalForm = { enrollment_id: '', record_date: today(), kind: 'observation', text: '' }; state.pedagogicalRecords = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/pedagogical-records'); state.notice = 'Registro pedagógico incluído.'; }); }
             async function submitDiary() { if (!state.selected)
-                return; await run(async () => { await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/submit', { version: state.selected.version }); await selectDiary(state.selected); state.notice = 'Diário enviado para revisão.'; }); }
+                return; await run(async () => { await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/submit', { version: state.selected.version }); await loadDiary(state.selected); state.notice = 'Diário enviado para revisão.'; }); }
             async function reviewDiary() { if (!state.selected)
-                return; await run(async () => { await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/review', { version: state.selected.version }); await selectDiary(state.selected); state.notice = 'Diário marcado como revisado.'; }); }
+                return; await run(async () => { await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/review', { version: state.selected.version }); await loadDiary(state.selected); state.notice = 'Diário marcado como revisado.'; }); }
             async function closeDiary() { if (!state.selected)
-                return; await run(async () => { const period = Boolean(state.closePeriod); await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/close', { academic_period_id: state.closePeriod || null, reason: state.closeReason, version: state.selected.version }); await selectDiary(state.selected); state.notice = period ? 'Período fechado com snapshot e hash de integridade.' : 'Diário fechado com snapshot e hash de integridade.'; }); }
+                return; await run(async () => { const period = Boolean(state.closePeriod); await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/close', { academic_period_id: state.closePeriod || null, reason: state.closeReason, version: state.selected.version }); await loadDiary(state.selected); state.notice = period ? 'Período fechado.' : 'Diário fechado.'; }); }
             async function reopenDiary() { if (!state.selected)
-                return; await run(async () => { await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/reopen', { reason: state.reopenReason, version: state.selected.version }); state.reopenReason = ''; await selectDiary(state.selected); state.notice = 'Diário reaberto com registro de retificação.'; }); }
+                return; await run(async () => { await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/reopen', { reason: state.reopenReason, version: state.selected.version }); state.reopenReason = ''; await loadDiary(state.selected); state.notice = 'Diário reaberto com registro de retificação.'; }); }
             async function report() { if (state.selected)
                 await run(() => { const q = new URLSearchParams(); if (state.reportPeriod)
                     q.set('academic_period_id', state.reportPeriod); if (state.reportType === 'student_record' && state.reportEnrollment)
                     q.set('enrollment_id', state.reportEnrollment); const query = q.toString(); return PigeAPI.download(base() + '/diaries/' + state.selected.id + '/reports/' + state.reportType + '.pdf' + (query ? '?' + query : ''), 'diario-' + state.reportType + '.pdf'); }); }
             Vue.onMounted(() => { void load(); });
-            return { state, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
+            return { state, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, editAssessment, cancelAssessmentEdit, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
         } };
 })(PigeDiary || (PigeDiary = {}));
 var PigeContracts;
@@ -1761,7 +1887,7 @@ var PigeSigning;
             const state = Vue.reactive({
                 busy: false, loading: false, error: '', notice: '',
                 configured: false, certificate: null, certificateName: '', certificatePassword: '',
-                pending: [], pendingTotal: 0, offset: 0, limit: 30,
+                pending: [], pendingTotal: 0, offset: 0, limit: 30, unsigned: [], unsignedTotal: 0, unsignedOffset: 0, removeCertificateOpen: false,
                 enrollmentIssued: [], review: null,
                 reportName: '', signerCpf: '', validationReference: '', confirmedReview: false, rejectionReason: ''
             });
@@ -1796,6 +1922,11 @@ var PigeSigning;
                 state.pending = result.items;
                 state.pendingTotal = result.total;
             }
+            async function loadUnsigned() { if (!can('documents.read'))
+                return; const result = await PigeAPI.request(base() + `/issued-documents/signatures/unsigned?limit=${state.limit}&offset=${state.unsignedOffset}`); state.unsigned = result.items; state.unsignedTotal = result.total; }
+            async function unsignedPage(delta) { const next = state.unsignedOffset + delta * state.limit; if (next < 0 || next >= state.unsignedTotal)
+                return; state.unsignedOffset = next; await run(loadUnsigned); }
+            async function signDocument(item) { await run(async () => { const result = await PigeAPI.request(base() + '/issued-documents/' + item.document_id + '/sign/a1', { method: 'POST' }); await loadUnsigned(); await loadReview(item.document_id); state.notice = 'Documento assinado pela escola. O PDF original foi preservado.'; }); }
             async function loadEnrollmentIssued() {
                 if (!props.enrollmentId)
                     return;
@@ -1807,7 +1938,7 @@ var PigeSigning;
                 state.loading = true;
                 state.error = '';
                 try {
-                    await Promise.all([loadCertificate(), loadPending(), loadEnrollmentIssued()]);
+                    await Promise.all([loadCertificate(), loadPending(), loadUnsigned(), loadEnrollmentIssued()]);
                     if (props.issuedId)
                         await loadReview(props.issuedId);
                 }
@@ -1847,9 +1978,9 @@ var PigeSigning;
                 clearCertificateInput();
             }
             async function removeCertificate() {
-                if (!canManageA1() || !window.confirm('Desativar o certificado A1 desta escola para futuras emissões? Contratos já assinados são preservados.'))
+                if (!canManageA1())
                     return;
-                await run(async () => { await PigeAPI.request(base() + '/signing-certificate/a1', { method: 'DELETE' }); await loadCertificate(); state.notice = 'Certificado A1 desativado. Emissões que exigem assinatura da escola permanecerão bloqueadas até nova configuração.'; });
+                await run(async () => { await PigeAPI.request(base() + '/signing-certificate/a1', { method: 'DELETE' }); await loadCertificate(); state.removeCertificateOpen = false; state.notice = 'Certificado A1 desativado. Emissões que exigem assinatura da escola permanecerão bloqueadas até nova configuração.'; });
             }
             async function page(delta) { const next = state.offset + delta * state.limit; if (next < 0 || next >= state.pendingTotal)
                 return; state.offset = next; await run(loadPending); }
@@ -1902,9 +2033,307 @@ var PigeSigning;
             }
             Vue.onMounted(() => { void load(); });
             Vue.onUnmounted(() => { clearCertificateInput(); reportFile = null; state.signerCpf = ''; state.validationReference = ''; });
-            return { state, can, canManageA1, canDecide, certificateExpired, str, date, label, load, loadPending, openReview, certificateChanged, saveCertificate, removeCertificate, page, download, reportChanged, validate, reject };
+            return { state, can, canManageA1, canDecide, certificateExpired, str, date, label, load, loadPending, openReview, loadUnsigned, unsignedPage, signDocument, certificateChanged, saveCertificate, removeCertificate, page, download, reportChanged, validate, reject };
         } };
 })(PigeSigning || (PigeSigning = {}));
+var PigeReports;
+(function (PigeReports) {
+    PigeReports.component = { props: ['schoolId', 'catalogs'], render: PigeRenders.reports, setup(props) {
+            const state = Vue.reactive({ busy: false, error: '', catalog: [], kind: 'enrollments', dateFrom: '', dateTo: '', preset: 'last-three', academicYear: '', classGroup: '', unit: '', status: '', q: '', page: 1, result: null, appliedQuery: '' });
+            const base = () => '/schools/' + props.schoolId + '/reports';
+            const selected = () => state.catalog.find(c => c.id === state.kind);
+            const iso = (d) => [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
+            function period() {
+                const today = new Date(), y = today.getFullYear(), m = today.getMonth();
+                let start, end;
+                if (state.preset === 'custom')
+                    return;
+                if (state.preset === 'month') {
+                    start = new Date(y, m, 1);
+                    end = new Date(y, m + 1, 0);
+                }
+                else if (state.preset === 'quarter') {
+                    const q = Math.floor(m / 3) * 3;
+                    start = new Date(y, q, 1);
+                    end = new Date(y, q + 3, 0);
+                }
+                else if (state.preset === 'year') {
+                    start = new Date(y, 0, 1);
+                    end = new Date(y, 11, 31);
+                }
+                else {
+                    start = new Date(y, m - 3, 1);
+                    end = new Date(y, m, 0);
+                }
+                state.dateFrom = iso(start);
+                state.dateTo = iso(end);
+            }
+            function query() {
+                const q = new URLSearchParams({ date_from: state.dateFrom, date_to: state.dateTo });
+                for (const [k, v] of Object.entries({ academic_year_id: state.academicYear, class_group_id: state.classGroup, unit_id: state.unit, status: state.status, q: state.q.trim() }))
+                    if (v)
+                        q.set(k, v);
+                return q.toString();
+            }
+            function changed() { return Boolean(state.result) && state.appliedQuery !== state.kind + '?' + query(); }
+            function changeKind() { state.status = ''; state.academicYear = ''; state.classGroup = ''; state.unit = ''; state.result = null; state.page = 1; state.error = ''; }
+            async function run(action) { if (state.busy)
+                return; state.busy = true; state.error = ''; try {
+                await action();
+            }
+            catch (e) {
+                state.error = e instanceof Error ? e.message : 'Não foi possível gerar o relatório.';
+            }
+            finally {
+                state.busy = false;
+            } }
+            async function generate(page = 1) {
+                await run(async () => {
+                    if (!state.dateFrom || !state.dateTo || state.dateFrom > state.dateTo)
+                        throw new Error('Informe um período válido, com a data inicial antes da final.');
+                    const applied = state.kind + '?' + query();
+                    state.result = await PigeAPI.request(base() + '/management/' + applied + '&page=' + page + '&page_size=30');
+                    state.appliedQuery = applied;
+                    state.page = page;
+                });
+            }
+            async function download(format) { await run(async () => { if (!state.result || changed())
+                throw new Error('Atualize o relatório antes de exportar.'); const [kind, filters] = state.appliedQuery.split('?'); await PigeAPI.download(base() + '/management/' + kind + '.' + format + '?' + filters, 'relatorio-' + kind + '-' + state.result.period.date_from + '-' + state.result.period.date_to + '.' + format); }); }
+            function value(v, type) { if (v === null || v === undefined || v === '')
+                return '—'; if (type === 'currency')
+                return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v)); if (type === 'date')
+                return new Date(String(v).slice(0, 10) + 'T12:00:00Z').toLocaleDateString('pt-BR', { timeZone: 'UTC' }); if (type === 'number' || type === 'integer' || type === 'percent')
+                return Number(v).toLocaleString('pt-BR') + (type === 'percent' ? '%' : ''); return String(v); }
+            const classes = () => (props.catalogs['class-groups'] || []).filter(c => (!state.academicYear || c.academic_year_id === state.academicYear) && (!state.unit || c.unit_id === state.unit));
+            const filterAllowed = (name) => selected()?.filters?.includes(name) || false;
+            Vue.onMounted(() => { period(); void run(async () => { const c = await PigeAPI.request(base() + '/catalog'); state.catalog = c.items; if (!c.items.some(i => i.id === state.kind))
+                state.kind = c.items[0]?.id || ''; }); });
+            return { state, selected, period, changeKind, generate, download, value, classes, changed, filterAllowed, get catalogs() { return props.catalogs; } };
+        } };
+})(PigeReports || (PigeReports = {}));
+var PigeLegacyImport;
+(function (PigeLegacyImport) {
+    const labels = { alunos: 'Alunos', responsaveis: 'Pais e responsáveis', aluno_responsaveis: 'Vínculos familiares', professores: 'Professores', colaboradores: 'Funcionários', periodos_letivos: 'Anos letivos', cursos: 'Séries e cursos', disciplinas: 'Disciplinas', turmas: 'Turmas', matriculas: 'Matrículas', documentos_alunos: 'Documentos dos alunos', usuarios: 'Usuários', unidades_escolares: 'Unidades da escola' };
+    PigeLegacyImport.component = { props: ['schoolId', 'schoolName', 'units'], render: PigeRenders.legacyImport, setup(props) {
+            let backup = null, media = null;
+            const state = Vue.reactive({ busy: false, error: '', backupName: '', mediaName: '', inventory: null, preview: null, selection: { tables: [], record_ids: {}, include_photos: false, include_media: false, unit_id: '' }, confirmation: '', recordTable: '', recordQuery: '', records: null, runs: [], result: null });
+            const base = () => '/schools/' + props.schoolId + '/legacy-import';
+            function invalidate() { state.preview = null; state.confirmation = ''; state.result = null; state.error = ''; }
+            function fileChange(event, kind) { const input = event.target, file = input.files?.[0] || null; if (kind === 'backup') {
+                backup = file;
+                state.backupName = file?.name || '';
+                state.inventory = null;
+                state.selection.tables = [];
+                state.selection.record_ids = {};
+                state.records = null;
+                state.recordTable = '';
+            }
+            else {
+                media = file;
+                state.mediaName = file?.name || '';
+            } invalidate(); }
+            function form(includeSelection = true) { const f = new FormData(); if (backup)
+                f.append('backup', backup); if (media)
+                f.append('container_media', media); if (includeSelection)
+                f.append('selection', JSON.stringify(state.selection)); return f; }
+            async function run(action) { if (state.busy)
+                return; state.busy = true; state.error = ''; try {
+                await action();
+            }
+            catch (e) {
+                state.error = e instanceof Error ? e.message : 'Não foi possível concluir a importação.';
+            }
+            finally {
+                state.busy = false;
+            } }
+            async function analyze() { await run(async () => { if (!backup)
+                throw new Error('Selecione o arquivo da aplicação anterior.'); state.inventory = await PigeAPI.request(base() + '/preview', { method: 'POST', body: form(false) }); invalidate(); if (!state.selection.unit_id && props.units.length === 1)
+                state.selection.unit_id = props.units[0].id; }); }
+            function toggleTable(table) { invalidate(); if (state.selection.tables.includes(table)) {
+                state.selection.tables = state.selection.tables.filter(t => t !== table);
+                delete state.selection.record_ids[table];
+                if (state.recordTable === table) {
+                    state.recordTable = '';
+                    state.records = null;
+                }
+            }
+            else
+                state.selection.tables.push(table); }
+            function destinationChanged() { if (state.selection.unit_id) {
+                state.selection.tables = state.selection.tables.filter(t => t !== 'unidades_escolares');
+                delete state.selection.record_ids.unidades_escolares;
+            } invalidate(); }
+            async function chooseRecords(table) { state.recordTable = table; state.recordQuery = ''; if (!(table in state.selection.record_ids)) {
+                state.selection.record_ids[table] = [];
+                invalidate();
+            } await loadRecords(1); }
+            async function loadRecords(page = 1) { await run(async () => { const f = form(); f.append('table', state.recordTable); f.append('query', state.recordQuery); f.append('page', String(page)); f.append('page_size', '30'); state.records = await PigeAPI.request(base() + '/records', { method: 'POST', body: f }); }); }
+            function toggleRecord(id) { const list = state.selection.record_ids[state.recordTable] || []; state.selection.record_ids[state.recordTable] = list.includes(id) ? list.filter(i => i !== id) : [...list, id]; invalidate(); }
+            function allRecords(table) { delete state.selection.record_ids[table]; if (state.recordTable === table) {
+                state.recordTable = '';
+                state.records = null;
+            } invalidate(); }
+            function count(table, total) { return table in state.selection.record_ids ? state.selection.record_ids[table].length : total; }
+            async function review() { await run(async () => { if (!state.selection.tables.length)
+                throw new Error('Selecione pelo menos uma categoria para importar.'); state.preview = await PigeAPI.request(base() + '/preview', { method: 'POST', body: form() }); state.confirmation = ''; }); }
+            async function loadRuns() { state.runs = await PigeAPI.request(base() + '/runs'); }
+            async function apply() { await run(async () => { if (!state.preview?.can_apply || state.confirmation.trim().toUpperCase() !== 'IMPORTAR')
+                throw new Error('Revise a seleção e confirme a importação.'); const f = form(); f.append('fingerprint', state.preview.fingerprint); f.append('confirmation', state.confirmation); state.result = await PigeAPI.request(base() + '/apply', { method: 'POST', body: f }); state.preview = null; state.inventory = null; backup = null; media = null; state.backupName = ''; state.mediaName = ''; state.confirmation = ''; state.selection.tables = []; state.selection.record_ids = {}; state.records = null; state.recordTable = ''; await loadRuns(); }); }
+            async function download(id) { await run(() => PigeAPI.download(base() + '/runs/' + id + '/archive', 'importacao-' + id.slice(0, 8) + '.jsonl')); }
+            const tableName = (table) => labels[table] || table.replace(/_/g, ' ');
+            const categories = () => state.inventory?.tables.filter(t => t.rows > 0 && Boolean(labels[t.name])) || [];
+            const extras = () => state.inventory?.tables.filter(t => t.rows > 0 && !labels[t.name]) || [];
+            const date = (v) => new Date(String(v)).toLocaleString('pt-BR', { timeZone: 'America/Bahia' });
+            Vue.onMounted(() => { void run(loadRuns); });
+            return { state, fileChange, analyze, toggleTable, destinationChanged, chooseRecords, loadRecords, toggleRecord, allRecords, count, review, apply, download, invalidate, tableName, categories, extras, date, schoolName: props.schoolName, get units() { return props.units; } };
+        } };
+})(PigeLegacyImport || (PigeLegacyImport = {}));
+var PigeLearning;
+(function (PigeLearning) {
+    PigeLearning.component = { props: ['request', 'download', 'rootPath', 'schoolId'], render: PigeRenders.learning, setup(props) {
+            const state = Vue.reactive({ busy: false, error: '', students: [], studentId: '', enrollmentId: '', note: '' });
+            const base = () => (props.rootPath || '/profile') + '/learning';
+            const student = () => state.students.find(s => s.student_id === state.studentId);
+            const enrollment = () => student()?.enrollments.find(e => e.enrollment_id === state.enrollmentId);
+            function selectStudent() { state.enrollmentId = student()?.enrollments[0]?.enrollment_id || ''; }
+            async function run(action) { if (state.busy)
+                return; state.busy = true; state.error = ''; try {
+                await action();
+            }
+            catch (e) {
+                state.error = e instanceof Error ? e.message : 'Não foi possível carregar o boletim.';
+            }
+            finally {
+                state.busy = false;
+            } }
+            async function load() { await run(async () => { const data = await props.request(base() + (props.schoolId ? '?school_id=' + encodeURIComponent(props.schoolId) : '')); state.students = data.students; state.note = data.note; if (!student())
+                state.studentId = state.students[0]?.student_id || ''; selectStudent(); }); }
+            const rows = () => (enrollment()?.subjects || []).flatMap(subject => subject.periods.map(period => ({ ...period, component_name: subject.component_name, diary_id: subject.diary_id })));
+            const percent = (value) => value === null || value === undefined ? 'Não apurada' : Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%';
+            async function download() { await run(async () => { if (!student() || !enrollment())
+                return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId), 'boletim-' + student().student_number + '.pdf'); }); }
+            Vue.onMounted(() => { void load(); });
+            return { state, student, enrollment, selectStudent, rows, percent, load, download };
+        } };
+})(PigeLearning || (PigeLearning = {}));
+/** Notícias e agenda com transporte compartilhável entre gestão, portal e página pública. */
+var PigeCommunity;
+(function (PigeCommunity) {
+    const audienceLabels = { public: 'Público — qualquer visitante', authenticated: 'Comunidade escolar autenticada', students: 'Alunos', guardians: 'Pais e responsáveis', teachers: 'Professores' };
+    const statusLabels = { draft: 'Rascunho', published: 'Publicado', archived: 'Arquivado' };
+    const empty = () => ({ id: '', version: 1, title: '', summary: '', content: '', kind: 'news', audience: 'authenticated', status: 'draft', pinned: false, publish_at: '', expires_at: '', event_start: '', event_end: '', location: '' });
+    async function request(path, options = {}) {
+        const response = await fetch('/api/v1' + path, { ...options, credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-CSRF-Protection': '1', ...options.headers } });
+        const payload = await response.json();
+        if (!response.ok)
+            throw new Error(payload.errors?.map((item) => item.message).join(' ') || payload.detail || 'Não foi possível carregar as publicações.');
+        return payload;
+    }
+    PigeCommunity.request = request;
+    function date(value, withTime = false) { return value ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: 'short', year: 'numeric', ...(withTime ? { hour: '2-digit', minute: '2-digit' } : {}) }).format(new Date(value)) : '—'; }
+    function local(value) {
+        if (!value)
+            return '';
+        const parts = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Bahia', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(value));
+        return parts.replace(' ', 'T');
+    }
+    PigeCommunity.component = { props: ['schoolId', 'permissions', 'publicMode', 'portalMode', 'request', 'compact'], render: PigeRenders.community, setup(props) {
+            const s = Vue.reactive({ busy: false, error: '', notice: '', items: [], page: 1, total: 0, q: '', kind: '', status: '', upcoming: false, selected: null, editing: false, discard: false, deleteConfirm: false, initial: '', form: empty() });
+            const manage = () => !props.publicMode && !props.portalMode && Boolean(props.permissions?.includes('schools.manage'));
+            const endpoint = () => props.portalMode ? '/portal/community-feed' : props.publicMode ? '/public/schools/' + props.schoolId + '/community-feed' : '/schools/' + props.schoolId + (manage() ? '/community-posts' : '/community-feed');
+            const transport = (path, options) => (props.request || request)(path, options);
+            async function run(action) { if (s.busy)
+                return; s.busy = true; s.error = ''; s.notice = ''; try {
+                await action();
+            }
+            catch (error) {
+                s.error = error instanceof Error ? error.message : String(error);
+            }
+            finally {
+                s.busy = false;
+            } }
+            async function load() {
+                if (!props.schoolId && !props.portalMode)
+                    return;
+                const params = new URLSearchParams({ page: String(s.page), page_size: props.compact ? '4' : '12', q: s.q, kind: s.kind, ...(manage() ? { status: s.status } : { upcoming: String(s.upcoming) }) });
+                const result = await transport(endpoint() + '?' + params);
+                s.items = result.items;
+                s.total = result.total;
+            }
+            async function search() { s.page = 1; await run(load); }
+            async function page(delta) { s.page += delta; await run(load); }
+            function open(post) { s.selected = post; s.error = ''; }
+            function edit(post) {
+                s.form = post ? { id: post.id, version: post.version || 1, title: post.title, summary: post.summary, content: post.content, kind: post.kind, audience: post.audience, status: post.status || 'draft', pinned: post.pinned, publish_at: local(post.publish_at), expires_at: local(post.expires_at), event_start: local(post.event_start), event_end: local(post.event_end), location: post.location } : empty();
+                s.initial = JSON.stringify(s.form);
+                s.editing = true;
+                s.discard = false;
+                s.deleteConfirm = false;
+                s.selected = null;
+                s.error = '';
+            }
+            function closeEditor(force = false) { if (s.busy)
+                return; if (!force && JSON.stringify(s.form) !== s.initial) {
+                s.discard = true;
+                return;
+            } s.editing = false; s.discard = false; s.deleteConfirm = false; }
+            async function save() {
+                await run(async () => {
+                    const { id, version, ...form } = s.form;
+                    const stamp = (value) => value ? value + ':00-03:00' : null;
+                    const payload = { ...form, publish_at: stamp(form.publish_at), expires_at: stamp(form.expires_at), event_start: form.kind === 'event' ? stamp(form.event_start) : null, event_end: form.kind === 'event' ? stamp(form.event_end) : null, location: form.kind === 'event' ? form.location : '', ...(id ? { version } : {}) };
+                    await transport('/schools/' + props.schoolId + '/community-posts' + (id ? '/' + id : ''), { method: id ? 'PATCH' : 'POST', body: JSON.stringify(payload) });
+                    s.editing = false;
+                    await load();
+                    s.notice = form.status === 'published' ? (form.publish_at && new Date(payload.publish_at) > new Date() ? 'Publicação agendada.' : 'Publicação disponível para o público selecionado.') : form.status === 'archived' ? 'Publicação arquivada.' : 'Rascunho salvo.';
+                });
+            }
+            async function remove() { await run(async () => { if (!s.deleteConfirm || !s.form.id)
+                return; await transport('/schools/' + props.schoolId + '/community-posts/' + s.form.id + '?version=' + s.form.version, { method: 'DELETE' }); s.editing = false; await load(); s.notice = 'Rascunho excluído.'; }); }
+            const scheduled = (post) => post.status === 'published' && Boolean(post.publish_at) && new Date(post.publish_at) > new Date();
+            const expired = (post) => Boolean(post.expires_at) && new Date(post.expires_at) <= new Date();
+            const paragraphs = (value) => value.split(/\n\s*\n/).filter(Boolean);
+            Vue.onMounted(() => { void run(load); });
+            return { s, props, manage, run, load, search, page, open, edit, closeEditor, save, remove, date, audienceLabels, statusLabels, scheduled, expired, paragraphs };
+        } };
+})(PigeCommunity || (PigeCommunity = {}));
+var PigeMailcow;
+(function (PigeMailcow) {
+    const defaults = () => ({ configured: false, enabled: false, base_url: '', domain: '', default_quota_mb: 1024, allow_private_network: false, api_key_configured: false, version: null });
+    PigeMailcow.component = { props: ['schoolId'], render: PigeRenders.mailcow, setup(props) {
+            const state = Vue.reactive({ busy: false, error: '', notice: '', config: defaults(), apiKey: '', mailboxes: [], users: [], showConfig: false, showNew: false, userId: '', localPart: '', quota: 1024, credentials: null });
+            const base = () => '/schools/' + props.schoolId + '/mailcow';
+            async function run(action) { if (state.busy)
+                return; state.busy = true; state.error = ''; state.notice = ''; try {
+                await action();
+            }
+            catch (e) {
+                state.error = e instanceof Error ? e.message : 'Não foi possível concluir a operação.';
+            }
+            finally {
+                state.busy = false;
+            } }
+            async function load() { const [config, mailboxes, users] = await Promise.all([PigeAPI.request(base() + '/config'), PigeAPI.request(base() + '/mailboxes'), PigeAPI.request('/users')]); state.config = config; state.mailboxes = mailboxes; state.users = users.filter(user => user.active && (user.role === 'admin' || user.school_ids.includes(props.schoolId))); state.quota = config.default_quota_mb; if (!config.configured)
+                state.showConfig = true; }
+            async function refresh() { await run(load); }
+            async function save() { await run(async () => { const c = state.config; state.config = await PigeAPI.request(base() + '/config', { method: 'PUT', body: JSON.stringify({ enabled: c.enabled, base_url: c.base_url, domain: c.domain, default_quota_mb: Number(c.default_quota_mb), allow_private_network: c.allow_private_network, version: c.version, api_key: state.apiKey }) }); state.apiKey = ''; state.notice = 'Configuração de e-mail salva.'; state.showConfig = false; }); }
+            async function test() { await run(async () => { const result = await PigeAPI.post(base() + '/test', {}); if (!result.ok)
+                throw new Error(result.message); state.config.last_test_ok = true; state.notice = result.message; }); }
+            function beginNew() { state.showNew = true; state.userId = ''; state.localPart = ''; state.quota = state.config.default_quota_mb; state.error = ''; }
+            function selectUser() { state.localPart = state.users.find(user => user.id === state.userId)?.email.split('@')[0] || ''; }
+            const availableUsers = Vue.computed(() => state.users.filter(user => !state.mailboxes.some(box => box.user_id === user.id)));
+            async function create() { await run(async () => { if (!state.userId)
+                throw new Error('Selecione o usuário que receberá a caixa de e-mail.'); await PigeAPI.post(base() + '/mailboxes', { user_id: state.userId, local_part: state.localPart, quota_mb: Number(state.quota) }); state.showNew = false; await load(); state.notice = 'Caixa solicitada. A criação será processada em segundo plano.'; }); }
+            async function action(box, kind) { await run(async () => { await PigeAPI.post(base() + '/mailboxes/' + box.id + '/' + kind, {}); state.mailboxes = await PigeAPI.request(base() + '/mailboxes'); state.notice = kind === 'retry' ? 'A criação será tentada novamente.' : 'Situação da caixa atualizada.'; }); }
+            async function credentials(box) { await run(async () => { state.credentials = await PigeAPI.post(base() + '/mailboxes/' + box.id + '/credentials', {}); box.credentials_available = false; }); }
+            const status = (value) => ({ active: 'Ativa', disabled: 'Desativada', pending: 'Aguardando criação', processing: 'Criando', retry: 'Nova tentativa agendada', failed: 'Requer atenção', uncertain: 'Aguardando conferência', completed: 'Concluída' }[value] || 'Aguardando');
+            const issue = (box) => ({ MAILCOW_ADDRESS_CONFLICT: 'Este endereço já existe no servidor e pertence a outro cadastro.', MAILCOW_ACCESS_DENIED: 'A chave não possui acesso à API. Confira as permissões no servidor.', MAILCOW_DOMAIN_UNAVAILABLE: 'O domínio precisa estar ativo no servidor de e-mail.', MAILCOW_DISABLED: 'A integração está desativada.', MAILCOW_CREATE_REJECTED: 'O servidor recusou a criação. Confira as cotas e a disponibilidade do endereço.', MAILCOW_ADDRESS_BLOCKED: 'O endereço do servidor não atende à configuração de rede.', MAILCOW_NETWORK_ERROR: 'O servidor não respondeu. A criação será tentada novamente.', MAILCOW_REMOTE_MAILBOX_MISSING: 'A caixa não foi encontrada no servidor.' }[box.error_code] || 'Confira a configuração do servidor e tente novamente.');
+            const usage = (bytes) => bytes >= 1073741824 ? (bytes / 1073741824).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' GB' : (bytes / 1048576).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' MB';
+            Vue.onMounted(() => { void refresh(); });
+            Vue.onUnmounted(() => { state.apiKey = ''; state.credentials = null; });
+            return { state, availableUsers, refresh, save, test, beginNew, selectUser, create, action, credentials, status, issue, usage };
+        } };
+})(PigeMailcow || (PigeMailcow = {}));
 var PigeUI;
 (function (PigeUI) {
     const text = (value) => value === null || value === undefined ? '' : String(value);
@@ -1912,7 +2341,7 @@ var PigeUI;
     const catalogLabels = { 'units': 'Unidades', 'academic-years': 'Anos letivos', 'grades': 'Séries e etapas', 'shifts': 'Turnos', 'class-groups': 'Turmas', 'document-types': 'Tipos de documento' };
     const registryPages = ['people', 'students', 'teachers', 'employees', 'guardians', 'suppliers', 'providers', 'customers', 'partners'];
     const businessTypes = { suppliers: { code: 'supplier', singular: 'fornecedor', category: 'Categoria de fornecimento' }, providers: { code: 'service_provider', singular: 'prestador de serviços', category: 'Especialidade / serviço' }, customers: { code: 'customer', singular: 'cliente', category: 'Categoria do cliente' }, partners: { code: 'partner', singular: 'sócio', category: 'Vínculo societário' } };
-    const pageLabels = { diagnostics: 'Diagnóstico e logs', online: 'Inscrições online', banking: 'Cobranças', integrations: 'Bancária', connect: 'WhatsApp', email: 'E-mail / SMTP', dashboard: 'Visão geral', help: 'Guia de uso', people: 'Cadastro único', students: 'Alunos', teachers: 'Professores', employees: 'Funcionários', guardians: 'Pais e responsáveis', suppliers: 'Fornecedores', providers: 'Prestadores de serviços', customers: 'Clientes', partners: 'Sócios', academic: 'Estrutura acadêmica', diary: 'Diário Escolar', enrollments: 'Matrículas', documents: 'Pendências documentais', contracts: 'Modelos e contratos', protocols: 'Protocolos', reports: 'Relatórios', settings: 'Instituição', users: 'Usuários e acessos', audit: 'Auditoria', 'legacy-import': 'Portabilidade de dados' };
+    const pageLabels = { diagnostics: 'Diagnóstico e logs', online: 'Inscrições online', banking: 'Cobranças', integrations: 'Bancária', connect: 'WhatsApp', email: 'E-mail / SMTP', dashboard: 'Visão geral', help: 'Guia de uso', people: 'Cadastro único', students: 'Alunos', teachers: 'Professores', employees: 'Funcionários', guardians: 'Pais e responsáveis', suppliers: 'Fornecedores', providers: 'Prestadores de serviços', customers: 'Clientes', partners: 'Sócios', academic: 'Estrutura acadêmica', diary: 'Diário Escolar', enrollments: 'Matrículas', documents: 'Pendências documentais', contracts: 'Modelos e contratos', protocols: 'Protocolos', community: 'Notícias e eventos', signatures: 'Assinaturas', reports: 'Relatórios', settings: 'Instituição', users: 'Usuários e acessos', audit: 'Auditoria', 'legacy-import': 'Portabilidade de dados' };
     const integrationPages = ['connect', 'email', 'integrations'];
     const blankModal = () => ({ kind: '', title: '', fields: [], form: {}, target: null, action: '', error: '' });
     const state = Vue.reactive({
@@ -1965,10 +2394,10 @@ var PigeUI;
     function can(permission) { return Boolean(state.user?.permissions.includes(permission)); }
     function pageAllowed(page) {
         if (isProfileRole())
-            return page === 'dashboard' || page === 'help' || (page === 'diary' && can('diary.read'));
+            return page === 'dashboard' || page === 'help' || page === 'community' || (page === 'diary' && can('diary.read'));
         if (page === 'legacy-import' || page === 'diagnostics' || page === 'email')
             return state.user?.role === 'admin';
-        if (page === 'contracts')
+        if (page === 'contracts' || page === 'signatures')
             return can('documents.read');
         if (page === 'connect')
             return can('connect.manage');
@@ -2306,8 +2735,7 @@ var PigeUI;
                     state.page = 'dashboard';
                     return;
                 }
-                state.legacyImport.runs = await PigeAPI.request(base() + '/legacy-import/runs');
-                state.total = state.legacyImport.runs.length;
+                state.total = 0;
             }
             else if (state.page === 'email') {
                 state.total = 0;
@@ -2322,7 +2750,7 @@ var PigeUI;
                         state.emailStatus = 'unavailable';
                 }
             }
-            else if (['online', 'banking', 'integrations', 'connect', 'diagnostics', 'diary', 'contracts', 'help'].includes(state.page)) {
+            else if (['online', 'banking', 'integrations', 'connect', 'diagnostics', 'diary', 'contracts', 'signatures', 'community', 'help'].includes(state.page)) {
                 state.total = 0;
             }
             else if (state.page === 'dashboard') {
@@ -2556,6 +2984,10 @@ var PigeUI;
     const personalKeys = new Set(['social_name', 'cpf', 'birth_date', 'rg', 'rg_issuer', 'rg_state', 'rg_issued_on', 'birth_certificate', 'birth_city', 'birth_state', 'nationality', 'sex', 'gender', 'race_color', 'marital_status', 'mother_name', 'father_name', 'occupation', 'employer', 'education', 'emergency_contact_name', 'emergency_contact_phone']);
     function modalFieldRelevant(f) {
         const kind = state.modal.kind, legal = state.modal.form.entity_kind === 'organization';
+        if (kind === 'user' && f.key === 'create_mailbox')
+            return state.user?.role === 'admin';
+        if (kind === 'user' && f.key.startsWith('mailbox_'))
+            return state.user?.role === 'admin' && Boolean(state.modal.form.create_mailbox);
         if (!isPersonModal())
             return true;
         if (f.key === 'person_types')
@@ -2604,7 +3036,7 @@ var PigeUI;
         const group = invalid.closest('[data-form-section]');
         if (group)
             state.modalSection = group.dataset.formSection || '';
-        state.modal.error = 'Revise o campo: ' + (invalid.closest('label')?.querySelector('span')?.textContent?.trim() || 'informação obrigatória') + '.';
+        state.modal.error = 'Revise o campo: ' + (invalid.labels?.[0]?.textContent?.trim().replace(/\s+/g, ' ') || 'informação obrigatória') + '.';
         const details = invalid.closest('details');
         if (details)
             details.open = true;
@@ -2979,7 +3411,9 @@ var PigeUI;
         fields.push(field('role', 'Perfil', 'select', true, ['admin', 'direction', 'coordination', 'secretary', 'teacher', 'student', 'guardian', 'viewer'].map(v => ({ value: v, label: label(v) }))), field('person_id', 'Pessoa vinculada (Professor, Aluno ou Responsável)', 'person', false), field('school_ids', 'Escolas autorizadas', 'multiselect', false, state.schools.map(s => ({ value: s.id, label: s.name })), true));
         if (row)
             fields.push(field('active', 'Usuário ativo', 'checkbox'));
-        openModal('user', row ? 'Editar acesso' : 'Criar usuário', fields, row ? valuesFrom(row, fields) : { role: 'secretary', person_id: '', school_ids: [state.schoolId] }, row);
+        else if (state.user?.role === 'admin')
+            fields.push(field('create_mailbox', 'Criar e-mail institucional no Mailcow', 'checkbox'), field('mailbox_school_id', 'Escola do e-mail', 'select', false, state.schools.map(s => ({ value: s.id, label: s.name }))), field('mailbox_local_part', 'Nome antes do @ (opcional)'), field('mailbox_quota_mb', 'Limite da caixa em MB (opcional)', 'number'));
+        openModal('user', row ? 'Editar acesso' : 'Criar usuário', fields, row ? valuesFrom(row, fields) : { role: 'secretary', person_id: '', school_ids: [state.schoolId], create_mailbox: false, mailbox_school_id: state.schoolId, mailbox_local_part: '', mailbox_quota_mb: '' }, row);
     }
     async function loadMyPhoto() {
         const id = state.user?.id;
@@ -3270,6 +3704,13 @@ var PigeUI;
             }
             else if (modal.kind === 'user') {
                 form.person_id = form.person_id || null;
+                if (!target) {
+                    form.mailbox_quota_mb = form.create_mailbox && form.mailbox_quota_mb ? Number(form.mailbox_quota_mb) : null;
+                    if (!form.create_mailbox) {
+                        delete form.mailbox_school_id;
+                        delete form.mailbox_local_part;
+                    }
+                }
                 if (target)
                     await PigeAPI.patch('/users/' + target.id, { ...form, version: target.version });
                 else
@@ -3418,5 +3859,5 @@ var PigeUI;
             event.returnValue = '';
         } });
     }
-    Vue.createApp({ components: { 'diagnostics-panel': PigeDiagnostics.component, 'expansion-panel': PigeExpansion.component, 'diary-panel': PigeDiary.component, 'contracts-panel': PigeContracts.component, 'signing-panel': PigeSigning.component, 'assist-panel': PigeAssist.component }, render: PigeRenders.app, setup() { Vue.onMounted(() => { PigeMFA.init(PigeAPI.request, afterMFA, logout); PigeDialogs.install(); setupPWA(); void initialize(); }); return { state, base, familyAssistFields, assistRequest, assistFields, assistEligible, assistCompany, setupCompany, setupCompanyFields, companyExtra, setupLookup, readStudentDocument, readResponsibleDocument, editIntake, mfa: PigeMFA, dossier: PigeDossier, selectedPersonTypes, availablePersonTypes, togglePersonType, lockedPersonType, familyRelevant, manageMFA, editMFAPolicy, editEmbedding, probeEmbedding, editMyProfile, myPhotoChange, profilePassword, registryPages, integrationPages, businessTypes, isBusiness, newBusiness, reusePerson, personDocument, modalSections, modalTab, visibleSection, modalFieldLabel, modalFieldRelevant, advancedPersonField, isPersonModal, personTypeOptions, personTypeLabel, modalDirty, contractDirty, identity: PigeInstitution.state, supportStatus: PigeSupport.status, editIdentity, identityFileChange, manageUnits, editMaintainer, text, can, isProfileRole, school, label, date, cpf, initials, photoSrc, getName, options, pageLabels, catalogLabels, configure, login, logout, navigate, changeSchool, setCatalog, search, page, loadPage, legacyImportFileChange, previewLegacyImport, applyLegacyImport, populatedImportTables, downloadLegacyArchive, viewStudent, newPerson, newStudent, editStudent, newGuardian, newTeacher, editTeacher, newEmployee, editEmployee, editPerson, newCatalog, newEnrollment, viewEnrollment, contractsForEnrollment, startMovement, reenroll, newLink, editLink, uploadDocument, fileChange, reviewDocument, waiveDocument, issueDocument, downloadFile, newProtocol, newCompany, newSchool, editSupportHub, newUser, password, archiveStudent, closeModal, saveModal, loadReport, exportStudents, exportClass, searchStudents, searchPersons, filteredClasses, clearFilters, yearChanged, editDraft, viewProtocol, protocolNote, protocolReceipt, exportPendencies, install, updateApp }; } }).mount('#app');
+    Vue.createApp({ components: { 'mailcow-panel': PigeMailcow.component, 'school-community': PigeCommunity.component, 'learning-panel': PigeLearning.component, 'reports-panel': PigeReports.component, 'legacy-import-panel': PigeLegacyImport.component, 'diagnostics-panel': PigeDiagnostics.component, 'expansion-panel': PigeExpansion.component, 'diary-panel': PigeDiary.component, 'contracts-panel': PigeContracts.component, 'signing-panel': PigeSigning.component, 'assist-panel': PigeAssist.component }, render: PigeRenders.app, setup() { Vue.onMounted(() => { PigeMFA.init(PigeAPI.request, afterMFA, logout); PigeDialogs.install(); setupPWA(); void initialize(); }); return { request: PigeAPI.request, download: PigeAPI.download, state, base, familyAssistFields, assistRequest, assistFields, assistEligible, assistCompany, setupCompany, setupCompanyFields, companyExtra, setupLookup, readStudentDocument, readResponsibleDocument, editIntake, mfa: PigeMFA, dossier: PigeDossier, selectedPersonTypes, availablePersonTypes, togglePersonType, lockedPersonType, familyRelevant, manageMFA, editMFAPolicy, editEmbedding, probeEmbedding, editMyProfile, myPhotoChange, profilePassword, registryPages, integrationPages, businessTypes, isBusiness, newBusiness, reusePerson, personDocument, modalSections, modalTab, visibleSection, modalFieldLabel, modalFieldRelevant, advancedPersonField, isPersonModal, personTypeOptions, personTypeLabel, modalDirty, contractDirty, identity: PigeInstitution.state, supportStatus: PigeSupport.status, editIdentity, identityFileChange, manageUnits, editMaintainer, text, can, isProfileRole, school, label, date, cpf, initials, photoSrc, getName, options, pageLabels, catalogLabels, configure, login, logout, navigate, changeSchool, setCatalog, search, page, loadPage, legacyImportFileChange, previewLegacyImport, applyLegacyImport, populatedImportTables, downloadLegacyArchive, viewStudent, newPerson, newStudent, editStudent, newGuardian, newTeacher, editTeacher, newEmployee, editEmployee, editPerson, newCatalog, newEnrollment, viewEnrollment, contractsForEnrollment, startMovement, reenroll, newLink, editLink, uploadDocument, fileChange, reviewDocument, waiveDocument, issueDocument, downloadFile, newProtocol, newCompany, newSchool, editSupportHub, newUser, password, archiveStudent, closeModal, saveModal, loadReport, exportStudents, exportClass, searchStudents, searchPersons, filteredClasses, clearFilters, yearChanged, editDraft, viewProtocol, protocolNote, protocolReceipt, exportPendencies, install, updateApp }; } }).mount('#app');
 })(PigeUI || (PigeUI = {}));

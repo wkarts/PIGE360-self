@@ -1,0 +1,252 @@
+{
+  "product": "PIGE360 Self",
+  "source_version": "0.10.0",
+  "date": "2026-10-01",
+  "timezone": "America/Bahia",
+  "frontend_build": {
+    "product": "PIGE360 Self",
+    "version": "0.10.0",
+    "vue": "3.5.13",
+    "build_id": "6ac974c4f4ab5cc4",
+    "pipeline": "typescript-vue-precompiled",
+    "external_cdn": false
+  },
+  "runtime": {
+    "python": "3.13.15",
+    "node": "22",
+    "browser": "Chromium 153"
+  },
+  "backend": {
+    "command": "cd backend && python -m pytest -q",
+    "passed": 326,
+    "subtests_passed": 5,
+    "skipped": 1,
+    "skip_reason": "Teste SELECT FOR UPDATE requer PostgreSQL real."
+  },
+  "ci_policies": {
+    "command": "python -m unittest discover -s tests/ci -v",
+    "passed": 96
+  },
+  "frontend": {
+    "command": "npm run build --prefix frontend",
+    "status": "passed",
+    "includes": [
+      "TypeScript app/portal/news",
+      "render-smoke",
+      "integration-navigation",
+      "diary-flow"
+    ]
+  },
+  "structural_validation": {
+    "command": "python scripts/ci/validate.py",
+    "status": "passed"
+  },
+  "database_migrations": {
+    "revision": "0027_school_community",
+    "database": "SQLite temporário",
+    "status": "passed"
+  },
+  "browser_suites": [
+    {
+      "name": "cadastros",
+      "command": "scripts/e2e-cadastres.py",
+      "status": "passed",
+      "checks": [
+        "Nove cadastros agrupados em menu expansível acessível",
+        "Fornecedor PJ salvo com CNPJ alfanumérico, sem dados acadêmicos e sem perder seções",
+        "Mesma identidade vinculada como cliente sem duplicação ou perda do fornecedor",
+        "Edição contextual compartilha contatos e preserva detalhes dos outros vínculos",
+        "Prestadores e sócios possuem cadastro, campos e listagens próprios",
+        "Filtro por tipo processado no servidor sem misturar cadastros",
+        "Escape pede confirmação interna e mantém o formulário preenchido",
+        "Foco contido no modal com Tab, fundo inerte e cabeçalho fixo",
+        "Cadastro responsivo em 390px, descarte explícito não persiste dados",
+        "Campo obrigatório oculto direciona para a seção correta antes de enviar",
+        "Erro 422 destaca o campo do CPF e permite corrigir o mesmo cadastro sem recomeçar",
+        "Busca por nome reutiliza a identidade existente e adiciona perfil de aluno sem duplicar pessoa",
+        "Guia de uso alcançável do cabeçalho e orienta cadastro, matrícula e Diário",
+        "Lançamento em modal responsivo com resumo nominal e confirmação de descarte; sem alterar emissão",
+        "Navegação de todas as rotas administrativas sem respostas API 404"
+      ]
+    },
+    {
+      "name": "acessos_2fa",
+      "command": "scripts/e2e-access.py",
+      "status": "passed",
+      "checks": [
+        "HEAD público responde 200 e mantém bloqueio de iframe por padrão",
+        "Tipos no topo, quatro seções e aluno/familiar salvos juntos; parentesco não concede permissões",
+        "Vínculo bidirecional: cadastrar aluno pela ficha da mãe reaproveita a identidade e a mesma relação",
+        "2FA opcional: usuário configura QR e confirma TOTP; dez códigos de recuperação exibidos uma única vez",
+        "Senha sozinha não libera a aplicação quando o usuário ativou 2FA; recuperação de uso único funciona",
+        "Política institucional obrigatória revoga sessões e força usuário não configurado a ativar 2FA antes de acessar"
+      ]
+    },
+    {
+      "name": "interface_responsiva",
+      "command": "scripts/e2e-workspace.py",
+      "status": "passed",
+      "checks": [
+        "Logo fixa: rolar menu não desloca marca, cabeçalho ou conteúdo",
+        "Cabeçalho fixo: conteúdo tem scroll próprio sem rolagem global ou dupla",
+        "Menu pode ser percorrido e rolado pelo teclado até o último item",
+        "Página ativa identificada; rotas preservadas e ícones vetoriais locais resolvidos",
+        "Modais de cadastro preservados: fundo inerte e fechamento continuam funcionando",
+        "Reflow em 1024, 768, 390 e 320px; janela baixa sem cortar áreas de navegação",
+        "Drawer mobile contém foco, protege fundo e fecha com Escape devolvendo o foco",
+        "Navegação mobile e redimensionamento não deixam overlay ou bloqueio residual",
+        "Atalho de conteúdo, alto contraste e movimento reduzido respeitados"
+      ]
+    },
+    {
+      "name": "identidade_iframe",
+      "command": "scripts/e2e-whitelabel.py",
+      "status": "passed",
+      "checks": [
+        "HTML inicial já usa nome e logotipo da escola, com bootstrap público e iframe bloqueado por padrão",
+        "PDF emitido pela API usa logo, nome e fonte fornecida pela escola; sem marca do fornecedor",
+        "Primeiro carregamento sem logotipo/fonte do fornecedor e sem buscas sequenciais de identidade e setup",
+        "Login preservado, somente textos marcados removidos; botão de pré-matrícula liga/desliga pela interface e persiste para visitas sem sessão",
+        "Perfil salvo sem enviar foto: campos opcionais preservam o contrato booleano",
+        "Perfil próprio salvo com foto privada, contatos e cargo; avatar persiste ao recarregar",
+        "Probe anônimo HEAD 200 usa a mesma autorização de iframe do GET, sem depender de Origin ou Referer",
+        "Administrador autoriza origem pela interface sem reiniciar Docker; alteração revoga sessões existentes",
+        "Iframe cross-site HTTPS autorizado: login, cookie CHIPS, foto e sessão persistida após recarregar",
+        "2FA configurado e validado dentro do iframe HTTPS: sessão com segundo fator persiste na partição do HUB",
+        "Origem não cadastrada bloqueada pelo navegador via frame-ancestors, sem liberar CORS",
+        "Logout no iframe elimina a sessão da partição; recarregar não restaura autenticação"
+      ]
+    },
+    {
+      "name": "importacao_relatorios",
+      "command": "scripts/e2e-management.py",
+      "status": "passed",
+      "checks": [
+        "Importa somente o aluno escolhido, sem responsáveis, instituição ou unidade extra.",
+        "Relatório mensal consultado e exportado em PDF/CSV, com a escola e o recorte corretos.",
+        "Central de relatórios utilizável em 390px, sem transbordamento horizontal da página."
+      ]
+    },
+    {
+      "name": "noticias_eventos",
+      "command": "scripts/e2e-community.py",
+      "status": "passed",
+      "checks": [
+        "Direção cria e publica evento pela interface, com público, local e horários.",
+        "Página pública apresenta notícias/eventos e não revela rascunho nem mensagem de professores.",
+        "Leitura acessível com Escape e filtro de eventos funcionam sem autenticação.",
+        "Página de notícias responsiva a 390px sem rolagem horizontal."
+      ]
+    },
+    {
+      "name": "portal_matricula_boletins",
+      "command": "scripts/e2e-online.py",
+      "status": "passed",
+      "checks": [
+        "Responsável cria conta no portal, sem usuário administrativo",
+        "Autocadastro do aluno e escolha da oferta persistidos",
+        "Upload documental privado pelo responsável",
+        "Aceites explícitos e envio de pré-matrícula pela interface",
+        "Portal responsivo a 390px, sem rolagem horizontal",
+        "Fila administrativa exibe a inscrição enviada no portal",
+        "Documento do portal validado pela Secretaria",
+        "Aprovação cria aluno, responsável e matrícula sem duplicação",
+        "Efetivação da matrícula e emissão persistida do comprovante",
+        "Responsável consulta a matrícula efetivada e baixa o documento autorizado",
+        "Responsável autoriza acesso e consulta nota, frequência e PDF do período fechado",
+        "Notícia/evento dirigido a responsáveis aparece no portal da escola",
+        "Conta bancária de homologação configurada pela interface com credencial protegida",
+        "Cobrança de mensalidade criada e enfileirada pela interface, sem simular pagamento",
+        "Aluno autenticado consulta apenas seu boletim no espaço pessoal",
+        "Nenhum erro de JavaScript nas novas telas exercitadas"
+      ]
+    },
+    {
+      "name": "operacao_pwa",
+      "command": "scripts/e2e.py",
+      "status": "passed",
+      "checks": [
+        "Nome da própria escola exibido no login, sem marca do fornecedor como principal",
+        "Instalação inicial e login pela interface",
+        "Cadastro Único: abertura, criação, múltiplos tipos, edição e consulta persistida após recarregar o navegador",
+        "Identidade institucional editada pela interface e CNPJ da mantenedora persistido sem recriar escola",
+        "Série, turno e turma criados pela interface",
+        "Professor cadastrado na visão operacional com dados profissionais",
+        "Funcionário cadastrado na visão operacional com dados funcionais",
+        "Responsável e aluno cadastrados, vínculo legal/financeiro persistido",
+        "Upload e validação documental pela interface",
+        "Edição da pré-matrícula com justificativa e histórico",
+        "Ficha da pré-matrícula emitida antes da ativação",
+        "Matrícula criada e ativada pela interface",
+        "PDF emitido e baixado pelo navegador",
+        "Relatório por turma com PDF",
+        "Sessão restaurada por refresh após reload",
+        "Responsividade 390px sem overflow horizontal",
+        "Menu e navegação mobile",
+        "Filtros de matrícula com resultado persistido",
+        "Protocolo com atendimento acrescentado ao histórico",
+        "Filtro de protocolo vencido e comprovante PDF",
+        "Protocolos acessíveis dentro da ficha do aluno",
+        "Pendências filtradas e exportadas em CSV/PDF pela interface",
+        "Novos filtros documentais responsivos em 390px",
+        "Service worker ativo; cache limitado a arquivos estáticos e identidade pública, sem sessão, cadastros ou financeiro",
+        "Queda de rede sinalizada sem confirmar operações offline",
+        "Nenhum erro de JavaScript observado nas telas exercitadas"
+      ]
+    },
+    {
+      "name": "diagnosticos_portal",
+      "command": "scripts/e2e-diagnostics.py",
+      "status": "passed",
+      "checks": [
+        "Sem campanha, responsável pode iniciar cadastro familiar com aviso vigente e sem criar pré-matrícula.",
+        "Conta existente entra sem processo aberto e mantém o acesso a suas inscrições.",
+        "Secretaria recebe diagnóstico do processo não publicado e acesso à configuração existente.",
+        "Administrador consulta e exporta diagnóstico sem a senha sintética.",
+        "Diagnóstico acessível em tela móvel sem transbordamento da janela.",
+        "Falha de carregamento é diferenciada de inscrições encerradas, com nova tentativa."
+      ]
+    },
+    {
+      "name": "mailcow_assinaturas_ui",
+      "command": "inspeção visual HTTP/Chromium",
+      "status": "passed",
+      "checks": [
+        "Configuração Mailcow com hierarquia, botões e campos consistentes; responsiva em 390px",
+        "Assinaturas e A1 visíveis no menu com formulário responsivo"
+      ]
+    },
+    {
+      "name": "preenchimento_assistido_ocr",
+      "command": "scripts/e2e-assisted.py",
+      "status": "passed",
+      "checks": [
+        "Consulta CNPJ via cache só preenche após conferência e persiste no cadastro PJ completo",
+        "Imagem sintética reconhecida por Tesseract/português no worker real sem sobrescrever o nome digitado",
+        "CEP complementa endereço sem inventar número e ficha responsiva salva dados conferidos",
+        "Mantenedora também consulta CNPJ e mantém os dados sem criar outra empresa",
+        "Captura com câmera sintética nativa respeita a política e encerra a trilha ao cancelar",
+        "Portal reaproveita anexo privado e preenche a identidade do responsável sem modificar o aluno",
+        "Consulta de CEP também funciona no rascunho da matrícula do portal",
+        "Nenhum erro JavaScript nos fluxos exercitados"
+      ],
+      "environment_note": "Tesseract com por/eng/configs locais; worker real separado; câmera sintética."
+    }
+  ],
+  "pdf_inspection": {
+    "status": "passed",
+    "synthetic_samples": [
+      "ficha-cadastral-amostra.pdf",
+      "ficha-matricula-amostra.pdf",
+      "pendencias-amostra.pdf",
+      "financeiro-trimestral-amostra.pdf"
+    ]
+  },
+  "not_executed": [
+    "PostgreSQL real e smoke Docker locais: gates do CI remoto.",
+    "Homologação com credenciais reais Asaas, Mailcow e GOV.BR.",
+    "Token/cartão A3 físico."
+  ],
+  "external_actions": "Nenhuma cobrança, caixa postal ou mensagem real criada durante os testes.",
+  "browser_checks_passed": 107
+}

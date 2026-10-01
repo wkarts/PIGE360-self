@@ -26,3 +26,4 @@ deploy/**/backups/
 release/
 checkpoints/
 ci-evidence/
+evidence/

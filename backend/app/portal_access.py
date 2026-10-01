@@ -48,7 +48,7 @@ def login_school(db, school_id='', campaign_slug=''):
 
 
 PORTAL_DIARY_ACCESS_CONSENT_TEXT = (
-    'Autorizo esta conta a acessar os comunicados pedagógicos da escola destinados aos estudantes '
+    'Autorizo esta conta a acessar os comunicados pedagógicos, boletins, notas e frequência publicados pela escola para os estudantes '
     'para os quais consto como responsável legal ativo no cadastro escolar. O acesso exige CPF e '
     'contato verificado compatíveis com esse cadastro. Os comunicados ficam disponíveis somente '
     'neste portal; esta autorização não permite envio automático por WhatsApp ou e-mail. Posso '

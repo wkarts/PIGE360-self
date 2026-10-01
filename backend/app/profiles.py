@@ -287,3 +287,8 @@ def update_teacher_assignment(assignment_id: str, data: s.Edit, db: DB, user: Ac
     audit(db, request, user, 'teacher_assignment.updated', obj, school.id)
     db.flush()
     return assignment_output(db, obj)
+
+
+# Rotas próprias de boletim compartilham as mesmas dependências de autenticação.
+from .learning_portal import router as learning_router
+router.include_router(learning_router)

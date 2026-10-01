@@ -12,7 +12,7 @@ namespace PigeSigning {
     const state=Vue.reactive({
       busy:false,loading:false,error:'',notice:'',
       configured:false,certificate:null as Certificate|null,certificateName:'',certificatePassword:'',
-      pending:[] as QueueItem[],pendingTotal:0,offset:0,limit:30,
+      pending:[] as QueueItem[],pendingTotal:0,offset:0,limit:30,unsigned:[] as QueueItem[],unsignedTotal:0,unsignedOffset:0,removeCertificateOpen:false,
       enrollmentIssued:[] as Row[],review:null as Review|null,
       reportName:'',signerCpf:'',validationReference:'',confirmedReview:false,rejectionReason:''
     });
@@ -32,13 +32,16 @@ namespace PigeSigning {
       const result=await PigeAPI.request<{items:QueueItem[];total:number}>(base()+`/issued-documents/signatures/pending?limit=${state.limit}&offset=${state.offset}`);
       state.pending=result.items;state.pendingTotal=result.total;
     }
+    async function loadUnsigned():Promise<void>{if(!can('documents.read'))return;const result=await PigeAPI.request<{items:QueueItem[];total:number}>(base()+`/issued-documents/signatures/unsigned?limit=${state.limit}&offset=${state.unsignedOffset}`);state.unsigned=result.items;state.unsignedTotal=result.total;}
+    async function unsignedPage(delta:number):Promise<void>{const next=state.unsignedOffset+delta*state.limit;if(next<0||next>=state.unsignedTotal)return;state.unsignedOffset=next;await run(loadUnsigned);}
+    async function signDocument(item:QueueItem):Promise<void>{await run(async()=>{const result=await PigeAPI.request<{file_id:string}>(base()+'/issued-documents/'+item.document_id+'/sign/a1',{method:'POST'});await loadUnsigned();await loadReview(item.document_id);state.notice='Documento assinado pela escola. O PDF original foi preservado.';});}
     async function loadEnrollmentIssued():Promise<void>{if(!props.enrollmentId)return;
       const enrollment=await PigeAPI.request<Row>(base()+'/enrollments/'+props.enrollmentId);
       const result=await PigeAPI.request<{issued:Row[]}>(base()+'/students/'+str(enrollment.student_id)+'/documents');
       state.enrollmentIssued=(result.issued||[]).filter(row=>row.kind==='template'&&row.enrollment_id===props.enrollmentId);
     }
     async function load():Promise<void>{state.loading=true;state.error='';try{
-      await Promise.all([loadCertificate(),loadPending(),loadEnrollmentIssued()]);
+      await Promise.all([loadCertificate(),loadPending(),loadUnsigned(),loadEnrollmentIssued()]);
       if(props.issuedId)await loadReview(props.issuedId);
     }catch(error){state.error=error instanceof Error?error.message:String(error);}finally{state.loading=false;}}
     async function loadReview(id:string):Promise<void>{state.review=await PigeAPI.request<Review>(base()+'/issued-documents/'+id+'/signatures');state.confirmedReview=false;state.rejectionReason='';}
@@ -55,8 +58,8 @@ namespace PigeSigning {
       // Senha e arquivo permanecem somente na memória deste formulário durante o envio.
       clearCertificateInput();
     }
-    async function removeCertificate():Promise<void>{if(!canManageA1()||!window.confirm('Desativar o certificado A1 desta escola para futuras emissões? Contratos já assinados são preservados.'))return;
-      await run(async()=>{await PigeAPI.request(base()+'/signing-certificate/a1',{method:'DELETE'});await loadCertificate();state.notice='Certificado A1 desativado. Emissões que exigem assinatura da escola permanecerão bloqueadas até nova configuração.';});
+    async function removeCertificate():Promise<void>{if(!canManageA1())return;
+      await run(async()=>{await PigeAPI.request(base()+'/signing-certificate/a1',{method:'DELETE'});await loadCertificate();state.removeCertificateOpen=false;state.notice='Certificado A1 desativado. Emissões que exigem assinatura da escola permanecerão bloqueadas até nova configuração.';});
     }
     async function page(delta:number):Promise<void>{const next=state.offset+delta*state.limit;if(next<0||next>=state.pendingTotal)return;state.offset=next;await run(loadPending);}
     async function download(fileId:string,name='documento-assinado.pdf'):Promise<void>{await run(()=>PigeAPI.download(base()+'/files/'+fileId+'/download',name));}
@@ -81,6 +84,6 @@ namespace PigeSigning {
     }
     Vue.onMounted(()=>{void load();});
     Vue.onUnmounted(()=>{clearCertificateInput();reportFile=null;state.signerCpf='';state.validationReference='';});
-    return{state,can,canManageA1,canDecide,certificateExpired,str,date,label,load,loadPending,openReview,certificateChanged,saveCertificate,removeCertificate,page,download,reportChanged,validate,reject};
+    return{state,can,canManageA1,canDecide,certificateExpired,str,date,label,load,loadPending,openReview,loadUnsigned,unsignedPage,signDocument,certificateChanged,saveCertificate,removeCertificate,page,download,reportChanged,validate,reject};
   }};
 }

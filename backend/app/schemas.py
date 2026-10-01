@@ -388,6 +388,10 @@ class UserInput(Input):
     role: Literal['admin','direction','coordination','secretary','teacher','student','guardian','viewer'] = 'secretary'
     school_ids: list[str] = Field(default_factory=list, max_length=100)
     person_id: str | None = None
+    create_mailbox: bool = False
+    mailbox_school_id: str | None = None
+    mailbox_local_part: str = Field(default='', max_length=64)
+    mailbox_quota_mb: int | None = Field(default=None, ge=1, le=1048576)
 
 class UserEdit(Input):
     name: str = Field(min_length=2, max_length=160)
