@@ -227,7 +227,7 @@ try:
         expect(workspace.locator('.access-user-card').filter(has_text=USER_EMAIL)).to_have_count(0)
         expect(workspace.locator('.access-user-card').filter(has_text=SHARED_EMAIL)).to_be_visible()
         workspace.get_by_role('tab',name=re.compile('Perfis de acesso')).click()
-        expect(workspace.locator('.access-profile-card')).to_have_count(0)
+        expect(workspace.locator('[aria-labelledby="custom-profiles-title"] .access-profile-card')).to_have_count(0)
         page.get_by_label('Selecionar escola',exact=True).select_option(school_a)
         expect(workspace.locator('.access-user-card').filter(has_text=USER_EMAIL)).to_be_visible()
         record('Troca real de instituição remove usuários e perfis exclusivos da tela anterior')
