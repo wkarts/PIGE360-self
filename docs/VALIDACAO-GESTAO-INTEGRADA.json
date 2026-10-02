@@ -2,7 +2,7 @@
   "schema_version": 1,
   "recorded_at_utc": "2026-10-02T02:27:30.869555+00:00",
   "product": "PIGE360 Self",
-  "validation_status": "local_validation_recorded_final_gates_pending",
+  "validation_status": "local_and_published_head_validation_recorded_corrected_head_final_gates_pending",
   "source": {
     "repository": "wkarts/PIGE360-self",
     "base_branch": "develop",
@@ -10,7 +10,14 @@
     "base_note": "Base real após integração da PR 38. Este registro documenta o trabalho local posterior e não depende do número de uma PR futura.",
     "working_tree_changes_committed": false,
     "deployment_performed": false,
-    "production_data_modified": false
+    "production_data_modified": false,
+    "published_checkpoint": {
+      "pull_request": 39,
+      "pull_request_url": "https://github.com/wkarts/PIGE360-self/pull/39",
+      "head_commit": "dc7e945ec8a1b0519da355b2cad5dd98f3bdde9f",
+      "note": "Head observado no CI abaixo. As correções posteriores de seletores E2E ainda não têm resultado final registrado neste documento."
+    },
+    "working_tree_status_note": "working_tree_changes_committed descreve o snapshot local original de recorded_at_utc; o checkpoint publicado é identificado separadamente e não substitui essa proveniência."
   },
   "frontend_build": {
     "product": "PIGE360 Self",
@@ -28,7 +35,7 @@
       "repository_requirement": "6.1.0",
       "local_installed": "6.1.3",
       "exact_pinned_version_tested_locally": false,
-      "note": "A suíte local executou com lxml 6.1.3. A instalação da dependência fixada em 6.1.0 e sua validação permanecem como gate do CI final."
+      "note": "A suíte local registrada executou com lxml 6.1.3. O CI do head dc7e945ec8a1b0519da355b2cad5dd98f3bdde9f instalou o pin 6.1.0 e aprovou a suíte PostgreSQL; o CI final após a correção dos seletores permanece pendente."
     }
   },
   "local_checks": {
@@ -210,15 +217,16 @@
       "rótulos da interface"
     ],
     "note": "Capturas dos snapshots intermediários não são apresentadas como capturas do build atual. Os relatórios de e-mail e cobrança sem build embutido preservam build_id nulo; não é inferida identidade exata do binário.",
-    "failed_or_debug_artifacts": "Diretórios de depuração e arquivos failure.png remanescentes de tentativas anteriores não constituem evidência de aprovação."
+    "failed_or_debug_artifacts": "Diretórios de depuração e arquivos failure.png remanescentes de tentativas anteriores não constituem evidência de aprovação.",
+    "remote_run_note": "Os snapshots locais e seus build_ids/hashes permanecem preservados. O run remoto pertence exclusivamente ao head dc7e945ec8a1b0519da355b2cad5dd98f3bdde9f; não é apresentado como validação de alterações posteriores."
   },
   "pending_gates": {
     "enrollment_e2e_final_acceptance": "passed",
-    "final_remote_ci": "pending",
-    "postgresql_full_suite": "pending_final_ci",
-    "docker_smoke": "pending_final_ci",
-    "pinned_dependency_installation": "pending_final_ci",
-    "note": "Atualizar estes estados apenas depois de observar o resultado correspondente. Um build local aprovado não substitui CI, PostgreSQL ou Docker."
+    "final_remote_ci": "pending_corrected_head_after_e2e_failure",
+    "postgresql_full_suite": "passed_for_dc7e945_pending_corrected_head_final_ci",
+    "docker_smoke": "skipped_on_observed_run_pending_corrected_head_final_ci",
+    "pinned_dependency_installation": "lxml_6.1.0_installed_for_dc7e945_pending_corrected_head_final_ci",
+    "note": "O run 36955884848 aprovou PostgreSQL e instalou lxml 6.1.0, mas terminou com falha no seletor E2E de scripts/e2e.py:81. Docker foi ignorado. O gate global permanece pendente da execução do head que corrigirá os seletores."
   },
   "external_limitations": [
     "O cliente de e-mail foi validado com mensagens sintéticas e servidores de protocolo/TLS locais. Nenhum servidor institucional real foi autenticado, nenhuma caixa real foi criada e nenhum e-mail externo foi enviado nesta validação.",
@@ -232,7 +240,7 @@
     "Cobranças internas, recebimento manual e comprovante foram validados sem conexão bancária. Isso não comprova emissão de boleto/Pix, recebimento externo ou conciliação bancária.",
     "A validação de interface utiliza Chromium com toque emulado. Safari/iOS, teclado físico do aparelho e combinações reais de navegador/dispositivo não foram executados.",
     "A redução da janela e a simulação de VisualViewport não equivalem a todos os comportamentos do teclado nativo. A ampliação por gesto simulada não substitui validação de zoom desktop com reflow.",
-    "O teste de concorrência que exige PostgreSQL foi explicitamente ignorado na suíte local SQLite e permanece pendente do CI final.",
+    "O teste de concorrência que exige PostgreSQL foi ignorado na suíte local SQLite. O run 36955884848 do head dc7e945 aprovou 415 testes e 5 subtestes em PostgreSQL, sem skips; a aprovação do CI final no head posterior continua pendente.",
     "Nenhum deploy em produção ou alteração de dados reais foi realizado."
   ],
   "handoff": {
@@ -242,6 +250,47 @@
       "pending_gates.docker_smoke",
       "pending_gates.pinned_dependency_installation"
     ],
-    "note": "Matrícula aceita no build 0fcf6a960fa33272; gates remotos continuam pendentes."
-  }
+    "note": "Matrícula aceita no snapshot local 0fcf6a960fa33272. PostgreSQL e o pin lxml 6.1.0 foram confirmados no head publicado dc7e945; CI global falhou no seletor antigo, Docker foi ignorado e o resultado final do head corrigido ainda deve ser registrado."
+  },
+  "updated_at_utc": "2026-10-02T02:36:35.595416+00:00",
+  "remote_validation_runs": [
+    {
+      "pull_request": 39,
+      "head_commit": "dc7e945ec8a1b0519da355b2cad5dd98f3bdde9f",
+      "run_id": 36955884848,
+      "run_url": "https://github.com/wkarts/PIGE360-self/actions/runs/36955884848",
+      "log_provenance_url": "https://github.com/wkarts/PIGE360-self/actions/runs/36955884848",
+      "provenance_note": "Resultados confirmados pelo responsável na execução e nos logs deste run; não atribuídos ao head posterior de correção dos seletores.",
+      "overall_conclusion": "failure",
+      "backend_postgresql": {
+        "status": "passed",
+        "database": "postgresql",
+        "passed": 415,
+        "subtests_passed": 5,
+        "skipped": 0,
+        "warnings": 39,
+        "elapsed_seconds": 117.62,
+        "log_provenance_url": "https://github.com/wkarts/PIGE360-self/actions/runs/36955884848"
+      },
+      "pinned_dependencies": {
+        "status": "installed",
+        "lxml": "6.1.0",
+        "backend_suite_executed_with_pin": true,
+        "log_provenance_url": "https://github.com/wkarts/PIGE360-self/actions/runs/36955884848"
+      },
+      "e2e": {
+        "status": "failed",
+        "failure_location": "scripts/e2e.py:81",
+        "failure_reason": "O seletor procura o heading antigo Instituição, que mudou na interface.",
+        "source_at_tested_head_url": "https://github.com/wkarts/PIGE360-self/blob/dc7e945ec8a1b0519da355b2cad5dd98f3bdde9f/scripts/e2e.py#L81",
+        "log_provenance_url": "https://github.com/wkarts/PIGE360-self/actions/runs/36955884848",
+        "correction_status": "selector_updates_in_progress_at_recording"
+      },
+      "docker": {
+        "status": "skipped",
+        "reason": "O gate E2E anterior falhou; Docker não foi executado neste run."
+      },
+      "promoted_to_final_gate": false
+    }
+  ]
 }
