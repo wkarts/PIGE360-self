@@ -174,6 +174,7 @@ namespace PigeContracts {
     const beforeUnload=(event:BeforeUnloadEvent)=>{if(editorDirty()){event.preventDefault();event.returnValue='';}};
     Vue.onMounted(()=>{window.addEventListener('beforeunload',beforeUnload);void load().then(()=>{if(props.enrollmentId)void activateEnrollment(props.enrollmentId);});});
     Vue.onUnmounted(()=>{window.removeEventListener('beforeunload',beforeUnload);hasUnsavedChanges=()=>false;clearLetterhead();});
-    return{state,identity,can,str,date,load,beginNew,beginEdit,cancelEdit,save,importDocx,importJson,insertField,categories,categoryFields,yearName,contractKind,syncContractSignature,editorDirty,placeholders,fieldLabel,automaticValue,searchEnrollments,chooseEnrollment,clearEnrollment,selectTemplate,previewKeys,displayValue,setValue,preview,issue,downloadPdfPreview,downloadIssued,letterheadChanged,uploadLetterhead,removeLetterhead};
+    const hasDocumentContext=()=>Boolean(props.enrollmentId||props.issuedId||state.enrollment);
+    return{hasDocumentContext,state,identity,can,str,date,load,beginNew,beginEdit,cancelEdit,save,importDocx,importJson,insertField,categories,categoryFields,yearName,contractKind,syncContractSignature,editorDirty,placeholders,fieldLabel,automaticValue,searchEnrollments,chooseEnrollment,clearEnrollment,selectTemplate,previewKeys,displayValue,setValue,preview,issue,downloadPdfPreview,downloadIssued,letterheadChanged,uploadLetterhead,removeLetterhead};
   }};
 }

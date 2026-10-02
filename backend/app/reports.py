@@ -116,6 +116,7 @@ def dashboard(db: DB, user: Actor, school: Scope):
 @router.get('/document-pendencies')
 def document_pendencies(db: DB, user: Actor, school: Scope, filters: PendencyFilters,
                        page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100)):
+    require(user, 'documents.read')
     data = collect_pendencies(db, school.id, filters)
     return {**data, 'items':data['items'][(page-1)*page_size:page*page_size], 'page':page, 'page_size':page_size}
 
@@ -136,6 +137,7 @@ def protocol_event(db, obj, user, action, message, before=None):
 def protocols(db: DB, user: Actor, school: Scope, q: str = Query('', max_length=160), status: str = '',
               student_id: str = '', overdue: bool = False,
               page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100)):
+    require(user, 'protocols.read')
     stmt = select(m.Protocol).where(m.Protocol.school_id == school.id)
     if status:
         if status not in PROTOCOL_STATES: fail(422, 'Situação de protocolo inválida.')
@@ -165,6 +167,7 @@ def create_protocol(data: s.ProtocolInput, db: DB, user: Actor, school: Scope, r
 
 @router.get('/protocols/{protocol_id}')
 def protocol_detail(protocol_id: str, db: DB, user: Actor, school: Scope):
+    require(user, 'protocols.read')
     obj = scoped(db, m.Protocol, protocol_id, school.id)
     history = db.execute(select(m.ProtocolEvent, m.User.name).join(m.User, m.User.id == m.ProtocolEvent.actor_id).where(
         m.ProtocolEvent.school_id == school.id, m.ProtocolEvent.protocol_id == obj.id).order_by(m.ProtocolEvent.created_at, m.ProtocolEvent.id)).all()

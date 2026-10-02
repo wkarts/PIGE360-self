@@ -225,7 +225,7 @@ def process_one(job_id=None):
                 job.error_code = 'UNEXPECTED_WORKER_ERROR'
                 LOG.error('job=%s kind=%s code=%s', job.id, job.kind, job.error_code)
             job.lease_until = None; db.commit()
-            emit('integration.job_finished', service='worker', level='INFO' if job.status=='completed' else 'WARNING', job_id=job.id, kind=job.kind, state=job.status, code=job.error_code, attempts=job.attempts)
+            emit('integration.job_finished', service='worker', level='INFO' if job.status=='completed' else 'WARNING', job_id=job.id, school_id=job.school_id, kind=job.kind, state=job.status, code=job.error_code, attempts=job.attempts)
             return True
         finally:
             if locked:
@@ -267,7 +267,7 @@ def process_connect_one():
             try:
                 payload = unseal(job.encrypted_payload)
                 instance = db.get(m.ConnectInstance, job.instance_id)
-                if not instance or not instance.enabled or instance.status == 'deleted':
+                if not instance or instance.school_id != job.school_id or not instance.enabled or instance.status == 'deleted':
                     raise IntegrationFailure('CONNECT_INSTANCE_DISABLED')
                 remote_id = ConnectApiClient().send_text(
                     instance.name,
@@ -297,7 +297,7 @@ def process_connect_one():
                 LOG.error('connect_job=%s code=%s', job.id, job.error_code)
             job.lease_until = None
             db.commit()
-            emit('integration.job_finished', service='worker', level='INFO' if job.status=='completed' else 'WARNING', job_id=job.id, kind=job.kind, state=job.status, code=job.error_code, attempts=job.attempts)
+            emit('integration.job_finished', service='worker', level='INFO' if job.status=='completed' else 'WARNING', job_id=job.id, school_id=job.school_id, kind=job.kind, state=job.status, code=job.error_code, attempts=job.attempts)
             return True
         finally:
             if locked:

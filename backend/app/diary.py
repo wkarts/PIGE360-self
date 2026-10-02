@@ -14,7 +14,7 @@ from .common import audit, output
 from .db import now
 from .documents import render_pdf
 from .portal_access import PORTAL_DIARY_ACCESS_CONSENT_VERSION, verified_guardian_contact_matches
-from .security import Actor, DB, PERMISSIONS, check_version, current_user, fail, lock_school, require
+from .security import Actor, DB, check_version, current_user, fail, lock_school, require
 from .lifecycle_models import require_available
 
 
@@ -25,6 +25,8 @@ def diary_school_scope(school_id: str, db: DB, user: Actor):
     school = db.get(m.School, school_id)
     if not school or not school.active:
         fail(404, "Escola não encontrada.")
+    from .access_security import bind_access
+    bind_access(db, user, school_id)
     if user.role == "admin":
         return school
     if user.role in {"direction","coordination","secretary","viewer"}:

@@ -21,7 +21,7 @@ const sandbox={console,document:{createElement(){return {textContent:'',get inne
 execFileSync(compiler,['-p',path.join(root,'tsconfig.portal.json')],{stdio:'inherit'});
 execFileSync(compiler,['-p',path.join(root,'tsconfig.news.json')],{stdio:'inherit'});
 const renders={};
-for(const name of ['app','portal','expansion','assist','diagnostics','diary','contracts','signing','reports','legacyImport','learning','community','news','mailcow','audit','email','lifecycle']){
+for(const name of ['app','portal','expansion','camera','users','assist','diagnostics','diary','contracts','signing','reports','legacyImport','learning','community','news','mailcow','audit','email','lifecycle']){
  const fragment=key=>fs.readFileSync(path.join(root,'templates',key+'.html'),'utf8');
  const template=fs.readFileSync(path.join(root,'templates',name+'.html'),'utf8').replaceAll('<!-- MFA-MANAGE -->',fragment('mfa-manage')).replaceAll('<!-- MFA-CHALLENGE -->',fragment('mfa-challenge')).replaceAll('<!-- FAMILY -->',fragment('family')).replaceAll('<!-- FORM-FIELDS -->',fragment('form-fields'));
  const errors=[];
@@ -69,5 +69,6 @@ execFileSync(process.execPath,[path.join(root,'tests/integration-navigation.mjs'
 execFileSync(process.execPath,[path.join(root,'tests/diary-flow.mjs')],{stdio:'inherit'});
 execFileSync(process.execPath,[path.join(root,'tests/mailcow-flow.mjs')],{stdio:'inherit'});
 execFileSync(process.execPath,[path.join(root,'tests/api-download.mjs')],{stdio:'inherit'});
+execFileSync(process.execPath,[path.join(root,'tests/active-school.mjs')],{stdio:'inherit'});
 execFileSync(process.execPath,[path.join(root,'tests/email-flow.mjs')],{stdio:'inherit'});
 console.log('PWA compilada:',hash);

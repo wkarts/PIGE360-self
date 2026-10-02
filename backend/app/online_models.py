@@ -120,8 +120,9 @@ class AdmissionAttachment(Record, Scoped, Base):
     student_document_id: Mapped[str | None] = mapped_column(ForeignKey('student_documents.id'))
 
 class ConnectInstance(Record, Base):
-    """Instância global da Connect API vinculada à empresa/tenant."""
+    """Instância de WhatsApp pertencente a uma instituição."""
     __tablename__ = 'connect_instances'
+    school_id: Mapped[str | None] = mapped_column(ForeignKey('schools.id'), index=True)
     company_id: Mapped[str] = mapped_column(ForeignKey('companies.id'), index=True)
     name: Mapped[str] = mapped_column(String(100))
     display_name: Mapped[str] = mapped_column(String(160), default='')

@@ -64,6 +64,8 @@ try:
         page.get_by_role('button',name='Minha conta',exact=False).click();page.get_by_role('button',name='Sair',exact=True).click()
         page.goto(URL+'/',wait_until='networkidle')
         page.get_by_label('E-mail',exact=True).fill('admin@example.com');page.get_by_label('Senha',exact=True).fill(password);page.get_by_role('button',name='Entrar na aplicação',exact=False).click()
+        expect(page.get_by_label('Selecionar escola')).to_be_enabled()
+        expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
         page.get_by_role('link',name='Inscrições online',exact=True).click()
         expect(page.get_by_role('heading',name='Matrícula online · Configuração pendente')).to_be_visible()
         expect(page.get_by_text('Nenhum processo está disponível hoje.',exact=False)).to_be_visible()

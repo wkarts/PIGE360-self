@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A1/XML e avisos pela UI HTTP real, usando apenas certificados sintéticos."""
+"""Certificados A1, pendências escolares e avisos em áreas distintas, via HTTP real."""
 import json
 import os
 import shutil
@@ -24,6 +24,7 @@ OUT.mkdir(parents=True, exist_ok=True)
 TEMP = Path(tempfile.mkdtemp(prefix='pige-fiscal-'))
 EMAIL, LOGIN_PASSWORD = 'fiscal@example.com', 'Synthetic-Fiscal-Login-2026!'
 A1_PASSWORD, CNPJ = 'Synthetic-A1-Secret-2026!', '12345678000190'
+shutil.copytree(ROOT / 'frontend/dist', TEMP / 'frontend')
 with socket.socket() as sock:
     sock.bind(('127.0.0.1', 0))
     PORT = sock.getsockname()[1]
@@ -56,18 +57,13 @@ cert = (x509.CertificateBuilder().subject_name(x509.Name([
 pfx = pkcs12.serialize_key_and_certificates(b'E2E', key, cert, [ca],
     serialization.BestAvailableEncryption(A1_PASSWORD.encode()))
 (TEMP / 'synthetic.p12').write_bytes(pfx)
-identifier = 'DPS' + '2928703' + '2' + CNPJ + '00001' + '000000000000001'
-xml = (f'<DPS xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.01"><infDPS Id="{identifier}">'
-       f'<prest><CNPJ>{CNPJ}</CNPJ></prest><serv><cServ><xDescServ>DOCUMENTO SINTETICO SEM VALOR FISCAL</xDescServ>'
-       '</cServ></serv></infDPS></DPS>').encode()
-(TEMP / 'synthetic.xml').write_bytes(xml)
 env = {**os.environ, 'PYTHONPATH': str(ROOT / 'backend'), 'DATABASE_URL': 'sqlite:///' + str(TEMP / 'test.db'),
        'ALLOW_SQLITE': 'true', 'APP_ENV': 'test', 'APP_URL': URL, 'ALLOWED_HOSTS': '127.0.0.1,localhost',
        'APP_SECRET_KEY': 'synthetic-fiscal-app-secret-01234567890123456789',
        'SETUP_TOKEN': 'synthetic-fiscal-setup-01234567890123456789',
        'INTEGRATION_ENCRYPTION_KEY': 'MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=',
        'SIGNATURE_TRUST_ROOTS_DIR': str(TEMP / 'roots'), 'STORAGE_PATH': str(TEMP / 'files'),
-       'FRONTEND_PATH': str(ROOT / 'frontend/dist'), 'COOKIE_SECURE': 'false',
+       'FRONTEND_PATH': str(TEMP / 'frontend'), 'COOKIE_SECURE': 'false',
        'SMTP_HOST': '', 'SMTP_FROM': '', 'CONNECT_API_BASE_URL': '', 'CONNECT_API_KEY': ''}
 subprocess.run([sys.executable, '-m', 'alembic', 'upgrade', 'head'], cwd=ROOT / 'backend', env=env, check=True)
 log = (OUT / 'server.log').open('w')
@@ -114,6 +110,14 @@ try:
     base = '/api/v1/schools/' + setup.json()['school_id']
     token = client.post('/api/v1/auth/login', json={'email': EMAIL, 'password': LOGIN_PASSWORD}).json()['access_token']
     headers = {'Authorization': 'Bearer ' + token}
+    student_response = client.post(base + '/students', headers=headers, json={
+        'person': {'name': 'Aluno da assinatura escolar', 'birth_date': '2018-05-15'},
+    })
+    assert student_response.status_code == 201, student_response.text
+    issued_response = client.post(base + '/students/' + student_response.json()['id'] + '/issued-documents',
+                                  headers=headers, json={'kind': 'student_record'})
+    assert issued_response.status_code == 201, issued_response.text
+    issued_id = issued_response.json()['id']
     with sync_playwright() as pw:
         binary = os.getenv('CHROMIUM_PATH') or (None if Path(pw.chromium.executable_path).exists() else shutil.which('chromium'))
         browser = pw.chromium.launch(headless=True, **({'executable_path': binary} if binary else {}), args=['--no-sandbox'])
@@ -127,16 +131,16 @@ try:
         page.get_by_role('button', name='Entrar na aplicação').click()
         expect(page.locator('.app-root')).to_be_visible()
         page.get_by_role('button', name='Abrir menu', exact=True).click()
-        page.locator('aside nav a[href="#/signatures"]').click()
+        page.get_by_role('button', name='Configurações', exact=True).click()
+        page.locator('aside nav a[href="#/certificate"]').click()
         expect(page.locator('.contract-signatures')).to_be_visible()
         expect(page.locator('.contract-signatures .loading-strip')).to_have_count(0)
         workspace = page.locator('.contract-signatures')
-        workspace.get_by_role('button', name='Certificado e avisos', exact=True).click()
         page.locator('#a1-certificate-file').set_input_files(str(TEMP / 'synthetic.p12'))
         secret = page.get_by_label('Senha do arquivo A1', exact=True)
         secret.fill(A1_PASSWORD)
         workspace.get_by_role('button', name='Salvar certificado', exact=True).click()
-        expect(workspace.get_by_text('Certificado A1 configurado para documentos escolares e perfis fiscais compatíveis.', exact=True)).to_be_visible()
+        expect(workspace.get_by_text('Certificado A1 da instituição configurado.', exact=True)).to_be_visible()
         expect(secret).to_have_value('')
         expect(page.locator('#a1-certificate-file')).to_have_value('')
         browser_storage = page.evaluate('JSON.stringify([Object.entries(localStorage),Object.entries(sessionStorage)])')
@@ -150,23 +154,43 @@ try:
         assert client.get(base + '/signing-certificate/alert-preferences', headers=headers).json()['email_enabled']
         assert client.get(base + '/signing-certificate/alerts', headers=headers).json()['items'][0]['days_remaining'] == 20
         record('Preferência própria de e-mail persiste; WhatsApp sem telefone fica indisponível; alerta de validade aparece na API')
-        workspace.get_by_role('button', name='Documentos fiscais', exact=True).click()
-        workspace.get_by_role('combobox').select_option('nfse_dps_101')
-        page.locator('#fiscal-xml-file').set_input_files(str(TEMP / 'synthetic.xml'))
-        submit = workspace.get_by_role('button', name='Assinar XML', exact=True)
-        expect(submit).to_be_disabled()
-        workspace.get_by_label('Conferi o XML e autorizo sua assinatura com o certificado da mantenedora', exact=True).check()
-        submit.click()
-        expect(workspace.get_by_text('XML assinado. Baixe o arquivo para seu fluxo fiscal. Nenhuma nota foi transmitida ou autorizada.', exact=True)).to_be_visible()
-        expect(workspace.get_by_role('button', name='Baixar assinado', exact=True)).to_be_visible()
+        def navigate_area(route, group):
+            expect(page.locator('.app-root')).to_have_attribute('aria-busy', 'false')
+            opener = page.get_by_role('button', name='Abrir menu', exact=True)
+            if opener.is_visible() and opener.get_attribute('aria-expanded') == 'false':
+                opener.click()
+            toggle = page.locator('aside').get_by_role('button', name=group, exact=True)
+            if toggle.get_attribute('aria-expanded') == 'false':
+                toggle.click()
+            page.locator('aside nav a[href="#/' + route + '"]').click()
+            expect(page.locator('.contract-signatures')).to_be_visible()
+            expect(page.locator('.contract-signatures .loading-strip')).to_have_count(0)
+
+        expect(workspace.get_by_role('heading', name='Assinaturas pendentes', exact=True)).to_have_count(0)
+        expect(workspace.get_by_role('heading', name='Conferência de assinaturas', exact=True)).to_have_count(0)
+        expect(page.get_by_role('button', name='Documentos fiscais', exact=True)).to_have_count(0)
+        expect(page.locator('aside a[href="#/signatures"]')).to_have_count(0)
+        navigate_area('pending-signatures', 'Documentação')
+        expect(workspace.get_by_role('heading', name='Assinaturas pendentes', exact=True)).to_be_visible()
+        expect(workspace.get_by_text('Aluno da assinatura escolar', exact=True)).to_be_visible()
+        expect(workspace.locator('#a1-certificate-file')).to_have_count(0)
+        workspace.get_by_role('button', name='Assinar com A1', exact=True).click()
+        expect(workspace.get_by_text('Documento assinado pela escola. O PDF original foi preservado.', exact=True)).to_be_visible()
+        expect(workspace.get_by_text('Nenhum documento aguardando assinatura.', exact=True)).to_be_visible()
         with page.expect_download() as downloaded:
-            workspace.get_by_role('button', name='Baixar assinado', exact=True).click()
-        saved = TEMP / 'download.xml'
+            workspace.get_by_role('button', name='Baixar PDF atual', exact=True).click()
+        saved = TEMP / 'school-signed.pdf'
         downloaded.value.save_as(saved)
-        assert b'rsa-sha256' in saved.read_bytes() and b'SignatureValue' in saved.read_bytes()
-        listed = client.get(base + '/fiscal-signatures', headers=headers).json()
-        assert listed['total'] == 1 and listed['items'][0]['authorization_status'] == 'not_submitted'
-        record('DPS1.01 é assinada pelo formulário com consentimento, armazenada e baixada; nenhum envio fiscal')
+        assert saved.read_bytes().startswith(b'%PDF') and b'/ByteRange' in saved.read_bytes()
+        signature = client.get(base + '/issued-documents/' + issued_id + '/signatures', headers=headers).json()
+        assert signature['status'] == 'company_signed' and signature['cryptographic_valid'] is True
+        record('Documento escolar sai da fila de assinaturas após A1; PDF original preservado e assinado disponível para download')
+        navigate_area('signature-review', 'Documentação')
+        expect(workspace.get_by_role('heading', name='Conferência de assinaturas', exact=True)).to_be_visible()
+        expect(workspace.get_by_text('Nenhuma assinatura externa pendente de revisão nesta escola.', exact=True)).to_be_visible()
+        expect(workspace.get_by_role('heading', name='Assinaturas pendentes', exact=True)).to_have_count(0)
+        expect(workspace.locator('#a1-certificate-file')).to_have_count(0)
+        record('Configurações, assinaturas pendentes e conferência são telas distintas, sem interface fiscal')
         # Atualização do shell também busca o aviso de validade sem disparar o worker.
         page.reload()
         expect(page.locator('.contract-signatures')).to_be_visible()
@@ -174,23 +198,23 @@ try:
         expect(page.locator('.notice-menu')).to_be_visible()
         for width, height in [(390, 844), (320, 640), (1440, 960)]:
             page.set_viewport_size({'width': width, 'height': height})
-            for tab, slug in [('Documentos escolares', 'escolares'), ('Documentos fiscais', 'fiscais'), ('Certificado e avisos', 'certificado')]:
-                workspace.get_by_role('button', name=tab, exact=True).click()
+            for route, group, slug in [('pending-signatures', 'Documentação', 'pendencias'), ('signature-review', 'Documentação', 'conferencia'), ('certificate', 'Configurações', 'certificado')]:
+                navigate_area(route, group)
                 page.locator('#main-content').evaluate('el=>el.scrollTop=0')
                 layout(page)
                 page.screenshot(path=str(OUT / f'{slug}-{width}.png'), full_page=True)
-                if width <= 600 and slug in {'fiscais', 'certificado'}:
-                    workspace.get_by_role('button', name='Assinar XML' if slug == 'fiscais' else 'Salvar preferências', exact=True).scroll_into_view_if_needed()
+                if width <= 600 and slug == 'certificado':
+                    workspace.get_by_role('button', name='Salvar preferências', exact=True).scroll_into_view_if_needed()
                     page.screenshot(path=str(OUT / f'{slug}-form-{width}.png'), full_page=True)
-            record(f'Três abas em {width}px sem transbordamento, com campos legíveis' + (' e alvos de toque de 44px' if width <= 600 else ''))
+            record(f'Três áreas independentes em {width}px sem transbordamento, com campos legíveis' + (' e alvos de toque de 44px' if width <= 600 else ''))
         page.locator('.notice-menu summary').click()
         expect(page.locator('.notice-popover').get_by_text('Renovação do certificado', exact=True)).to_be_visible()
         page.screenshot(path=str(OUT / 'aviso-topo-1440.png'), full_page=True)
         assert not errors, errors
         browser.close()
     (OUT / 'results.json').write_text(json.dumps({'status': 'passed', 'checks': checks, 'errors': errors,
-        'frontend': json.loads((ROOT / 'frontend/dist/build-info.json').read_text()), 'remote_providers': False,
-        'limitations': ['Chromium com emulação de toque; não executado Safari/iOS', 'XML sintético valida assinatura, sem homologação fiscal']}, ensure_ascii=False, indent=2))
+        'frontend': json.loads((TEMP / 'frontend/build-info.json').read_text()), 'remote_providers': False,
+        'limitations': ['Chromium com emulação de toque; não executado Safari/iOS', 'Certificado e PDF sintéticos; nenhum provedor externo foi contatado']}, ensure_ascii=False, indent=2))
 except Exception:
     try:
         page.screenshot(path=str(OUT / 'failure.png'), full_page=True)

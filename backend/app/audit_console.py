@@ -6,7 +6,7 @@ import json
 import re
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from . import models as m
 from .admin_tools import require_admin
 from .common import audit, output
@@ -36,8 +36,8 @@ def audit_filters(action:str=Query('',max_length=80),entity_type:str=Query('',ma
 
 
 def statement(school_id,filters):
-    stmt=select(m.AuditEvent).where(or_(m.AuditEvent.school_id==school_id,m.AuditEvent.school_id.is_(None))
-                                  if filters['include_global'] else m.AuditEvent.school_id==school_id)
+    # Parâmetro legado aceito por compatibilidade, sem misturar eventos da instalação.
+    stmt=select(m.AuditEvent).where(m.AuditEvent.school_id==school_id)
     for key in ('action','entity_type','entity_id','actor_id','request_id'):
         if filters[key]:stmt=stmt.where(getattr(m.AuditEvent,key)==filters[key])
     if filters['since']:stmt=stmt.where(m.AuditEvent.created_at>=filters['since'])
@@ -70,7 +70,7 @@ def audit_list(db:DB,user:Actor,school:Scope,options:dict=Depends(audit_filters)
 @router.get('/audit/options')
 def options(db:DB,user:Actor,school:Scope,include_global:bool=False):
     require_admin(user)
-    scope=or_(m.AuditEvent.school_id==school.id,m.AuditEvent.school_id.is_(None)) if include_global else m.AuditEvent.school_id==school.id
+    scope=m.AuditEvent.school_id==school.id
     return {'actions':list(db.scalars(select(m.AuditEvent.action).where(scope).distinct().order_by(m.AuditEvent.action).limit(500))),
             'entities':list(db.scalars(select(m.AuditEvent.entity_type).where(scope).distinct().order_by(m.AuditEvent.entity_type).limit(200))),
             'actors':[{'id':r[0],'name':r[1]} for r in db.execute(select(m.User.id,m.User.name).join(m.AuditEvent,m.AuditEvent.actor_id==m.User.id).where(scope).distinct().order_by(m.User.name).limit(1000))]}
@@ -93,5 +93,5 @@ def export(db:DB,user:Actor,school:Scope,request:Request,options:dict=Depends(au
     for row in records(db,rows):
         writer.writerow([cell(v) for v in [row['created_at'],row['action'],row['entity_type'],row['entity_id'],row['actor_name'],row['actor_id'],row['scope'],row['request_id'],row['ip'],json.dumps(row['details'],ensure_ascii=False)]])
     audit(db,request,user,'audit.exported',school,school.id,details={'records':len(rows)})
-    filename=download_filename(db,'auditoria').removesuffix('.zip')+'.csv'
+    filename=download_filename(db,'auditoria',school.id).removesuffix('.zip')+'.csv'
     return Response(stream.getvalue().encode('utf-8-sig'),media_type='text/csv; charset=utf-8',headers={'Content-Disposition':f'attachment; filename="{filename}"','Cache-Control':'no-store'})

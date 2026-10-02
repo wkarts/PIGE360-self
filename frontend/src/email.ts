@@ -1,7 +1,7 @@
 /** Caixa institucional: o conteúdo recebido é sempre apresentado como texto. */
 namespace PigeEmail {
   type Folder={id:string;name:string;role:string;total:number;unread:number};
-  type Account={available:boolean;connected:boolean;address:string;display_name:string;needs_password:boolean;limits?:{message_bytes:number;attachment_bytes:number;recipients:number};connection_parameters?:unknown};
+  type Account={available:boolean;connected:boolean;address:string;display_name:string;needs_password:boolean;can_auto_connect?:boolean;connection_state?:string;connection_error?:string;connection_error_code?:string;can_reconcile?:boolean;candidate_address?:string;limits?:{message_bytes:number;attachment_bytes:number;recipients:number};connection_parameters?:unknown};
   type Attachment={part:string;filename:string;content_type:string;size:number};
   type Message={uid:number;uidvalidity:number;subject:string;from:string;to:string;cc?:string;bcc?:string;date:string;seen:boolean;flagged:boolean;size:number;text?:string;message_id?:string;in_reply_to?:string;attachments?:Attachment[]};
   type Page={items:Message[];folder:string;uidvalidity:number;next_before_uid:number|null};
@@ -28,11 +28,12 @@ namespace PigeEmail {
     const query=(message:Message,folderId=s.folder)=>new URLSearchParams({folder:folderId,uidvalidity:String(message.uidvalidity)}).toString();
     const messagePath=(message:Message)=>base()+'/messages/'+message.uid;
     const dirty=()=>Boolean(s.compose&&JSON.stringify(s.compose)!==s.composeInitial);
-    async function run(action:()=>Promise<void>):Promise<void>{if(s.busy)return;s.busy=true;s.error='';s.notice='';try{await action();}catch(error){s.error=error instanceof Error?error.message:'Não foi possível concluir a operação.';}finally{s.busy=false;s.loading=false;}}
+    async function run(action:()=>Promise<void>):Promise<void>{if(s.busy)return;s.busy=true;s.error='';s.notice='';try{await action();}catch(error){s.error=error instanceof Error?error.message:'Não foi possível concluir a operação.';if(s.account?.connected){try{s.account=await PigeAPI.request<Account>(base()+'/account');}catch{/* Preserva o erro original da operação. */}}}finally{s.busy=false;s.loading=false;}}
     async function loadFolders():Promise<void>{const r=await PigeAPI.request<{items:Folder[]}>(base()+'/folders');s.folders=r.items;if(!s.folders.some(x=>x.id===s.folder))s.folder=s.folders.find(x=>x.role==='inbox')?.id||s.folders[0]?.id||'';}
     async function loadMessages():Promise<void>{if(!s.folder){s.items=[];return;}const params=new URLSearchParams({folder:s.folder,limit:'25',q:s.activeQuery});if(s.cursor!==null)params.set('before_uid',String(s.cursor));const r=await PigeAPI.request<Page>(base()+'/messages?'+params);s.items=r.items;s.next=r.next_before_uid;}
-    async function loadAccount():Promise<void>{s.account=await PigeAPI.request<Account>(base()+'/account');if(s.account.connected){await loadFolders();await loadMessages();}}
-    async function refresh():Promise<void>{await run(async()=>{await loadAccount();s.notice='Caixa atualizada.';});}
+    async function loadAccount():Promise<void>{s.account=await PigeAPI.request<Account>(base()+'/account');if(s.account.can_auto_connect){s.account=await PigeAPI.post<Account>(base()+'/connection/automatic',{});if(s.account.connection_error)s.error=s.account.connection_error;}if(s.account.connected){await loadFolders();await loadMessages();}}
+    async function refresh():Promise<void>{await run(async()=>{await loadAccount();if(s.account?.connected)s.notice='Caixa atualizada.';});}
+    async function reconcile():Promise<void>{await run(async()=>{s.account=await PigeAPI.post<Account>(base()+'/reconcile',{});window.dispatchEvent(new CustomEvent('pige:email-account-changed',{detail:{schoolId:props.schoolId}}));s.notice='Caixa encontrada. Use a senha atual do e-mail para conectar.';});}
     async function connect():Promise<void>{await run(async()=>{await PigeAPI.post(base()+'/connection',{password:s.password});s.password='';s.showConnection=false;await loadAccount();s.notice='E-mail conectado.';});s.password='';}
     async function disconnect():Promise<void>{await run(async()=>{await PigeAPI.request(base()+'/connection',{method:'DELETE'});s.disconnectConfirm=false;s.selected=null;s.items=[];s.folders=[];await loadAccount();s.notice='Conexão encerrada. Suas mensagens permanecem na caixa.';});}
     async function selectFolder(id:string):Promise<void>{await run(async()=>{s.folder=id;s.cursor=null;s.cursors=[];s.selected=null;s.items=[];s.q='';s.activeQuery='';s.showFolders=false;s.deleteConfirm=false;await loadMessages();});}
@@ -65,6 +66,6 @@ namespace PigeEmail {
     function beforeUnload(event:BeforeUnloadEvent):void{if(dirty()&&s.sendResult?.status!=='sent'){event.preventDefault();event.returnValue='';}}
     Vue.onMounted(()=>{unsavedWork=()=>Boolean(s.compose&&(dirty()||s.pendingPayload)&&s.sendResult?.status!=='sent');window.addEventListener('beforeunload',beforeUnload);void run(loadAccount);});
     Vue.onUnmounted(()=>{unsavedWork=()=>false;window.removeEventListener('beforeunload',beforeUnload);s.password='';s.compose=null;s.pendingPayload=null;});
-    return {s,props,folder,folderName,folderIcon,date,size,dirty,refresh,connect,disconnect,selectFolder,search,nextPage,previousPage,open,flag,unread,move,moveRole,remove,newFolder,manageFolder,renameFolder,deleteFolder,download,begin,editDraft,forward,closeCompose,addFiles,saveDraft,send,editAfterFailure,showSettings,saveSettings};
+    return {s,props,folder,folderName,folderIcon,date,size,dirty,refresh,reconcile,connect,disconnect,selectFolder,search,nextPage,previousPage,open,flag,unread,move,moveRole,remove,newFolder,manageFolder,renameFolder,deleteFolder,download,begin,editDraft,forward,closeCompose,addFiles,saveDraft,send,editAfterFailure,showSettings,saveSettings};
   }};
 }

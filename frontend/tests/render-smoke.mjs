@@ -18,7 +18,7 @@ for(const filename of fs.readdirSync(path.join(root,'templates')).filter(name=>n
 }
 const applications=[];
 const document={createElement:()=>({}),querySelector:()=>null,querySelectorAll:()=>[],title:''};
-const sandbox={crypto,console,document,navigator:{onLine:true},location:{hash:'',pathname:'/',origin:'http://test'},history:{replaceState(){}},localStorage:{getItem:()=>null,setItem:()=>{}},URLSearchParams,URL,Intl,Headers,FormData,Blob,File,Event,CustomEvent,setTimeout,clearTimeout};
+const sandbox={crypto,console,document,navigator:{onLine:true},location:{hash:'',pathname:'/',origin:'http://test'},history:{replaceState(){}},localStorage:{getItem:()=>null,setItem:()=>{}},URLSearchParams,URL,Intl,Headers,FormData,Blob,File,Event,CustomEvent,AbortController,AbortSignal,setTimeout,clearTimeout};
 sandbox.window=sandbox;sandbox.addEventListener=()=>{};
 sandbox.fetch=()=>{throw new Error('O teste de renderização não pode acessar a rede.');};
 vm.createContext(sandbox);
@@ -187,49 +187,77 @@ await contractContext.preview();await contractContext.issue();assert.equal(issue
 sandbox.PigeAPI.post=originalPost;sandbox.PigeAPI.request=originalRequest;sandbox.PigeAPI.download=originalDownload;
 console.log('Contracts smoke: JSON privado, vigência, campos pendentes e emissão conferidos OK.');
 
-// A senha A1 nunca permanece no estado após upload; a revisão usa o documento exato.
+// Configuração, pendências e conferência têm dados e ações próprios.
 const signingComponent=sandbox.PigeSigning.component;
-const signing=signingComponent.setup({schoolId:'school-test',permissions:['schools.manage','documents.read','documents.validate'],role:'admin',enrollmentId:'',issuedId:''});
-let receivedA1=false,receivedValidation=false,receivedFiscal=false,receivedPreferences=false,reviewStatus='pending_validation';
+const signingProps={schoolId:'school-test',permissions:['schools.manage','documents.read','documents.validate','documents.generate'],role:'admin',enrollmentId:'',issuedId:''};
+const signing=signingComponent.setup({...signingProps,mode:'certificate'});
+let receivedA1=false,receivedValidation=false,receivedPreferences=false,reviewStatus='pending_validation';
+const signingRequests=[];
 document.getElementById=()=>null;
 sandbox.PigeAPI.request=async(path,options={})=>{
+  signingRequests.push(path);
+  assert.ok(path.startsWith('/schools/school-test/'),'Todos os dados pertencem à escola ativa');
   if(path.endsWith('/signing-certificate/a1')){
     if(options.method==='PUT'){receivedA1=true;assert.equal(options.body.get('password'),'senha-de-teste');return {subject:'CN=Escola',expires_at:'2028-12-31T00:00:00Z',certificate_sha256:'a'.repeat(64)};}
     return{configured:receivedA1,certificate:receivedA1?{subject:'CN=Escola',expires_at:'2028-12-31T00:00:00Z',certificate_sha256:'a'.repeat(64)}:null};
-  }
-  if(path.includes('/fiscal-signatures')){
-    if(options.method==='POST'){receivedFiscal=true;assert.equal(options.body.get('profile'),'nfe_4');assert.equal(options.body.get('consent'),'true');assert.equal(options.body.get('file').name,'nota.xml');return{id:'fiscal-1',authorization_status:'not_submitted'};}
-    return{items:[],total:0,profiles:[{id:'nfe_4',label:'NF-e 4.00'}]};
   }
   if(path.endsWith('/signing-certificate/alert-preferences')){
     if(options.method==='PUT'){const prefs=JSON.parse(options.body);assert.equal(prefs.email_enabled,true);assert.equal(prefs.whatsapp_enabled,false);receivedPreferences=true;}
     return{email_enabled:receivedPreferences,whatsapp_enabled:false,email:'direcao@example.com',phone_available:false};
   }
-  if(path.includes('/issued-documents/signatures/unsigned'))return{items:[],total:0};
+  if(path.includes('/issued-documents/signatures/unsigned'))return{items:[{document_id:'issued-2',student_name:'João',signature_status:'unsigned',file_id:'original-2',kind:'enrollment'}],total:1};
   if(path.includes('/issued-documents/signatures/pending'))return{items:[{document_id:'issued-1',student_name:'Maria',enrollment_id:'enrollment-1',signature_status:'pending_validation'}],total:1};
   if(path.endsWith('/issued-documents/issued-1/signatures'))return{document_id:'issued-1',status:reviewStatus,file_id:'signed-1',signature_valid:true,cryptographic_valid:true,trust_status:'trusted',signatures:[],revisions:[]};
   if(path.endsWith('/issued-documents/issued-1/validate-signature')){receivedValidation=true;reviewStatus='verified';assert.equal(options.body.get('signer_cpf'),'12345678909');return{signature_status:'verified'};}
+  if(path.endsWith('/enrollments/enrollment-1'))return{student_id:'student-1'};
+  if(path.endsWith('/students/student-1/documents'))return{issued:[{id:'issued-1',kind:'template',enrollment_id:'enrollment-1'},{id:'issued-other',kind:'template',enrollment_id:'enrollment-other'}]};
   throw new Error('Requisição inesperada: '+path);
 };
+const renderSigning=context=>signingComponent.render.call(context,context,[]);
 await signing.load();
-const renderSigning=()=>signingComponent.render.call(signing,signing,[]);
-assert.match(loginText(renderSigning()),/Documentos escolares/);
-signing.state.tab='certificate';assert.match(loginText(renderSigning()),/Certificado A1/);
+assert.match(loginText(renderSigning(signing)),/Certificado A1/);
+assert.doesNotMatch(loginText(renderSigning(signing)),/Assinaturas pendentes|Conferência de assinaturas|Assinar XML|Documentos fiscais/);
+assert.ok(signingRequests.every(path=>path.includes('/signing-certificate/')),'Configuração não carrega filas de documentos');
 const p12=new File(['conteúdo de teste'],'escola.p12',{type:'application/x-pkcs12'});
 signing.certificateChanged({target:{files:[p12]}});signing.state.certificatePassword='senha-de-teste';
 await signing.saveCertificate();assert.ok(receivedA1);assert.equal(signing.state.certificatePassword,'');
 signing.state.alerts.email_enabled=true;await signing.saveAlertPreferences();assert.ok(receivedPreferences);
-signing.state.tab='fiscal';assert.match(loginText(renderSigning()),/Assinar XML com A1/);
-signing.fiscalChanged({target:{files:[new File(['<NFe/>'],'nota.xml',{type:'application/xml'})]}});
-await signing.signFiscal();assert.equal(receivedFiscal,false,'Assinatura fiscal exige consentimento');
-signing.state.fiscalConsent=true;await signing.signFiscal();assert.ok(receivedFiscal);assert.equal(signing.state.fiscalFilename,'');assert.equal(signing.state.fiscalConsent,false);
-assert.match(signing.state.notice,/Nenhuma nota foi transmitida ou autorizada/);
-signing.state.tab='documents';await signing.openReview('issued-1');assert.match(loginText(renderSigning()),/Conferência documental/i);
-signing.reportChanged({target:{files:[new File(['%PDF-1.4'],'validar.pdf',{type:'application/pdf'})]}});
-signing.state.signerCpf='123.456.789-09';signing.state.validationReference='VALIDAR-123';signing.state.confirmedReview=true;
-await signing.validate();assert.ok(receivedValidation);assert.equal(signing.state.review.status,'verified');
+let firstRequest=signingRequests.length;
+const signatureQueue=signingComponent.setup({...signingProps,mode:'pending-signatures'});
+await signatureQueue.load();
+assert.match(loginText(renderSigning(signatureQueue)),/Assinaturas pendentes/);
+assert.doesNotMatch(loginText(renderSigning(signatureQueue)),/Conferência de assinaturas|Avisos de vencimento|Assinar XML/);
+assert.ok(signingRequests.slice(firstRequest).every(path=>path.endsWith('/signing-certificate/a1')||path.includes('/signatures/unsigned')),'Pendências carregam somente assinatura da escola');
+firstRequest=signingRequests.length;
+const signatureReview=signingComponent.setup({...signingProps,mode:'signature-review'});
+await signatureReview.load();
+assert.match(loginText(renderSigning(signatureReview)),/Conferência de assinaturas/);
+assert.doesNotMatch(loginText(renderSigning(signatureReview)),/Assinaturas pendentes|Avisos de vencimento|Assinar XML/);
+assert.ok(signingRequests.slice(firstRequest).every(path=>path.includes('/signatures/pending')),'Conferência não carrega certificado ou fila de assinatura da escola');
+await signatureReview.openReview('issued-1');
+signatureReview.reportChanged({target:{files:[new File(['%PDF-1.4'],'validar.pdf',{type:'application/pdf'})]}});
+signatureReview.state.signerCpf='123.456.789-09';signatureReview.state.validationReference='VALIDAR-123';signatureReview.state.confirmedReview=true;
+await signatureReview.validate();assert.ok(receivedValidation);assert.equal(signatureReview.state.review.status,'verified');
+firstRequest=signingRequests.length;
+const enrollmentDocuments=signingComponent.setup({...signingProps,mode:'document',enrollmentId:'enrollment-1'});
+await enrollmentDocuments.load();
+assert.equal(enrollmentDocuments.state.enrollmentIssued.length,1,'Documentos de outra matrícula não aparecem no contexto selecionado');
+assert.equal(enrollmentDocuments.state.enrollmentIssued[0].id,'issued-1');
+assert.ok(signingRequests.slice(firstRequest).every(path=>!path.includes('/signatures/pending')&&!path.includes('/signatures/unsigned')),'A matrícula não carrega filas gerais');
+assert.ok(signingRequests.every(path=>!path.includes('/fiscal-signatures')),'Interface fiscal permanece fora destes fluxos');
+let finishOldSchool;
+const changingProps={...signingProps,schoolId:'school-old',mode:'pending-signatures'};
+const staleSigning=signingComponent.setup(changingProps);
+sandbox.PigeAPI.request=path=>path.includes('/signatures/unsigned')?new Promise(resolve=>{finishOldSchool=resolve;}):Promise.resolve({configured:false,certificate:null});
+const loadingOldSchool=staleSigning.load();
+changingProps.schoolId='school-new';
+finishOldSchool({items:[{document_id:'old-school-document',student_name:'Documento de outra entidade'}],total:1});
+await loadingOldSchool;
+assert.equal(staleSigning.state.unsigned.length,0,'Resposta tardia da escola anterior deve ser descartada');
+assert.equal(staleSigning.isCurrent(),false);
+assert.doesNotMatch(loginText(renderSigning(staleSigning)),/Documento de outra entidade/);
 sandbox.PigeAPI.request=originalRequest;
-console.log('Signing smoke: abas, A1 efêmero, preferências, consentimento fiscal e revisão auditável OK.');
+console.log('Signing smoke: telas separadas, A1 efêmero, revisão por matrícula e isolamento de respostas tardias OK.');
 
 // Campanha salva o modelo selecionado; a inscrição aprovada emite a revisão congelada.
 const expansion=sandbox.PigeExpansion.component.setup({schoolId:'school-test',page:'online',permissions:['admissions.manage','admissions.write','documents.read','documents.generate']});
@@ -342,23 +370,29 @@ assisted.s.rows=[{field:'name',targetField:'name',value:'Leitura atrasada',check
 assisted.s.confirmed=true;assisted.apply();assert.equal(target.name,'Nome preservado');assert.ok(assisted.s.error);
 console.log('Assist smoke: render, campos permitidos e proteção de edição concorrente OK.');
 
-// SDK opcional com falha não pode produzir uma exceção na operação escolar.
-const elements=[];
-document.createElement=()=>({dataset:{},remove(){const i=elements.indexOf(this);if(i>=0)elements.splice(i,1);}});
-document.head={appendChild:element=>elements.push(element)};
-let config={enabled:true,base_url:'https://hub.example.test',website_token:'test-public-token',position:'left',type:'standard',launcherTitle:'Atendimento'};
-sandbox.fetch=async()=>({ok:true,json:async()=>config});
-sandbox.hubSDK={run(){throw new Error('Falha sintética do SDK');}};
-await sandbox.PigeSupport.load();
-assert.equal(elements.length,1);elements[0].onload();
-assert.match(sandbox.PigeSupport.status.error,/não iniciou/);
-assert.equal(elements.length,0);
-let ran=0;sandbox.hubSDK={run(){ran++;}};
-await sandbox.PigeSupport.load();await sandbox.PigeSupport.load();elements[0].onload();
-assert.equal(ran,1);await sandbox.PigeSupport.load();assert.equal(elements.length,1);
-config={...config,enabled:false};await sandbox.PigeSupport.load();assert.equal(elements.length,0);
-assert.equal(context.state.modal.kind,'');
-console.log('Support smoke: falha do SDK isolada, carga idempotente e descarte do script OK.');
+// Atendimento pertence à instituição/área selecionada e tem contexto descartável.
+const supportFrames=[],supportScripts=[];
+let supportRun=()=>{throw new Error('Falha sintética do atendimento');};
+sandbox.setInterval=setInterval;sandbox.clearInterval=clearInterval;
+sandbox.MutationObserver=class{observe(){}disconnect(){}};
+document.createElement=()=>({dataset:{},style:{},contentWindow:{innerWidth:390,innerHeight:844,hubSDK:{run:()=>supportRun()}},contentDocument:{documentElement:{style:{}},body:{style:{}},createElement:()=>({}),head:{appendChild:element=>supportScripts.push(element)},querySelectorAll:()=>[]},remove(){const i=supportFrames.indexOf(this);if(i>=0)supportFrames.splice(i,1);}});
+document.body={appendChild:element=>supportFrames.push(element)};
+let config={enabled:true,base_url:'https://support.example.test',website_token:'test-public-token',position:'left',type:'standard',launcherTitle:'Atendimento'};
+const supportRequests=[];
+sandbox.fetch=async path=>{supportRequests.push(path);return{ok:true,json:async()=>path==='/api/v1/support-widget'?{...config,enabled:false}:config};};
+await sandbox.PigeSupport.load();assert.equal(supportFrames.length,0);assert.deepEqual(supportRequests,['/api/v1/support-widget']);
+await sandbox.PigeSupport.load('school-a','online_enrollment');
+assert.equal(supportFrames.length,1);supportScripts.at(-1).onload();
+assert.match(sandbox.PigeSupport.status.error,/não iniciou/);assert.equal(supportFrames.length,0);
+let ran=0;supportRun=()=>{ran++;};
+await sandbox.PigeSupport.load('school-a','online_enrollment');await sandbox.PigeSupport.load('school-a','online_enrollment');supportScripts.at(-1).onload();
+assert.equal(ran,1);assert.equal(supportFrames.length,1);
+const formerFrame=supportFrames[0];
+await sandbox.PigeSupport.load('school-b','online_enrollment');
+assert.equal(supportFrames.includes(formerFrame),false);assert.match(supportRequests.at(-1),/schools\/school-b\/support-widget\?area=online_enrollment/);
+config={...config,enabled:false};await sandbox.PigeSupport.load('school-b','internal');assert.equal(supportFrames.length,0);
+sandbox.PigeSupport.dispose();assert.equal(context.state.modal.kind,'');
+console.log('Support smoke: entidade e área explícitas, falha isolada, carga idempotente e descarte do contexto OK.');
 
 // Consultar a fila não exige permissões financeiras nem leitura de contratos.
 const admissionReader=sandbox.PigeExpansion.component.setup({schoolId:'school-test',page:'online',permissions:['admissions.read']});

@@ -18,7 +18,7 @@ from sqlalchemy import and_, case, func, or_, select
 from . import models as m
 from .common import audit
 from .db import now
-from .security import Actor, DB, PERMISSIONS, Scope, fail, require, scoped, utc
+from .security import Actor, DB, Scope, fail, require, scoped, utc
 
 router = APIRouter()
 TZ = ZoneInfo('America/Bahia')
@@ -418,7 +418,8 @@ def collect_report(kind, db, user, school, f):
 def report_catalog(db: DB, user: Actor, school: Scope):
     require(user, 'reports.read')
     start, end = default_period()
-    permissions = PERMISSIONS.get(user.role, set())
+    from .access_security import permissions_for
+    permissions = permissions_for(user, db)
     items = []
     for ident, data in CATALOG.items():
         if data['permission'] not in permissions: continue

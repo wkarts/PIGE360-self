@@ -35,8 +35,9 @@ class AlertPreferenceInput(BaseModel):
 
 
 def _access(db, user, school_id):
-    return bool(user and user.active and user.role in {'admin', 'direction'} and
-                (user.role == 'admin' or db.get(m.SchoolAccess, (user.id, school_id))))
+    access = db.get(m.SchoolAccess, (user.id, school_id)) if user else None
+    return bool(user and user.active and user.role in {'admin', 'direction'}
+                and access and access.active and not access.archived_at)
 
 
 def expiry_notice(certificate):
@@ -51,7 +52,7 @@ def expiry_notice(certificate):
             'kind': 'certificate_expiry', 'severity': 'error' if remaining <= 0 else 'warning',
             'title': 'Certificado vencido' if remaining <= 0 else 'Renovação do certificado',
             'message': message, 'expires_at': utc(certificate.expires_at).isoformat(),
-            'days_remaining': days, 'route': 'signing', 'bucket': bucket}
+            'days_remaining': days, 'route': 'certificate', 'bucket': bucket}
 
 
 @router.get('/signing-certificate/alerts')
@@ -143,7 +144,7 @@ def execute_certificate_alert(db, job, payload, send_email):
         return 'cancelled-stale'
     text = (school.name + ': ' + notice['message'] + ' Validade: ' +
             utc(certificate.expires_at).strftime('%d/%m/%Y') +
-            '. Acesse Assinaturas na aplicação: ' + settings().app_url)
+            '. Acesse Configurações > Certificados A1 na aplicação: ' + settings().app_url)
     if channel == 'email':
         return send_email({'to': user.email, 'subject': 'Renovação do certificado — ' + school.name,
                            'text': text})

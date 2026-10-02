@@ -81,7 +81,9 @@ PERMISSIONS = {
     'guardian': {
         'read', 'profile.read', 'profile.self', 'guardian.self.read',
     },
-    'viewer': {'read', 'dashboard.read', 'reports.read', 'profile.read'},
+    'viewer': {'read', 'dashboard.read', 'reports.read', 'profile.read',
+               'people.read', 'students.read', 'guardians.read', 'academic.read',
+               'enrollments.read', 'documents.read', 'protocols.read'},
 }
 
 def fail(status: int, detail: str):
@@ -110,7 +112,7 @@ def access_token(user: User, session: AuthSession):
     return jwt.encode({'sub': user.id, 'sid': session.id, 'typ': 'access', 'aud': 'pige360-self', 'iss': cfg.app_url,
                        'iat': now, 'exp': now + timedelta(minutes=cfg.access_token_minutes)}, cfg.app_secret_key, algorithm='HS256')
 
-def current_user(db: DB, credential: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)]) -> User:
+def current_user(request: Request, db: DB, credential: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)]) -> User:
     if not credential:
         fail(401, 'Autenticação necessária.')
     cfg = settings()
@@ -127,12 +129,31 @@ def current_user(db: DB, credential: Annotated[HTTPAuthorizationCredentials | No
         fail(401, 'Sessão revogada ou usuário inativo.')
     from .mfa import enforce_session
     enforce_session(db, 'user', user, session)
+    # A entidade vem do endereço operacional ou da seleção explícita da interface.
+    # Nunca permitir que um cabeçalho antigo direcione ações para outra escola.
+    user._active_school_id = None
+    # O seletor precisa continuar acessível quando o vínculo antes ativo foi revogado.
+    selected_id = '' if request.method == 'GET' and request.url.path == '/api/v1/schools' else request.headers.get('X-School-Id', '')
+    scopes = [value.strip() for value in (
+        request.path_params.get('school_id', ''), selected_id,
+        request.query_params.get('school_id', ''),
+    ) if value and value.strip()]
+    if len(set(scopes)) > 1:
+        fail(409, 'A instituição ativa foi alterada. Reabra a tela antes de continuar.')
+    if scopes:
+        school = db.get(School, scopes[0])
+        if not school or not school.active:
+            fail(404, 'Escola não encontrada.')
+        from .access_security import bind_access
+        bind_access(db, user, school.id)
+        request.state.school_id = school.id
     return user
 
 Actor = Annotated[User, Depends(current_user)]
 
 def require(user: User, permission: str):
-    if permission not in PERMISSIONS.get(user.role, set()):
+    from .access_security import permissions_for
+    if permission not in permissions_for(user):
         fail(403, 'Seu perfil não possui permissão para esta operação.')
 
 def school_scope(school_id: str, db: DB, user: Actor) -> School:
@@ -143,8 +164,8 @@ def school_scope(school_id: str, db: DB, user: Actor) -> School:
     school = db.get(School, school_id)
     if not school or not school.active:
         fail(404, 'Escola não encontrada.')
-    if user.role != 'admin' and not db.get(SchoolAccess, (user.id, school_id)):
-        fail(403, 'Acesso não autorizado a esta escola.')
+    from .access_security import bind_access
+    bind_access(db, user, school_id)
     return school
 
 Scope = Annotated[School, Depends(school_scope)]

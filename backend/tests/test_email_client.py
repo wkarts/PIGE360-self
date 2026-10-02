@@ -190,6 +190,8 @@ def mailbox_api(client, admin, school, monkeypatch):
     monkeypatch.setattr(e, '_target', lambda *args: '8.8.8.8')
     monkeypatch.setattr(e, 'PinnedIMAP', lambda *args: FakeIMAP(state, *args))
     monkeypatch.setattr(e, 'PinnedSMTPSSL', lambda *args: FakeSMTP(state, *args))
+    automatic = client.post(f'/api/v1/schools/{school["id"]}/email/connection/automatic', headers=headers, json={})
+    assert automatic.status_code == 200 and automatic.json()['connected'], automatic.text
     return {'client': client, 'admin': admin, 'school': school, 'user': user, 'headers': headers,
             'base': f'/api/v1/schools/{school["id"]}/email', 'state': state}
 
@@ -538,3 +540,87 @@ def test_smtp_acceptance_survives_quit_and_close_failure(mailbox_api):
     assert result.status_code == 200 and result.json()['status'] == 'sent' and result.json()['sent_saved']
     assert a['client'].post(a['base'] + '/send', headers=a['headers'], json=payload).json()['status'] == 'sent'
     assert len(a['state']['sent']) == 1
+
+
+def test_automatic_connection_waits_for_both_protocols_and_exposes_no_password(mailbox_api, monkeypatch):
+    a=mailbox_api
+    with SessionLocal() as db:
+        connection=db.scalar(select(e.EmailConnection).where(e.EmailConnection.user_id==a['user']['id']))
+        connection.validated_at=None;connection.checked_at=None;db.commit()
+    count=len(a['state']['logins'])
+    pending=a['client'].get(a['base']+'/account',headers=a['headers']).json()
+    assert not pending['connected'] and pending['can_auto_connect'] and not pending['needs_password']
+    assert len(a['state']['logins'])==count  # A tela/painel não realiza rede em GET.
+    assert pending['connection_parameters']=={'imap_host':'mail.escola.example.test','imap_port':993,'imap_security':'TLS','smtp_host':'mail.escola.example.test','smtp_port':465,'smtp_security':'TLS','username':a['user']['mailbox']['address']}
+    smtp=[]
+    class CheckedSMTP(FakeSMTP):
+        def login(self,address,password):
+            super().login(address,password);smtp.append(address)
+    monkeypatch.setattr(e,'PinnedSMTPSSL',lambda *args:CheckedSMTP(a['state'],*args))
+    result=a['client'].post(a['base']+'/connection/automatic',headers=a['headers'],json={})
+    assert result.status_code==200 and result.json()['connected'] and result.json()['validated_at']
+    assert smtp==[a['user']['mailbox']['address']] and a['state']['sent']==[]
+    assert a['state']['password'] not in result.text
+
+
+def test_automatic_recovery_uses_known_secret_and_never_undoes_disconnect(mailbox_api):
+    a=mailbox_api
+    with SessionLocal() as db:
+        connection=db.scalar(select(e.EmailConnection).where(e.EmailConnection.user_id==a['user']['id']))
+        db.delete(connection);db.commit()
+    assert a['client'].get(a['base']+'/account',headers=a['headers']).json()['can_auto_connect']
+    restored=a['client'].post(a['base']+'/connection/automatic',headers=a['headers'],json={})
+    assert restored.status_code==200 and restored.json()['connected']
+    a['client'].delete(a['base']+'/connection',headers=a['headers']).raise_for_status()
+    count=len(a['state']['logins'])
+    stopped=a['client'].post(a['base']+'/connection/automatic',headers=a['headers'],json={}).json()
+    assert not stopped['connected'] and not stopped['can_auto_connect'] and stopped['needs_password']
+    assert len(a['state']['logins'])==count
+
+
+def test_automatic_validation_does_not_mark_ready_on_smtp_failure(mailbox_api, monkeypatch):
+    a=mailbox_api
+    with SessionLocal() as db:
+        connection=db.scalar(select(e.EmailConnection).where(e.EmailConnection.user_id==a['user']['id']))
+        connection.validated_at=None;connection.checked_at=None;db.commit()
+    def unavailable(*args):
+        raise OSError('temporary failure with secret-that-must-not-leak')
+    monkeypatch.setattr(e,'PinnedSMTPSSL',unavailable)
+    failed=a['client'].post(a['base']+'/connection/automatic',headers=a['headers'],json={})
+    state=failed.json()
+    assert failed.status_code==200 and not state['connected'] and state['can_auto_connect'] and not state['needs_password']
+    assert state['connection_error_code']=='EMAIL_NETWORK' and 'secret-that' not in failed.text
+    assert a['state']['sent']==[]
+    with SessionLocal() as db:
+        connection=db.scalar(select(e.EmailConnection).where(e.EmailConnection.user_id==a['user']['id']))
+        assert connection.validated_at is None and connection.last_error=='EMAIL_NETWORK'
+        connection.checked_at=None;db.commit()
+    monkeypatch.setattr(e,'PinnedSMTPSSL',lambda *args:FakeSMTP(a['state'],*args))
+    ready=a['client'].post(a['base']+'/connection/automatic',headers=a['headers'],json={}).json()
+    assert ready['connected'] and not ready['connection_error']
+
+
+def test_automatic_auth_rejection_requests_current_password_without_reset(mailbox_api):
+    a=mailbox_api
+    with SessionLocal() as db:
+        connection=db.scalar(select(e.EmailConnection).where(e.EmailConnection.user_id==a['user']['id']))
+        connection.validated_at=None;connection.checked_at=None
+        connection.encrypted_secret=seal({'password':'obsolete-password-never-printed'});db.commit()
+    failed=a['client'].post(a['base']+'/connection/automatic',headers=a['headers'],json={})
+    assert not failed.json()['connected'] and not failed.json()['can_auto_connect'] and failed.json()['needs_password']
+    assert failed.json()['connection_error_code']=='EMAIL_AUTH' and 'obsolete-password' not in failed.text
+    count=len(a['state']['logins'])
+    a['client'].post(a['base']+'/connection/automatic',headers=a['headers'],json={})
+    assert len(a['state']['logins'])==count  # Sem repetição automática de senha recusada.
+    result=a['client'].post(a['base']+'/connection',headers=a['headers'],json={'password':a['state']['password']})
+    assert result.status_code==200 and result.json()['connected']
+
+
+def test_changed_server_configuration_requires_revalidation(mailbox_api):
+    a=mailbox_api
+    result=a['client'].put(a['base']+'/settings',headers=a['admin'],json={'imap_host':'imap.escola.example.test','smtp_host':'smtp.escola.example.test','smtp_port':587})
+    assert result.status_code==200,result.text
+    account=a['client'].get(a['base']+'/account',headers=a['headers']).json()
+    assert not account['connected'] and account['can_auto_connect'] and not account['needs_password']
+    assert account['connection_parameters']['imap_host']=='imap.escola.example.test'
+    assert account['connection_parameters']['smtp_port']==587 and account['connection_parameters']['smtp_security']=='STARTTLS'

@@ -259,6 +259,12 @@ def manifest(db: DB):
 def edit_company(company_id: str, data: Edit, db: DB, user: Actor, request: Request):
     # Mantém o contrato versionado existente, sem criar outra mantenedora.
     _admin(user)
+    active_id = getattr(user, '_active_school_id', None)
+    if active_id:
+        from .models import School
+        active = db.get(School, active_id)
+        if not active or active.company_id != company_id:
+            fail(404, 'Mantenedora não encontrada nesta instituição.')
     try:
         values = CompanyInput.model_validate(data.data)
     except ValidationError:
@@ -271,6 +277,6 @@ def edit_company(company_id: str, data: Edit, db: DB, user: Actor, request: Requ
     for key, value in values.model_dump(exclude_unset=True).items():
         setattr(company, key, value)
     company.version += 1
-    audit(db, request, user, 'company.updated', company)
+    audit(db, request, user, 'company.updated', company, active_id)
     db.flush()
     return output(company)

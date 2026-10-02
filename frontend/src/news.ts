@@ -7,7 +7,7 @@ namespace PigeNews {
     const context=await PigeCommunity.request('/portal/context') as {schools:typeof state.schools;default_school_id:string};state.schools=context.schools;
     const requested=new URLSearchParams(location.search).get('school')||'';
     state.schoolId=state.schools.some(school=>school.id===requested)?requested:context.default_school_id;
-  }catch(error){state.error=error instanceof Error?error.message:String(error);}finally{state.ready=true;}}
-  function selectSchool():void{const url=new URL(location.href);if(state.schoolId)url.searchParams.set('school',state.schoolId);else url.searchParams.delete('school');history.replaceState(null,'',url);}
+  }catch(error){state.error=error instanceof Error?error.message:String(error);}finally{state.ready=true;void PigeSupport.load(state.schoolId,'news');}}
+  function selectSchool():void{PigeSupport.dispose();void PigeSupport.load(state.schoolId,'news');const url=new URL(location.href);if(state.schoolId)url.searchParams.set('school',state.schoolId);else url.searchParams.delete('school');history.replaceState(null,'',url);}
   Vue.createApp({render:PigeRenders.news,components:{'school-community':PigeCommunity.component},setup(){Vue.onMounted(()=>{PigeDialogs.install();void start();});return {state,identity:PigeInstitution.state,start,selectSchool};}}).mount('#school-news');
 }

@@ -25,6 +25,7 @@ OUT = ROOT / "evidence/0.10.0/mobile"
 OUT.mkdir(parents=True, exist_ok=True)
 (OUT / "failure.png").unlink(missing_ok=True)
 TEMP = Path(tempfile.mkdtemp(prefix="pige-mobile-"))
+shutil.copytree(ROOT / 'frontend/dist', TEMP / 'frontend')
 with socket.socket() as sock:
     sock.bind(("127.0.0.1", 0))
     PORT = sock.getsockname()[1]
@@ -42,7 +43,7 @@ env = {
     "APP_SECRET_KEY": "test-only-mobile-secret-01234567890123456789",
     "SETUP_TOKEN": "test-only-mobile-setup-01234567890123456789",
     "STORAGE_PATH": str(TEMP / "files"),
-    "FRONTEND_PATH": str(ROOT / "frontend/dist"),
+    "FRONTEND_PATH": str(TEMP / "frontend"),
     "COOKIE_SECURE": "false",
 }
 subprocess.run(

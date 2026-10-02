@@ -15,7 +15,8 @@ from .assisted_models import LookupCache, LookupProvider
 from .assisted_common import ensure, quota, enabled
 from .db import now
 from .schemas import Input, PersonInput
-from .security import Actor, DB, Scope, require, fail, utc, PERMISSIONS
+from .security import Actor, DB, Scope, require, fail, utc
+from .access_security import permissions_for
 from .portal import Parent
 from .config import settings
 
@@ -204,7 +205,7 @@ def lookup(db, kind: str, value: str):
 
 @router.post('/api/v1/schools/{school_id}/lookups/{kind}')
 def school_lookup(kind:Literal['cnpj','cep'],data:LookupInput,db:DB,user:Actor,school:Scope):
-    if not {'people.write','schools.manage'}.intersection(PERMISSIONS.get(user.role,set())):
+    if not {'people.write','schools.manage'}.intersection(permissions_for(user)):
         fail(403,'Seu perfil não pode preencher cadastros.')
     normalize_key(kind,data.value);quota(db,'lookup:user:'+user.id,60)
     return lookup(db,kind,data.value)

@@ -2,17 +2,17 @@ namespace PigeAudit {
   type Event={id:string;created_at:string;action:string;entity_type:string;entity_id:string;actor_id:string|null;actor_name:string;request_id:string;ip:string;scope:string;details:Record<string,unknown>};
   type Choices={actions:string[];entities:string[];actors:{id:string;name:string}[]};
   export const component={props:['schoolId'],render:PigeRenders.audit,setup(props:{schoolId:string}){
-    const state=Vue.reactive({filtersOpen:window.innerWidth>600,busy:false,error:'',notice:'',rows:[] as Event[],total:0,page:1,action:'',entity:'',entityId:'',actor:'',reference:'',since:'',until:'',includeGlobal:false,selected:null as Event|null,choices:{actions:[],entities:[],actors:[]} as Choices});
+    const state=Vue.reactive({filtersOpen:window.innerWidth>600,busy:false,error:'',notice:'',rows:[] as Event[],total:0,page:1,action:'',entity:'',entityId:'',actor:'',reference:'',since:'',until:'',selected:null as Event|null,choices:{actions:[],entities:[],actors:[]} as Choices});
     const base=()=>'/schools/'+props.schoolId+'/audit';
-    function query():string{const q=new URLSearchParams({include_global:String(state.includeGlobal)});for(const[k,v]of Object.entries({action:state.action,entity_type:state.entity,entity_id:state.entityId.trim(),actor_id:state.actor,request_id:state.reference.trim(),since:state.since?new Date(state.since).toISOString():'',until:state.until?new Date(state.until).toISOString():''}))if(v)q.set(k,v);return q.toString();}
+    function query():string{const q=new URLSearchParams();for(const[k,v]of Object.entries({action:state.action,entity_type:state.entity,entity_id:state.entityId.trim(),actor_id:state.actor,request_id:state.reference.trim(),since:state.since?new Date(state.since).toISOString():'',until:state.until?new Date(state.until).toISOString():''}))if(v)q.set(k,v);return q.toString();}
     async function run(fn:()=>Promise<void>):Promise<void>{if(state.busy)return;state.busy=true;state.error='';try{await fn();}catch(e){state.error=e instanceof Error?e.message:'Não foi possível consultar a auditoria.';}finally{state.busy=false;}}
     async function rows():Promise<void>{const r=await PigeAPI.request<{items:Event[];total:number}>(base()+'?'+query()+'&page='+state.page);state.rows=r.items;state.total=r.total;}
-    async function load():Promise<void>{await run(async()=>{state.choices=await PigeAPI.request<Choices>(base()+'/options?include_global='+state.includeGlobal);await rows();});}
+    async function load():Promise<void>{await run(async()=>{state.choices=await PigeAPI.request<Choices>(base()+'/options');await rows();});}
     async function search():Promise<void>{state.page=1;state.selected=null;await load();}
     async function page(delta:number):Promise<void>{const previous=state.page;state.page=Math.max(1,state.page+delta);await run(rows);if(state.error)state.page=previous;}
     function reset():void{Object.assign(state,{action:'',entity:'',entityId:'',actor:'',reference:'',since:'',until:''});}
     async function clear():Promise<void>{reset();await search();}
-    async function related(item:Event,kind:string):Promise<void>{reset();if(kind==='record'){state.entity=item.entity_type;state.entityId=item.entity_id;}else{state.reference=item.request_id;state.includeGlobal=true;}await search();}
+    async function related(item:Event,kind:string):Promise<void>{reset();if(kind==='record'){state.entity=item.entity_type;state.entityId=item.entity_id;}else{state.reference=item.request_id;}await search();}
     async function download():Promise<void>{await run(async()=>{await PigeAPI.download(base()+'/export?'+query(),'auditoria-'+new Date().toISOString().replace(/[:.]/g,'-')+'.csv');state.notice='Arquivo de auditoria gerado com os filtros selecionados.';});}
     function investigate(item:Event):void{if(/^[a-f0-9]{24}$/.test(item.request_id)){sessionStorage.setItem('pige-diagnostic-reference',item.request_id);location.hash='#/diagnostics';}}
     const date=(v:string)=>v?new Date(v).toLocaleString('pt-BR'):'—';

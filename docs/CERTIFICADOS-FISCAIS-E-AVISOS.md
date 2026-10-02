@@ -1,10 +1,10 @@
-# Certificado da mantenedora, assinatura fiscal e vencimento
+# Certificados A1, avisos e reserva da estrutura fiscal
 
-O mesmo A1 cadastrado em **Assinaturas → Certificado e avisos** serve aos PDFs escolares e aos perfis XML fiscais explicitamente disponíveis. O arquivo PFX/P12 e a senha continuam criptografados pela chave de integração da instalação. Nenhuma chave privada é entregue ao navegador ou registrada nos logs.
+O A1 é cadastrado em **Configurações → Certificados A1**. A tela mantém exclusivamente cadastro, validade, substituição, desativação e preferências de avisos. A assinatura dos documentos escolares fica em **Documentação → Assinaturas pendentes**; os PDFs devolvidos pelas famílias ficam em **Conferência de assinaturas**. O arquivo PFX/P12 e a senha continuam criptografados pela chave de integração da instalação. Nenhuma chave privada é entregue ao navegador ou registrada nos logs.
 
 ## Assinatura fiscal
 
-Em **Assinaturas → Documentos fiscais**, direção ou administração escolhe um XML unitário, seleciona o perfil, confirma a operação e baixa a via assinada. A aplicação preserva também o XML original e registra seus hashes, o certificado utilizado e o usuário responsável. Repetir o mesmo original/perfil/certificado reaproveita o registro.
+A interface fiscal foi retirada, conforme a decisão de aguardar a especificação completa da emissão. O backend e seus registros foram preservados para evolução futura. Os contratos técnicos abaixo descrevem essa estrutura existente; não representam um menu disponível nem emissão/autorização de nota fiscal.
 
 | Perfil | Elemento assinado | Versão aceita | Restrição |
 | --- | --- | --- | --- |

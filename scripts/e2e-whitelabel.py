@@ -118,6 +118,8 @@ try:
         login(page)
         # Preferência real da escola, alterada pela interface e vista sem sessão.
         expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
+        settings=page.get_by_role('button',name='Configurações',exact=True)
+        if settings.get_attribute('aria-expanded')=='false':settings.click()
         page.locator('aside').get_by_role('link',name='Instituição',exact=True).click()
         page.get_by_role('navigation',name='Configurações da instituição').get_by_role('button',name='Identidade visual',exact=True).click()
         page.get_by_role('button',name='Personalizar identidade visual',exact=True).click()
@@ -166,6 +168,8 @@ try:
         page.get_by_role('button',name='Meu perfil',exact=True).click();expect(page.get_by_role('dialog')).to_be_visible();page.set_viewport_size({'width':390,'height':844})
         assert page.get_by_role('dialog').evaluate('e=>e.scrollWidth<=e.clientWidth+1')
         page.screenshot(path=str(OUT/'03-perfil-mobile.png'));page.get_by_role('dialog').get_by_role('button',name='Fechar janela').click();page.set_viewport_size({'width':1440,'height':980})
+        settings=page.get_by_role('button',name='Configurações',exact=True)
+        if settings.get_attribute('aria-expanded')=='false':settings.click()
         page.locator('aside').get_by_role('link',name='Instituição',exact=True).click()
         page.get_by_role('navigation',name='Configurações da instituição').get_by_role('button',name='Segurança',exact=True).click()
         page.get_by_role('button',name='Gerenciar sites autorizados',exact=True).click();dialog=page.get_by_role('dialog')

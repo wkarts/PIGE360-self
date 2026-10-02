@@ -176,6 +176,7 @@ def _profile_list(db, school, model, output_fn, q, page, page_size, search_field
 
 @router.get('/persons')
 def list_persons(db: DB, user: Actor, school: Scope, q: str = Query(default='', max_length=160), guardians_only: bool = False, type_code: str = Query(default='', max_length=40, pattern=r'^([a-z][a-z0-9_]{1,39})?$'), entity_kind: str = Query(default='', pattern=r'^(individual|organization)?$'), active: bool | None = None, page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100), archived: ArchiveFilter = 'active'):
+    require(user, 'people.read')
     stmt = filter_archived(select(m.Person).where(m.Person.school_id == school.id), m.Person, archived)
     if type_code:
         matching = select(m.PersonTypeLink.person_id).where(
@@ -325,6 +326,7 @@ def list_teachers(
     page_size: int = Query(30, ge=1, le=100),
     archived: ArchiveFilter = 'active',
 ):
+    require(user, 'people.read')
     return _profile_list(
         db, school, m.TeacherProfile, teacher_output, q, page, page_size,
         [m.Person.name, m.Person.social_name, m.Person.cpf, m.Person.phone,
@@ -375,6 +377,7 @@ def list_employees(
     page_size: int = Query(30, ge=1, le=100),
     archived: ArchiveFilter = 'active',
 ):
+    require(user, 'people.read')
     return _profile_list(
         db, school, m.EmployeeProfile, employee_output, q, page, page_size,
         [m.Person.name, m.Person.social_name, m.Person.cpf, m.Person.phone,
@@ -417,6 +420,7 @@ def update_employee(employee_id: str, data: s.Edit, db: DB, user: Actor, school:
 
 @router.get('/students')
 def list_students(db: DB, user: Actor, school: Scope, q: str = Query(default='', max_length=160), page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100), status: str = '', archived: ArchiveFilter = 'active'):
+    require(user, 'students.read')
     stmt = select(m.Student).join(m.Person, m.Student.person_id == m.Person.id).where(m.Student.school_id == school.id)
     # O filtro legado status=archived continua encontrando alunos antigos.
     stmt = filter_archived(stmt, m.Student, 'archived' if status == 'archived' and archived == 'active' else archived)
@@ -474,6 +478,7 @@ def update_student(student_id: str, data: s.Edit, db: DB, user: Actor, school: S
 
 @router.get('/students/{student_id}')
 def student(student_id: str, db: DB, user: Actor, school: Scope):
+    require(user, 'students.read')
     obj = scoped(db, m.Student, student_id, school.id)
     guardians = []
     for link in db.scalars(select(m.GuardianLink).where(m.GuardianLink.student_id == obj.id, m.GuardianLink.school_id == school.id).order_by(m.GuardianLink.created_at)):
@@ -527,6 +532,7 @@ def archive_student(student_id: str, data: s.Edit, db: DB, user: Actor, school: 
 
 @router.get('/students/{student_id}/history')
 def student_history(student_id: str, db: DB, user: Actor, school: Scope):
+    require(user, 'students.read')
     obj = scoped(db, m.Student, student_id, school.id)
     stmt = select(m.EnrollmentEvent).join(m.Enrollment, m.Enrollment.id == m.EnrollmentEvent.enrollment_id).where(m.Enrollment.student_id == obj.id, m.EnrollmentEvent.school_id == school.id).order_by(m.EnrollmentEvent.created_at.desc())
     return [output(x) for x in db.scalars(stmt)]

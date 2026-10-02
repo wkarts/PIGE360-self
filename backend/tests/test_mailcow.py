@@ -75,7 +75,7 @@ def test_new_user_opt_in_queues_without_network_and_worker_provisions_once(clien
     payload = next(call[2] for call in calls if call[0] == 'POST')
     assert payload['password'] == payload['password2'] == password
     assert payload['quota'] == '2048'
-    assert payload['force_pw_update'] == '1'
+    assert payload['force_pw_update'] == '0'
     listed = client.get(base + '/mailboxes', headers=admin)
     assert listed.status_code == 200
     assert listed.json()[0]['status'] == 'active'

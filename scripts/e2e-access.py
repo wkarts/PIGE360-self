@@ -46,6 +46,9 @@ try:
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
             button=page.get_by_role('button',name='Cadastros',exact=True)
             if name in ['Cadastro único','Alunos','Pais e responsáveis'] and button.get_attribute('aria-expanded')=='false':button.click()
+            if name=='Instituição':
+                settings=page.locator('aside').get_by_role('button',name='Configurações',exact=True)
+                if settings.get_attribute('aria-expanded')=='false':settings.click()
             page.locator('aside').get_by_role('link',name=name,exact=True).click()
             expect(page.get_by_role('heading',name=name,exact=True)).to_be_visible()
         def dialog():return page.get_by_role('dialog')

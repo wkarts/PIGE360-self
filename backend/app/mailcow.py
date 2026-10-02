@@ -15,10 +15,10 @@ from datetime import datetime, timedelta
 from urllib.parse import quote, urlsplit
 
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import Field
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, select
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func, select
 from sqlalchemy.orm import Mapped, mapped_column
 
 from . import models as m
@@ -56,6 +56,8 @@ ERROR_MESSAGES = {
     'MAILCOW_REMOTE_MAILBOX_MISSING': 'A caixa anteriormente criada não foi encontrada no servidor de e-mail. Confira o endereço no servidor antes de tentar novamente.',
     'MAILCOW_USER_INACTIVE': 'O usuário está desativado. Reative o cadastro antes de tentar criar sua caixa.',
     'MAILCOW_SCHOOL_INACTIVE': 'A escola está desativada. Reative a escola antes de tentar criar a caixa.',
+    'MAILCOW_REMOTE_MAILBOX_INACTIVE': 'Esta caixa está desativada no servidor de e-mail. Solicite sua ativação antes de vincular.',
+    'MAILCOW_RECONCILE_MISSING': 'Não existe uma caixa ativa com o e-mail deste usuário no servidor da escola. Confira o cadastro ou crie a caixa.',
     'MAILCOW_USER_ACCESS_REMOVED': 'O usuário não tem mais acesso à escola. Confira seu vínculo antes de tentar criar a caixa.',
 }
 
@@ -127,6 +129,10 @@ class ConfigInput(Input):
     default_quota_mb: int = Field(default=1024, ge=1, le=MAX_QUOTA_MB)
     allow_private_network: bool = False
     version: int | None = Field(default=None, ge=1)
+
+
+class ReconcileInput(Input):
+    user_id: str
 
 
 class MailboxInput(Input):
@@ -260,7 +266,7 @@ class MailcowClient:
         raw = self.request('/api/v1/get/domain/' + quote(self.config.domain, safe=''))
         values = raw if isinstance(raw, list) else [raw] if isinstance(raw, dict) else []
         match = next((item for item in values if isinstance(item, dict) and str(item.get('domain_name') or item.get('domain') or '').casefold() == self.config.domain), None)
-        if not match or str(match.get('active', 1)).lower() not in ('1', 'true'):
+        if not match or str(match.get('active', 0)).lower() not in ('1', 'true'):
             raise IntegrationFailure('MAILCOW_DOMAIN_UNAVAILABLE')
         return match
 
@@ -268,7 +274,7 @@ class MailcowClient:
         result = self.request('/api/v1/add/mailbox', 'POST', {
             'active': '1', 'domain': self.config.domain, 'local_part': mailbox.address.split('@')[0],
             'name': mailbox.display_name, 'password': password, 'password2': password,
-            'quota': str(mailbox.quota_mb), 'force_pw_update': '1', 'authsource': 'mailcow',
+            'quota': str(mailbox.quota_mb), 'force_pw_update': '0', 'authsource': 'mailcow',
             'tags': ['pige360-' + mailbox.id],
         })
         messages = result if isinstance(result, list) else [result]
@@ -300,6 +306,7 @@ def mailbox_output(db, mailbox):
             'job_status': job.status if job else 'failed', 'attempts': job.attempts if job else 0,
             'error_code': job.error_code if job else '',
             'error_message': error_message(job.error_code) if job and job.error_code else '',
+            'origin': 'existing' if job and job.kind == 'mailbox_reconcile' else 'created',
             'credentials_available': bool(mailbox.provisioned_at and utc(mailbox.provisioned_at) >= now() - timedelta(days=7)
                                           and mailbox.encrypted_password and not mailbox.password_revealed_at)}
 
@@ -307,8 +314,8 @@ def mailbox_output(db, mailbox):
 def queue_mailbox(db, school_id: str, target: m.User, local_part: str = '', quota_mb: int | None = None):
     lock_school(db, school_id)
     config = _config(db, school_id)
-    if target.role != 'admin' and not db.scalar(select(m.SchoolAccess.user_id).where(
-            m.SchoolAccess.school_id == school_id, m.SchoolAccess.user_id == target.id)):
+    if not db.scalar(select(m.SchoolAccess.user_id).where(
+            m.SchoolAccess.school_id == school_id, m.SchoolAccess.user_id == target.id, m.SchoolAccess.active.is_(True))):
         fail(422, 'O usuário precisa ter acesso à escola que fornecerá a caixa de e-mail.')
     local = (local_part or target.email.split('@')[0]).strip().lower()
     if not LOCAL_PART.fullmatch(local) or '..' in local:
@@ -335,9 +342,9 @@ def queue_mailbox(db, school_id: str, target: m.User, local_part: str = '', quot
     return obj
 
 
-def _apply_remote(mailbox: SchoolMailbox, remote: dict):
+def _apply_remote(mailbox: SchoolMailbox, remote: dict, *, reconciled=False):
     tags = remote.get('tags') or []
-    if not isinstance(tags, list) or 'pige360-' + mailbox.id not in tags:
+    if not reconciled and (not isinstance(tags, list) or 'pige360-' + mailbox.id not in tags):
         raise IntegrationFailure('MAILCOW_ADDRESS_CONFLICT')
     if str(remote.get('username', '')).casefold() != mailbox.address:
         raise IntegrationFailure('MAILCOW_ADDRESS_CONFLICT')
@@ -350,6 +357,88 @@ def _apply_remote(mailbox: SchoolMailbox, remote: dict):
         mailbox.quota_used_bytes = 0
 
 
+def reconciliation_candidate(db, school_id: str, target: m.User) -> str:
+    """Local eligibility only; an address is never proof of mailbox ownership."""
+    config = _config(db, school_id, False)
+    if not config or not config.enabled or not target or not target.active:
+        return ''
+    membership = db.get(m.SchoolAccess, (target.id, school_id))
+    if not membership or not membership.active:
+        return ''
+    address = target.email.strip().casefold()
+    parts = address.split('@')
+    if (len(parts) != 2 or parts[1] != config.domain or not 1 <= len(parts[0]) <= 64
+            or len(address) > 254 or any(ord(char) < 33 or ord(char) > 126 for char in parts[0]) or '..' in parts[0]):
+        return ''
+    return address
+
+
+def reconcile_mailbox(db, school_id: str, target: m.User):
+    """Link a verified existing address without creating/resetting a remote account.
+
+    The account still requires its owner's IMAP/SMTP password. No remote secret
+    can be obtained from the administrative API, and no password is fabricated.
+    School locking serializes this operation with creation and worker processing.
+    """
+    school = lock_school(db, school_id)
+    if not school or not school.active:
+        fail(404, 'Escola não encontrada.')
+    target = db.scalar(select(m.User).where(m.User.id == target.id).with_for_update())
+    address = reconciliation_candidate(db, school_id, target)
+    if not address:
+        fail(422, 'Selecione um usuário ativo desta escola com e-mail no domínio institucional configurado.')
+    config = _config(db, school_id)
+    mailbox = db.scalar(select(SchoolMailbox).where(SchoolMailbox.school_id == school_id, SchoolMailbox.user_id == target.id))
+    if mailbox and (mailbox.address != address or mailbox.config_id != config.id):
+        fail(409, 'Este usuário já possui outra caixa vinculada nesta escola. Confira o cadastro antes de continuar.')
+    conflict = db.scalar(select(SchoolMailbox).where(SchoolMailbox.config_id == config.id, SchoolMailbox.address == address))
+    if conflict and conflict.user_id != target.id:
+        fail(409, 'Este endereço já está vinculado a outro usuário da escola.')
+    job = db.get(m.IntegrationJob, mailbox.job_id) if mailbox else None
+    if mailbox and not job:
+        fail(409, 'O registro desta caixa precisa ser conferido pelo administrador antes de vincular.')
+    if job and job.status in ('pending', 'processing', 'retry', 'uncertain'):
+        fail(409, 'A criação desta caixa ainda está em andamento. Aguarde sua conclusão antes de vincular.')
+    try:
+        client = MailcowClient(config)
+        client.domain()
+        remote = client.mailbox(address)
+        if not remote:
+            raise IntegrationFailure('MAILCOW_RECONCILE_MISSING')
+        if str(remote.get('active', '0')).lower() not in ('1', 'true'):
+            raise IntegrationFailure('MAILCOW_REMOTE_MAILBOX_INACTIVE')
+    except IntegrationFailure as error:
+        emit('mailcow.mailbox_reconcile', level='WARNING', state='failed', code=error.code)
+        fail(409 if error.code in ('MAILCOW_RECONCILE_MISSING', 'MAILCOW_REMOTE_MAILBOX_INACTIVE') else 502, error_message(error.code))
+    if not mailbox:
+        from .db import uid
+        mailbox_id = uid()
+        # Never publish a pending job: this transaction only records verification.
+        job = m.IntegrationJob(school_id=school_id, kind='mailbox_reconcile',
+                              dedupe_key='mailbox-reconcile:' + mailbox_id,
+                              encrypted_payload=seal({'mailbox_id': mailbox_id}),
+                              available_at=now(), status='completed', completed_at=now(), remote_id=address)
+        db.add(job); db.flush()
+        try:
+            quota_mb = min(MAX_QUOTA_MB, max(1, int(remote.get('quota') or 0) // 1_048_576))
+        except (TypeError, ValueError):
+            quota_mb = config.default_quota_mb
+        mailbox = SchoolMailbox(id=mailbox_id, school_id=school_id, config_id=config.id, user_id=target.id,
+                                job_id=job.id, address=address, display_name=target.name,
+                                quota_mb=quota_mb if remote.get('quota') else config.default_quota_mb,
+                                encrypted_password='')
+        db.add(mailbox); db.flush()
+    elif not mailbox.provisioned_at:
+        # Failed creation can be recovered only by this explicit exact-email check.
+        job.kind, job.status, job.error_code = 'mailbox_reconcile', 'completed', ''
+        job.completed_at, job.remote_id, job.lease_until = now(), address, None
+        mailbox.encrypted_password = ''
+    _apply_remote(mailbox, remote, reconciled=True)
+    mailbox.version += 1
+    db.flush()
+    return mailbox
+
+
 def provision_job(db, job, payload):
     school = lock_school(db, job.school_id)
     if not school or not school.active:
@@ -360,8 +449,8 @@ def provision_job(db, job, payload):
     target = db.scalar(select(m.User).where(m.User.id == mailbox.user_id).with_for_update())
     if not target or not target.active:
         raise IntegrationFailure('MAILCOW_USER_INACTIVE')
-    if target.role != 'admin' and not db.scalar(select(m.SchoolAccess.user_id).where(
-            m.SchoolAccess.user_id == target.id, m.SchoolAccess.school_id == job.school_id)):
+    if not db.scalar(select(m.SchoolAccess.user_id).where(
+            m.SchoolAccess.user_id == target.id, m.SchoolAccess.school_id == job.school_id, m.SchoolAccess.active.is_(True))):
         raise IntegrationFailure('MAILCOW_USER_ACCESS_REMOVED')
     config = db.get(MailcowConfig, mailbox.config_id)
     if not config or not config.enabled or config.school_id != job.school_id:
@@ -369,9 +458,8 @@ def provision_job(db, job, payload):
     client = MailcowClient(config)
     remote = client.mailbox(mailbox.address)
     if remote:
-        first_confirmation = not mailbox.provisioned_at
         _apply_remote(mailbox, remote)
-        if first_confirmation:
+        if mailbox.encrypted_password:
             from .email_client import provision_connection
             provision_connection(db, mailbox, unseal(mailbox.encrypted_password).get('password'))
         return mailbox.address
@@ -452,6 +540,33 @@ def list_mailboxes(db: DB, user: Actor, school: Scope):
     return [mailbox_output(db, row) for row in rows]
 
 
+@router.get('/mailboxes/candidates')
+def reconciliation_candidates(db: DB, user: Actor, school: Scope,
+                              offset: int = Query(default=0, ge=0), limit: int = Query(default=20, ge=1, le=50)):
+    _admin(user)
+    config = _config(db, school.id)
+    access = select(m.SchoolAccess.user_id).where(m.SchoolAccess.school_id == school.id, m.SchoolAccess.active.is_(True))
+    existing = select(SchoolMailbox.user_id).where(SchoolMailbox.school_id == school.id, SchoolMailbox.provisioned_at.is_not(None))
+    filters = (m.User.active.is_(True), m.User.id.in_(access),
+               func.lower(m.User.email).endswith('@' + config.domain, autoescape=True), m.User.id.not_in(existing))
+    total = db.scalar(select(func.count()).select_from(m.User).where(*filters))
+    users = db.scalars(select(m.User).where(*filters).order_by(m.User.name, m.User.id).offset(offset).limit(limit)).all()
+    return {'items': [{'user_id': target.id, 'name': target.name, 'address': address}
+                      for target in users if (address := reconciliation_candidate(db, school.id, target))],
+            'total': total, 'offset': offset, 'limit': limit}
+
+
+@router.post('/mailboxes/reconcile')
+def link_existing_mailbox(data: ReconcileInput, db: DB, user: Actor, school: Scope, request: Request):
+    _admin(user)
+    target = db.get(m.User, data.user_id)
+    if not target or not target.active:
+        fail(422, 'Selecione um usuário ativo da escola.')
+    mailbox = reconcile_mailbox(db, school.id, target)
+    audit(db, request, user, 'mailcow.mailbox_reconciled', mailbox, school.id, {'user_id': target.id})
+    return mailbox_output(db, mailbox)
+
+
 @router.post('/mailboxes', status_code=201)
 def create_mailbox(data: MailboxInput, db: DB, user: Actor, school: Scope, request: Request):
     _admin(user)
@@ -491,7 +606,8 @@ def sync_mailbox(mailbox_id: str, db: DB, user: Actor, school: Scope, request: R
         remote = MailcowClient(_config(db, school.id)).mailbox(obj.address)
         if not remote:
             fail(409, 'A caixa ainda não foi encontrada no servidor.')
-        _apply_remote(obj, remote)
+        job = db.get(m.IntegrationJob, obj.job_id)
+        _apply_remote(obj, remote, reconciled=bool(job and job.kind == 'mailbox_reconcile'))
     except IntegrationFailure as error:
         emit('mailcow.mailbox_sync', level='WARNING', state='failed', code=error.code)
         fail(502, error_message(error.code))

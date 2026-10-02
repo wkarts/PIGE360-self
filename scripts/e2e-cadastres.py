@@ -61,6 +61,9 @@ try:
             if label in ['WhatsApp','E-mail institucional','Bancária'] and integrations.get_attribute('aria-expanded')=='false':integrations.click()
             admin=page.get_by_role('button',name='Administração do sistema',exact=True)
             if label in ['Diagnóstico','Auditoria','Portabilidade de dados'] and admin.get_attribute('aria-expanded')=='false':admin.click()
+            if label=='Instituição':
+                settings=page.get_by_role('button',name='Configurações',exact=True)
+                if settings.get_attribute('aria-expanded')=='false':settings.click()
             page.locator('aside').get_by_role('link',name=label,exact=False).click()
             expect(page.locator('h1')).to_have_text(heading or label)
         def dialog():return page.get_by_role('dialog')
@@ -81,7 +84,7 @@ try:
         menu.click();expect(page.get_by_role('link',name='Fornecedores',exact=True)).not_to_be_visible()
         menu.click();record('Nove cadastros agrupados em menu expansível acessível')
         nav('Fornecedores');page.get_by_role('button',name='+ Cadastrar fornecedor',exact=True).click()
-        expect(dialog()).to_have_class('modal modal-wide')
+        expect(dialog()).to_have_class('modal modal-person modal-wide')
         field('Natureza da pessoa').select_option('organization')
         field('Razão social').fill('Papelaria Exemplo Ltda')
         field('CNPJ').fill('12.ABC.345/01DE-35')
@@ -220,7 +223,7 @@ try:
         expect(dialog()).to_have_count(0)
         record('Lançamento em modal responsivo com resumo nominal e confirmação de descarte; sem alterar emissão')
         page.set_viewport_size({'width':1440,'height':960})
-        for label in ['Visão geral','Cadastro único','Alunos','Professores','Funcionários','Pais e responsáveis','Fornecedores','Prestadores de serviços','Clientes','Sócios','Matrículas','Estrutura acadêmica','Diário Escolar','Documentação','Protocolos','Relatórios','Inscrições online','Cobranças','WhatsApp','E-mail institucional','Bancária','Instituição','Usuários e acessos','Diagnóstico','Auditoria']:
+        for label in ['Visão geral','Cadastro único','Alunos','Professores','Funcionários','Pais e responsáveis','Fornecedores','Prestadores de serviços','Clientes','Sócios','Matrículas','Estrutura acadêmica','Diário Escolar','Pendências documentais','Protocolos','Relatórios','Inscrições online','Cobranças','WhatsApp','E-mail institucional','Bancária','Instituição','Usuários e acessos','Diagnóstico','Auditoria']:
             nav(label,heading='Pendências documentais' if label=='Documentação' else label)
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
         assert not route_failures,route_failures
