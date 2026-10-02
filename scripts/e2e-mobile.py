@@ -287,6 +287,9 @@ try:
         name.fill("Pessoa cadastrada pelo celular")
         for width, height in [(320, 640), (390, 400)]:
             page.set_viewport_size({"width": width, "height": height})
+            # VisualViewport é aplicado no próximo frame. Aguarde a geometria
+            # observável antes de medir; o limite do botão continua estrito.
+            expect(page.locator(".modal-backdrop")).to_have_css("height", f"{height}px")
             no_page_overflow(page)
             assert dialog.evaluate("el => el.scrollWidth <= el.clientWidth + 1")
             save = dialog.get_by_role("button", name="Salvar", exact=True)
