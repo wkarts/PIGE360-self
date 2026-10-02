@@ -53,8 +53,7 @@ print("\\n".join(line for line in content.splitlines() if "sogo" in line.lower()
 PYREDACT
     container="$(compose ps -q sogo)"
     if [[ -n "$container" ]]; then
-      docker inspect --format '{{json .State.Health}}' "$container" | \\
-        python -c 'import json,sys; d=json.load(sys.stdin); [print(json.dumps(x)) for x in d.get("Log", [])[-5:]]' || true
+      docker inspect --format '{{json .State.Health}}' "$container" | python -c 'import json,sys; d=json.load(sys.stdin); [print(json.dumps(x)) for x in d.get("Log", [])[-5:]]' || true
     fi
   fi
   # Secrets gerados nunca são publicados junto aos logs. O marker foi criado
