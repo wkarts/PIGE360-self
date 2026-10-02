@@ -79,6 +79,15 @@ try:
         expect(page.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible()
         expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
         wait_until(lambda: page.locator('.sidebar-logo').evaluate('el=>el.complete && el.naturalWidth>0'), 'Logotipo institucional não carregou')
+        crest=page.locator('.sidebar-logo').bounding_box();brand=page.locator('.sidebar-brand').bounding_box()
+        assert crest and brand and 140<=crest['height']<=180,crest
+        assert abs(crest['x']+crest['width']/2-brand['x']-brand['width']/2)<=2,{'crest':crest,'brand':brand}
+        guide=page.get_by_role('button',name='Guia de uso',exact=True)
+        guide_box=guide.bounding_box();heading=page.get_by_role('heading',name='Visão geral',exact=True).bounding_box()
+        assert guide_box and heading and guide_box['x']>=1666*.7 and guide_box['y']<=heading['y']+heading['height'],{'guide':guide_box,'heading':heading}
+        assert guide_box['height']>=43.5,guide_box
+        assert guide.evaluate("el=>parseFloat(getComputedStyle(el).borderTopWidth)>=1 && parseFloat(getComputedStyle(el).paddingLeft)>=10 && getComputedStyle(el).textDecorationLine==='none'"),'Guia precisa preservar o botão com borda, espaçamento e texto sem sublinhado'
+        record('Sidebar mantém brasão ampliado e centralizado; Guia aparece como botão com borda à direita do cabeçalho')
         nav=page.locator('.sidebar-scroll');main=page.locator('#main-content')
         def top(el):return el.evaluate('el=>el.scrollTop')
         def fixed():return page.evaluate("JSON.stringify(['.sidebar-brand','.topbar'].map(s=>{const r=document.querySelector(s).getBoundingClientRect();return [r.x,r.y,r.width,r.height]}))")

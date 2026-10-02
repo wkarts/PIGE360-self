@@ -150,23 +150,48 @@ try:
         expect(password).to_have_value("Senha temporária para conferência")
         password.fill("")
         record("Senha pode ser conferida e ocultada sem perder o valor; login não aciona teclado automaticamente")
-        for width, height in [(390, 844), (320, 568)]:
+        for width, height in [(390, 844), (360, 800), (320, 568)]:
             viewport = {"width": width, "height": height}
             page.set_viewport_size(viewport)
             page.evaluate("scrollTo(0, 0)")
             no_page_overflow(page)
             intro = page.locator(".auth-intro").bounding_box()
+            crest = page.locator(".official-brand img").bounding_box()
             cta = page.get_by_role("button", name="Entrar na aplicação")
             in_view(cta, viewport)
-            assert intro and intro["height"] <= 160, intro
+            assert intro and crest, {"intro": intro, "crest": crest}
+            assert crest["height"] >= (160 if width >= 360 else 96), crest
+            assert abs(crest["x"] + crest["width"] / 2 - width / 2) <= 2, crest
+            assert crest["y"] >= 0 and crest["y"] + crest["height"] <= intro["y"] + intro["height"], crest
+            assert page.locator(".auth-form").bounding_box()["y"] >= crest["y"] + crest["height"], crest
             for caption in ("E-mail", "Senha"):
                 field = page.get_by_label(caption, exact=True)
                 touch_target(field)
                 assert field.evaluate("el => parseFloat(getComputedStyle(el).fontSize) >= 16"), caption
             touch_target(cta)
-            metrics[f"login_{width}"] = {"brand_height": intro["height"], "button": cta.bounding_box()}
+            metrics[f"login_{width}"] = {"brand_height": intro["height"], "crest": crest, "button": cta.bounding_box()}
             page.screenshot(path=str(OUT / f"01-login-{width}.png"), full_page=True)
-        record("Login com brasão vertical e fonte própria mantém Entrar visível em 390×844 e 320×568, campos de 16px e alvos de toque")
+        record("Brasão centralizado tem ao menos 160px em 390×844 e 360×800 e 96px em 320×568; Entrar permanece visível, com campos de 16px e alvos de toque")
+
+        for width, height in [(1440, 960), (1024, 768)]:
+            viewport = {"width": width, "height": height}
+            page.set_viewport_size(viewport)
+            page.evaluate("scrollTo(0, 0)")
+            no_page_overflow(page)
+            intro = page.locator(".auth-intro").bounding_box()
+            crest = page.locator(".official-brand img").bounding_box()
+            copy = page.locator(".auth-copy").bounding_box()
+            panel = page.locator(".auth-panel").bounding_box()
+            assert intro and crest and copy and panel
+            assert crest["height"] >= 220, crest
+            assert abs(crest["x"] + crest["width"] / 2 - intro["x"] - intro["width"] / 2) <= 2, {"intro": intro, "crest": crest}
+            assert crest["y"] <= height * .2, crest
+            assert crest["y"] + crest["height"] < copy["y"], {"crest": crest, "copy": copy}
+            assert panel["x"] >= intro["x"] + intro["width"] - 1, {"intro": intro, "panel": panel}
+            in_view(page.get_by_role("button", name="Entrar na aplicação"), viewport)
+            metrics[f"login_{width}"] = {"intro": intro, "crest": crest, "copy": copy, "panel": panel}
+            page.screenshot(path=str(OUT / f"01-login-{width}.png"), full_page=True)
+        record("Login desktop mantém brasão ampliado e centralizado no alto do painel de apresentação, acima do texto, com acesso visível ao lado")
 
         # Janela baixa não pode prender o formulário atrás de altura fixa.
         page.set_viewport_size({"width": 640, "height": 360})
@@ -174,6 +199,7 @@ try:
         cta.scroll_into_view_if_needed()
         in_view(cta, {"width": 640, "height": 360})
         no_page_overflow(page)
+        page.screenshot(path=str(OUT / "01-login-640x360.png"), full_page=True)
         record("Login em paisagem permite rolar até senha e botão sem recortar controles")
 
         # O atalho opcional não pode recriar o bloco vazio nem encobrir o acesso.
@@ -204,6 +230,15 @@ try:
         touch_target(opener)
         touch_target(page.get_by_role("button", name="Meu perfil", exact=True))
         touch_target(page.get_by_label("Selecionar escola", exact=True))
+        for width, height in [(390, 844), (320, 568)]:
+            page.set_viewport_size({"width": width, "height": height})
+            no_page_overflow(page)
+            guide = page.get_by_role("button", name="Guia de uso", exact=True)
+            in_view(guide, {"width": width, "height": height})
+            touch_target(guide)
+            assert guide.evaluate("el => parseFloat(getComputedStyle(el).borderTopWidth) >= 1"), "Guia precisa da borda do botão"
+            page.screenshot(path=str(OUT / f"02-dashboard-{width}.png"), full_page=True)
+        page.set_viewport_size({"width": 390, "height": 844})
         page.get_by_role("button", name="Guia de uso", exact=True).click()
         expect(page.get_by_role("heading", name="Guia de uso", exact=True)).to_be_visible()
         for width, height in [(390, 844), (320, 640), (768, 900), (1440, 960)]:
