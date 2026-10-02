@@ -67,4 +67,5 @@ fs.writeFileSync(path.join(dist,'build-info.json'),JSON.stringify({product:'PIGE
 execFileSync(process.execPath,[path.join(root,'tests/render-smoke.mjs')],{stdio:'inherit'});
 execFileSync(process.execPath,[path.join(root,'tests/integration-navigation.mjs')],{stdio:'inherit'});
 execFileSync(process.execPath,[path.join(root,'tests/diary-flow.mjs')],{stdio:'inherit'});
+execFileSync(process.execPath,[path.join(root,'tests/mailcow-flow.mjs')],{stdio:'inherit'});
 console.log('PWA compilada:',hash);

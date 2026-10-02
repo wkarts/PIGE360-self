@@ -10,6 +10,7 @@ import json
 import re
 import secrets
 import socket
+import ssl
 from datetime import datetime, timedelta
 from urllib.parse import quote, urlsplit
 
@@ -27,11 +28,65 @@ from .db import Base, Record, now
 from .integration_core import IntegrationFailure, enqueue, seal, unseal
 from .schemas import Input
 from .security import Actor, DB, Scope, check_version, fail, lock_school, utc
+from .telemetry import emit
 
 router = APIRouter(prefix='/api/v1/schools/{school_id}/mailcow', tags=['E-mail institucional'])
 MAX_QUOTA_MB = 1_048_576
 LOCAL_PART = re.compile(r'[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?')
 DOMAIN = re.compile(r'(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{1,62}')
+ERROR_MESSAGES = {
+    'MAILCOW_KEY_REJECTED': 'A chave da API foi recusada pelo Mailcow. Confira se a API está habilitada e substitua a chave salva pela chave de leitura e escrita do servidor.',
+    'MAILCOW_IP_NOT_ALLOWED': 'O Mailcow bloqueou o IP de origem da conexão. Autorize os IPs de saída da aplicação e do worker na lista de acesso da API Mailcow.',
+    'MAILCOW_READ_ONLY_KEY': 'A chave salva permite apenas leitura. Substitua-a pela chave de leitura e escrita do Mailcow para criar caixas de e-mail.',
+    'MAILCOW_ACCESS_DENIED': 'O Mailcow recusou o acesso à API. Confira a chave de leitura e escrita e autorize os IPs de saída da aplicação e do worker na lista de acesso do Mailcow.',
+    'MAILCOW_WRITE_DENIED': 'O Mailcow recusou a criação pela API. Use a chave de leitura e escrita, confirme que essa API está habilitada e autorize o IP de saída do worker no Mailcow.',
+    'MAILCOW_KEY_MISSING': 'Salve uma chave da API de leitura e escrita do Mailcow antes de testar a conexão.',
+    'MAILCOW_DOMAIN_UNAVAILABLE': 'O domínio informado não foi encontrado ativo no Mailcow. Confira o domínio de e-mail e sua ativação no servidor.',
+    'MAILCOW_DNS_UNAVAILABLE': 'O servidor da aplicação não conseguiu resolver o endereço do Mailcow. Confira o hostname e o DNS da instalação.',
+    'MAILCOW_ADDRESS_BLOCKED': 'O endereço do Mailcow foi bloqueado pela configuração de rede. Se o servidor está em uma rede privada, habilite essa opção e mantenha um hostname HTTPS válido.',
+    'MAILCOW_TLS_ERROR': 'O certificado HTTPS do Mailcow não pôde ser validado. Confira o hostname, a validade e a cadeia de certificados do servidor.',
+    'MAILCOW_NETWORK_ERROR': 'Não foi possível conectar ao Mailcow. Confira a disponibilidade do servidor, a porta HTTPS e o firewall de saída da instalação.',
+    'MAILCOW_UNAVAILABLE': 'O Mailcow está temporariamente indisponível ou limitou as requisições. Aguarde antes de tentar novamente.',
+    'MAILCOW_INVALID_RESPONSE': 'O endereço configurado não retornou uma resposta válida da API Mailcow. Confira o servidor e as regras do proxy.',
+    'MAILCOW_HTTP_REJECTED': 'O servidor recusou a requisição à API Mailcow. Confira o endereço HTTPS e as regras do proxy ou firewall.',
+    'MAILCOW_ADDRESS_CONFLICT': 'Este endereço já existe no Mailcow sem o vínculo deste cadastro. Escolha outro endereço; a caixa existente não será alterada.',
+    'MAILCOW_DISABLED': 'A criação de contas está desativada. Habilite a integração antes de tentar novamente.',
+    'MAILCOW_CREATE_REJECTED': 'O Mailcow recusou a criação. Confira a disponibilidade do endereço, as cotas do domínio e as permissões de escrita da API.',
+    'MAILCOW_CONFIRMATION_PENDING': 'O pedido foi enviado, mas a caixa ainda não foi confirmada. A próxima tentativa consultará o servidor antes de criar novamente.',
+    'MAILCOW_REMOTE_MAILBOX_MISSING': 'A caixa anteriormente criada não foi encontrada no Mailcow. Confira o endereço no servidor antes de tentar novamente.',
+    'MAILCOW_USER_INACTIVE': 'O usuário está desativado. Reative o cadastro antes de tentar criar sua caixa.',
+    'MAILCOW_SCHOOL_INACTIVE': 'A escola está desativada. Reative a escola antes de tentar criar a caixa.',
+    'MAILCOW_USER_ACCESS_REMOVED': 'O usuário não tem mais acesso à escola. Confira seu vínculo antes de tentar criar a caixa.',
+}
+
+
+def error_message(code: str) -> str:
+    # Messages are application-owned: provider bodies can echo credentials.
+    return ERROR_MESSAGES.get(code, 'Não foi possível concluir a operação no Mailcow. Confira a configuração e tente novamente.')
+
+
+def _access_error(status: int, content: bytes, method: str) -> str:
+    """Recognize only Mailcow's fixed authentication messages; never echo a body."""
+    fallback = 'MAILCOW_ACCESS_DENIED' if method == 'GET' else 'MAILCOW_WRITE_DENIED'
+    try:
+        raw = json.loads(content)
+    except (ValueError, UnicodeDecodeError):
+        return fallback
+    if not isinstance(raw, dict) or raw.get('type') != 'error':
+        return fallback
+    message = raw.get('msg')
+    if status == 403 and message == 'API read/write access denied':
+        return 'MAILCOW_READ_ONLY_KEY'
+    if status == 401 and message == 'authentication failed':
+        return 'MAILCOW_KEY_REJECTED'
+    prefix = 'api access denied for ip '
+    if status == 401 and isinstance(message, str) and message.startswith(prefix):
+        try:
+            ipaddress.ip_address(message[len(prefix):])
+        except ValueError:
+            return fallback
+        return 'MAILCOW_IP_NOT_ALLOWED'
+    return fallback
 
 
 class MailcowConfig(Record, m.Scoped, Base):
@@ -168,15 +223,24 @@ class MailcowClient:
                         return None
                     if response.status_code >= 500 or response.status_code == 429:
                         raise IntegrationFailure('MAILCOW_UNAVAILABLE', retryable=True)
-                    if not 200 <= response.status_code < 300:
-                        raise IntegrationFailure('MAILCOW_ACCESS_DENIED' if response.status_code in (401, 403) else 'MAILCOW_HTTP_REJECTED')
                     content = bytearray()
                     for part in response.iter_bytes():
                         content.extend(part)
                         if len(content) > 1_000_000:
                             raise IntegrationFailure('MAILCOW_RESPONSE_TOO_LARGE')
+                    if response.status_code in (401, 403):
+                        raise IntegrationFailure(_access_error(response.status_code, content, method))
+                    if not 200 <= response.status_code < 300:
+                        raise IntegrationFailure('MAILCOW_HTTP_REJECTED')
                     result = json.loads(content) if content else None
-        except (httpx.HTTPError, OSError):
+        except (httpx.HTTPError, OSError) as error:
+            cause = error
+            seen = set()
+            while cause is not None and id(cause) not in seen:
+                seen.add(id(cause))
+                if isinstance(cause, ssl.SSLCertVerificationError):
+                    raise IntegrationFailure('MAILCOW_TLS_ERROR') from None
+                cause = cause.__cause__ or cause.__context__
             raise IntegrationFailure('MAILCOW_NETWORK_ERROR', retryable=True)
         except (ValueError, UnicodeDecodeError):
             raise IntegrationFailure('MAILCOW_INVALID_RESPONSE', retryable=True)
@@ -235,6 +299,7 @@ def mailbox_output(db, mailbox):
             'status': ('active' if mailbox.remote_active else 'disabled') if mailbox.provisioned_at else job.status if job else 'failed',
             'job_status': job.status if job else 'failed', 'attempts': job.attempts if job else 0,
             'error_code': job.error_code if job else '',
+            'error_message': error_message(job.error_code) if job and job.error_code else '',
             'credentials_available': bool(mailbox.provisioned_at and utc(mailbox.provisioned_at) >= now() - timedelta(days=7)
                                           and mailbox.encrypted_password and not mailbox.password_revealed_at)}
 
@@ -340,10 +405,11 @@ def save_config(data: ConfigInput, db: DB, user: Actor, school: Scope, request: 
     else:
         obj = MailcowConfig(school_id=school.id, base_url=base_url, domain=domain)
         db.add(obj)
-    if data.api_key:
-        if len(data.api_key) < 16 or any(ord(char) < 33 or ord(char) > 126 for char in data.api_key):
+    api_key = data.api_key.strip()
+    if api_key:
+        if len(api_key) < 16 or any(ord(char) < 33 or ord(char) > 126 for char in api_key):
             fail(422, 'Informe uma chave da API válida, sem espaços.')
-        obj.encrypted_secret = seal({'api_key': data.api_key})
+        obj.encrypted_secret = seal({'api_key': api_key})
     if data.enabled and not obj.encrypted_secret:
         fail(422, 'Informe a chave da API para habilitar o e-mail institucional.')
     obj.base_url, obj.domain, obj.enabled = base_url, domain, data.enabled
@@ -358,7 +424,9 @@ def save_config(data: ConfigInput, db: DB, user: Actor, school: Scope, request: 
 @router.post('/test')
 def test_config(db: DB, user: Actor, school: Scope, request: Request):
     _admin(user); lock_school(db, school.id)
-    config = _config(db, school.id)
+    config = _config(db, school.id, False)
+    if not config:
+        fail(409, 'Salve o servidor, o domínio e a chave antes de testar a conexão.')
     try:
         MailcowClient(config).domain()
         ok, code = True, ''
@@ -366,7 +434,9 @@ def test_config(db: DB, user: Actor, school: Scope, request: Request):
         ok, code = False, error.code
     config.last_test_at, config.last_test_ok = now(), ok
     audit(db, request, user, 'mailcow.tested', config, school.id, {'ok': ok, 'code': code})
-    return {'ok': ok, 'code': code, 'message': 'Servidor e domínio validados.' if ok else 'Não foi possível validar o domínio. Confira o servidor, a chave e as permissões da API.'}
+    emit('mailcow.connection_test', level='INFO' if ok else 'WARNING', state='read_validated' if ok else 'failed', code=code)
+    return {'ok': ok, 'code': code, 'read_authenticated': ok, 'write_verified': False,
+            'message': 'Consulta ao domínio validada. A permissão de criação será confirmada ao provisionar uma caixa.' if ok else error_message(code)}
 
 
 @router.get('/mailboxes')
@@ -416,8 +486,9 @@ def sync_mailbox(mailbox_id: str, db: DB, user: Actor, school: Scope, request: R
         if not remote:
             fail(409, 'A caixa ainda não foi encontrada no servidor.')
         _apply_remote(obj, remote)
-    except IntegrationFailure:
-        fail(502, 'Não foi possível consultar a caixa com segurança. Confira a integração e tente novamente.')
+    except IntegrationFailure as error:
+        emit('mailcow.mailbox_sync', level='WARNING', state='failed', code=error.code)
+        fail(502, error_message(error.code))
     audit(db, request, user, 'mailcow.mailbox_synced', obj, school.id)
     return mailbox_output(db, obj)
 
