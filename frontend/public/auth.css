@@ -86,7 +86,7 @@
   .auth-form h2 { font-size: 26px; }
   .auth-enrollment { margin-top: 24px; padding-top: 20px; }
 }
-@media (max-width: 360px), (max-height: 600px) and (max-width: 800px) {
+@media (max-width: 340px), (max-height: 600px) and (max-width: 800px) {
   .auth-intro { padding: max(16px, env(safe-area-inset-top)) 20px 8px; }
   .auth-intro .official-brand > img { max-height: 104px; }
   .auth-panel { padding: 18px 20px max(20px, env(safe-area-inset-bottom)); }

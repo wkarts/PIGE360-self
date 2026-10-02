@@ -150,7 +150,7 @@ try:
         expect(password).to_have_value("Senha temporária para conferência")
         password.fill("")
         record("Senha pode ser conferida e ocultada sem perder o valor; login não aciona teclado automaticamente")
-        for width, height in [(390, 844), (320, 568)]:
+        for width, height in [(390, 844), (360, 800), (320, 568)]:
             viewport = {"width": width, "height": height}
             page.set_viewport_size(viewport)
             page.evaluate("scrollTo(0, 0)")
@@ -160,7 +160,7 @@ try:
             cta = page.get_by_role("button", name="Entrar na aplicação")
             in_view(cta, viewport)
             assert intro and crest, {"intro": intro, "crest": crest}
-            assert crest["height"] >= (160 if width == 390 else 96), crest
+            assert crest["height"] >= (160 if width >= 360 else 96), crest
             assert abs(crest["x"] + crest["width"] / 2 - width / 2) <= 2, crest
             assert crest["y"] >= 0 and crest["y"] + crest["height"] <= intro["y"] + intro["height"], crest
             assert page.locator(".auth-form").bounding_box()["y"] >= crest["y"] + crest["height"], crest
@@ -171,7 +171,7 @@ try:
             touch_target(cta)
             metrics[f"login_{width}"] = {"brand_height": intro["height"], "crest": crest, "button": cta.bounding_box()}
             page.screenshot(path=str(OUT / f"01-login-{width}.png"), full_page=True)
-        record("Brasão centralizado tem ao menos 160px em 390×844 e 96px em tela compacta; Entrar permanece visível, com campos de 16px e alvos de toque")
+        record("Brasão centralizado tem ao menos 160px em 390×844 e 360×800 e 96px em 320×568; Entrar permanece visível, com campos de 16px e alvos de toque")
 
         for width, height in [(1440, 960), (1024, 768)]:
             viewport = {"width": width, "height": height}
