@@ -40,10 +40,13 @@ def main():
             'ALLOWED_HOSTS':','.join(dict.fromkeys(['localhost','127.0.0.1',url.hostname])),
             'APP_SECRET_KEY':secrets.token_urlsafe(48),'SETUP_TOKEN':secrets.token_urlsafe(32),
             'INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(),
+            'MAIL_AGENT_SHARED_KEY':secrets.token_urlsafe(48),'SOGO_DB_PASSWORD':secrets.token_urlsafe(36),
             'POSTGRES_PASSWORD':secrets.token_urlsafe(36),
             'APP_IMAGE':{'local':f'pige360-self:{version}','stable':'ghcr.io/wkarts/pige360-self:latest','develop':'ghcr.io/wkarts/pige360-self:develop'}[args.channel],
             'APP_ENV':'development' if args.channel=='develop' else 'production',
             'APP_PULL_POLICY':'never' if args.channel=='local' else 'always',
+            'MAIL_AGENT_IMAGE':{'local':f'pige360-mail-agent:{version}','stable':'ghcr.io/wkarts/pige360-self-mail-agent:latest','develop':'ghcr.io/wkarts/pige360-self-mail-agent:develop'}[args.channel],
+            'SOGO_IMAGE':{'local':f'pige360-sogo:{version}','stable':'ghcr.io/wkarts/pige360-self-sogo:latest','develop':'ghcr.io/wkarts/pige360-self-sogo:develop'}[args.channel],
             'POSTGRES_DB':'pige360_develop' if args.channel=='develop' else 'pige360',
             'COMPOSE_PROJECT_NAME':project}
     lines=[line.split('=',1)[0]+'='+values[line.split('=',1)[0]] if '=' in line and line.split('=',1)[0] in values else line for line in text.splitlines()]

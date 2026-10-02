@@ -29,7 +29,7 @@ async def lifespan(app):
     engine.dispose()
 
 app = FastAPI(title='PIGE360 Self — Gestão Educacional', version=cfg.app_version, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url='/api/v1/openapi.json')
-for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, contract_templates.router, contract_signatures.router, personal_signing.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router, mfa.router, dossiers.router, ocr.router, lookups.router, diagnostics.router, diary.router, legacy_import.router, mailcow.router, school_community.router, email_client.router, fiscal_signing.router, certificate_alerts.router]:
+for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, contract_templates.router, contract_signatures.router, personal_signing.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router, mfa.router, dossiers.router, ocr.router, lookups.router, diagnostics.router, diary.router, legacy_import.router, mailcow.router, school_community.router, email_client.router, email_client.webmail_router, fiscal_signing.router, certificate_alerts.router]:
     app.include_router(router)
 
 @app.exception_handler(HTTPException)
@@ -69,7 +69,7 @@ async def security_headers(request: Request, call_next):
     response.headers['X-App-Version'] = cfg.app_version
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'same-origin'
-    if not parents:
+    if not parents and not request.url.path.startswith('/webmail/'):
         response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Permissions-Policy'] = 'camera=(self), microphone=(), geolocation=()'
     hub_script_sources = ' '.join(hub_origins)

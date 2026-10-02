@@ -10,6 +10,7 @@ import binascii
 import hashlib
 import imaplib
 import ipaddress
+import secrets
 import re
 import smtplib
 import socket
@@ -23,11 +24,12 @@ from email.parser import BytesParser
 from email.utils import format_datetime, formataddr, make_msgid
 from html.parser import HTMLParser
 from typing import Annotated, Literal
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Form
+from fastapi.responses import Response, RedirectResponse
+import httpx
 from pydantic import ConfigDict, EmailStr, Field, field_validator
 from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, select, update
 from sqlalchemy.exc import IntegrityError
@@ -36,17 +38,19 @@ from sqlalchemy.orm import Mapped, mapped_column
 from . import models as m
 from .common import audit
 from .config import settings
-from .db import Base, Record, now
+from .db import Base, Record, SessionLocal, now
 from .integration_core import IntegrationFailure, seal, unseal
 from .mailcow import MailcowConfig, SchoolMailbox, _base_url, reconciliation_candidate, reconcile_mailbox
 from .schemas import Input
-from .security import Actor, DB, fail, lock_school, utc
+from .security import Actor, DB, fail, lock_school, request_csrf, utc
 
 router = APIRouter(prefix='/api/v1/schools/{school_id}/email', tags=['Meu e-mail'])
+webmail_router = APIRouter()
 MAX_MESSAGE = 10 * 1024 * 1024
 MAX_ATTACHMENTS = 5 * 1024 * 1024
 MAX_RECIPIENTS = 50
 MAX_FOLDERS = 100
+MAX_WEBMAIL_RESPONSE = 50 * 1024 * 1024
 ERRORS = {
     'EMAIL_AUTH': 'A senha da caixa de e-mail foi recusada. Conecte novamente com a senha atual.',
     'EMAIL_TLS': 'Não foi possível validar a segurança do servidor de e-mail. Solicite ao administrador a conferência do certificado.',
@@ -71,6 +75,7 @@ class EmailConnection(Record, m.Scoped, Base):
     __tablename__ = 'email_connections'
     mailbox_id: Mapped[str] = mapped_column(ForeignKey('school_mailboxes.id'), unique=True)
     user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    address_override: Mapped[str] = mapped_column(String(254), default='', server_default='')
     encrypted_secret: Mapped[str] = mapped_column(Text, default='')
     validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -91,15 +96,38 @@ class EmailSubmission(Record, m.Scoped, Base):
     __table_args__ = (UniqueConstraint('mailbox_id', 'request_id'),)
 
 
+class WebmailSession(Record, m.Scoped, Base):
+    """Ticket de uso único e sessão webmail, vinculados a uma caixa e escola."""
+    __tablename__ = 'email_webmail_sessions'
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    mailbox_id: Mapped[str] = mapped_column(ForeignKey('school_mailboxes.id'), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    redeemed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (UniqueConstraint('token_hash'),)
+
+
 class ConnectionInput(Input):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=False)
     password: str = Field(min_length=1, max_length=512)
+    # The configured school domain is authoritative; accept internal/test TLDs too.
+    address: str | None = Field(default=None, min_length=3, max_length=254)
 
     @field_validator('password')
     @classmethod
     def valid_password(cls, value):
         if any(ord(c) < 32 or ord(c) == 127 for c in value):
             raise ValueError('A senha contém caracteres não permitidos.')
+        return value
+
+    @field_validator('address')
+    @classmethod
+    def valid_address(cls, value):
+        if value is None:
+            return value
+        value = value.strip()
+        if not re.fullmatch(r'[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+', value):
+            raise ValueError('Informe um e-mail válido.')
         return value
 
 
@@ -194,6 +222,11 @@ def _connection(db, mailbox):
                     EmailConnection.school_id == mailbox.school_id, EmailConnection.user_id == mailbox.user_id))
 
 
+def _mailbox_address(db, mailbox):
+    connection = _connection(db, mailbox)
+    return (connection.address_override or mailbox.address) if connection else mailbox.address
+
+
 def provision_connection(db, mailbox, password):
     """Cópia separada para o titular; nunca reativa uma conexão desconectada."""
     if password and not _connection(db, mailbox):
@@ -228,6 +261,7 @@ def _account_output(db, mailbox):
     config = db.get(MailcowConfig, mailbox.config_id) if mailbox else None
     available = bool(mailbox and mailbox.provisioned_at and mailbox.remote_active and config and config.enabled)
     connection = _connection(db, mailbox) if mailbox else None
+    address = ((connection.address_override or mailbox.address) if connection else mailbox.address) if mailbox else ''
     connected = bool(available and connection and connection.encrypted_secret and connection.validated_at and not connection.last_error)
     automatic = bool(available and not connected and _recoverable(db, mailbox, connection))
     parameters = _settings_output(_server(db, mailbox.school_id), config) if mailbox else {}
@@ -237,8 +271,8 @@ def _account_output(db, mailbox):
             'connection_error': ERRORS.get(connection.last_error, '') if connection else '',
             'connection_error_code': connection.last_error if connection else '',
             'validated_at': connection.validated_at.isoformat() if connection and connection.validated_at else None,
-            'connection_parameters': {**parameters, 'username': mailbox.address, 'imap_port': 993, 'imap_security': 'TLS', 'smtp_security': 'TLS' if parameters.get('smtp_port') == 465 else 'STARTTLS'} if mailbox else {},
-            'address': mailbox.address if mailbox else '', 'display_name': mailbox.display_name if mailbox else '',
+            'connection_parameters': {**parameters, 'username': address, 'imap_port': 993, 'imap_security': 'TLS', 'smtp_security': 'TLS' if parameters.get('smtp_port') == 465 else 'STARTTLS'} if mailbox else {},
+            'address': address, 'display_name': mailbox.display_name if mailbox else '',
             'limits': {'message_bytes': MAX_MESSAGE, 'attachment_bytes': MAX_ATTACHMENTS,
                        'recipients': MAX_RECIPIENTS, 'attachment_count': 10}}
 
@@ -293,6 +327,17 @@ class PinnedIMAP(imaplib.IMAP4_SSL):
         except BaseException:
             sock.close()
             raise
+
+    def login(self, user, password):
+        # imaplib.login expects str (not bytes). Use SASL PLAIN for UTF-8
+        # mailbox passwords; the socket is already protected by verified TLS.
+        raw = password.encode('utf-8') if isinstance(password, str) else password
+        try:
+            decoded = raw.decode('ascii')
+        except UnicodeDecodeError:
+            payload = base64.b64encode(b'\0' + user.encode('utf-8') + b'\0' + raw).decode('ascii')
+            return self.authenticate('PLAIN', lambda _: payload)
+        return super().login(user, decoded)
 
     def _budget(self):
         remaining = self.deadline - time.monotonic()
@@ -418,13 +463,13 @@ def _ok(response):
 
 
 class MailClient:
-    def __init__(self, config, server, mailbox, password):
+    def __init__(self, config, server, mailbox, password, username=None):
         base_host = urlsplit(config.base_url).hostname
         self.imap_host = server.imap_host if server and server.imap_host else base_host
         self.smtp_host = server.smtp_host if server and server.smtp_host else base_host
         self.smtp_port = server.smtp_port if server else 465
         self.allow_private = config.allow_private_network
-        self.address, self.password = mailbox.address, password
+        self.address, self.password = username or mailbox.address, password
         self.timeout = min(30, settings().integration_timeout_seconds)
         self.imap = None
         self._folders = None
@@ -666,8 +711,9 @@ def _client(db, user, school, password=None):
             fail(409, 'Conecte novamente sua caixa de e-mail.')
     if not isinstance(password, str) or not password:
         fail(409, 'Conecte novamente sua caixa de e-mail.')
+    username = (connection.address_override or mailbox.address) if connection else mailbox.address
     try:
-        with MailClient(config, _server(db, school.id), mailbox, password) as client:
+        with MailClient(config, _server(db, school.id), mailbox, password, username=username) as client:
             yield client, mailbox
     except (OSError, imaplib.IMAP4.error, IntegrationFailure) as error:
         mapped = _mapped_error(error)
@@ -762,7 +808,7 @@ def _filename(value):
     return re.sub(r'[\x00-\x1f\x7f/\\]', '_', value).strip(' .')[:180] or 'anexo'
 
 
-def _compose(data, mailbox, message_id, draft=False):
+def _compose(data, mailbox, message_id, draft=False, sender_address=None):
     recipients = list(dict.fromkeys(str(item) for item in [*data.to, *data.cc, *data.bcc]))
     if len(recipients) > MAX_RECIPIENTS:
         fail(422, 'Use no máximo 50 destinatários por mensagem.')
@@ -771,7 +817,8 @@ def _compose(data, mailbox, message_id, draft=False):
     if any(not address.isascii() for address in recipients):
         fail(422, 'Use endereços de e-mail sem caracteres especiais no nome da caixa.')
     message = EmailMessage(policy=policy.SMTP)
-    message['From'] = formataddr((_header({'name': mailbox.display_name}, 'name', 160), mailbox.address))
+    address = sender_address or mailbox.address
+    message['From'] = formataddr((_header({'name': mailbox.display_name}, 'name', 160), address))
     for field, addresses in (('To', data.to), ('Cc', data.cc), ('Bcc', data.bcc if draft else [])):
         if addresses:
             message[field] = ', '.join(map(str, addresses))
@@ -807,6 +854,197 @@ def account(db: DB, user: Actor, school: EmailScope):
     mailbox = _owned(db, user, school, False)
     candidate = reconciliation_candidate(db, school.id, user) if not mailbox else ''
     return {**_account_output(db, mailbox), 'can_reconcile': bool(candidate), 'candidate_address': candidate}
+
+
+def _webmail_identity(db):
+    from .institution import public_identity
+    return public_identity(db)
+
+
+@router.post('/webmail-ticket')
+def create_webmail_ticket(db: DB, user: Actor, school: EmailScope, request: Request):
+    """Gera um ticket curto para abrir o webmail sem expor a senha da caixa."""
+    request_csrf(request)
+    if not settings().sogo_upstream_url:
+        fail(503, 'O webmail integrado ainda não está habilitado nesta instalação.')
+    mailbox = _owned(db, user, school)
+    connection = _connection(db, mailbox)
+    if not connection or not connection.encrypted_secret or not connection.validated_at or connection.last_error:
+        fail(409, 'Conecte e valide sua caixa antes de abrir o webmail.')
+    raw = secrets.token_urlsafe(32)
+    db.add(WebmailSession(school_id=school.id, user_id=user.id, mailbox_id=mailbox.id,
+                          token_hash=hashlib.sha256(raw.encode()).hexdigest(),
+                          expires_at=now() + timedelta(seconds=90)))
+    db.flush()
+    return {'ticket': raw, 'action': f'/webmail/{quote(school.id, safe="")}/launch',
+            'identity': _webmail_identity(db)}
+
+
+def _school_cookie_name(school_id: str) -> str:
+    return 'pige_webmail_' + hashlib.sha256(school_id.encode()).hexdigest()[:12]
+
+
+def _webmail_cookie_hash(request: Request, school_id: str) -> str:
+    raw = request.cookies.get(_school_cookie_name(school_id), '')
+    return hashlib.sha256(raw.encode()).hexdigest() if raw else ''
+
+
+def _validated_webmail_resource(resource: str) -> str:
+    decoded = unquote(unquote(resource))
+    segments = decoded.split('/')
+    if (not decoded.startswith(('SOGo/', 'principals/')) or
+            any(part in {'.', '..'} for part in segments) or
+            any(ord(char) < 32 or ord(char) == 127 or char == '\\' for char in decoded) or
+            len(decoded) > 4096):
+        fail(404, 'Caminho do webmail inválido.')
+    return decoded
+
+
+@webmail_router.post('/webmail/{school_id}/launch', include_in_schema=False)
+def redeem_webmail_ticket(school_id: str, ticket: str = Form(...)):
+    """Consome o ticket POST e cria cookie HttpOnly vinculado a uma escola."""
+    ticket_hash = hashlib.sha256(ticket.encode()).hexdigest()
+    with SessionLocal() as db:
+        row = db.scalar(select(WebmailSession).where(WebmailSession.token_hash == ticket_hash,
+                         WebmailSession.school_id == school_id, WebmailSession.redeemed_at.is_(None)))
+        if not row or utc(row.expires_at) <= now():
+            fail(401, 'A sessão do e-mail expirou. Abra o E-mail novamente.')
+        cookie_token = secrets.token_urlsafe(48)
+        row.token_hash = hashlib.sha256(cookie_token.encode()).hexdigest()
+        row.redeemed_at = now()
+        row.expires_at = now() + timedelta(hours=8)
+        db.commit()
+    response = RedirectResponse(f'/webmail/{quote(school_id, safe="")}/SOGo/', status_code=303)
+    response.set_cookie(_school_cookie_name(school_id), cookie_token, max_age=8*60*60,
+                        httponly=True, secure=settings().cookie_secure, samesite='lax',
+                        path=f'/webmail/{quote(school_id, safe="")}')
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['Referrer-Policy'] = 'no-referrer'
+    return response
+
+
+WEBMAIL_METHODS = {'GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PROPFIND', 'REPORT', 'MKCOL', 'MOVE', 'COPY'}
+WEBMAIL_HOP_HEADERS = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te',
+                       'trailers', 'transfer-encoding', 'upgrade', 'host', 'content-length',
+                       'authorization', 'cookie', 'x-webobjects-remote-user', 'x-webobjects-auth-type'}
+
+
+@webmail_router.api_route('/webmail/{school_id}/{resource:path}', methods=sorted(WEBMAIL_METHODS), include_in_schema=False)
+async def proxy_webmail(school_id: str, resource: str, request: Request):
+    """Proxy same-origin e valida usuário, vínculo, caixa e instituição em cada requisição."""
+    cfg = settings()
+    upstream = cfg.sogo_upstream_url
+    if not upstream:
+        fail(503, 'O webmail integrado ainda não está habilitado nesta instalação.')
+    decoded_resource = _validated_webmail_resource(resource)
+    token_hash = _webmail_cookie_hash(request, school_id)
+    if not token_hash:
+        fail(401, 'Sua sessão do e-mail expirou. Abra o E-mail novamente.')
+    with SessionLocal() as db:
+        session = db.scalar(select(WebmailSession).where(WebmailSession.token_hash == token_hash,
+                            WebmailSession.school_id == school_id, WebmailSession.redeemed_at.is_not(None)))
+        if not session or utc(session.expires_at) <= now():
+            fail(401, 'Sua sessão do e-mail expirou. Abra o E-mail novamente.')
+        school = db.get(m.School, school_id)
+        membership = db.get(m.SchoolAccess, (session.user_id, school_id))
+        user = db.get(m.User, session.user_id)
+        mailbox = db.scalar(select(SchoolMailbox).where(SchoolMailbox.id == session.mailbox_id,
+                              SchoolMailbox.school_id == school_id, SchoolMailbox.user_id == session.user_id,
+                              SchoolMailbox.provisioned_at.is_not(None), SchoolMailbox.remote_active.is_(True)))
+        connection = _connection(db, mailbox) if mailbox else None
+        if (not school or not school.active or not membership or not membership.active or not user or not user.active
+                or not connection or not connection.encrypted_secret or not connection.validated_at or connection.last_error):
+            fail(403, 'A caixa não está mais autorizada para esta instituição.')
+        try:
+            password = unseal(connection.encrypted_secret).get('password')
+        except IntegrationFailure:
+            fail(409, 'Conecte novamente sua caixa de e-mail.')
+        if not isinstance(password, str) or not password:
+            fail(409, 'Conecte novamente sua caixa de e-mail.')
+        address = connection.address_override or mailbox.address
+        principal = session.user_id + '@' + school_id
+        identity = _webmail_identity(db)
+    try:
+        parsed = urlsplit(upstream)
+        if parsed.scheme not in {'http', 'https'} or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
+            fail(503, 'O destino interno do webmail está inválido.')
+        target = upstream.rstrip('/') + '/' + decoded_resource
+        if request.url.query:
+            target += '?' + request.url.query
+        headers = {key: value for key, value in request.headers.items() if key.lower() not in WEBMAIL_HOP_HEADERS}
+        cookie_pairs = []
+        for item in request.headers.get('cookie', '').split(';'):
+            key, sep, value = item.strip().partition('=')
+            if sep and not key.startswith('pige_'):
+                cookie_pairs.append(f'{key}={value}')
+        if cookie_pairs:
+            headers['cookie'] = '; '.join(cookie_pairs)
+        basic = base64.b64encode(f'{address}:{password}'.encode()).decode()
+        proxy_base = str(request.base_url).rstrip('/') + '/webmail/' + quote(school_id, safe='')
+        headers.update({'x-webobjects-remote-user': principal, 'x-webobjects-auth-type': 'Basic',
+                        'authorization': 'Basic ' + basic, 'x-webobjects-server-url': proxy_base})
+        body = await request.body()
+        if len(body) > 20 * 1024 * 1024:
+            fail(413, 'O conteúdo enviado ao webmail excede 20 MB.')
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60), follow_redirects=False, trust_env=False) as client:
+            upstream_request = client.build_request(request.method, target, headers=headers, content=body or None)
+            upstream_response = await client.send(upstream_request, stream=True)
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, OSError, ValueError):
+        fail(502, 'O webmail não respondeu. Tente novamente em instantes.')
+    try:
+        chunks, size = [], 0
+        async for chunk in upstream_response.aiter_bytes():
+            size += len(chunk)
+            if size > MAX_WEBMAIL_RESPONSE:
+                fail(502, 'A resposta do webmail excede o limite permitido.')
+            chunks.append(chunk)
+        content = b''.join(chunks)
+    finally:
+        await upstream_response.aclose()
+    content_type = upstream_response.headers.get('content-type', '')
+    prefix = f'/webmail/{quote(school_id, safe="")}'
+    if 'text/html' in content_type:
+        rendered = content.decode('utf-8', errors='replace')
+        rendered = rendered.replace('"/SOGo', '"' + prefix + '/SOGo').replace("'/SOGo", "'" + prefix + '/SOGo')
+        rendered = rendered.replace('"/principals', '"' + prefix + '/principals').replace("'/principals", "'" + prefix + '/principals')
+        title = identity['display_name'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        family = 'system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' if identity['font_family'] == 'system' else identity['font_family']
+        theme = (f'<title>{title} · E-mail</title><style>:root{{--pige-mail-primary:{identity["primary_color"]};'
+                 f'--pige-mail-secondary:{identity["secondary_color"]};--pige-mail-font:{family}}}'
+                 f'body{{font-family:var(--pige-mail-font)}}a,.toolbarButton,.button{{color:var(--pige-mail-primary)}}'
+                 f'.toolbar,.menu{{border-color:var(--pige-mail-primary)}}</style>')
+        rendered = rendered.replace('</head>', theme + '</head>', 1)
+        content = rendered.encode('utf-8')
+    response_headers = {}
+    for name in ('content-type', 'content-language', 'cache-control', 'etag', 'last-modified', 'content-disposition'):
+        if name in upstream_response.headers:
+            response_headers[name] = upstream_response.headers[name]
+    location = upstream_response.headers.get('location')
+    if location:
+        target_origin = f'{parsed.scheme}://{parsed.netloc}'
+        if location.startswith(target_origin):
+            location_path = location[len(target_origin):]
+            if location_path.startswith('/SOGo'):
+                response_headers['location'] = prefix + location_path
+            elif location_path.startswith('/'):
+                response_headers['location'] = prefix + location_path
+            else:
+                response_headers['location'] = prefix + '/SOGo/'
+        elif location.startswith('/SOGo') or location.startswith('/principals'):
+            response_headers['location'] = prefix + location
+        elif location.startswith('/'):
+            response_headers['location'] = prefix + location
+        else:
+            response_headers['location'] = prefix + '/SOGo/'
+    response_headers['Cache-Control'] = 'no-store'
+    response_headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response_headers['Content-Security-Policy'] = "default-src 'self' data: blob:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
+    response = Response(content=content, status_code=upstream_response.status_code, headers=response_headers)
+    for cookie in upstream_response.headers.get_list('set-cookie'):
+        response.headers.append('set-cookie', re.sub(r'(?i)path=/', f'Path={prefix}/', cookie))
+    return response
 
 
 @router.post('/reconcile')
@@ -869,7 +1107,8 @@ def automatic_connection(db: DB, user: Actor, school: EmailScope, request: Reque
         config = db.get(MailcowConfig, mailbox.config_id)
         if not config or not config.enabled or config.school_id != school.id:
             fail(409, 'O e-mail institucional precisa ser habilitado pelo administrador.')
-        with MailClient(config, _server(db, school.id), mailbox, password) as client:
+        username = (connection.address_override or mailbox.address) if connection else mailbox.address
+        with MailClient(config, _server(db, school.id), mailbox, password, username=username) as client:
             with client.smtp():
                 pass
         connection.validated_at, connection.last_error = now(), ''
@@ -886,18 +1125,31 @@ def automatic_connection(db: DB, user: Actor, school: EmailScope, request: Reque
 
 @router.post('/connection')
 def connect(data: ConnectionInput, db: DB, user: Actor, school: EmailScope, request: Request):
-    with _client(db, user, school, data.password) as (client, mailbox):
+    mailbox = _owned(db, user, school)
+    config = db.get(MailcowConfig, mailbox.config_id)
+    if not config or not config.enabled or config.school_id != school.id:
+        fail(409, 'O e-mail institucional precisa ser configurado pelo administrador.')
+    address = str(data.address or mailbox.address).strip().casefold()
+    configured_domain = config.domain.strip().casefold()
+    if not address or address.rsplit('@', 1)[-1] != configured_domain:
+        fail(422, 'Use uma caixa ativa do domínio de e-mail desta instituição.')
+    try:
+        with MailClient(config, _server(db, school.id), mailbox, data.password, username=address) as client:
+            with client.smtp():
+                pass
+    except (OSError, imaplib.IMAP4.error, IntegrationFailure) as error:
+        _safe_fail(_mapped_error(error))
+    else:
         # Ambas as autenticações são validadas sem enviar qualquer mensagem.
-        with client.smtp():
-            pass
         lock_school(db, school.id)
         connection = _connection(db, mailbox)
         if not connection:
             connection = EmailConnection(school_id=school.id, mailbox_id=mailbox.id, user_id=user.id)
             db.add(connection)
+        connection.address_override = '' if address == mailbox.address.casefold() else address
         connection.encrypted_secret, connection.validated_at = seal({'password': data.password}), now()
         connection.checked_at, connection.last_error = now(), ''
-        db.flush(); audit(db, request, user, 'email.connected', connection, school.id)
+        db.flush(); audit(db, request, user, 'email.connected', connection, school.id, details={'mailbox_changed': address != mailbox.address.casefold()})
         return _account_output(db, mailbox)
 
 
@@ -1051,7 +1303,8 @@ def _remove_draft(client, draft):
 @router.post('/drafts', status_code=201)
 def save_draft(data: ComposeInput, db: DB, user: Actor, school: EmailScope):
     mailbox = _owned(db, user, school)
-    raw, _ = _compose(data, mailbox, make_msgid(domain=mailbox.address.split('@')[1]), draft=True)
+    address = _mailbox_address(db, mailbox)
+    raw, _ = _compose(data, mailbox, make_msgid(domain=address.split('@')[1]), draft=True, sender_address=address)
     with _client(db, user, school) as (client, _):
         if data.draft:
             if client.folder(data.draft.folder)['role'] != 'drafts':
@@ -1079,9 +1332,10 @@ def send(data: ComposeInput, db: DB, user: Actor, school: EmailScope, request: R
     if not data.request_id:
         fail(422, 'Identifique a tentativa de envio antes de continuar.')
     mailbox = _owned(db, user, school)
+    address = _mailbox_address(db, mailbox)
     request_id = str(data.request_id)
-    message_id = '<' + request_id + '@' + mailbox.address.split('@')[1] + '>'
-    raw, recipients = _compose(data, mailbox, message_id)
+    message_id = '<' + request_id + '@' + address.split('@')[1] + '>'
+    raw, recipients = _compose(data, mailbox, message_id, sender_address=address)
     # Hash can be compared across retries; Date/MIME boundary vary in raw MIME.
     digest = hashlib.sha256(data.model_dump_json(exclude={'request_id'}).encode()).hexdigest()
     row = db.scalar(select(EmailSubmission).where(EmailSubmission.mailbox_id == mailbox.id,
@@ -1115,7 +1369,7 @@ def send(data: ComposeInput, db: DB, user: Actor, school: EmailScope, request: R
         try:
             with client.smtp() as smtp:
                 phase = 'submitting'
-                rejected = smtp.sendmail(mailbox.address, recipients, raw)
+                rejected = smtp.sendmail(client.address, recipients, raw)
                 refused = [address for address in recipients if address in rejected]
                 accepted = True
         except (OSError, smtplib.SMTPException, IntegrationFailure) as error:

@@ -49,7 +49,7 @@ try:
         def nav(name):
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
             sidebar=page.locator('aside')
-            group='Configurações' if name in {'Instituição','Certificados A1'} else 'Documentação' if name in {'Pendências documentais','Assinaturas pendentes','Conferência de assinaturas'} else None
+            group='Configurações' if name=='Certificados A1' else 'Documentos' if name in {'Pendências documentais','Modelos e contratos','Assinaturas pendentes','Conferência de assinaturas'} else None
             if group:
                 toggle=sidebar.get_by_role('button',name=group,exact=True)
                 if toggle.get_attribute('aria-expanded')=='false':toggle.click()
@@ -138,7 +138,7 @@ try:
         expect(person_option).to_have_count(1)
         dialog().locator('select').first.select_option(label='Mariana Almeida — Teste · Não informado')
         form_field('Responsável financeiro',exact=True).check();save();checks.append('Responsável e aluno cadastrados, vínculo legal/financeiro persistido')
-        page.get_by_role('button',name='Documentos',exact=True).click();page.get_by_role('button',name='+ Receber documento').click()
+        page.get_by_label('Conteúdo da escola').get_by_role('button',name='Documentos',exact=True).click();page.get_by_role('button',name='+ Receber documento').click()
         form_field('Tipo de documento').select_option(index=1)
         # Upload de imagem sintética conhecida, não de documento de pessoa real.
         dialog().locator('input[type=file]').set_input_files(str(ROOT/'frontend/public/icons/icon-192.png'));save()

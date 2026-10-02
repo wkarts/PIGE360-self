@@ -14,6 +14,10 @@ on:
         value: ${{ jobs.publish.outputs.image }}
       digest:
         value: ${{ jobs.publish.outputs.digest }}
+      mail_agent_digest:
+        value: ${{ jobs.publish.outputs.mail_agent_digest }}
+      sogo_digest:
+        value: ${{ jobs.publish.outputs.sogo_digest }}
 permissions:
   contents: read
   packages: write
@@ -27,6 +31,8 @@ jobs:
     outputs:
       image: ${{ steps.names.outputs.image }}
       digest: ${{ steps.build.outputs.digest }}
+      mail_agent_digest: ${{ steps.build-agent.outputs.digest }}
+      sogo_digest: ${{ steps.build-sogo.outputs.digest }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -53,6 +59,8 @@ jobs:
             [[ "$value" =~ @sha256:[0-9a-f]{64}$ ]]
           done
           echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "mail_agent=ghcr.io/${GITHUB_REPOSITORY,,}-mail-agent" >> "$GITHUB_OUTPUT"
+          echo "sogo=ghcr.io/${GITHUB_REPOSITORY,,}-sogo" >> "$GITHUB_OUTPUT"
       - name: Build do candidato (sem atualizar aliases)
         id: build
         uses: docker/build-push-action@v6
@@ -72,10 +80,38 @@ jobs:
           cache-to: type=gha,scope=pige360-${{ inputs.channel }},mode=max,version=2,ignore-error=true
           provenance: false
           sbom: false
-      - name: Testar a imagem publicada por digest
+      - name: Build e publicação do agente de correio
+        id: build-agent
+        uses: docker/build-push-action@v6
+        with:
+          context: services/mail-agent
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.names.outputs.mail_agent }}:${{ inputs.candidate }}
+          build-args: |
+            APP_VERSION=${{ inputs.version }}
+            SOURCE_REVISION=${{ inputs.ref }}
+          provenance: false
+          sbom: false
+      - name: Build e publicação do webmail integrado
+        id: build-sogo
+        uses: docker/build-push-action@v6
+        with:
+          context: services/sogo
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.names.outputs.sogo }}:${{ inputs.candidate }}
+          build-args: |
+            APP_VERSION=${{ inputs.version }}
+            SOURCE_REVISION=${{ inputs.ref }}
+          provenance: false
+          sbom: false
+      - name: Smoke da stack com os três artefatos publicados
         env:
           IMAGE: ${{ steps.names.outputs.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
+          MAIL_AGENT_IMAGE: ${{ steps.names.outputs.mail_agent }}@${{ steps.build-agent.outputs.digest }}
+          SOGO_IMAGE: ${{ steps.names.outputs.sogo }}@${{ steps.build-sogo.outputs.digest }}
           POSTGRES_IMAGE: ${{ inputs.postgres_ref }}
         run: bash scripts/ci/smoke.sh "$IMAGE@$DIGEST" remote
       - name: Promover somente aliases develop após smoke
@@ -83,8 +119,15 @@ jobs:
         env:
           IMAGE: ${{ steps.names.outputs.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
+          MAIL_AGENT_IMAGE: ${{ steps.names.outputs.mail_agent }}
+          MAIL_AGENT_DIGEST: ${{ steps.build-agent.outputs.digest }}
+          SOGO_IMAGE: ${{ steps.names.outputs.sogo }}
+          SOGO_DIGEST: ${{ steps.build-sogo.outputs.digest }}
           VERSION: ${{ inputs.version }}
-        run: python scripts/ci/promote.py develop
+        run: |
+          python scripts/ci/promote.py develop
+          IMAGE="$MAIL_AGENT_IMAGE" DIGEST="$MAIL_AGENT_DIGEST" python scripts/ci/promote.py develop
+          IMAGE="$SOGO_IMAGE" DIGEST="$SOGO_DIGEST" python scripts/ci/promote.py develop
       - name: Verificar possibilidade de pull anônimo
         env:
           IMAGE: ${{ steps.names.outputs.image }}

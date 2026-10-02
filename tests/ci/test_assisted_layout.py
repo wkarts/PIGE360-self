@@ -11,7 +11,7 @@ class AssistedLayoutTests(unittest.TestCase):
             self.assertEqual(text.count('  worker-ocr:'),1,name)
             worker=text.split('  worker-ocr:',1)[1]
             self.assertIn('command: ["worker-ocr"]',worker)
-            self.assertIn('environment: *application_environment',worker)
+            self.assertIn('<<: *application_environment',worker)
             self.assertNotIn('ports:',worker)
             self.assertIn('app.ocr_worker',worker)
             self.assertIn('cap_drop: ["ALL"]',worker)
@@ -19,7 +19,7 @@ class AssistedLayoutTests(unittest.TestCase):
             self.assertIn('cpus:',worker)
     def test_smoke_validates_new_service_and_the_real_driver(self):
         script=(ROOT/'scripts/ci/smoke.sh').read_text()
-        self.assertIn('for service in db storage-init app worker worker-ocr;',script)
+        self.assertIn('for service in db storage-init app mail-agent sogo worker worker-ocr;',script)
         self.assertIn('compose exec -T worker-ocr',script)
         self.assertIn("'app.ocr_engine'",script)
     def test_previous_browser_suites_and_new_suite_are_required(self):
