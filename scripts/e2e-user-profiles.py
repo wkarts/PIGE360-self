@@ -157,7 +157,7 @@ try:
         expect(user_card.get_by_text('Operador Exemplo Atualizado', exact=True)).to_be_visible()
         workspace.get_by_role('tab', name=re.compile('Perfis de acesso')).click()
         expect(profile_card.get_by_role('button', name='Excluir', exact=True)).to_be_disabled()
-        profile_card.get_by_role('button', name='Editar permissões', exact=True).click()
+        profile_card.get_by_role('button', name='Editar', exact=True).click()
         workspace.locator('input[type="checkbox"][value="students.read"]').check()
         workspace.get_by_label('Motivo da alteração', exact=True).fill('Liberar consulta de alunos')
         workspace.get_by_role('button', name='Salvar perfil', exact=True).click()
@@ -171,13 +171,13 @@ try:
         assert operator_access(school_b).status_code == 403
         record('Edição de usuário/permissões persiste e a outra instituição permanece inacessível')
 
-        profile_card.get_by_role('button', name='Editar permissões', exact=True).click()
+        profile_card.get_by_role('button', name='Editar', exact=True).click()
         workspace.get_by_label(re.compile('^Situação')).select_option('false')
         workspace.get_by_label('Motivo da alteração', exact=True).fill('Suspender perfil sintético')
         workspace.get_by_role('button', name='Salvar perfil', exact=True).click()
         expect(profile_card.locator('.badge')).to_have_text('Inativo')
         assert operator_access(school_a).status_code == 403
-        profile_card.get_by_role('button', name='Editar permissões', exact=True).click()
+        profile_card.get_by_role('button', name='Editar', exact=True).click()
         workspace.get_by_label(re.compile('^Situação')).select_option('true')
         workspace.get_by_label('Motivo da alteração', exact=True).fill('Reativar perfil sintético')
         workspace.get_by_role('button', name='Salvar perfil', exact=True).click()
@@ -214,7 +214,7 @@ try:
                 box=button.bounding_box();assert box and box['width']>=43.5 and box['height']>=43.5
             page.screenshot(path=str(OUT/f'users-{width}.png'),full_page=True)
             workspace.get_by_role('tab', name=re.compile('Perfis de acesso')).click()
-            profile_card.get_by_role('button', name='Editar permissões', exact=True).click()
+            profile_card.get_by_role('button', name='Editar', exact=True).click()
             assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
             assert workspace.get_by_label('Nome do perfil',exact=True).evaluate('el=>parseFloat(getComputedStyle(el).fontSize)>=16')
             page.screenshot(path=str(OUT/f'profile-editor-{width}.png'),full_page=True)
