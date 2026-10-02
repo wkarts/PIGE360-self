@@ -1,11 +1,13 @@
 /* Vue pré-compilado; sem eval em runtime. */
 var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
   with (_ctx) {
-    const { openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, toDisplayString: _toDisplayString, createElementVNode: _createElementVNode, createTextVNode: _createTextVNode, vModelText: _vModelText, withDirectives: _withDirectives, resolveComponent: _resolveComponent, createVNode: _createVNode, renderList: _renderList, Fragment: _Fragment, vModelDynamic: _vModelDynamic, withModifiers: _withModifiers, withKeys: _withKeys, normalizeClass: _normalizeClass, vShow: _vShow, vModelSelect: _vModelSelect, createBlock: _createBlock, vModelCheckbox: _vModelCheckbox } = _Vue
+    const { openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, toDisplayString: _toDisplayString, createElementVNode: _createElementVNode, createTextVNode: _createTextVNode, vModelText: _vModelText, withDirectives: _withDirectives, resolveComponent: _resolveComponent, createVNode: _createVNode, renderList: _renderList, Fragment: _Fragment, vModelDynamic: _vModelDynamic, withModifiers: _withModifiers, withKeys: _withKeys, normalizeClass: _normalizeClass, vShow: _vShow, vModelSelect: _vModelSelect, createBlock: _createBlock, vModelCheckbox: _vModelCheckbox, normalizeStyle: _normalizeStyle } = _Vue
 
     const _component_assist_panel = _resolveComponent("assist-panel")
     const _component_legacy_import_panel = _resolveComponent("legacy-import-panel")
     const _component_diagnostics_panel = _resolveComponent("diagnostics-panel")
+    const _component_institutional_email = _resolveComponent("institutional-email")
+    const _component_audit_panel = _resolveComponent("audit-panel")
     const _component_mailcow_panel = _resolveComponent("mailcow-panel")
     const _component_expansion_panel = _resolveComponent("expansion-panel")
     const _component_diary_panel = _resolveComponent("diary-panel")
@@ -14,6 +16,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
     const _component_learning_panel = _resolveComponent("learning-panel")
     const _component_reports_panel = _resolveComponent("reports-panel")
     const _component_signing_panel = _resolveComponent("signing-panel")
+    const _component_lifecycle_panel = _resolveComponent("lifecycle-panel")
 
     return (_openBlock(), _createElementBlock("div", {
       class: "app-root",
@@ -331,9 +334,23 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
               "aria-label": "Rolagem do menu"
             }, [
               _createElementVNode("div", { class: "sidebar-label" }, "OPERAÇÃO ESCOLAR"),
-              (!isProfileRole())
+              (state.emailAvailable)
                 ? (_openBlock(), _createElementBlock("nav", {
                     key: 0,
+                    "aria-label": "Comunicação pessoal"
+                  }, [_createElementVNode("a", {
+                    href: "#/webmail",
+                    class: _normalizeClass({active:state.page==='webmail'}),
+                    "aria-current": state.page==='webmail'?'page':undefined,
+                    onClick: _withModifiers($event => (navigate('webmail')), ["prevent"])
+                  }, [(_openBlock(), _createElementBlock("svg", {
+                    class: "nav-icon",
+                    "aria-hidden": "true"
+                  }, [_createElementVNode("use", { href: "/ui-icons.svg#email" })])), _createTextVNode("Meu e-mail")], 10, ["aria-current", "onClick"])]))
+                : _createCommentVNode("", true),
+              (!isProfileRole())
+                ? (_openBlock(), _createElementBlock("nav", {
+                    key: 1,
                     "aria-label": "Menu principal"
                   }, [
                     _createElementVNode("a", {
@@ -466,7 +483,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
               _createElementVNode("div", { class: "sidebar-label" }, "ADMINISTRAÇÃO"),
               (!isProfileRole())
                 ? (_openBlock(), _createElementBlock("nav", {
-                    key: 1,
+                    key: 2,
                     "aria-label": "Administração"
                   }, [
                     (can('admissions.read'))
@@ -510,7 +527,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                           class: "nav-icon",
                           "aria-hidden": "true",
                           focusable: "false"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#connect" })])), _createElementVNode("span", null, "Integrações"), (_openBlock(), _createElementBlock("svg", {
+                        }, [_createElementVNode("use", { href: "/ui-icons.svg#integrations" })])), _createElementVNode("span", null, "Integrações"), (_openBlock(), _createElementBlock("svg", {
                           class: _normalizeClass(["nav-chevron ui-icon", {expanded:state.integrationsOpen}]),
                           "aria-hidden": "true",
                           focusable: "false"
@@ -528,7 +545,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                               class: "nav-icon",
                               "aria-hidden": "true",
                               focusable: "false"
-                            }, [_createElementVNode("use", { href: "/ui-icons.svg#connect" })])), _createTextVNode("WhatsApp")], 10, ["aria-current", "onClick"]))
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#whatsapp" })])), _createTextVNode("WhatsApp")], 10, ["aria-current", "onClick"]))
                           : _createCommentVNode("", true), (state.user?.role==='admin')
                           ? (_openBlock(), _createElementBlock("a", {
                               key: 1,
@@ -540,7 +557,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                               class: "nav-icon",
                               "aria-hidden": "true",
                               focusable: "false"
-                            }, [_createElementVNode("use", { href: "/ui-icons.svg#online" })])), _createTextVNode("E-mail / SMTP")], 10, ["aria-current", "onClick"]))
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#email" })])), _createTextVNode("E-mail institucional")], 10, ["aria-current", "onClick"]))
                           : _createCommentVNode("", true), (can('integrations.manage'))
                           ? (_openBlock(), _createElementBlock("a", {
                               key: 2,
@@ -574,7 +591,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                         }, [(_openBlock(), _createElementBlock("svg", {
                           class: "nav-icon",
                           "aria-hidden": "true"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#documents" })])), _createTextVNode("Assinaturas")], 10, ["aria-current", "onClick"]))
+                        }, [_createElementVNode("use", { href: "/ui-icons.svg#certificate" })])), _createTextVNode("Certificados e assinaturas")], 10, ["aria-current", "onClick"]))
                       : _createCommentVNode("", true),
                     (can('schools.manage'))
                       ? (_openBlock(), _createElementBlock("a", {
@@ -603,45 +620,65 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                         }, [_createElementVNode("use", { href: "/ui-icons.svg#access" })])), _createTextVNode("Usuários e acessos")], 10, ["aria-current", "onClick"]))
                       : _createCommentVNode("", true),
                     (state.user?.role==='admin')
-                      ? (_openBlock(), _createElementBlock("a", {
+                      ? (_openBlock(), _createElementBlock("div", {
                           key: 6,
-                          href: "#/legacy-import",
-                          class: _normalizeClass({active:state.page==='legacy-import'}),
-                          "aria-current": state.page==='legacy-import'?'page':undefined,
-                          onClick: _withModifiers($event => (navigate('legacy-import')), ["prevent"])
-                        }, [(_openBlock(), _createElementBlock("svg", {
-                          class: "nav-icon",
-                          "aria-hidden": "true",
-                          focusable: "false"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#documents" })])), _createTextVNode("Portabilidade de dados")], 10, ["aria-current", "onClick"]))
-                      : _createCommentVNode("", true),
-                    (state.user?.role==='admin')
-                      ? (_openBlock(), _createElementBlock("a", {
-                          key: 7,
-                          href: "#/diagnostics",
-                          class: _normalizeClass({active:state.page==='diagnostics'}),
-                          onClick: _withModifiers($event => (navigate('diagnostics')), ["prevent"])
+                          class: _normalizeClass(["nav-group admin-nav-group", {selected:administrationPages.includes(state.page)}])
+                        }, [_createElementVNode("button", {
+                          type: "button",
+                          class: "nav-group-toggle",
+                          "aria-label": "Administração do sistema",
+                          onClick: $event => (state.adminMenuOpen=!state.adminMenuOpen),
+                          "aria-expanded": state.adminMenuOpen || administrationPages.includes(state.page),
+                          "aria-controls": "administration-menu"
                         }, [(_openBlock(), _createElementBlock("svg", {
                           class: "nav-icon",
                           "aria-hidden": "true"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#audit" })])), _createTextVNode("Diagnóstico e logs")], 10, ["onClick"]))
-                      : _createCommentVNode("", true),
-                    (can('audit.read'))
-                      ? (_openBlock(), _createElementBlock("a", {
-                          key: 8,
-                          href: "#/audit",
-                          class: _normalizeClass({active:state.page==='audit'}),
-                          "aria-current": state.page==='audit'?'page':undefined,
-                          onClick: _withModifiers($event => (navigate('audit')), ["prevent"])
-                        }, [(_openBlock(), _createElementBlock("svg", {
-                          class: "nav-icon",
-                          "aria-hidden": "true",
-                          focusable: "false"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#audit" })])), _createTextVNode("Auditoria")], 10, ["aria-current", "onClick"]))
+                        }, [_createElementVNode("use", { href: "/ui-icons.svg#admin" })])), _createElementVNode("span", null, "Administração do sistema"), (_openBlock(), _createElementBlock("svg", {
+                          class: _normalizeClass(["nav-chevron ui-icon", {expanded:state.adminMenuOpen || administrationPages.includes(state.page)}]),
+                          "aria-hidden": "true"
+                        }, [_createElementVNode("use", { href: "/ui-icons.svg#chevron" })], 2))], 8, ["onClick", "aria-expanded"]), _withDirectives(_createElementVNode("div", {
+                          id: "administration-menu",
+                          class: "nav-group-items"
+                        }, [(adminTool('diagnostics'))
+                          ? (_openBlock(), _createElementBlock("a", {
+                              key: 0,
+                              href: "#/diagnostics",
+                              class: _normalizeClass({active:state.page==='diagnostics'}),
+                              "aria-current": state.page==='diagnostics'?'page':undefined,
+                              onClick: _withModifiers($event => (navigate('diagnostics')), ["prevent"])
+                            }, [(_openBlock(), _createElementBlock("svg", {
+                              class: "nav-icon",
+                              "aria-hidden": "true"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#diagnostics" })])), _createTextVNode("Diagnóstico")], 10, ["aria-current", "onClick"]))
+                          : _createCommentVNode("", true), (adminTool('audit'))
+                          ? (_openBlock(), _createElementBlock("a", {
+                              key: 1,
+                              href: "#/audit",
+                              class: _normalizeClass({active:state.page==='audit'}),
+                              "aria-current": state.page==='audit'?'page':undefined,
+                              onClick: _withModifiers($event => (navigate('audit')), ["prevent"])
+                            }, [(_openBlock(), _createElementBlock("svg", {
+                              class: "nav-icon",
+                              "aria-hidden": "true"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#audit" })])), _createTextVNode("Auditoria")], 10, ["aria-current", "onClick"]))
+                          : _createCommentVNode("", true), (adminTool('legacy-import'))
+                          ? (_openBlock(), _createElementBlock("a", {
+                              key: 2,
+                              href: "#/legacy-import",
+                              class: _normalizeClass({active:state.page==='legacy-import'}),
+                              "aria-current": state.page==='legacy-import'?'page':undefined,
+                              onClick: _withModifiers($event => (navigate('legacy-import')), ["prevent"])
+                            }, [(_openBlock(), _createElementBlock("svg", {
+                              class: "nav-icon",
+                              "aria-hidden": "true"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#portability" })])), _createTextVNode("Portabilidade de dados")], 10, ["aria-current", "onClick"]))
+                          : _createCommentVNode("", true)], 512), [[_vShow, state.adminMenuOpen || administrationPages.includes(state.page)]])], 2))
                       : _createCommentVNode("", true)
                   ]))
                 : _createCommentVNode("", true)
-            ]), _createElementVNode("div", { class: "sidebar-footer" }, [_createElementVNode("small", null, "PIGE360 · " + _toDisplayString(identity.app_version || '—'), 1)])], 2),
+            ]), _createElementVNode("div", { class: "sidebar-footer" }, [_createElementVNode("small", null, [_createTextVNode(_toDisplayString(identity.short_name), 1), (state.user.role==='admin')
+              ? (_openBlock(), _createElementBlock("span", { key: 0 }, " · " + _toDisplayString(identity.app_version || '—'), 1))
+              : _createCommentVNode("", true)])])], 2),
             _createElementVNode("div", { class: "main-column" }, [_createElementVNode("header", { class: "topbar" }, [_createElementVNode("button", {
               type: "button",
               class: "icon-button menu-button",
@@ -664,10 +701,25 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                 value: s.id
               }, _toDisplayString(s.name), 9, ["value"]))
             }), 128))], 40, ["onUpdate:modelValue", "onChange", "disabled"]), [[_vModelSelect, state.schoolId]])]), _createElementVNode("div", { class: "topbar-actions" }, [
+              (state.certificateAlerts.length)
+                ? (_openBlock(), _createElementBlock("details", {
+                    key: 0,
+                    class: "notice-menu"
+                  }, [_createElementVNode("summary", { "aria-label": state.certificateAlerts.length+' aviso de certificado' }, [(_openBlock(), _createElementBlock("svg", {
+                    class: "ui-icon",
+                    "aria-hidden": "true"
+                  }, [_createElementVNode("use", { href: "/ui-icons.svg#bell" })])), _createElementVNode("span", { class: "notice-count" }, _toDisplayString(state.certificateAlerts.length), 1)], 8, ["aria-label"]), _createElementVNode("div", { class: "notice-popover" }, [_createElementVNode("p", { class: "eyebrow" }, "AVISOS DA ESCOLA"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.certificateAlerts, (notice) => {
+                    return (_openBlock(), _createElementBlock("button", {
+                      key: notice.id,
+                      type: "button",
+                      onClick: $event => (navigate('signatures'))
+                    }, [_createElementVNode("strong", null, _toDisplayString(notice.title), 1), _createElementVNode("span", null, _toDisplayString(notice.message), 1)], 8, ["onClick"]))
+                  }), 128))])]))
+                : _createCommentVNode("", true),
               _createElementVNode("span", { class: _normalizeClass(["online-chip", {offline:!state.online}]) }, [_createElementVNode("i", { class: "dot" }), _createTextVNode(_toDisplayString(state.online?'Online':'Sem conexão'), 1)], 2),
               (state.canInstall)
                 ? (_openBlock(), _createElementBlock("button", {
-                    key: 0,
+                    key: 1,
                     class: "btn btn-secondary small-button",
                     onClick: install
                   }, "Instalar aplicativo", 8, ["onClick"]))
@@ -738,7 +790,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                     "aria-label": "Fechar aviso"
                   }, "×", 8, ["onClick"])]))
                 : _createCommentVNode("", true),
-              _createElementVNode("div", { class: "page-header" }, [_createElementVNode("div", { class: "page-heading" }, [_createElementVNode("p", { class: "breadcrumb" }, _toDisplayString(registryPages.includes(state.page)?'Cadastros':integrationPages.includes(state.page)?'Integrações':'Secretaria') + " / " + _toDisplayString(pageLabels[state.page]), 1), _createElementVNode("div", { class: "page-heading-title" }, [_createElementVNode("h1", null, _toDisplayString(state.selectedStudent ? state.selectedStudent.person.name : pageLabels[state.page]), 1), (state.page!=='help')
+              _createElementVNode("div", { class: "page-header" }, [_createElementVNode("div", { class: "page-heading" }, [_createElementVNode("p", { class: "breadcrumb" }, _toDisplayString(registryPages.includes(state.page)?'Cadastros':integrationPages.includes(state.page)?'Integrações':administrationPages.includes(state.page)?'Administração':'Secretaria') + " / " + _toDisplayString(pageLabels[state.page]), 1), _createElementVNode("div", { class: "page-heading-title" }, [_createElementVNode("h1", null, _toDisplayString(state.selectedStudent ? state.selectedStudent.person.name : pageLabels[state.page]), 1), (state.page!=='help')
                 ? (_openBlock(), _createElementBlock("button", {
                     key: 0,
                     class: "link-button page-help",
@@ -842,7 +894,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                     role: "status"
                   }, "Carregando registros…"))
                 : _createCommentVNode("", true),
-              (state.page==='legacy-import' && state.user?.role==='admin')
+              (state.page==='legacy-import' && adminTool('legacy-import'))
                 ? (_openBlock(), _createBlock(_component_legacy_import_panel, {
                     key: state.schoolId,
                     "school-id": state.schoolId,
@@ -850,8 +902,21 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                     units: state.catalogs.units || []
                   }, null, 8, ["school-id", "school-name", "units"]))
                 : _createCommentVNode("", true),
-              (state.page==='diagnostics' && state.user?.role==='admin')
+              (state.page==='diagnostics' && adminTool('diagnostics'))
                 ? (_openBlock(), _createBlock(_component_diagnostics_panel, { key: 6 }))
+                : _createCommentVNode("", true),
+              (state.page==='webmail')
+                ? (_openBlock(), _createBlock(_component_institutional_email, {
+                    key: state.schoolId+':email',
+                    "school-id": state.schoolId,
+                    admin: state.user.role==='admin'
+                  }, null, 8, ["school-id", "admin"]))
+                : _createCommentVNode("", true),
+              (state.page==='audit' && adminTool('audit'))
+                ? (_openBlock(), _createBlock(_component_audit_panel, {
+                    key: state.schoolId+':audit',
+                    "school-id": state.schoolId
+                  }, null, 8, ["school-id"]))
                 : _createCommentVNode("", true),
               (state.page==='email' && state.user?.role==='admin')
                 ? (_openBlock(), _createBlock(_component_mailcow_panel, {
@@ -861,15 +926,15 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                 : _createCommentVNode("", true),
               (state.page==='email' && state.user?.role==='admin')
                 ? (_openBlock(), _createElementBlock("section", {
-                    key: 8,
+                    key: 10,
                     class: "panel x-card",
                     "aria-labelledby": "smtp-title"
-                  }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "INTEGRAÇÕES · E-MAIL"), _createElementVNode("h2", { id: "smtp-title" }, "Envio por SMTP"), _createElementVNode("p", null, "Acompanhe a configuração de envio de mensagens da escola.")])]), (state.emailStatus==='configured')
+                  }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "INTEGRAÇÕES · E-MAIL"), _createElementVNode("h2", { id: "smtp-title" }, "Envio de avisos"), _createElementVNode("p", null, "Acompanhe a configuração de envio de mensagens da escola.")])]), (state.emailStatus==='configured')
                     ? (_openBlock(), _createElementBlock("p", {
                         key: 0,
                         class: "alert success",
                         role: "status"
-                      }, "SMTP configurado na instalação."))
+                      }, "Envio de e-mail configurado."))
                     : (state.emailStatus==='missing')
                       ? (_openBlock(), _createElementBlock("p", {
                           key: 1,
@@ -881,12 +946,12 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                             key: 2,
                             class: "alert warning",
                             role: "status"
-                          }, "Não foi possível consultar a configuração de SMTP. Tente novamente mais tarde."))
+                          }, "Não foi possível consultar a configuração de envio. Tente novamente mais tarde."))
                         : (_openBlock(), _createElementBlock("p", {
                             key: 3,
                             class: "muted",
                             role: "status"
-                          }, "Consultando configuração de SMTP…")), _createElementVNode("details", null, [_createElementVNode("summary", null, "Configuração técnica"), _createElementVNode("p", { class: "muted" }, "Configure SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM e SMTP_SECURITY no .env da instalação. Reinicie os serviços para aplicar as alterações.")])]))
+                          }, "Consultando configuração de envio…")), _createElementVNode("details", null, [_createElementVNode("summary", null, "Configuração técnica"), _createElementVNode("p", { class: "muted" }, "Configure SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM e SMTP_SECURITY no .env da instalação. Reinicie os serviços para aplicar as alterações.")])]))
                 : _createCommentVNode("", true),
               (['online','banking','integrations','connect'].includes(state.page))
                 ? (_openBlock(), _createBlock(_component_expansion_panel, {
@@ -915,7 +980,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                 : _createCommentVNode("", true),
               (state.page==='help')
                 ? (_openBlock(), _createElementBlock("section", {
-                    key: 12,
+                    key: 14,
                     class: "school-guide",
                     "aria-labelledby": "guide-title"
                   }, [_createElementVNode("header", { class: "guide-intro" }, [_createElementVNode("p", { class: "eyebrow" }, _toDisplayString(isProfileRole() ? 'SEU ESPAÇO ESCOLAR' : 'POR ONDE COMEÇAR'), 1), _createElementVNode("h2", { id: "guide-title" }, _toDisplayString(isProfileRole() ? 'Use seu espaço escolar' : 'Siga a ordem da rotina escolar'), 1), (!isProfileRole())
@@ -1071,7 +1136,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                 : _createCommentVNode("", true),
               (state.page==='dashboard' && !isProfileRole())
                 ? (_openBlock(), _createElementBlock("section", {
-                    key: 13,
+                    key: 15,
                     class: "dashboard"
                   }, [_createElementVNode("div", { class: "welcome-card" }, [_createElementVNode("div", null, [
                     _createElementVNode("p", { class: "eyebrow" }, "ROTINA ESCOLAR EM DIA"),
@@ -1155,7 +1220,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                 : _createCommentVNode("", true),
               (state.page==='dashboard' && isProfileRole())
                 ? (_openBlock(), _createElementBlock("section", {
-                    key: 14,
+                    key: 16,
                     class: "dashboard"
                   }, [(_openBlock(), _createBlock(_component_school_community, {
                     key: state.schoolId+'-feed',
@@ -1295,7 +1360,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                 : _createCommentVNode("", true),
               (state.page==='students' && state.selectedStudent)
                 ? (_openBlock(), _createElementBlock("section", {
-                    key: 15,
+                    key: 17,
                     class: "student-detail"
                   }, [
                     _createElementVNode("div", { class: "student-banner" }, [
@@ -1643,23 +1708,74 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       : _createCommentVNode("", true)
                   ]))
                 : _createCommentVNode("", true),
-              (['people','students','teachers','employees','guardians','suppliers','providers','customers','partners','academic','enrollments','documents','protocols','users','audit'].includes(state.page) && !state.selectedStudent)
-                ? (_openBlock(), _createElementBlock("section", { key: 16 }, [
+              (['people','students','teachers','employees','guardians','suppliers','providers','customers','partners','academic','enrollments','documents','protocols','users'].includes(state.page) && !state.selectedStudent)
+                ? (_openBlock(), _createElementBlock("section", { key: 18 }, [
                     (state.page==='academic')
                       ? (_openBlock(), _createElementBlock("div", {
                           key: 0,
-                          class: "tabs"
+                          class: "academic-workspace"
+                        }, [_createElementVNode("nav", {
+                          class: "academic-sections",
+                          "aria-label": "Organização acadêmica"
                         }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(catalogLabels, (caption, kind) => {
                           return (_openBlock(), _createElementBlock("button", {
                             key: kind,
+                            type: "button",
+                            "aria-label": caption,
                             class: _normalizeClass({active:state.catalog===kind}),
+                            "aria-pressed": state.catalog===kind,
                             onClick: $event => (setCatalog(kind))
-                          }, _toDisplayString(caption), 11, ["onClick"]))
-                        }), 128))]))
+                          }, [_createElementVNode("span", { class: "academic-section-head" }, [_createElementVNode("strong", null, _toDisplayString(caption), 1), _createElementVNode("span", null, _toDisplayString((state.catalogs[kind] || []).length), 1)]), _createElementVNode("small", null, _toDisplayString(catalogDescriptions[kind]), 1)], 10, ["aria-label", "aria-pressed", "onClick"]))
+                        }), 128))]), _createElementVNode("div", { class: "academic-list-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, _toDisplayString(catalogLabels[state.catalog]), 1), _createElementVNode("p", null, _toDisplayString(catalogDescriptions[state.catalog]), 1)]), _createElementVNode("span", { class: "badge" }, _toDisplayString(state.total) + " registros", 1)]), _createElementVNode("form", {
+                          class: "academic-filters",
+                          onSubmit: _withModifiers(search, ["prevent"])
+                        }, [_createElementVNode("label", { class: "academic-search" }, [_createTextVNode("Buscar " + _toDisplayString(catalogLabels[state.catalog].toLocaleLowerCase('pt-BR')), 1), _withDirectives(_createElementVNode("input", {
+                          "onUpdate:modelValue": $event => ((state.q) = $event),
+                          type: "search",
+                          placeholder: "Digite o nome",
+                          onInput: search
+                        }, null, 40, ["onUpdate:modelValue", "onInput"]), [[_vModelText, state.q]])]), (state.catalog==='class-groups')
+                          ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
+                              _createElementVNode("label", null, [_createTextVNode("Ano letivo"), _withDirectives(_createElementVNode("select", {
+                                "onUpdate:modelValue": $event => ((state.academicFilter.year) = $event),
+                                onChange: search
+                              }, [_createElementVNode("option", { value: "" }, "Todos"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(options('academic-years'), (o) => {
+                                return (_openBlock(), _createElementBlock("option", { value: o.value }, _toDisplayString(o.label), 9, ["value"]))
+                              }), 256))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.academicFilter.year]])]),
+                              _createElementVNode("label", null, [_createTextVNode("Unidade"), _withDirectives(_createElementVNode("select", {
+                                "onUpdate:modelValue": $event => ((state.academicFilter.unit) = $event),
+                                onChange: search
+                              }, [_createElementVNode("option", { value: "" }, "Todas"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(options('units'), (o) => {
+                                return (_openBlock(), _createElementBlock("option", { value: o.value }, _toDisplayString(o.label), 9, ["value"]))
+                              }), 256))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.academicFilter.unit]])]),
+                              _createElementVNode("label", null, [_createTextVNode("Série"), _withDirectives(_createElementVNode("select", {
+                                "onUpdate:modelValue": $event => ((state.academicFilter.grade) = $event),
+                                onChange: search
+                              }, [_createElementVNode("option", { value: "" }, "Todas"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(options('grades'), (o) => {
+                                return (_openBlock(), _createElementBlock("option", { value: o.value }, _toDisplayString(o.label), 9, ["value"]))
+                              }), 256))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.academicFilter.grade]])]),
+                              _createElementVNode("label", null, [_createTextVNode("Turno"), _withDirectives(_createElementVNode("select", {
+                                "onUpdate:modelValue": $event => ((state.academicFilter.shift) = $event),
+                                onChange: search
+                              }, [_createElementVNode("option", { value: "" }, "Todos"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(options('shifts'), (o) => {
+                                return (_openBlock(), _createElementBlock("option", { value: o.value }, _toDisplayString(o.label), 9, ["value"]))
+                              }), 256))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.academicFilter.shift]])])
+                            ], 64))
+                          : _createCommentVNode("", true)], 40, ["onSubmit"])]))
+                      : _createCommentVNode("", true),
+                    (registryPages.includes(state.page) || state.page==='academic')
+                      ? (_openBlock(), _createElementBlock("label", {
+                          key: 1,
+                          class: "record-archive-filter"
+                        }, [_createTextVNode("Exibir"), _withDirectives(_createElementVNode("select", {
+                          "aria-label": "Exibir registros",
+                          "onUpdate:modelValue": $event => ((state.archiveFilter) = $event),
+                          onChange: search
+                        }, [_createElementVNode("option", { value: "active" }, "Cadastros disponíveis"), _createElementVNode("option", { value: "archived" }, "Arquivados"), _createElementVNode("option", { value: "all" }, "Todos os cadastros")], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.archiveFilter]])]))
                       : _createCommentVNode("", true),
                     (['people','students','teachers','employees','guardians','suppliers','providers','customers','partners'].includes(state.page))
                       ? (_openBlock(), _createElementBlock("form", {
-                          key: 1,
+                          key: 2,
                           class: "filter-bar",
                           onSubmit: _withModifiers(search, ["prevent"])
                         }, [_createElementVNode("label", { class: "search-field" }, [_createElementVNode("span", null, "⌕"), _withDirectives(_createElementVNode("input", {
@@ -1670,7 +1786,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       : _createCommentVNode("", true),
                     (['people','guardians',...Object.keys(businessTypes)].includes(state.page))
                       ? (_openBlock(), _createElementBlock("button", {
-                          key: 2,
+                          key: 3,
                           type: "button",
                           class: "registry-filter-toggle",
                           "aria-expanded": state.registryFiltersOpen,
@@ -1685,7 +1801,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       : _createCommentVNode("", true),
                     (['people','guardians',...Object.keys(businessTypes)].includes(state.page))
                       ? (_openBlock(), _createElementBlock("form", {
-                          key: 3,
+                          key: 4,
                           id: "registry-filters",
                           class: _normalizeClass(["registry-filters", {'filters-open':state.registryFiltersOpen}]),
                           onSubmit: _withModifiers(search, ["prevent"])
@@ -1712,7 +1828,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       : _createCommentVNode("", true),
                     (['enrollments','documents','protocols'].includes(state.page))
                       ? (_openBlock(), _createElementBlock("form", {
-                          key: 4,
+                          key: 5,
                           class: "panel filter-panel",
                           onSubmit: _withModifiers(search, ["prevent"])
                         }, [_createElementVNode("div", { class: "filter-grid" }, [
@@ -1826,7 +1942,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       : _createCommentVNode("", true),
                     (state.page==='documents')
                       ? (_openBlock(), _createElementBlock("div", {
-                          key: 5,
+                          key: 6,
                           class: "document-summary"
                         }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(state.pendencySummary.total_documents) + " " + _toDisplayString(state.pendencySummary.total_documents===1?'pendência documental':'pendências documentais'), 1), _createElementVNode("p", { class: "small muted" }, "Documentos obrigatórios ainda não validados, rejeitados ou vencidos. Somente alunos ativos.")]), (can('reports.read'))
                           ? (_openBlock(), _createElementBlock("div", {
@@ -1843,13 +1959,13 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       : _createCommentVNode("", true),
                     (state.page==='documents' && state.pendencySummary.truncated)
                       ? (_openBlock(), _createElementBlock("div", {
-                          key: 6,
+                          key: 7,
                           class: "alert warning"
                         }, "Resultado limitado: " + _toDisplayString(state.pendencySummary.scanned_students) + " de " + _toDisplayString(state.pendencySummary.total_students) + " alunos verificados. Restrinja por ano, turma ou nome. Exportações parciais são bloqueadas.", 1))
                       : _createCommentVNode("", true),
                     (state.page==='academic' && state.catalog==='class-groups')
                       ? (_openBlock(), _createElementBlock("div", {
-                          key: 7,
+                          key: 8,
                           class: "alert info"
                         }, "A capacidade é conferida ao ativar a matrícula. Matrículas suspensas continuam reservando a vaga."))
                       : _createCommentVNode("", true),
@@ -1929,13 +2045,13 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                               role: "cell",
                               headers: "record-1-column-5",
                               "data-label": "Situação"
-                            }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("span", { class: _normalizeClass(["badge", r.active===false?'archived':'active']) }, _toDisplayString(r.active===false?'Inativo':'Ativo'), 3)])]),
+                            }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("span", { class: _normalizeClass(["badge", r.archived || r.active===false?'archived':'active']) }, _toDisplayString(r.archived?'Arquivado':r.active===false?'Inativo':'Ativo'), 3)])]),
                             _createElementVNode("td", {
                               role: "cell",
                               headers: "record-1-column-6",
                               "data-label": "Ações"
                             }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("div", { class: "actions compact" }, [
-                              (can('people.write'))
+                              ((can('people.write')) && !r.archived)
                                 ? (_openBlock(), _createElementBlock("button", {
                                     key: 0,
                                     class: "link-button",
@@ -1963,7 +2079,13 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                                     onClick: $event => (newEmployee(r))
                                   }, "Adicionar funcionário →", 8, ["onClick"]))
                                 : _createCommentVNode("", true)
-                            ])])])
+                            ])]), (can('people.write'))
+                              ? (_openBlock(), _createElementBlock("button", {
+                                  key: 0,
+                                  class: "link-button record-manage",
+                                  onClick: $event => (manageRecord(r))
+                                }, _toDisplayString(r.archived?'Restaurar ou excluir':'Arquivar ou excluir'), 9, ["onClick"]))
+                              : _createCommentVNode("", true)])
                           ]))
                         }), 128))])]))
                       : (isBusiness())
@@ -2047,13 +2169,19 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                                 role: "cell",
                                 headers: "record-2-column-7",
                                 "data-label": "Ações"
-                              }, [_createElementVNode("div", { class: "record-value" }, [(can('people.write'))
+                              }, [_createElementVNode("div", { class: "record-value" }, [((can('people.write')) && !r.archived)
                                 ? (_openBlock(), _createElementBlock("button", {
                                     key: 0,
                                     class: "link-button",
                                     onClick: $event => (newBusiness(r))
                                   }, "Editar →", 8, ["onClick"]))
-                                : _createCommentVNode("", true)])])
+                                : _createCommentVNode("", true)]), (can('people.write'))
+                                ? (_openBlock(), _createElementBlock("button", {
+                                    key: 0,
+                                    class: "link-button record-manage",
+                                    onClick: $event => (manageRecord(r))
+                                  }, "Gerenciar exclusão", 8, ["onClick"]))
+                                : _createCommentVNode("", true)])
                             ]))
                           }), 128))])]))
                         : (state.page==='students')
@@ -2138,7 +2266,13 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                                 }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("button", {
                                   class: "link-button",
                                   onClick: $event => (viewStudent(r.id))
-                                }, "Abrir ficha →", 8, ["onClick"])])])
+                                }, "Abrir ficha →", 8, ["onClick"])]), (can('people.write'))
+                                  ? (_openBlock(), _createElementBlock("button", {
+                                      key: 0,
+                                      class: "link-button record-manage",
+                                      onClick: $event => (manageRecord(r))
+                                    }, _toDisplayString(r.archived?'Restaurar ou excluir':'Arquivar ou excluir'), 9, ["onClick"]))
+                                  : _createCommentVNode("", true)])
                               ]))
                             }), 128))])]))
                           : (state.page==='teachers')
@@ -2205,18 +2339,24 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                                     role: "cell",
                                     headers: "record-4-column-4",
                                     "data-label": "Vínculo"
-                                  }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("span", { class: _normalizeClass(["badge", r.employment_status]) }, _toDisplayString(label(r.employment_status)), 3), _createElementVNode("small", null, _toDisplayString(label(r.employment_type)) + " · " + _toDisplayString(r.workload_hours || 0) + "h/semana", 1)])]),
+                                  }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("span", { class: _normalizeClass(["badge", r.archived?'archived':r.employment_status]) }, _toDisplayString(r.archived?'Arquivado':label(r.employment_status)), 3), _createElementVNode("small", null, _toDisplayString(label(r.employment_type)) + " · " + _toDisplayString(r.workload_hours || 0) + "h/semana", 1)])]),
                                   _createElementVNode("td", {
                                     role: "cell",
                                     headers: "record-4-column-5",
                                     "data-label": "Ações"
-                                  }, [_createElementVNode("div", { class: "record-value" }, [(can('people.write'))
+                                  }, [_createElementVNode("div", { class: "record-value" }, [((can('people.write')) && !r.archived)
                                     ? (_openBlock(), _createElementBlock("button", {
                                         key: 0,
                                         class: "link-button",
                                         onClick: $event => (editTeacher(r))
                                       }, "Editar →", 8, ["onClick"]))
-                                    : _createCommentVNode("", true)])])
+                                    : _createCommentVNode("", true)]), (can('people.write'))
+                                    ? (_openBlock(), _createElementBlock("button", {
+                                        key: 0,
+                                        class: "link-button record-manage",
+                                        onClick: $event => (manageRecord(r))
+                                      }, _toDisplayString(r.archived?'Restaurar ou excluir':'Arquivar ou excluir'), 9, ["onClick"]))
+                                    : _createCommentVNode("", true)])
                                 ]))
                               }), 128))])]))
                             : (state.page==='employees')
@@ -2283,18 +2423,24 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                                       role: "cell",
                                       headers: "record-5-column-4",
                                       "data-label": "Vínculo"
-                                    }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("span", { class: _normalizeClass(["badge", r.employment_status]) }, _toDisplayString(label(r.employment_status)), 3), _createElementVNode("small", null, _toDisplayString(label(r.employment_type)) + " · " + _toDisplayString(r.work_schedule || 'Jornada não informada'), 1)])]),
+                                    }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("span", { class: _normalizeClass(["badge", r.archived?'archived':r.employment_status]) }, _toDisplayString(r.archived?'Arquivado':label(r.employment_status)), 3), _createElementVNode("small", null, _toDisplayString(label(r.employment_type)) + " · " + _toDisplayString(r.work_schedule || 'Jornada não informada'), 1)])]),
                                     _createElementVNode("td", {
                                       role: "cell",
                                       headers: "record-5-column-5",
                                       "data-label": "Ações"
-                                    }, [_createElementVNode("div", { class: "record-value" }, [(can('people.write'))
+                                    }, [_createElementVNode("div", { class: "record-value" }, [((can('people.write')) && !r.archived)
                                       ? (_openBlock(), _createElementBlock("button", {
                                           key: 0,
                                           class: "link-button",
                                           onClick: $event => (editEmployee(r))
                                         }, "Editar →", 8, ["onClick"]))
-                                      : _createCommentVNode("", true)])])
+                                      : _createCommentVNode("", true)]), (can('people.write'))
+                                      ? (_openBlock(), _createElementBlock("button", {
+                                          key: 0,
+                                          class: "link-button record-manage",
+                                          onClick: $event => (manageRecord(r))
+                                        }, _toDisplayString(r.archived?'Restaurar ou excluir':'Arquivar ou excluir'), 9, ["onClick"]))
+                                      : _createCommentVNode("", true)])
                                   ]))
                                 }), 128))])]))
                               : (state.page==='guardians')
@@ -2368,13 +2514,19 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                                         role: "cell",
                                         headers: "record-6-column-5",
                                         "data-label": "Ações"
-                                      }, [_createElementVNode("div", { class: "record-value" }, [(can('people.write'))
+                                      }, [_createElementVNode("div", { class: "record-value" }, [((can('people.write')) && !r.archived)
                                         ? (_openBlock(), _createElementBlock("button", {
                                             key: 0,
                                             class: "link-button",
                                             onClick: $event => (editPerson(r))
                                           }, "Editar →", 8, ["onClick"]))
-                                        : _createCommentVNode("", true)])])
+                                        : _createCommentVNode("", true)]), (can('people.write'))
+                                        ? (_openBlock(), _createElementBlock("button", {
+                                            key: 0,
+                                            class: "link-button record-manage",
+                                            onClick: $event => (manageRecord(r))
+                                          }, _toDisplayString(r.archived?'Restaurar ou excluir':'Arquivar ou excluir'), 9, ["onClick"]))
+                                        : _createCommentVNode("", true)])
                                     ]))
                                   }), 128))])]))
                                 : (state.page==='academic')
@@ -2417,7 +2569,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                                           headers: "record-7-column-2",
                                           "data-label": "Detalhes"
                                         }, [_createElementVNode("div", { class: "record-value" }, [(state.catalog==='class-groups')
-                                          ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createTextVNode(_toDisplayString(getName('academic-years',r.academic_year_id)) + " · " + _toDisplayString(getName('grades',r.grade_id)) + " · " + _toDisplayString(getName('shifts',r.shift_id)), 1), _createElementVNode("small", null, _toDisplayString(r.occupied) + " / " + _toDisplayString(r.capacity) + " vagas ocupadas · " + _toDisplayString(r.available) + " disponíveis", 1)], 64))
+                                          ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createTextVNode(_toDisplayString(r.year_name || getName('academic-years',r.academic_year_id)) + " · " + _toDisplayString(r.grade_name || getName('grades',r.grade_id)) + " · " + _toDisplayString(r.shift_name || getName('shifts',r.shift_id)), 1), _createElementVNode("small", null, _toDisplayString(r.occupied) + " / " + _toDisplayString(r.capacity) + " vagas ocupadas · " + _toDisplayString(r.available) + " disponíveis", 1)], 64))
                                           : (state.catalog==='academic-years')
                                             ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [_createTextVNode(_toDisplayString(date(r.starts_on)) + " a " + _toDisplayString(date(r.ends_on)), 1)], 64))
                                             : (state.catalog==='grades')
@@ -2429,18 +2581,24 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                                           role: "cell",
                                           headers: "record-7-column-3",
                                           "data-label": "Situação"
-                                        }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("span", { class: _normalizeClass(["badge", r.status || (r.active?'active':'archived')]) }, _toDisplayString(r.status?label(r.status):(r.active?'Ativo':'Inativo')), 3)])]),
+                                        }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("span", { class: _normalizeClass(["badge", r.archived?'archived':r.status || (r.active?'active':'archived')]) }, _toDisplayString(r.archived?'Arquivado':r.status?label(r.status):(r.active?'Ativo':'Inativo')), 3)])]),
                                         _createElementVNode("td", {
                                           role: "cell",
                                           headers: "record-7-column-4",
                                           "data-label": "Ações"
-                                        }, [_createElementVNode("div", { class: "record-value" }, [(can('academic.write'))
+                                        }, [_createElementVNode("div", { class: "record-value" }, [(can(state.catalog==='document-types'?'documents.write':'academic.write') && !r.archived)
                                           ? (_openBlock(), _createElementBlock("button", {
                                               key: 0,
                                               class: "link-button",
                                               onClick: $event => (newCatalog(r))
                                             }, "Editar →", 8, ["onClick"]))
-                                          : _createCommentVNode("", true)])])
+                                          : _createCommentVNode("", true)]), (can(state.catalog==='document-types'?'documents.write':'academic.write'))
+                                          ? (_openBlock(), _createElementBlock("button", {
+                                              key: 0,
+                                              class: "link-button record-manage",
+                                              onClick: $event => (manageRecord(r))
+                                            }, _toDisplayString(r.archived?'Restaurar ou excluir':'Arquivar ou excluir'), 9, ["onClick"]))
+                                          : _createCommentVNode("", true)])
                                       ]))
                                     }), 128))])]))
                                   : (state.page==='enrollments')
@@ -2690,68 +2848,14 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                                                 }, "Editar acesso →", 8, ["onClick"])])])
                                               ]))
                                             }), 128))])]))
-                                          : (state.page==='audit')
-                                            ? (_openBlock(), _createElementBlock("table", {
-                                                key: 11,
-                                                role: "table"
-                                              }, [_createElementVNode("thead", { role: "rowgroup" }, [_createElementVNode("tr", { role: "row" }, [
-                                                _createElementVNode("th", {
-                                                  scope: "col",
-                                                  role: "columnheader",
-                                                  id: "record-12-column-1"
-                                                }, "Operação"),
-                                                _createElementVNode("th", {
-                                                  scope: "col",
-                                                  role: "columnheader",
-                                                  id: "record-12-column-2"
-                                                }, "Registro"),
-                                                _createElementVNode("th", {
-                                                  scope: "col",
-                                                  role: "columnheader",
-                                                  id: "record-12-column-3"
-                                                }, "Data"),
-                                                _createElementVNode("th", {
-                                                  scope: "col",
-                                                  role: "columnheader",
-                                                  id: "record-12-column-4"
-                                                }, "Referência")
-                                              ])]), _createElementVNode("tbody", { role: "rowgroup" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.rows, (r) => {
-                                                return (_openBlock(), _createElementBlock("tr", {
-                                                  role: "row",
-                                                  key: r.id
-                                                }, [
-                                                  _createElementVNode("td", {
-                                                    role: "cell",
-                                                    headers: "record-12-column-1",
-                                                    "data-label": "Operação"
-                                                  }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("strong", null, _toDisplayString(r.action), 1), _createElementVNode("small", null, _toDisplayString(r.entity_type), 1)])]),
-                                                  _createElementVNode("td", {
-                                                    class: "mono small",
-                                                    role: "cell",
-                                                    headers: "record-12-column-2",
-                                                    "data-label": "Registro"
-                                                  }, [_createElementVNode("div", { class: "record-value" }, _toDisplayString(r.entity_id), 1)]),
-                                                  _createElementVNode("td", {
-                                                    role: "cell",
-                                                    headers: "record-12-column-3",
-                                                    "data-label": "Data"
-                                                  }, [_createElementVNode("div", { class: "record-value" }, _toDisplayString(date(r.created_at)), 1)]),
-                                                  _createElementVNode("td", {
-                                                    class: "mono small",
-                                                    role: "cell",
-                                                    headers: "record-12-column-4",
-                                                    "data-label": "Referência"
-                                                  }, [_createElementVNode("div", { class: "record-value" }, _toDisplayString(r.request_id), 1)])
-                                                ]))
-                                              }), 128))])]))
-                                            : _createCommentVNode("", true), (!state.rows.length && !state.loading)
+                                          : _createCommentVNode("", true), (!state.rows.length && !state.loading)
                       ? (_openBlock(), _createElementBlock("div", {
-                          key: 12,
+                          key: 11,
                           class: "empty-state"
                         }, [_createElementVNode("span", null, "▱"), _createElementVNode("h3", null, _toDisplayString(state.page==='documents'?'Nenhuma pendência encontrada':'Nenhum registro encontrado'), 1), _createElementVNode("p", null, _toDisplayString(state.page==='documents'?'Confira também os tipos de documento exigidos para cada série.':'Cadastre o primeiro registro ou ajuste sua pesquisa.'), 1)]))
-                      : _createCommentVNode("", true), (['people','students','teachers','employees','guardians','suppliers','providers','customers','partners','enrollments','documents','protocols','audit'].includes(state.page))
+                      : _createCommentVNode("", true), (['people','students','teachers','employees','guardians','suppliers','providers','customers','partners','enrollments','documents','protocols'].includes(state.page))
                       ? (_openBlock(), _createElementBlock("div", {
-                          key: 13,
+                          key: 12,
                           class: "pagination"
                         }, [_createElementVNode("span", null, _toDisplayString(state.total) + " " + _toDisplayString(state.total===1?'registro':'registros') + " · Página " + _toDisplayString(state.pageNumber), 1), _createElementVNode("div", null, [_createElementVNode("button", {
                           class: "btn btn-secondary small-button",
@@ -2789,114 +2893,179 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                   }, null, 8, ["school-id", "permissions", "role"]))
                 : _createCommentVNode("", true),
               (state.page==='settings')
-                ? (_openBlock(), _createElementBlock("section", { key: 20 }, [
-                    _createElementVNode("div", { class: "section-actions" }, [_createElementVNode("h2", null, "Minha escola e suas unidades"), _createElementVNode("div", { class: "actions" }, [(state.user.role==='admin')
-                      ? (_openBlock(), _createElementBlock("button", {
+                ? (_openBlock(), _createElementBlock("section", {
+                    key: 22,
+                    class: "institution-workspace"
+                  }, [
+                    _createElementVNode("header", { class: "institution-summary" }, [_createElementVNode("div", { class: "institution-mark" }, [(identity.logo_url)
+                      ? (_openBlock(), _createElementBlock("img", {
                           key: 0,
+                          src: identity.logo_url,
+                          alt: ""
+                        }, null, 8, ["src"]))
+                      : (_openBlock(), _createElementBlock("svg", {
+                          key: 1,
+                          class: "ui-icon",
+                          "aria-hidden": "true"
+                        }, [_createElementVNode("use", { href: "/ui-icons.svg#school" })]))]), _createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "SUA INSTITUIÇÃO"), _createElementVNode("h2", null, _toDisplayString(school()?.name), 1), _createElementVNode("p", null, _toDisplayString(state.companies.find(c=>c.id===school()?.company_id)?.name), 1)]), _createElementVNode("span", { class: _normalizeClass(["badge", school()?.active?'active':'archived']) }, _toDisplayString(school()?.active?'Ativa':'Inativa'), 3)]),
+                    _createElementVNode("nav", {
+                      class: "institution-tabs",
+                      "aria-label": "Configurações da instituição"
+                    }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(institutionTabs.filter(t=>state.user.role==='admin' || ['general','support'].includes(t.id)), (tab) => {
+                      return (_openBlock(), _createElementBlock("button", {
+                        key: tab.id,
+                        type: "button",
+                        "aria-pressed": state.institutionTab===tab.id,
+                        class: _normalizeClass({active:state.institutionTab===tab.id}),
+                        onClick: $event => (state.institutionTab=tab.id)
+                      }, _toDisplayString(tab.label), 11, ["aria-pressed", "onClick"]))
+                    }), 128))]),
+                    (state.institutionTab==='general')
+                      ? (_openBlock(), _createElementBlock("div", {
+                          key: 0,
+                          class: "institution-grid"
+                        }, [_createElementVNode("article", { class: "panel institution-card institution-profile" }, [_createElementVNode("div", { class: "institution-card-title" }, [(_openBlock(), _createElementBlock("svg", {
+                          class: "ui-icon",
+                          "aria-hidden": "true"
+                        }, [_createElementVNode("use", { href: "/ui-icons.svg#school" })])), _createElementVNode("h3", null, "Dados da escola")]), _createElementVNode("dl", { class: "institution-data" }, [
+                          _createElementVNode("div", null, [_createElementVNode("dt", null, "Nome"), _createElementVNode("dd", null, _toDisplayString(school()?.name), 1)]),
+                          _createElementVNode("div", null, [_createElementVNode("dt", null, "Endereço"), _createElementVNode("dd", null, _toDisplayString(school()?.address || 'Não informado'), 1)]),
+                          _createElementVNode("div", null, [_createElementVNode("dt", null, "Telefone"), _createElementVNode("dd", null, _toDisplayString(school()?.phone || 'Não informado'), 1)]),
+                          _createElementVNode("div", null, [_createElementVNode("dt", null, "E-mail"), _createElementVNode("dd", null, _toDisplayString(school()?.email || 'Não informado'), 1)]),
+                          _createElementVNode("div", { class: "wide" }, [_createElementVNode("dt", null, "Documentos para matrícula"), _createElementVNode("dd", null, _toDisplayString(school()?.document_policy==='block'?'Validar os obrigatórios antes da ativação':'Avisar sobre pendências sem impedir a ativação'), 1)])
+                        ]), _createElementVNode("div", { class: "institution-card-actions" }, [_createElementVNode("button", {
                           class: "btn btn-secondary",
-                          onClick: editMaintainer
-                        }, "Dados da mantenedora", 8, ["onClick"]))
-                      : _createCommentVNode("", true), _createElementVNode("button", {
-                      class: "btn btn-primary",
-                      onClick: manageUnits
-                    }, "Gerenciar unidades", 8, ["onClick"])])]),
-                    _createElementVNode("article", { class: "panel school-card" }, [
-                      _createElementVNode("p", { class: "eyebrow" }, "IDENTIDADE DA ESCOLA"),
-                      _createElementVNode("h2", null, _toDisplayString(identity.display_name), 1),
-                      _createElementVNode("p", { class: "muted" }, "Nome, logotipo, cores, tipografia e aplicativo desta instituição. A personalização é preservada nas atualizações."),
-                      (state.user.role==='admin')
-                        ? (_openBlock(), _createElementBlock("button", {
-                            key: 0,
+                          onClick: $event => (newSchool(school()))
+                        }, "Editar dados", 8, ["onClick"]), (state.user.role==='admin')
+                          ? (_openBlock(), _createElementBlock("button", {
+                              key: 0,
+                              class: "link-button",
+                              onClick: editMaintainer
+                            }, "Dados da mantenedora", 8, ["onClick"]))
+                          : _createCommentVNode("", true)])]), _createElementVNode("article", { class: "panel institution-card" }, [
+                          _createElementVNode("div", { class: "institution-card-title" }, [(_openBlock(), _createElementBlock("svg", {
+                            class: "ui-icon",
+                            "aria-hidden": "true"
+                          }, [_createElementVNode("use", { href: "/ui-icons.svg#academic" })])), _createElementVNode("h3", null, "Unidades e organização")]),
+                          _createElementVNode("p", null, "Organize os locais de atendimento e a estrutura que recebe seus alunos."),
+                          _createElementVNode("div", { class: "institution-stat" }, [_createElementVNode("strong", null, _toDisplayString((state.catalogs.units || []).length), 1), _createElementVNode("span", null, "unidades cadastradas")]),
+                          _createElementVNode("div", { class: "institution-card-actions" }, [_createElementVNode("button", {
                             class: "btn btn-secondary",
-                            onClick: editIdentity
-                          }, "Personalizar identidade visual", 8, ["onClick"]))
-                        : _createCommentVNode("", true)
-                    ]),
-                    (state.user.role==='admin')
+                            onClick: manageUnits
+                          }, "Gerenciar unidades", 8, ["onClick"]), _createElementVNode("button", {
+                            class: "link-button",
+                            onClick: $event => (navigate('academic'))
+                          }, "Estrutura acadêmica →", 8, ["onClick"])])
+                        ]), _createElementVNode("article", { class: "panel institution-card" }, [
+                          _createElementVNode("div", { class: "institution-card-title" }, [(_openBlock(), _createElementBlock("svg", {
+                            class: "ui-icon",
+                            "aria-hidden": "true"
+                          }, [_createElementVNode("use", { href: "/ui-icons.svg#certificate" })])), _createElementVNode("h3", null, "Certificados e assinaturas")]),
+                          _createElementVNode("p", null, "Acompanhe a validade dos certificados e assine documentos da escola."),
+                          (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.certificateAlerts, (notice) => {
+                            return (_openBlock(), _createElementBlock("div", {
+                              key: notice.id,
+                              class: "certificate-inline-notice"
+                            }, [_createElementVNode("strong", null, _toDisplayString(notice.title), 1), _createElementVNode("p", null, _toDisplayString(notice.message), 1)]))
+                          }), 128)),
+                          _createElementVNode("div", { class: "institution-card-actions" }, [_createElementVNode("button", {
+                            class: "btn btn-secondary",
+                            onClick: $event => (navigate('signatures'))
+                          }, "Gerenciar certificados", 8, ["onClick"])])
+                        ])]))
+                      : _createCommentVNode("", true),
+                    (state.institutionTab==='identity' && state.user.role==='admin')
                       ? (_openBlock(), _createElementBlock("article", {
-                          key: 0,
-                          class: "panel school-card"
+                          key: 1,
+                          class: "panel institution-card"
                         }, [
-                          _createElementVNode("p", { class: "eyebrow" }, "SEGURANÇA"),
-                          _createElementVNode("h2", null, "Segurança da instituição"),
-                          _createElementVNode("p", { class: "muted" }, "Controle a incorporação em sites autorizados e a exigência de autenticação em duas etapas."),
-                          _createElementVNode("button", {
-                            class: "btn btn-secondary",
-                            onClick: editEmbedding
-                          }, "Autorizar origens de iframe", 8, ["onClick"]),
-                          (state.user.role==='admin')
-                            ? (_openBlock(), _createElementBlock("button", {
+                          _createElementVNode("div", { class: "institution-card-title" }, [(_openBlock(), _createElementBlock("svg", {
+                            class: "ui-icon",
+                            "aria-hidden": "true"
+                          }, [_createElementVNode("use", { href: "/ui-icons.svg#school" })])), _createElementVNode("h3", null, "A identidade da sua escola")]),
+                          _createElementVNode("div", { class: "identity-preview" }, [(identity.logo_url)
+                            ? (_openBlock(), _createElementBlock("img", {
                                 key: 0,
-                                class: "btn btn-secondary",
-                                onClick: editMFAPolicy
-                              }, "Política de 2FA", 8, ["onClick"]))
-                            : _createCommentVNode("", true),
-                          _createElementVNode("button", {
-                            class: "btn btn-secondary",
-                            onClick: editIntake
-                          }, "OCR e consultas cadastrais", 8, ["onClick"])
+                                src: identity.logo_url,
+                                alt: identity.display_name
+                              }, null, 8, ["src", "alt"]))
+                            : _createCommentVNode("", true), _createElementVNode("div", null, [_createElementVNode("h2", null, _toDisplayString(identity.display_name), 1), _createElementVNode("p", null, _toDisplayString(identity.short_name), 1), _createElementVNode("div", { class: "identity-swatches" }, [_createElementVNode("span", {
+                            style: _normalizeStyle({backgroundColor:identity.primary_color}),
+                            "aria-hidden": "true"
+                          }, null, 4), _createElementVNode("span", {
+                            style: _normalizeStyle({backgroundColor:identity.secondary_color}),
+                            "aria-hidden": "true"
+                          }, null, 4), _createElementVNode("small", null, "Cores da instituição")])])]),
+                          _createElementVNode("p", null, "Personalize o nome, a marca, as cores e a tipografia exibidos nos seus portais."),
+                          _createElementVNode("div", { class: "institution-card-actions" }, [_createElementVNode("button", {
+                            class: "btn btn-primary",
+                            onClick: editIdentity
+                          }, "Personalizar identidade visual", 8, ["onClick"])])
                         ]))
                       : _createCommentVNode("", true),
-                    _createElementVNode("div", { class: "school-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.schools, (s) => {
-                      return (_openBlock(), _createElementBlock("article", {
-                        key: s.id,
-                        class: "panel school-card"
-                      }, [
-                        _createElementVNode("p", { class: "eyebrow" }, "INSTITUIÇÃO DE ENSINO"),
-                        _createElementVNode("h2", null, _toDisplayString(s.name), 1),
-                        _createElementVNode("p", null, _toDisplayString(state.companies.find(c=>c.id===s.company_id)?.name), 1),
-                        _createElementVNode("p", { class: "muted" }, _toDisplayString(s.address || 'Endereço não informado'), 1),
-                        _createElementVNode("div", { class: "divider" }),
-                        _createElementVNode("p", { class: "small" }, [_createTextVNode("Documentação: "), _createElementVNode("strong", null, _toDisplayString(s.document_policy==='block'?'obrigatória antes de ativar':'aviso sem bloqueio'), 1)]),
-                        _createElementVNode("button", {
+                    (state.institutionTab==='security' && state.user.role==='admin')
+                      ? (_openBlock(), _createElementBlock("div", {
+                          key: 2,
+                          class: "institution-grid"
+                        }, [_createElementVNode("article", { class: "panel institution-card" }, [_createElementVNode("div", { class: "institution-card-title" }, [(_openBlock(), _createElementBlock("svg", {
+                          class: "ui-icon",
+                          "aria-hidden": "true"
+                        }, [_createElementVNode("use", { href: "/ui-icons.svg#access" })])), _createElementVNode("h3", null, "Proteção das contas")]), _createElementVNode("p", null, "Exija uma segunda verificação para proteger o acesso aos dados escolares."), _createElementVNode("div", { class: "institution-card-actions" }, [_createElementVNode("button", {
                           class: "btn btn-secondary",
-                          onClick: $event => (newSchool(s))
-                        }, "Editar instituição", 8, ["onClick"])
-                      ]))
-                    }), 128))]),
-                    _createElementVNode("article", { class: "panel support-hub-card" }, [
-                      (supportStatus.error)
-                        ? (_openBlock(), _createElementBlock("p", {
-                            key: 0,
-                            class: "alert warning",
-                            role: "status"
-                          }, _toDisplayString(supportStatus.error), 1))
-                        : _createCommentVNode("", true),
-                      _createElementVNode("div", { class: "panel-header" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "ATENDIMENTO"), _createElementVNode("h2", null, "Chat de suporte via site"), _createElementVNode("p", { class: "muted" }, "Configuração do Hub para a mantenedora da escola ativa.")]), _createElementVNode("span", { class: _normalizeClass(["badge", state.supportHub.enabled?'active':'archived']) }, _toDisplayString(state.supportHub.enabled?'Ativo':'Desativado'), 3)]),
-                      (state.supportHub.enabled)
-                        ? (_openBlock(), _createElementBlock("p", { key: 1 }, [_createTextVNode("O botão "), _createElementVNode("strong", null, _toDisplayString(state.supportHub.launcher_title), 1), _createTextVNode(" será carregado em " + _toDisplayString(state.supportHub.position==='right'?'à direita':'à esquerda') + " para os usuários do site.", 1)]))
-                        : (_openBlock(), _createElementBlock("p", {
-                            key: 2,
-                            class: "muted"
-                          }, "Nenhum widget de suporte será carregado enquanto a integração estiver desativada.")),
-                      (state.supportHub.token_configured)
-                        ? (_openBlock(), _createElementBlock("p", {
-                            key: 3,
-                            class: "small muted"
-                          }, "Website token configurado · " + _toDisplayString(state.supportHub.base_url), 1))
-                        : (_openBlock(), _createElementBlock("p", {
-                            key: 4,
-                            class: "small muted"
-                          }, "URL e website token ainda não configurados.")),
-                      _createElementVNode("div", { class: "actions" }, [(can('schools.manage'))
-                        ? (_openBlock(), _createElementBlock("button", {
-                            key: 0,
+                          onClick: editMFAPolicy
+                        }, "Verificação em duas etapas", 8, ["onClick"])])]), _createElementVNode("article", { class: "panel institution-card" }, [_createElementVNode("div", { class: "institution-card-title" }, [(_openBlock(), _createElementBlock("svg", {
+                          class: "ui-icon",
+                          "aria-hidden": "true"
+                        }, [_createElementVNode("use", { href: "/ui-icons.svg#integrations" })])), _createElementVNode("h3", null, "Acesso pelo site da escola")]), _createElementVNode("p", null, "Defina quais sites podem incorporar a aplicação."), _createElementVNode("div", { class: "institution-card-actions" }, [_createElementVNode("button", {
+                          class: "btn btn-secondary",
+                          onClick: editEmbedding
+                        }, "Gerenciar sites autorizados", 8, ["onClick"])])]), _createElementVNode("article", { class: "panel institution-card" }, [_createElementVNode("div", { class: "institution-card-title" }, [(_openBlock(), _createElementBlock("svg", {
+                          class: "ui-icon",
+                          "aria-hidden": "true"
+                        }, [_createElementVNode("use", { href: "/ui-icons.svg#documents" })])), _createElementVNode("h3", null, "Preenchimento assistido")]), _createElementVNode("p", null, "Escolha se a escola permite ler documentos e consultar dados cadastrais durante o preenchimento."), _createElementVNode("div", { class: "institution-card-actions" }, [_createElementVNode("button", {
+                          class: "btn btn-secondary",
+                          onClick: editIntake
+                        }, "Configurar preenchimento", 8, ["onClick"])])])]))
+                      : _createCommentVNode("", true),
+                    (state.institutionTab==='support')
+                      ? (_openBlock(), _createElementBlock("article", {
+                          key: 3,
+                          class: "panel institution-card"
+                        }, [
+                          _createElementVNode("div", { class: "institution-card-title" }, [(_openBlock(), _createElementBlock("svg", {
+                            class: "ui-icon",
+                            "aria-hidden": "true"
+                          }, [_createElementVNode("use", { href: "/ui-icons.svg#connect" })])), _createElementVNode("h3", null, "Atendimento pelo site"), _createElementVNode("span", { class: _normalizeClass(["badge", state.supportHub.enabled?'active':'archived']) }, _toDisplayString(state.supportHub.enabled?'Ativo':'Desativado'), 3)]),
+                          (supportStatus.error)
+                            ? (_openBlock(), _createElementBlock("p", {
+                                key: 0,
+                                class: "alert warning",
+                                role: "status"
+                              }, _toDisplayString(supportStatus.error), 1))
+                            : _createCommentVNode("", true),
+                          _createElementVNode("p", null, _toDisplayString(state.supportHub.enabled?'O botão de atendimento está disponível para os usuários do site.':'Ative o atendimento para disponibilizar um canal de ajuda aos usuários.'), 1),
+                          (state.supportHub.enabled)
+                            ? (_openBlock(), _createElementBlock("dl", {
+                                key: 1,
+                                class: "institution-data"
+                              }, [_createElementVNode("div", null, [_createElementVNode("dt", null, "Nome do botão"), _createElementVNode("dd", null, _toDisplayString(state.supportHub.launcher_title), 1)]), _createElementVNode("div", null, [_createElementVNode("dt", null, "Posição"), _createElementVNode("dd", null, _toDisplayString(state.supportHub.position==='right'?'À direita':'À esquerda'), 1)])]))
+                            : _createCommentVNode("", true),
+                          _createElementVNode("div", { class: "institution-card-actions" }, [_createElementVNode("button", {
                             class: "btn btn-secondary",
                             onClick: editSupportHub
-                          }, "Configurar chat", 8, ["onClick"]))
-                        : _createCommentVNode("", true)]),
-                      _createElementVNode("details", null, [_createElementVNode("summary", null, "Ajuda para configuração"), _createElementVNode("p", { class: "small muted" }, "Se o chat não abrir, verifique no serviço de suporte a autorização para o endereço desta escola.")])
-                    ]),
-                    _createElementVNode("article", { class: "panel school-card" }, [
-                      _createElementVNode("p", { class: "eyebrow" }, "DOCUMENTOS"),
-                      _createElementVNode("h2", null, "Certificados e assinaturas"),
-                      _createElementVNode("p", { class: "muted" }, "Configure o certificado A1 da escola e acompanhe as assinaturas dos documentos."),
-                      _createElementVNode("button", {
-                        class: "btn btn-secondary",
-                        onClick: $event => (navigate('signatures'))
-                      }, "Gerenciar assinaturas", 8, ["onClick"])
-                    ])
+                          }, "Configurar atendimento", 8, ["onClick"])])
+                        ]))
+                      : _createCommentVNode("", true)
                   ]))
+                : _createCommentVNode("", true),
+              (state.lifecycleTarget)
+                ? (_openBlock(), _createBlock(_component_lifecycle_panel, {
+                    key: state.schoolId+state.lifecycleTarget.resource+state.lifecycleTarget.id,
+                    "school-id": state.schoolId,
+                    target: state.lifecycleTarget,
+                    onClose: $event => (state.lifecycleTarget=null),
+                    onCompleted: lifecycleCompleted
+                  }, null, 8, ["school-id", "target", "onClose", "onCompleted"]))
                 : _createCommentVNode("", true),
               _createElementVNode("footer", { class: "content-footer" }, [_createElementVNode("span", null, _toDisplayString(identity.display_name), 1), _createElementVNode("a", {
                 href: '/news.html?school='+state.schoolId,
@@ -2911,7 +3080,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
           onClick: _withModifiers(closeModal, ["self"])
         }, [_createElementVNode("section", {
           id: "main-dialog",
-          class: _normalizeClass(["modal", {'modal-account':state.modal.kind==='my-profile','modal-wide':isPersonModal() || state.modal.fields.length>10 || ['enrollment-detail','protocol-detail'].includes(state.modal.kind)}]),
+          class: _normalizeClass(["modal", {'modal-enrollment':isEnrollmentForm(),'modal-account':state.modal.kind==='my-profile','modal-wide':isPersonModal() || state.modal.fields.length>10 || ['enrollment-detail','protocol-detail'].includes(state.modal.kind)}]),
           role: "dialog",
           "aria-modal": "true",
           "aria-labelledby": "modal-title"
@@ -3219,7 +3388,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       class: "btn btn-danger",
                       onClick: $event => (closeModal(true))
                     }, "Descartar alterações", 8, ["onClick"])]))
-                  : _createCommentVNode("", true), _createElementVNode("div", { class: _normalizeClass(["modal-workspace", {sectioned:modalSections().length>1}]) }, [(modalSections().length>1)
+                  : _createCommentVNode("", true), _createElementVNode("div", { class: _normalizeClass(["modal-workspace", {sectioned:modalSections().length>1 && !isEnrollmentForm(),'enrollment-workspace':isEnrollmentForm()}]) }, [(modalSections().length>1 && !isEnrollmentForm())
                   ? (_openBlock(), _createElementBlock("nav", {
                       key: 0,
                       class: "form-section-nav",
@@ -3254,7 +3423,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                     ? (_openBlock(), _createElementBlock("p", {
                         key: 1,
                         class: "alert info"
-                      }, "OCR no worker local, sem envio de documentos a serviços externos. CNPJ e CEP consultam provedores públicos com cache e limites. Os resultados precisam de conferência; o preenchimento manual permanece disponível. O OCR não valida a autenticidade dos documentos."))
+                      }, "Confira os dados sugeridos antes de salvar. A leitura auxilia o preenchimento e não valida a autenticidade dos documentos."))
                     : _createCommentVNode("", true),
                   (state.modal.error)
                     ? (_openBlock(), _createElementBlock("div", {
@@ -3264,10 +3433,10 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       }, _toDisplayString(state.modal.error), 1))
                     : _createCommentVNode("", true),
                   (state.modal.kind==='enrollment')
-                    ? (_openBlock(), _createElementBlock("p", {
+                    ? (_openBlock(), _createElementBlock("div", {
                         key: 3,
-                        class: "alert info"
-                      }, "A matrícula será salva como rascunho. A confirmação da vaga acontece na ativação."))
+                        class: "enrollment-stage"
+                      }, [_createElementVNode("span", { class: "badge draft" }, "Pré-matrícula"), _createElementVNode("p", null, "Salve os dados para conferir os documentos e confirmar a vaga.")]))
                     : _createCommentVNode("", true),
                   (state.modal.kind==='draft-edit')
                     ? (_openBlock(), _createElementBlock("p", {
@@ -3626,7 +3795,12 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       key: section.id,
                       "data-form-section": section.id,
                       class: "form-section"
-                    }, [_createElementVNode("div", { class: "form-section-heading" }, [_createElementVNode("p", { class: "eyebrow" }, _toDisplayString(state.modal.kind==='my-profile'?'CONTA':isPersonModal()?'FICHA CADASTRAL':'LANÇAMENTO'), 1), _createElementVNode("h3", null, _toDisplayString(section.title), 1), _createElementVNode("p", null, _toDisplayString(section.hint), 1)]), _createElementVNode("fieldset", {
+                    }, [_createElementVNode("div", { class: "form-section-heading" }, [(!isEnrollmentForm())
+                      ? (_openBlock(), _createElementBlock("p", {
+                          key: 0,
+                          class: "eyebrow"
+                        }, _toDisplayString(state.modal.kind==='my-profile'?'CONTA':isPersonModal()?'FICHA CADASTRAL':'LANÇAMENTO'), 1))
+                      : _createCommentVNode("", true), _createElementVNode("h3", null, _toDisplayString(section.title), 1), _createElementVNode("p", null, _toDisplayString(section.hint), 1)]), _createElementVNode("fieldset", {
                       class: "dossier-fieldset",
                       disabled: state.busy || (dossier.eligible(state.modal.kind) && dossier.state.loading)
                     }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList([section.fields.filter(f=>!advancedPersonField(f))], (fieldGroup) => {
@@ -3978,7 +4152,38 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                         }), 256))]))
                       : _createCommentVNode("", true)], 8, ["disabled"])], 8, ["data-form-section"])), [[_vShow, visibleSection(section.id)]])
                   }), 128))
-                ])], 2), _createElementVNode("footer", { class: "modal-footer" }, [_createElementVNode("span", { class: "small muted" }, [_createTextVNode(_toDisplayString(modalDirty()?'Alterações ainda não salvas':'Preencha os campos e confirme ao salvar'), 1), _createElementVNode("small", { class: "block" }, "* Campo obrigatório")]), _createElementVNode("button", {
+                ]), (isEnrollmentForm())
+                  ? (_openBlock(), _createElementBlock("aside", {
+                      key: 1,
+                      class: "enrollment-review",
+                      "aria-label": "Resumo da matrícula"
+                    }, [
+                      _createElementVNode("p", { class: "eyebrow" }, "CONFERÊNCIA"),
+                      _createElementVNode("h3", null, "Resumo da matrícula"),
+                      _createElementVNode("div", { class: "enrollment-selected-student" }, [_createElementVNode("span", { class: "avatar" }, _toDisplayString(initials(enrollmentStudent()?.person.name || state.modal.target?.student_name || 'Aluno')), 1), _createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(enrollmentStudent()?.person.name || state.modal.target?.student_name || 'Selecione o aluno'), 1), (enrollmentStudent())
+                        ? (_openBlock(), _createElementBlock("small", { key: 0 }, [_createTextVNode(_toDisplayString(enrollmentStudent().number), 1), (enrollmentStudent().person.birth_date)
+                            ? (_openBlock(), _createElementBlock("span", { key: 0 }, " · " + _toDisplayString(date(enrollmentStudent().person.birth_date)), 1))
+                            : _createCommentVNode("", true)]))
+                        : _createCommentVNode("", true)])]),
+                      _createElementVNode("dl", null, [
+                        _createElementVNode("div", null, [_createElementVNode("dt", null, "Ano letivo"), _createElementVNode("dd", null, _toDisplayString(enrollmentClass()?getName('academic-years',enrollmentClass().academic_year_id):'A definir'), 1)]),
+                        _createElementVNode("div", null, [_createElementVNode("dt", null, "Unidade"), _createElementVNode("dd", null, _toDisplayString(enrollmentClass()?getName('units',enrollmentClass().unit_id):'A definir'), 1)]),
+                        _createElementVNode("div", null, [_createElementVNode("dt", null, "Turma"), _createElementVNode("dd", null, _toDisplayString(enrollmentClass()?.name || 'A definir'), 1)]),
+                        _createElementVNode("div", null, [_createElementVNode("dt", null, "Série e turno"), _createElementVNode("dd", null, _toDisplayString(enrollmentClass()?getName('grades',enrollmentClass().grade_id)+' · '+getName('shifts',enrollmentClass().shift_id):'A definir'), 1)]),
+                        _createElementVNode("div", null, [_createElementVNode("dt", null, "Data da matrícula"), _createElementVNode("dd", null, _toDisplayString(date(state.modal.form.enrolled_on)), 1)]),
+                        (state.modal.form.financial_person_id)
+                          ? (_openBlock(), _createElementBlock("div", { key: 0 }, [_createElementVNode("dt", null, "Responsável financeiro"), _createElementVNode("dd", null, _toDisplayString(state.personChoices.find(p=>p.id===state.modal.form.financial_person_id)?.name || 'Selecionado'), 1)]))
+                          : _createCommentVNode("", true)
+                      ]),
+                      (enrollmentClass())
+                        ? (_openBlock(), _createElementBlock("div", {
+                            key: 0,
+                            class: _normalizeClass(["enrollment-capacity", {full:enrollmentClass().available<=0}])
+                          }, [_createElementVNode("strong", null, _toDisplayString(enrollmentClass().available ?? '—'), 1), _createElementVNode("span", null, _toDisplayString(enrollmentClass().available===1?'vaga disponível':'vagas disponíveis'), 1), _createElementVNode("small", null, "O rascunho não reserva vaga.")], 2))
+                        : _createCommentVNode("", true),
+                      _createElementVNode("p", { class: "enrollment-review-hint" }, "Após salvar, confira a ficha e a documentação antes de ativar a matrícula.")
+                    ]))
+                  : _createCommentVNode("", true)], 2), _createElementVNode("footer", { class: "modal-footer" }, [_createElementVNode("span", { class: "small muted" }, [_createTextVNode(_toDisplayString(modalDirty()?'Alterações ainda não salvas':'Preencha os campos e confirme ao salvar'), 1), _createElementVNode("small", { class: "block" }, "* Campo obrigatório")]), _createElementVNode("button", {
                   type: "button",
                   class: "btn btn-secondary",
                   disabled: state.busy,
@@ -5218,7 +5423,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                             return (_openBlock(), _createElementBlock("article", {
                               key: c.id,
                               class: "x-charge"
-                            }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(c.description), 1), _createElementVNode("p", null, "Vencimento " + _toDisplayString(date(c.due_on)) + " · " + _toDisplayString(c.billing_type), 1)]), _createElementVNode("div", null, [_createElementVNode("h3", null, _toDisplayString(money(c.amount)), 1), _createElementVNode("span", { class: "badge" }, _toDisplayString(label(c.status)), 1)])]), _createElementVNode("div", { class: "actions" }, [(safeLink(c.invoice_url))
+                            }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(c.description), 1), _createElementVNode("p", null, "Vencimento " + _toDisplayString(date(c.due_on)) + " · " + _toDisplayString(c.billing_type==='MANUAL'?'Cobrança interna':c.billing_type), 1)]), _createElementVNode("div", null, [_createElementVNode("h3", null, _toDisplayString(money(c.amount)), 1), _createElementVNode("span", { class: "badge" }, _toDisplayString(c.billing_type==='MANUAL'&&c.status==='received_external'?'Recebimento confirmado pela escola':label(c.status)), 1)])]), _createElementVNode("div", { class: "actions" }, [(safeLink(c.invoice_url))
                               ? (_openBlock(), _createElementBlock("a", {
                                   key: 0,
                                   href: safeLink(c.invoice_url),
@@ -5820,7 +6025,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                             key: c.id,
                             class: "x-record",
                             onClick: $event => (inspectCharge(c))
-                          }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(c.description), 1), _createElementVNode("span", null, _toDisplayString(date(c.due_on)) + " · " + _toDisplayString(c.billing_type), 1)]), _createElementVNode("strong", null, _toDisplayString(money(c.amount)), 1), _createElementVNode("span", { class: "badge" }, _toDisplayString(label(c.status)), 1)], 8, ["onClick"]))
+                          }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(c.description), 1), _createElementVNode("span", null, _toDisplayString(date(c.due_on)) + " · " + _toDisplayString(chargeMethod(c)), 1)]), _createElementVNode("strong", null, _toDisplayString(money(c.amount)), 1), _createElementVNode("span", { class: "badge" }, _toDisplayString(chargeStatus(c)), 1)], 8, ["onClick"]))
                         }), 128))]),
                         _createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("h2", null, "Atendimento com o responsável"), _createElementVNode("div", { class: "x-timeline" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.selected.messages, (m) => {
                           return (_openBlock(), _createElementBlock("article", {
@@ -5868,15 +6073,14 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                 ? (_openBlock(), _createElementBlock("button", {
                     key: 0,
                     class: "btn btn-primary",
-                    onClick: $event => (newCharge()),
-                    disabled: !s.bankingStatus?.enabled
-                  }, "+ Nova cobrança", 8, ["onClick", "disabled"]))
+                    onClick: $event => (newCharge())
+                  }, "+ Nova cobrança", 8, ["onClick"]))
                 : _createCommentVNode("", true)])]),
               (s.bankingStatus&&!s.bankingStatus.enabled)
                 ? (_openBlock(), _createElementBlock("div", {
                     key: 0,
-                    class: "alert warning"
-                  }, [_createElementVNode("strong", null, "Ative a integração bancária para emitir cobranças."), _createElementVNode("p", null, "Cadastre a conta da instituição em Integrações → Bancária."), (can('integrations.manage'))
+                    class: "alert info"
+                  }, [_createElementVNode("div", null, [_createElementVNode("strong", null, "Controle financeiro disponível"), _createElementVNode("p", null, "Registre cobranças internas e recebimentos. Para emitir Pix ou boleto pelo banco, configure a integração.")]), (can('integrations.manage'))
                     ? (_openBlock(), _createElementBlock("a", {
                         key: 0,
                         class: "btn btn-secondary",
@@ -5966,9 +6170,9 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       return (_openBlock(), _createElementBlock("tr", { key: c.id }, [
                         _createElementVNode("td", null, [_createElementVNode("strong", null, _toDisplayString(c.description), 1), _createElementVNode("small", { class: "block" }, _toDisplayString(c.payer_snapshot?.name), 1)]),
                         _createElementVNode("td", null, _toDisplayString(date(c.due_on)), 1),
-                        _createElementVNode("td", null, _toDisplayString(c.billing_type==='PIX'?'Pix':'Boleto'), 1),
+                        _createElementVNode("td", null, _toDisplayString(chargeMethod(c)), 1),
                         _createElementVNode("td", null, [_createElementVNode("strong", null, _toDisplayString(money(c.amount)), 1)]),
-                        _createElementVNode("td", null, [_createElementVNode("span", { class: "badge" }, _toDisplayString(label(c.status)), 1)]),
+                        _createElementVNode("td", null, [_createElementVNode("span", { class: "badge" }, _toDisplayString(chargeStatus(c)), 1)]),
                         _createElementVNode("td", null, [_createElementVNode("button", {
                           class: "btn btn-secondary small-button",
                           onClick: $event => (inspectCharge(c))
@@ -6030,10 +6234,20 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                   class: "alert error",
                   role: "alert"
                 }, _toDisplayString(s.error), 1))
-              : _createCommentVNode("", true), _createElementVNode("p", { class: "small muted" }, "Revise o aluno, o responsável financeiro e os valores. O lançamento só será enviado ao confirmar."), _createElementVNode("fieldset", {
+              : _createCommentVNode("", true), _createElementVNode("p", { class: "small muted" }, "Revise o aluno, o responsável financeiro e os valores. O lançamento será registrado ao confirmar."), _createElementVNode("fieldset", {
               class: "dialog-fields x-form",
               disabled: s.busy
             }, [
+              _createElementVNode("label", null, [_createTextVNode("Tipo de cobrança"), _withDirectives(_createElementVNode("select", {
+                "aria-label": "Tipo de cobrança",
+                "onUpdate:modelValue": $event => ((s.chargeForm.collection_mode) = $event),
+                onChange: changeCollectionMode
+              }, [_createElementVNode("option", { value: "manual" }, "Interna · recebimento registrado pela escola"), (s.bankingStatus?.enabled)
+                ? (_openBlock(), _createElementBlock("option", {
+                    key: 0,
+                    value: "provider"
+                  }, "Bancária · emitir Pix ou boleto"))
+                : _createCommentVNode("", true)], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, s.chargeForm.collection_mode]])]),
               (!s.chargeForm.admission_id)
                 ? (_openBlock(), _createElementBlock("div", { key: 0 }, [_createElementVNode("div", { class: "x-filter" }, [_createElementVNode("label", null, [_createTextVNode("Pesquisar aluno / matrícula"), _withDirectives(_createElementVNode("input", {
                     "onUpdate:modelValue": $event => ((s.enrollmentQ) = $event),
@@ -6084,14 +6298,19 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                   void 0,
                   { number: true }
                 ]])]),
-                _createElementVNode("label", null, [_createTextVNode("Forma"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((s.chargeForm.billing_type) = $event) }, [_createElementVNode("option", { value: "PIX" }, "Pix"), _createElementVNode("option", { value: "BOLETO" }, "Boleto")], 8, ["onUpdate:modelValue"]), [[_vModelSelect, s.chargeForm.billing_type]])])
+                (s.chargeForm.collection_mode==='provider')
+                  ? (_openBlock(), _createElementBlock("label", { key: 0 }, [_createTextVNode("Forma"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((s.chargeForm.billing_type) = $event) }, [_createElementVNode("option", { value: "PIX" }, "Pix"), _createElementVNode("option", { value: "BOLETO" }, "Boleto")], 8, ["onUpdate:modelValue"]), [[_vModelSelect, s.chargeForm.billing_type]])]))
+                  : _createCommentVNode("", true)
               ]),
               _createElementVNode("label", { class: "x-check" }, [_withDirectives(_createElementVNode("input", {
                 type: "checkbox",
                 "onUpdate:modelValue": $event => ((s.chargeForm.required_for_enrollment) = $event),
                 disabled: s.chargeForm.installment_count>1
               }, null, 8, ["onUpdate:modelValue", "disabled"]), [[_vModelCheckbox, s.chargeForm.required_for_enrollment]]), _createTextVNode("Recebimento obrigatório antes da matrícula (somente cobrança avulsa)")]),
-              _createElementVNode("p", null, "O pagador precisa de CPF válido. Para mensalidades, o valor acima é de cada cobrança, não o total dividido."),
+              (s.chargeForm.collection_mode==='provider')
+                ? (_openBlock(), _createElementBlock("p", { key: 2 }, "A emissão bancária exige CPF válido do pagador."))
+                : (_openBlock(), _createElementBlock("p", { key: 3 }, "A cobrança interna não envia dados ao banco. Registre o pagamento recebido nos detalhes da cobrança.")),
+              _createElementVNode("p", { class: "small muted" }, "Em parcelas mensais, informe o valor de cada cobrança."),
               _createElementVNode("div", { class: "charge-summary" }, [_createElementVNode("div", null, [_createElementVNode("small", null, "Valor de cada parcela"), _createElementVNode("strong", null, _toDisplayString(money(s.chargeForm.amount || '0')), 1)]), _createElementVNode("div", null, [_createElementVNode("small", null, "Quantidade"), _createElementVNode("strong", null, _toDisplayString(s.chargeForm.installment_count), 1)]), _createElementVNode("div", null, [_createElementVNode("small", null, "Total nominal previsto"), _createElementVNode("strong", null, _toDisplayString(chargeTotal()), 1)])])
             ], 8, ["disabled"])])]), _createElementVNode("footer", { class: "modal-footer" }, [_createElementVNode("span", { class: "small muted" }, [_createTextVNode("Confira o vínculo, vencimento e valor."), _createElementVNode("small", { class: "block" }, "O valor informado é por parcela.")]), _createElementVNode("button", {
               type: "button",
@@ -6137,7 +6356,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
               class: "dialog-fields",
               disabled: s.busy
             }, [
-              _createElementVNode("div", { class: "charge-summary" }, [_createElementVNode("div", null, [_createElementVNode("small", null, "Valor"), _createElementVNode("strong", null, _toDisplayString(money(s.selectedCharge.amount)), 1)]), _createElementVNode("div", null, [_createElementVNode("small", null, "Vencimento"), _createElementVNode("strong", null, _toDisplayString(date(s.selectedCharge.due_on)), 1)]), _createElementVNode("div", null, [_createElementVNode("small", null, "Situação"), _createElementVNode("strong", null, _toDisplayString(label(s.selectedCharge.status)), 1)])]),
+              _createElementVNode("div", { class: "charge-summary" }, [_createElementVNode("div", null, [_createElementVNode("small", null, "Valor"), _createElementVNode("strong", null, _toDisplayString(money(s.selectedCharge.amount)), 1)]), _createElementVNode("div", null, [_createElementVNode("small", null, "Vencimento"), _createElementVNode("strong", null, _toDisplayString(date(s.selectedCharge.due_on)), 1)]), _createElementVNode("div", null, [_createElementVNode("small", null, "Situação"), _createElementVNode("strong", null, _toDisplayString(chargeStatus(s.selectedCharge)), 1)])]),
               (s.selectedCharge.required_for_enrollment)
                 ? (_openBlock(), _createElementBlock("p", {
                     key: 0,
@@ -6180,7 +6399,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       rel: "noopener"
                     }, "Abrir boleto ↗", 8, ["href"]))
                   : _createCommentVNode("", true),
-                (can('banking.write'))
+                (can('banking.write')&&s.selectedCharge.collection_mode==='provider')
                   ? (_openBlock(), _createElementBlock("button", {
                       key: 2,
                       class: "btn btn-secondary",
@@ -6207,20 +6426,83 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                     onClick: $event => (copy(s.selectedCharge.pix_copy_paste))
                   }, "Copiar código Pix", 8, ["onClick"])])]))
                 : _createCommentVNode("", true),
-              _createElementVNode("p", { class: "small muted" }, "Última conciliação: " + _toDisplayString(date(s.selectedCharge.last_synced_at)), 1),
+              (s.selectedCharge.collection_mode==='provider')
+                ? (_openBlock(), _createElementBlock("p", {
+                    key: 4,
+                    class: "small muted"
+                  }, "Última conciliação: " + _toDisplayString(date(s.selectedCharge.last_synced_at)), 1))
+                : _createCommentVNode("", true),
+              (s.selectedCharge.collection_mode==='manual'&&s.selectedCharge.manual_paid_on)
+                ? (_openBlock(), _createElementBlock("div", {
+                    key: 5,
+                    class: "x-charge"
+                  }, [
+                    _createElementVNode("h3", null, "Recebimento registrado"),
+                    _createElementVNode("p", null, _toDisplayString(date(s.selectedCharge.manual_paid_on)) + " · " + _toDisplayString(receiptMethods[s.selectedCharge.manual_payment_method||'other']) + " · " + _toDisplayString(money(s.selectedCharge.manual_paid_amount||'0')), 1),
+                    _createElementVNode("p", null, _toDisplayString(s.selectedCharge.manual_reference), 1),
+                    _createElementVNode("button", {
+                      class: "btn btn-secondary",
+                      onClick: receiptPdf
+                    }, "Baixar comprovante PDF", 8, ["onClick"])
+                  ]))
+                : _createCommentVNode("", true),
+              (can('banking.write')&&s.selectedCharge.collection_mode==='manual'&&['pending','overdue'].includes(s.selectedCharge.status))
+                ? (_openBlock(), _createElementBlock("form", {
+                    key: 6,
+                    class: "x-form",
+                    onSubmit: _withModifiers(receiveManualCharge, ["prevent"])
+                  }, [
+                    _createElementVNode("h3", null, "Registrar recebimento"),
+                    _createElementVNode("div", { class: "x-grid" }, [
+                      _createElementVNode("label", null, [_createTextVNode("Valor recebido (R$)"), _withDirectives(_createElementVNode("input", {
+                        type: "number",
+                        min: "0.01",
+                        step: "0.01",
+                        "onUpdate:modelValue": $event => ((s.receiptForm.amount) = $event),
+                        required: ""
+                      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.receiptForm.amount]])]),
+                      _createElementVNode("label", null, [_createTextVNode("Data do recebimento"), _withDirectives(_createElementVNode("input", {
+                        type: "date",
+                        "onUpdate:modelValue": $event => ((s.receiptForm.paid_on) = $event),
+                        max: receiptDate(),
+                        required: ""
+                      }, null, 8, ["onUpdate:modelValue", "max"]), [[_vModelText, s.receiptForm.paid_on]])]),
+                      _createElementVNode("label", null, [_createTextVNode("Meio de recebimento"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((s.receiptForm.payment_method) = $event) }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(receiptMethods, (caption, key) => {
+                        return (_openBlock(), _createElementBlock("option", {
+                          key: key,
+                          value: key
+                        }, _toDisplayString(caption), 9, ["value"]))
+                      }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, s.receiptForm.payment_method]])]),
+                      _createElementVNode("label", null, [_createTextVNode("Referência / comprovante"), _withDirectives(_createElementVNode("input", {
+                        "onUpdate:modelValue": $event => ((s.receiptForm.reference) = $event),
+                        minlength: "3",
+                        maxlength: "200",
+                        placeholder: "Ex.: recibo 123 ou referência da transferência",
+                        required: ""
+                      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.receiptForm.reference]])])
+                    ]),
+                    _createElementVNode("p", { class: "small muted" }, "Registre somente o recebimento integral já conferido. Baixas parciais, descontos e acréscimos ainda não estão disponíveis."),
+                    _createElementVNode("button", { class: "btn btn-primary" }, "Confirmar recebimento integral")
+                  ], 40, ["onSubmit"]))
+                : _createCommentVNode("", true),
               _createElementVNode("h3", null, "Histórico da cobrança"),
               (!s.bankEvents.length)
                 ? (_openBlock(), _createElementBlock("p", {
-                    key: 4,
+                    key: 7,
                     class: "empty"
                   }, "O histórico será atualizado após a emissão."))
                 : _createCommentVNode("", true),
               _createElementVNode("div", { class: "x-timeline" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.bankEvents, (e) => {
-                return (_openBlock(), _createElementBlock("article", { key: e.id }, [_createElementVNode("small", null, _toDisplayString(date(e.created_at)), 1), _createElementVNode("p", null, _toDisplayString(label(e.previous_status)) + " → " + _toDisplayString(label(e.status)), 1)]))
+                return (_openBlock(), _createElementBlock("article", { key: e.id }, [_createElementVNode("small", null, _toDisplayString(date(e.created_at)), 1), _createElementVNode("p", null, _toDisplayString(e.source==='manual_created'?'Cobrança interna registrada':e.source==='manual_receipt'?'Recebimento manual registrado':label(e.previous_status)+' → '+label(e.status)), 1), (e.source==='manual_receipt'&&e.details)
+                  ? (_openBlock(), _createElementBlock("p", {
+                      key: 0,
+                      class: "small muted"
+                    }, _toDisplayString(date(e.details.paid_on)) + " · " + _toDisplayString(money(e.details.amount||'0')) + " · " + _toDisplayString(e.details.reference), 1))
+                  : _createCommentVNode("", true)]))
               }), 128))]),
               (can('banking.write'))
-                ? (_openBlock(), _createElementBlock("details", { key: 5 }, [
-                    _createElementVNode("summary", null, "Cancelamento e recuperação de emissão"),
+                ? (_openBlock(), _createElementBlock("details", { key: 8 }, [
+                    _createElementVNode("summary", null, _toDisplayString(s.selectedCharge.collection_mode==='manual'?'Cancelar cobrança interna':'Cancelamento e recuperação de emissão'), 1),
                     _createElementVNode("label", null, [_createTextVNode("Motivo da operação"), _withDirectives(_createElementVNode("textarea", {
                       "onUpdate:modelValue": $event => ((s.bankReason) = $event),
                       maxlength: "1000",
@@ -6234,7 +6516,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                           onClick: $event => (chargeAction('cancel')),
                           disabled: s.bankReason.length<5
                         }, "Cancelar cobrança", 8, ["onClick", "disabled"]))
-                      : _createCommentVNode("", true), (can('integrations.manage')&&!s.selectedCharge.remote_payment_id&&['uncertain','failed','queued'].includes(s.selectedCharge.status))
+                      : _createCommentVNode("", true), (s.selectedCharge.collection_mode==='provider'&&can('integrations.manage')&&!s.selectedCharge.remote_payment_id&&['uncertain','failed','queued'].includes(s.selectedCharge.status))
                       ? (_openBlock(), _createElementBlock("button", {
                           key: 1,
                           class: "btn btn-secondary",
@@ -6242,7 +6524,15 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                           disabled: s.bankReason.length<10
                         }, "Conferi a ausência no banco: autorizar nova emissão", 8, ["onClick", "disabled"]))
                       : _createCommentVNode("", true)]),
-                    _createElementVNode("p", { class: "small muted" }, "Antes de reemitir, confira a conta bancária para evitar duplicidade. O cancelamento não estorna pagamentos recebidos.")
+                    (s.selectedCharge.collection_mode==='provider')
+                      ? (_openBlock(), _createElementBlock("p", {
+                          key: 0,
+                          class: "small muted"
+                        }, "Antes de reemitir, confira a conta bancária para evitar duplicidade. O cancelamento não estorna pagamentos recebidos."))
+                      : (_openBlock(), _createElementBlock("p", {
+                          key: 1,
+                          class: "small muted"
+                        }, "Cobranças quitadas preservam o histórico e não podem ser canceladas por este fluxo."))
                   ]))
                 : _createCommentVNode("", true)
             ], 8, ["disabled"])])])]))
@@ -6943,9 +7233,12 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
   }
 },diagnostics:function render(_ctx, _cache) {
   with (_ctx) {
-    const { toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createElementVNode: _createElementVNode, renderList: _renderList, Fragment: _Fragment, vModelSelect: _vModelSelect, withDirectives: _withDirectives, createTextVNode: _createTextVNode, vModelText: _vModelText, withModifiers: _withModifiers } = _Vue
+    const { toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createElementVNode: _createElementVNode, normalizeClass: _normalizeClass, renderList: _renderList, Fragment: _Fragment, vModelSelect: _vModelSelect, withDirectives: _withDirectives, createTextVNode: _createTextVNode, vModelText: _vModelText, withModifiers: _withModifiers } = _Vue
 
-    return (_openBlock(), _createElementBlock("section", { "aria-label": "Diagnóstico da instalação" }, [(state.error)
+    return (_openBlock(), _createElementBlock("section", {
+      class: "admin-console",
+      "aria-label": "Diagnóstico da instalação"
+    }, [(state.error)
       ? (_openBlock(), _createElementBlock("div", {
           key: 0,
           class: "alert error",
@@ -6960,109 +7253,212 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
       : _createCommentVNode("", true), _createElementVNode("fieldset", {
       disabled: state.busy,
       class: "portal-fieldset"
-    }, [_createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Diagnóstico e logs"), _createElementVNode("p", null, "Informações técnicas da escola para análise do suporte. Sem documentos, senhas, tokens ou dados dos alunos.")]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
-      class: "btn btn-secondary",
-      onClick: load
-    }, "Atualizar diagnóstico", 8, ["onClick"]), _createElementVNode("button", {
-      class: "btn btn-primary",
-      onClick: download
-    }, "Baixar pacote de diagnóstico", 8, ["onClick"])])]), (state.busy)
-      ? (_openBlock(), _createElementBlock("p", {
-          key: 0,
-          role: "status"
-        }, "Consultando diagnóstico…"))
-      : _createCommentVNode("", true), _createElementVNode("p", { class: "muted" }, "O ZIP inclui resumo, eventos JSONL filtrados, manifesto e hashes. Não é um backup do banco nem uma coleta dos logs do host.")]), (state.summary)
-      ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
-          _createElementVNode("div", { class: "stats-grid" }, [
-            _createElementVNode("div", { class: "stat-card" }, [_createElementVNode("span", null, "Versão"), _createElementVNode("strong", null, _toDisplayString(state.summary.version), 1), _createElementVNode("small", null, "Build " + _toDisplayString(state.summary.build.build_id||'indisponível'), 1)]),
-            _createElementVNode("div", { class: "stat-card" }, [_createElementVNode("span", null, "Banco"), _createElementVNode("strong", null, _toDisplayString(state.summary.database.status==='ok'?'Disponível':'Indisponível'), 1), _createElementVNode("small", null, _toDisplayString(state.summary.database.dialect), 1)]),
-            _createElementVNode("div", { class: "stat-card" }, [_createElementVNode("span", null, "Armazenamento local"), _createElementVNode("strong", null, _toDisplayString(state.summary.storage.status==='ok'?'Disponível':'Indisponível'), 1), _createElementVNode("small", null, "Não testa provedores externos")]),
-            _createElementVNode("div", { class: "stat-card" }, [_createElementVNode("span", null, "Logs"), _createElementVNode("strong", null, _toDisplayString(state.summary.logging.status==='ok'?'Ativos':'Degradados'), 1), _createElementVNode("small", null, "Retenção de " + _toDisplayString(state.summary.logging.retention_days) + " dias ou limite de tamanho", 1)])
-          ]),
-          _createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("h2", null, "Atividade dos serviços"), _createElementVNode("div", { class: "x-list" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.summary.services, (item) => {
-            return (_openBlock(), _createElementBlock("div", {
-              key: item.service,
-              class: "x-record"
-            }, [_createElementVNode("strong", null, _toDisplayString(item.service), 1), _createElementVNode("span", null, _toDisplayString(item.status==='recent'?'Atividade recente':item.status==='stale'?'Sem atividade recente':'Ainda não observado'), 1), _createElementVNode("small", null, _toDisplayString(date(item.last_seen||'')), 1)]))
-          }), 128))]), _createElementVNode("p", { class: "muted" }, "Atividade observada não equivale ao healthcheck do Docker. Um worker parado ou ausente precisa ser conferido no Dockge.")]),
-          _createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("h2", null, "Disponibilidade da matrícula online"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.summary.portal, (school) => {
-            return (_openBlock(), _createElementBlock("div", { key: school.school_name }, [_createElementVNode("h3", null, _toDisplayString(school.school_name) + " · " + _toDisplayString(school.ready?'Disponível':'Pendente'), 1), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(school.issues, (issue) => {
-              return (_openBlock(), _createElementBlock("p", { key: issue.code }, _toDisplayString(issue.message), 1))
-            }), 128))]))
-          }), 128)), _createElementVNode("a", {
-            class: "btn btn-secondary",
-            href: "#/online"
-          }, "Abrir inscrições online")]),
-          _createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("details", null, [_createElementVNode("summary", null, "Filas, migrations e configuração sem segredos"), _createElementVNode("pre", { class: "diagnostic-pre" }, _toDisplayString(pretty({queues:state.summary.queues,migrations:state.summary.database.migrations,configuration:state.summary.configuration})), 1)])])
-        ], 64))
-      : _createCommentVNode("", true), _createElementVNode("section", { class: "panel x-card" }, [
-      _createElementVNode("h2", null, "Eventos técnicos"),
-      _createElementVNode("form", {
-        class: "x-filter",
-        onSubmit: _withModifiers(search, ["prevent"])
-      }, [
-        _createElementVNode("label", null, [_createTextVNode("Serviço"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.service) = $event) }, [
-          _createElementVNode("option", { value: "" }, "Todos"),
-          _createElementVNode("option", null, "app"),
-          _createElementVNode("option", null, "worker"),
-          _createElementVNode("option", null, "worker-ocr")
-        ], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.service]])]),
-        _createElementVNode("label", null, [_createTextVNode("Nível"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.level) = $event) }, [
-          _createElementVNode("option", { value: "" }, "Todos"),
-          _createElementVNode("option", null, "INFO"),
-          _createElementVNode("option", null, "WARNING"),
-          _createElementVNode("option", null, "ERROR")
-        ], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.level]])]),
-        _createElementVNode("label", null, [_createTextVNode("Referência do erro"), _withDirectives(_createElementVNode("input", {
-          "onUpdate:modelValue": $event => ((state.reference) = $event),
-          maxlength: "24",
-          pattern: "[a-f0-9]{24}",
-          placeholder: "Código exibido na mensagem"
-        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.reference]])]),
-        _createElementVNode("label", null, [_createTextVNode("Desde (horário local)"), _withDirectives(_createElementVNode("input", {
-          type: "datetime-local",
-          "onUpdate:modelValue": $event => ((state.since) = $event)
-        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.since]])]),
-        _createElementVNode("label", null, [_createTextVNode("Até (horário local)"), _withDirectives(_createElementVNode("input", {
-          type: "datetime-local",
-          "onUpdate:modelValue": $event => ((state.until) = $event)
-        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.until]])]),
-        _createElementVNode("button", { class: "btn btn-secondary" }, "Filtrar")
-      ], 40, ["onSubmit"]),
-      (state.truncated)
+    }, [
+      _createElementVNode("header", { class: "admin-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Saúde da instalação"), _createElementVNode("p", null, "Acompanhe serviços e investigue falhas por período ou referência."), (state.summary)
+        ? (_openBlock(), _createElementBlock("small", { key: 0 }, "Atualizado em " + _toDisplayString(date(state.summary.generated_at)), 1))
+        : _createCommentVNode("", true)]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+        class: "btn btn-secondary",
+        onClick: load
+      }, "Atualizar", 8, ["onClick"]), _createElementVNode("button", {
+        class: "btn btn-primary",
+        onClick: download
+      }, "Baixar diagnóstico", 8, ["onClick"])])]),
+      (state.busy)
         ? (_openBlock(), _createElementBlock("p", {
             key: 0,
-            class: "alert warning"
-          }, "Recorte limitado aos 10.000 eventos mais recentes. Refine o período."))
+            role: "status"
+          }, "Consultando diagnóstico…"))
         : _createCommentVNode("", true),
-      (!state.rows.length)
-        ? (_openBlock(), _createElementBlock("p", { key: 1 }, "Nenhum evento neste recorte. Logs antigos não são reconstruídos."))
+      (state.summary)
+        ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [_createElementVNode("div", { class: "admin-metrics" }, [
+            _createElementVNode("article", { class: "panel" }, [_createElementVNode("span", null, "Dados"), _createElementVNode("strong", { class: _normalizeClass({'admin-danger':state.summary.database.status!=='ok'}) }, _toDisplayString(state.summary.database.status==='ok'?'Disponíveis':'Indisponíveis'), 3)]),
+            _createElementVNode("article", { class: "panel" }, [_createElementVNode("span", null, "Armazenamento local"), _createElementVNode("strong", null, _toDisplayString(state.summary.storage.status==='ok'?'Disponível':'Indisponível'), 1)]),
+            _createElementVNode("article", { class: "panel" }, [_createElementVNode("span", null, "Registro de eventos"), _createElementVNode("strong", null, _toDisplayString(state.summary.logging.status==='ok'?'Ativo':'Requer atenção'), 1)]),
+            _createElementVNode("article", { class: "panel" }, [_createElementVNode("span", null, "Versão instalada"), _createElementVNode("strong", { class: "admin-version" }, _toDisplayString(state.summary.version), 1)])
+          ]), _createElementVNode("div", { class: "admin-grid" }, [_createElementVNode("section", { class: "panel admin-card" }, [_createElementVNode("h3", null, "Serviços"), _createElementVNode("ul", { class: "admin-service-list" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.summary.services, (item) => {
+            return (_openBlock(), _createElementBlock("li", { key: item.service }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(serviceName(item.service)), 1), _createElementVNode("small", null, _toDisplayString(date(item.last_seen||'')), 1)]), _createElementVNode("span", { class: _normalizeClass(["admin-badge", item.status==='recent'?'is-ok':'is-warning']) }, _toDisplayString(item.status==='recent'?'Atividade recente':item.status==='stale'?'Verificar':'Não observado'), 3)]))
+          }), 128))]), _createElementVNode("details", { class: "admin-help" }, [_createElementVNode("summary", null, "Como interpretar"), _createElementVNode("p", null, "A atividade recente confirma que o serviço executou tarefas. Se não houver registros recentes, confira sua execução no servidor.")])]), _createElementVNode("section", { class: "panel admin-card" }, [_createElementVNode("h3", null, "Filas de processamento"), _createElementVNode("ul", { class: "admin-service-list" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.summary.queues, (items, key) => {
+            return (_openBlock(), _createElementBlock("li", { key: key }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(queueName(key)), 1), _createElementVNode("small", null, _toDisplayString((items.queued||0)+(items.pending||0)) + " aguardando · " + _toDisplayString(items.running||items.processing||0) + " em execução", 1)]), _createElementVNode("span", { class: _normalizeClass(["admin-badge", failures(items)?'is-error':'is-ok']) }, _toDisplayString(failures(items)) + " falhas", 3)]))
+          }), 128))]), _createElementVNode("button", {
+            class: "btn btn-secondary",
+            onClick: $event => (preset('errors'))
+          }, "Investigar erros", 8, ["onClick"])])]), (state.summary.portal.some(s=>!s.ready))
+            ? (_openBlock(), _createElementBlock("section", {
+                key: 0,
+                class: "panel admin-card"
+              }, [_createElementVNode("h3", null, "Matrícula online: pendências"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.summary.portal.filter(s=>!s.ready), (school) => {
+                return (_openBlock(), _createElementBlock("div", {
+                  key: school.school_name,
+                  class: "admin-issue"
+                }, [_createElementVNode("strong", null, _toDisplayString(school.school_name), 1), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(school.issues, (issue) => {
+                  return (_openBlock(), _createElementBlock("p", { key: issue.code }, _toDisplayString(issue.message), 1))
+                }), 128))]))
+              }), 128)), _createElementVNode("a", {
+                class: "btn btn-secondary",
+                href: "#/online"
+              }, "Abrir inscrições online")]))
+            : _createCommentVNode("", true)], 64))
         : _createCommentVNode("", true),
-      _createElementVNode("div", { class: "table-wrap" }, [_createElementVNode("table", null, [_createElementVNode("thead", null, [_createElementVNode("tr", null, [
-        _createElementVNode("th", null, "Horário"),
-        _createElementVNode("th", null, "Serviço / nível"),
-        _createElementVNode("th", null, "Evento"),
-        _createElementVNode("th", null, "Referência"),
-        _createElementVNode("th", null, "Detalhes")
-      ])]), _createElementVNode("tbody", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.rows, (item, index) => {
-        return (_openBlock(), _createElementBlock("tr", { key: index }, [
-          _createElementVNode("td", null, _toDisplayString(date(item.timestamp)), 1),
-          _createElementVNode("td", null, _toDisplayString(item.service) + " · " + _toDisplayString(item.level), 1),
-          _createElementVNode("td", null, [_createTextVNode(_toDisplayString(item.event), 1), _createElementVNode("small", null, _toDisplayString(item.route) + " · " + _toDisplayString(item.status||''), 1)]),
-          _createElementVNode("td", null, [_createElementVNode("code", null, _toDisplayString(item.request_id||'—'), 1)]),
-          _createElementVNode("td", null, [_createElementVNode("details", null, [_createElementVNode("summary", null, "Ver"), _createElementVNode("pre", { class: "diagnostic-pre" }, _toDisplayString(pretty(item)), 1)])])
-        ]))
-      }), 128))])])]),
-      _createElementVNode("div", { class: "pagination" }, [_createElementVNode("span", null, _toDisplayString(state.total) + " eventos no recorte", 1), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
-        class: "btn btn-secondary",
-        disabled: state.page<=1,
-        onClick: $event => (page(-1))
-      }, "Anterior", 8, ["disabled", "onClick"]), _createElementVNode("button", {
-        class: "btn btn-secondary",
-        disabled: state.page*50>=state.total,
-        onClick: $event => (page(1))
-      }, "Próxima", 8, ["disabled", "onClick"])])])
-    ])], 8, ["disabled"])]))
+      _createElementVNode("section", { class: "panel admin-card" }, [
+        _createElementVNode("div", { class: "admin-heading" }, [_createElementVNode("div", null, [_createElementVNode("h3", null, "Investigar eventos"), _createElementVNode("p", null, "Filtre uma ocorrência e acompanhe as operações com a mesma referência.")]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+          class: "btn btn-secondary",
+          onClick: $event => (preset('day'))
+        }, "Últimas 24 horas", 8, ["onClick"]), _createElementVNode("button", {
+          class: "btn btn-secondary",
+          onClick: $event => (preset('errors'))
+        }, "Erros", 8, ["onClick"]), _createElementVNode("button", {
+          class: "btn btn-secondary",
+          onClick: $event => (preset('all'))
+        }, "Limpar filtros", 8, ["onClick"])])]),
+        _createElementVNode("details", {
+          class: "admin-filter-panel",
+          open: state.filtersOpen,
+          onToggle: $event => (state.filtersOpen=$event.target.open)
+        }, [_createElementVNode("summary", null, "Filtros de eventos"), _createElementVNode("form", {
+          class: "admin-filter",
+          onSubmit: _withModifiers(search, ["prevent"])
+        }, [
+          _createElementVNode("label", null, [_createTextVNode("Serviço"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.service) = $event) }, [
+            _createElementVNode("option", { value: "" }, "Todos os serviços"),
+            _createElementVNode("option", { value: "app" }, "Aplicação"),
+            _createElementVNode("option", { value: "worker" }, "Tarefas automáticas"),
+            _createElementVNode("option", { value: "worker-ocr" }, "Leitura de documentos")
+          ], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.service]])]),
+          _createElementVNode("label", null, [_createTextVNode("Nível"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.level) = $event) }, [
+            _createElementVNode("option", { value: "" }, "Todos os níveis"),
+            _createElementVNode("option", { value: "INFO" }, "Informação"),
+            _createElementVNode("option", { value: "WARNING" }, "Atenção"),
+            _createElementVNode("option", { value: "ERROR" }, "Erro")
+          ], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.level]])]),
+          _createElementVNode("label", null, [_createTextVNode("Referência"), _withDirectives(_createElementVNode("input", {
+            "onUpdate:modelValue": $event => ((state.reference) = $event),
+            maxlength: "24",
+            pattern: "[a-f0-9]{24}",
+            placeholder: "Código da ocorrência"
+          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.reference]])]),
+          _createElementVNode("label", null, [_createTextVNode("Desde"), _withDirectives(_createElementVNode("input", {
+            type: "datetime-local",
+            "onUpdate:modelValue": $event => ((state.since) = $event)
+          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.since]])]),
+          _createElementVNode("label", null, [_createTextVNode("Até"), _withDirectives(_createElementVNode("input", {
+            type: "datetime-local",
+            "onUpdate:modelValue": $event => ((state.until) = $event)
+          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.until]])]),
+          _createElementVNode("label", null, [_createTextVNode("Evento"), _withDirectives(_createElementVNode("input", {
+            "onUpdate:modelValue": $event => ((state.event) = $event),
+            maxlength: "120",
+            placeholder: "Ex.: mailbox_sync"
+          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.event]])]),
+          _createElementVNode("label", null, [_createTextVNode("Código de erro"), _withDirectives(_createElementVNode("input", {
+            "onUpdate:modelValue": $event => ((state.code) = $event),
+            maxlength: "120",
+            placeholder: "Código exato"
+          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.code]])]),
+          _createElementVNode("label", null, [_createTextVNode("Resposta da operação"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.minStatus) = $event) }, [_createElementVNode("option", { value: "" }, "Todas"), _createElementVNode("option", { value: "400" }, "Falhas (400 ou mais)"), _createElementVNode("option", { value: "500" }, "Erros internos (500 ou mais)")], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.minStatus]])]),
+          _createElementVNode("details", { class: "admin-filter-extra" }, [_createElementVNode("summary", null, "Referências técnicas"), _createElementVNode("div", { class: "admin-filter" }, [_createElementVNode("label", null, [_createTextVNode("Caminho da operação"), _withDirectives(_createElementVNode("input", {
+            "onUpdate:modelValue": $event => ((state.route) = $event),
+            maxlength: "180",
+            placeholder: "Ex.: /email/messages"
+          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.route]])]), _createElementVNode("label", null, [_createTextVNode("Tarefa"), _withDirectives(_createElementVNode("input", {
+            "onUpdate:modelValue": $event => ((state.job) = $event),
+            maxlength: "36",
+            placeholder: "Identificador da tarefa"
+          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.job]])])])]),
+          _createElementVNode("div", { class: "actions admin-filter-submit" }, [_createElementVNode("button", { class: "btn btn-primary" }, "Aplicar filtros")])
+        ], 40, ["onSubmit"])], 40, ["open", "onToggle"]),
+        (state.statistics)
+          ? (_openBlock(), _createElementBlock("div", {
+              key: 0,
+              class: "admin-result-summary"
+            }, [
+              _createElementVNode("span", null, _toDisplayString(state.total) + " eventos", 1),
+              _createElementVNode("span", null, _toDisplayString(state.statistics.levels.ERROR||0) + " erros", 1),
+              _createElementVNode("span", null, _toDisplayString(state.statistics.levels.WARNING||0) + " avisos", 1),
+              _createElementVNode("span", null, _toDisplayString(state.statistics.http_errors) + " respostas com falha", 1)
+            ]))
+          : _createCommentVNode("", true),
+        (state.statistics?.recurring.length)
+          ? (_openBlock(), _createElementBlock("details", {
+              key: 1,
+              class: "admin-recurring"
+            }, [_createElementVNode("summary", null, "Ocorrências recorrentes"), _createElementVNode("div", { class: "admin-recurrence-list" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.statistics.recurring, (item) => {
+              return (_openBlock(), _createElementBlock("button", {
+                key: item.event+item.code+item.route,
+                type: "button",
+                onClick: $event => (recurrence(item))
+              }, [_createElementVNode("span", null, [_createElementVNode("strong", null, _toDisplayString(item.code||item.event), 1), _createElementVNode("small", null, _toDisplayString(item.route||item.event), 1)]), _createElementVNode("b", null, _toDisplayString(item.count), 1)], 8, ["onClick"]))
+            }), 128))])]))
+          : _createCommentVNode("", true),
+        (state.truncated)
+          ? (_openBlock(), _createElementBlock("p", {
+              key: 2,
+              class: "alert warning"
+            }, "Recorte limitado aos 10.000 eventos mais recentes. Refine o período."))
+          : _createCommentVNode("", true),
+        (state.unreadable)
+          ? (_openBlock(), _createElementBlock("p", {
+              key: 3,
+              class: "alert warning"
+            }, _toDisplayString(state.unreadable) + " registros não puderam ser lidos. O recorte pode estar incompleto.", 1))
+          : _createCommentVNode("", true),
+        (!state.rows.length && !state.busy)
+          ? (_openBlock(), _createElementBlock("p", {
+              key: 4,
+              class: "admin-empty"
+            }, "Nenhum evento corresponde aos filtros selecionados."))
+          : _createCommentVNode("", true),
+        _createElementVNode("ol", { class: "admin-event-list" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.rows, (item, index) => {
+          return (_openBlock(), _createElementBlock("li", { key: item.timestamp+index }, [_createElementVNode("div", { class: "admin-event-main" }, [
+            _createElementVNode("div", null, [_createElementVNode("span", { class: _normalizeClass(["admin-badge", item.level==='ERROR'?'is-error':item.level==='WARNING'?'is-warning':'is-info']) }, _toDisplayString(levelName(item.level)), 3), _createElementVNode("time", null, _toDisplayString(date(item.timestamp)), 1), _createElementVNode("span", { class: "admin-service" }, _toDisplayString(serviceName(item.service)), 1)]),
+            _createElementVNode("strong", null, _toDisplayString(item.code||item.event), 1),
+            (item.route)
+              ? (_openBlock(), _createElementBlock("small", { key: 0 }, [_createTextVNode(_toDisplayString(item.route), 1), (item.status)
+                  ? (_openBlock(), _createElementBlock("span", { key: 0 }, " · " + _toDisplayString(item.status), 1))
+                  : _createCommentVNode("", true), (item.duration_ms!==undefined)
+                  ? (_openBlock(), _createElementBlock("span", { key: 1 }, " · " + _toDisplayString(item.duration_ms) + " ms", 1))
+                  : _createCommentVNode("", true)]))
+              : _createCommentVNode("", true),
+            (item.request_id)
+              ? (_openBlock(), _createElementBlock("code", { key: 1 }, _toDisplayString(item.request_id), 1))
+              : _createCommentVNode("", true)
+          ]), _createElementVNode("div", { class: "actions" }, [(item.request_id||item.job_id)
+            ? (_openBlock(), _createElementBlock("button", {
+                key: 0,
+                class: "btn btn-secondary",
+                onClick: $event => (correlate(item))
+              }, "Relacionar", 8, ["onClick"]))
+            : _createCommentVNode("", true), _createElementVNode("button", {
+            class: "btn btn-secondary",
+            "aria-expanded": state.selected===item,
+            onClick: $event => (state.selected=state.selected===item?null:item)
+          }, "Detalhes", 8, ["aria-expanded", "onClick"])]), (state.selected===item)
+            ? (_openBlock(), _createElementBlock("div", {
+                key: 0,
+                class: "admin-event-detail"
+              }, [_createElementVNode("dl", { class: "admin-detail-grid" }, [_createElementVNode("div", null, [_createElementVNode("dt", null, "Evento"), _createElementVNode("dd", null, _toDisplayString(item.event), 1)]), (item.error_type)
+                ? (_openBlock(), _createElementBlock("div", { key: 0 }, [_createElementVNode("dt", null, "Tipo do erro"), _createElementVNode("dd", null, _toDisplayString(item.error_type), 1)]))
+                : _createCommentVNode("", true), (item.job_id)
+                ? (_openBlock(), _createElementBlock("div", { key: 1 }, [_createElementVNode("dt", null, "Tarefa"), _createElementVNode("dd", null, _toDisplayString(item.job_id), 1)]))
+                : _createCommentVNode("", true)]), _createElementVNode("pre", { class: "diagnostic-pre" }, _toDisplayString(pretty(item)), 1)]))
+            : _createCommentVNode("", true)]))
+        }), 128))]),
+        _createElementVNode("div", { class: "pagination" }, [_createElementVNode("span", null, _toDisplayString(state.total) + " eventos · Página " + _toDisplayString(state.page), 1), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+          class: "btn btn-secondary",
+          disabled: state.page<=1,
+          onClick: $event => (page(-1))
+        }, "Anterior", 8, ["disabled", "onClick"]), _createElementVNode("button", {
+          class: "btn btn-secondary",
+          disabled: state.page*50>=state.total,
+          onClick: $event => (page(1))
+        }, "Próxima", 8, ["disabled", "onClick"])])])
+      ]),
+      (state.summary)
+        ? (_openBlock(), _createElementBlock("details", {
+            key: 2,
+            class: "panel admin-card admin-help"
+          }, [_createElementVNode("summary", null, "Informações para o suporte"), _createElementVNode("p", null, "Os arquivos incluem eventos técnicos sanitizados e respeitam os filtros. Registros anteriores à coleta ou fora da retenção de " + _toDisplayString(state.summary.logging.retention_days) + " dias não são reconstruídos. Serviços externos precisam de verificação própria.", 1), _createElementVNode("pre", { class: "diagnostic-pre" }, _toDisplayString(pretty({build:state.summary.build,database:state.summary.database,storage:state.summary.storage,configuration:state.summary.configuration})), 1)]))
+        : _createCommentVNode("", true)
+    ], 8, ["disabled"])]))
   }
 },diary:function render(_ctx, _cache) {
   with (_ctx) {
@@ -8678,7 +9074,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
   }
 },signing:function render(_ctx, _cache) {
   with (_ctx) {
-    const { toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createElementVNode: _createElementVNode, normalizeClass: _normalizeClass, createTextVNode: _createTextVNode, vModelText: _vModelText, withDirectives: _withDirectives, withModifiers: _withModifiers, renderList: _renderList, Fragment: _Fragment, vModelCheckbox: _vModelCheckbox } = _Vue
+    const { toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, normalizeClass: _normalizeClass, createElementVNode: _createElementVNode, createTextVNode: _createTextVNode, vModelText: _vModelText, withDirectives: _withDirectives, withModifiers: _withModifiers, vModelCheckbox: _vModelCheckbox, renderList: _renderList, Fragment: _Fragment, vModelSelect: _vModelSelect } = _Vue
 
     return (_openBlock(), _createElementBlock("section", {
       class: "contract-signatures",
@@ -8705,12 +9101,37 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
             role: "status"
           }, "Carregando assinaturas…"))
         : _createCommentVNode("", true),
-      (can('schools.manage'))
+      _createElementVNode("nav", {
+        class: "actions",
+        "aria-label": "Áreas de assinatura"
+      }, [_createElementVNode("button", {
+        type: "button",
+        class: _normalizeClass(["btn", state.tab==='documents'?'btn-primary':'btn-secondary']),
+        "aria-pressed": state.tab==='documents',
+        onClick: $event => (state.tab='documents')
+      }, "Documentos escolares", 10, ["aria-pressed", "onClick"]), (canManageA1())
+        ? (_openBlock(), _createElementBlock("button", {
+            key: 0,
+            type: "button",
+            class: _normalizeClass(["btn", state.tab==='fiscal'?'btn-primary':'btn-secondary']),
+            "aria-pressed": state.tab==='fiscal',
+            onClick: $event => (state.tab='fiscal')
+          }, "Documentos fiscais", 10, ["aria-pressed", "onClick"]))
+        : _createCommentVNode("", true), (canManageA1())
+        ? (_openBlock(), _createElementBlock("button", {
+            key: 1,
+            type: "button",
+            class: _normalizeClass(["btn", state.tab==='certificate'?'btn-primary':'btn-secondary']),
+            "aria-pressed": state.tab==='certificate',
+            onClick: $event => (state.tab='certificate')
+          }, "Certificado e avisos", 10, ["aria-pressed", "onClick"]))
+        : _createCommentVNode("", true)]),
+      (canManageA1() && state.tab==='certificate')
         ? (_openBlock(), _createElementBlock("section", {
             key: 3,
             class: "panel x-card"
           }, [
-            _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "ASSINATURA DA ESCOLA"), _createElementVNode("h3", null, "Certificado A1"), _createElementVNode("p", null, "Assine contratos, declarações, fichas e outros documentos emitidos pela escola.")]), _createElementVNode("span", { class: _normalizeClass(["badge", certificateExpired()?'expired':state.configured?'active':'pending']) }, _toDisplayString(certificateExpired()?'Vencido':state.configured?'Configurado':'Não configurado'), 3)]),
+            _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "ASSINATURA DA ESCOLA"), _createElementVNode("h3", null, "Certificado A1"), _createElementVNode("p", null, "Assine documentos escolares e XMLs dos perfis fiscais disponíveis com o certificado da mantenedora.")]), _createElementVNode("span", { class: _normalizeClass(["badge", certificateExpired()?'expired':state.configured?'active':'pending']) }, _toDisplayString(certificateExpired()?'Vencido':state.configured?'Configurado':'Não configurado'), 3)]),
             (state.certificate)
               ? (_openBlock(), _createElementBlock("div", {
                   key: 0,
@@ -8770,9 +9191,133 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
             _createElementVNode("p", { class: "small muted" }, "A rotação não modifica os PDFs já assinados. O certificado e a senha são enviados ao servidor apenas ao salvar; não são guardados no armazenamento deste navegador.")
           ]))
         : _createCommentVNode("", true),
-      (can('documents.read'))
+      (canManageA1() && state.tab==='certificate')
         ? (_openBlock(), _createElementBlock("section", {
             key: 4,
+            class: "panel x-card"
+          }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "RENOVAÇÃO"), _createElementVNode("h3", null, "Avisos de vencimento"), _createElementVNode("p", null, "Receba lembretes com 30, 15, 7 e 1 dia de antecedência e ao vencer.")])]), _createElementVNode("form", { onSubmit: _withModifiers(saveAlertPreferences, ["prevent"]) }, [
+            _createElementVNode("div", { class: "contract-certificate-form" }, [_createElementVNode("label", { class: "field checkbox-field" }, [_withDirectives(_createElementVNode("input", {
+              "onUpdate:modelValue": $event => ((state.alerts.email_enabled) = $event),
+              type: "checkbox"
+            }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, state.alerts.email_enabled]]), _createTextVNode("Receber no meu e-mail")]), _createElementVNode("label", { class: "field checkbox-field" }, [_withDirectives(_createElementVNode("input", {
+              "onUpdate:modelValue": $event => ((state.alerts.whatsapp_enabled) = $event),
+              type: "checkbox",
+              disabled: !state.alerts.phone_available
+            }, null, 8, ["onUpdate:modelValue", "disabled"]), [[_vModelCheckbox, state.alerts.whatsapp_enabled]]), _createTextVNode("Receber no meu WhatsApp")])]),
+            _createElementVNode("p", { class: "small muted" }, [_createTextVNode("E-mail: " + _toDisplayString(state.alerts.email) + ". ", 1), (!state.alerts.phone_available)
+              ? (_openBlock(), _createElementBlock("span", { key: 0 }, "Cadastre seu WhatsApp com DDI e DDD em Meu perfil para ativar esse canal."))
+              : _createCommentVNode("", true), _createTextVNode(" Os envios usam os serviços de comunicação configurados pela administração.")]),
+            _createElementVNode("p", { class: "small muted" }, "O aviso na aplicação fica disponível para direção e administração. Cada canal é opcional e usa seus próprios dados de contato."),
+            _createElementVNode("button", {
+              type: "submit",
+              class: "btn btn-primary",
+              disabled: state.busy
+            }, "Salvar preferências", 8, ["disabled"])
+          ], 40, ["onSubmit"])]))
+        : _createCommentVNode("", true),
+      (canManageA1() && state.tab==='fiscal')
+        ? (_openBlock(), _createElementBlock("section", {
+            key: 5,
+            class: "panel x-card"
+          }, [
+            _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "ASSINATURA FISCAL"), _createElementVNode("h3", null, "Assinar XML com A1"), _createElementVNode("p", null, "Selecione o XML original da mantenedora e seu perfil de assinatura.")])]),
+            (!state.configured || certificateExpired())
+              ? (_openBlock(), _createElementBlock("p", {
+                  key: 0,
+                  class: "alert warning"
+                }, [_createTextVNode(_toDisplayString(certificateExpired()?'Atualize o certificado vencido para continuar.':'Cadastre o certificado da mantenedora para começar.') + " ", 1), _createElementVNode("button", {
+                  type: "button",
+                  class: "link-button",
+                  onClick: $event => (state.tab='certificate')
+                }, "Abrir certificado", 8, ["onClick"])]))
+              : _createCommentVNode("", true),
+            _createElementVNode("form", {
+              class: "contract-certificate-form",
+              onSubmit: _withModifiers(signFiscal, ["prevent"])
+            }, [
+              _createElementVNode("label", { class: "field" }, [_createTextVNode("Tipo de documento"), _withDirectives(_createElementVNode("select", {
+                "onUpdate:modelValue": $event => ((state.fiscalProfile) = $event),
+                required: ""
+              }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.fiscalProfiles, (profile) => {
+                return (_openBlock(), _createElementBlock("option", {
+                  key: profile.id,
+                  value: profile.id
+                }, _toDisplayString(profile.label), 9, ["value"]))
+              }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.fiscalProfile]])]),
+              _createElementVNode("label", { class: "field" }, [_createTextVNode("XML original (até 2 MB)"), _createElementVNode("input", {
+                id: "fiscal-xml-file",
+                type: "file",
+                accept: ".xml,application/xml,text/xml",
+                required: "",
+                onChange: fiscalChanged
+              }, null, 40, ["onChange"])]),
+              _createElementVNode("label", { class: "field checkbox-field wide" }, [_withDirectives(_createElementVNode("input", {
+                "onUpdate:modelValue": $event => ((state.fiscalConsent) = $event),
+                type: "checkbox",
+                required: ""
+              }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, state.fiscalConsent]]), _createTextVNode("Conferi o XML e autorizo sua assinatura com o certificado da mantenedora")]),
+              _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                type: "submit",
+                class: "btn btn-primary",
+                disabled: state.busy || !state.configured || certificateExpired() || !state.fiscalFilename || !state.fiscalConsent
+              }, "Assinar XML", 8, ["disabled"])])
+            ], 40, ["onSubmit"]),
+            _createElementVNode("p", { class: "small muted" }, "A assinatura preserva o original e permite baixar o XML assinado. A autorização da nota depende do envio ao serviço fiscal. Este recurso verifica o perfil de assinatura; os campos e tributos devem ser conferidos pelo seu emissor."),
+            _createElementVNode("details", null, [_createElementVNode("summary", null, "Perfis e versões disponíveis"), _createElementVNode("p", { class: "small muted" }, "NF-e e NFC-e 4.00 com CNPJ numérico; NFS-e por DPS nacional 1.00 e 1.01. CNPJ alfanumérico e leiautes municipais precisam de perfis específicos antes do uso. A aplicação não assina XMLs de versões incompatíveis nem substitui uma assinatura existente.")])
+          ]))
+        : _createCommentVNode("", true),
+      (canManageA1() && state.tab==='fiscal')
+        ? (_openBlock(), _createElementBlock("section", {
+            key: 6,
+            class: "panel x-card"
+          }, [
+            _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h3", null, "XMLs assinados"), _createElementVNode("p", null, _toDisplayString(state.fiscalTotal) + " documento(s)", 1)]), _createElementVNode("button", {
+              type: "button",
+              class: "btn btn-secondary",
+              disabled: state.busy,
+              onClick: loadFiscal
+            }, "Atualizar", 8, ["disabled", "onClick"])]),
+            (!state.fiscalItems.length)
+              ? (_openBlock(), _createElementBlock("p", {
+                  key: 0,
+                  class: "empty-state"
+                }, "Os XMLs assinados aparecerão aqui."))
+              : _createCommentVNode("", true),
+            (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.fiscalItems, (item) => {
+              return (_openBlock(), _createElementBlock("div", {
+                key: item.id,
+                class: "contract-queue-row"
+              }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(item.profile_label), 1), _createElementVNode("small", null, _toDisplayString(date(item.created_at)) + " · Assinado · Sem transmissão fiscal", 1), _createElementVNode("details", null, [_createElementVNode("summary", null, "Identificação"), _createElementVNode("small", { class: "mono" }, "SHA-256 " + _toDisplayString(item.signed_sha256), 1)])]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                type: "button",
+                class: "btn btn-secondary",
+                onClick: $event => (download(str(item.original_file_id),str(item.profile)+'-original.xml'))
+              }, "Original", 8, ["onClick"]), _createElementVNode("button", {
+                type: "button",
+                class: "btn btn-primary",
+                onClick: $event => (download(str(item.signed_file_id),str(item.profile)+'-assinado.xml'))
+              }, "Baixar assinado", 8, ["onClick"])])]))
+            }), 128)),
+            (state.fiscalTotal>20)
+              ? (_openBlock(), _createElementBlock("div", {
+                  key: 1,
+                  class: "pagination"
+                }, [_createElementVNode("button", {
+                  type: "button",
+                  class: "btn btn-secondary",
+                  disabled: state.busy || state.fiscalOffset===0,
+                  onClick: $event => (fiscalPage(-1))
+                }, "Anterior", 8, ["disabled", "onClick"]), _createElementVNode("button", {
+                  type: "button",
+                  class: "btn btn-secondary",
+                  disabled: state.busy || state.fiscalOffset+20>=state.fiscalTotal,
+                  onClick: $event => (fiscalPage(1))
+                }, "Próxima", 8, ["disabled", "onClick"])]))
+              : _createCommentVNode("", true)
+          ]))
+        : _createCommentVNode("", true),
+      (can('documents.read') && state.tab==='documents')
+        ? (_openBlock(), _createElementBlock("section", {
+            key: 7,
             class: "panel x-card"
           }, [
             _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "DOCUMENTOS DA ESCOLA"), _createElementVNode("h3", null, "Prontos para assinatura"), _createElementVNode("p", null, "Confira o PDF e assine com o certificado A1 cadastrado.")]), _createElementVNode("button", {
@@ -8823,9 +9368,9 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
               : _createCommentVNode("", true)
           ]))
         : _createCommentVNode("", true),
-      (state.enrollmentIssued.length)
+      (state.enrollmentIssued.length && state.tab==='documents')
         ? (_openBlock(), _createElementBlock("section", {
-            key: 5,
+            key: 8,
             class: "panel x-card"
           }, [_createElementVNode("h3", null, "Documentos emitidos desta matrícula"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.enrollmentIssued, (document) => {
             return (_openBlock(), _createElementBlock("div", {
@@ -8838,49 +9383,54 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
             }, "Ver assinaturas", 8, ["onClick"])]))
           }), 128))]))
         : _createCommentVNode("", true),
-      _createElementVNode("section", { class: "panel x-card" }, [
-        _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "CONFERÊNCIA DOCUMENTAL"), _createElementVNode("h3", null, "PDFs assinados aguardando revisão"), _createElementVNode("p", null, "A assinatura externa é adicionada ao PDF pela família. A decisão final requer conferência da identidade e do relatório no VALIDAR/ITI.")]), _createElementVNode("button", {
-          type: "button",
-          class: "btn btn-secondary",
-          disabled: state.busy,
-          onClick: loadPending
-        }, "Atualizar fila", 8, ["disabled", "onClick"])]),
-        (!state.pending.length && !state.loading)
-          ? (_openBlock(), _createElementBlock("div", {
-              key: 0,
-              class: "empty-state"
-            }, [_createElementVNode("p", null, "Nenhuma assinatura externa pendente de revisão nesta escola.")]))
-          : _createCommentVNode("", true),
-        (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.pending, (item) => {
-          return (_openBlock(), _createElementBlock("div", {
-            key: item.document_id,
-            class: "contract-queue-row"
-          }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(item.student_name), 1), _createElementVNode("small", null, _toDisplayString(date(item.created_at)) + " · matrícula " + _toDisplayString(item.enrollment_id) + " · " + _toDisplayString(label(item.signature_status)), 1)]), _createElementVNode("button", {
-            type: "button",
-            class: "btn btn-secondary small-button",
-            onClick: $event => (openReview(item.document_id))
-          }, "Analisar PDF", 8, ["onClick"])]))
-        }), 128)),
-        (state.pendingTotal>state.limit)
-          ? (_openBlock(), _createElementBlock("div", {
-              key: 1,
-              class: "pagination"
-            }, [_createElementVNode("span", null, _toDisplayString(state.pendingTotal) + " pendente(s) · " + _toDisplayString(state.offset+1) + "–" + _toDisplayString(Math.min(state.offset+state.limit,state.pendingTotal)), 1), _createElementVNode("div", null, [_createElementVNode("button", {
-              type: "button",
-              class: "btn btn-secondary small-button",
-              disabled: state.offset===0 || state.busy,
-              onClick: $event => (page(-1))
-            }, "Anterior", 8, ["disabled", "onClick"]), _createElementVNode("button", {
-              type: "button",
-              class: "btn btn-secondary small-button",
-              disabled: state.offset+state.limit>=state.pendingTotal || state.busy,
-              onClick: $event => (page(1))
-            }, "Próxima", 8, ["disabled", "onClick"])])]))
-          : _createCommentVNode("", true)
-      ]),
-      (state.review)
+      (state.tab==='documents')
         ? (_openBlock(), _createElementBlock("section", {
-            key: 6,
+            key: 9,
+            class: "panel x-card"
+          }, [
+            _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "CONFERÊNCIA DOCUMENTAL"), _createElementVNode("h3", null, "PDFs assinados aguardando revisão"), _createElementVNode("p", null, "A assinatura externa é adicionada ao PDF pela família. A decisão final requer conferência da identidade e do relatório no VALIDAR/ITI.")]), _createElementVNode("button", {
+              type: "button",
+              class: "btn btn-secondary",
+              disabled: state.busy,
+              onClick: loadPending
+            }, "Atualizar fila", 8, ["disabled", "onClick"])]),
+            (!state.pending.length && !state.loading)
+              ? (_openBlock(), _createElementBlock("div", {
+                  key: 0,
+                  class: "empty-state"
+                }, [_createElementVNode("p", null, "Nenhuma assinatura externa pendente de revisão nesta escola.")]))
+              : _createCommentVNode("", true),
+            (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.pending, (item) => {
+              return (_openBlock(), _createElementBlock("div", {
+                key: item.document_id,
+                class: "contract-queue-row"
+              }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(item.student_name), 1), _createElementVNode("small", null, _toDisplayString(date(item.created_at)) + " · matrícula " + _toDisplayString(item.enrollment_id) + " · " + _toDisplayString(label(item.signature_status)), 1)]), _createElementVNode("button", {
+                type: "button",
+                class: "btn btn-secondary small-button",
+                onClick: $event => (openReview(item.document_id))
+              }, "Analisar PDF", 8, ["onClick"])]))
+            }), 128)),
+            (state.pendingTotal>state.limit)
+              ? (_openBlock(), _createElementBlock("div", {
+                  key: 1,
+                  class: "pagination"
+                }, [_createElementVNode("span", null, _toDisplayString(state.pendingTotal) + " pendente(s) · " + _toDisplayString(state.offset+1) + "–" + _toDisplayString(Math.min(state.offset+state.limit,state.pendingTotal)), 1), _createElementVNode("div", null, [_createElementVNode("button", {
+                  type: "button",
+                  class: "btn btn-secondary small-button",
+                  disabled: state.offset===0 || state.busy,
+                  onClick: $event => (page(-1))
+                }, "Anterior", 8, ["disabled", "onClick"]), _createElementVNode("button", {
+                  type: "button",
+                  class: "btn btn-secondary small-button",
+                  disabled: state.offset+state.limit>=state.pendingTotal || state.busy,
+                  onClick: $event => (page(1))
+                }, "Próxima", 8, ["disabled", "onClick"])])]))
+              : _createCommentVNode("", true)
+          ]))
+        : _createCommentVNode("", true),
+      (state.review && state.tab==='documents')
+        ? (_openBlock(), _createElementBlock("section", {
+            key: 10,
             class: "panel x-card",
             "aria-label": "Revisão de assinatura"
           }, [
@@ -9984,7 +10534,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
           }, [
             _createElementVNode("h3", null, "Servidor da escola"),
             _createElementVNode("div", { class: "x-grid" }, [
-              _createElementVNode("label", { class: "field" }, [_createTextVNode("Endereço do Mailcow"), _withDirectives(_createElementVNode("input", {
+              _createElementVNode("label", { class: "field" }, [_createTextVNode("Endereço do servidor de e-mail"), _withDirectives(_createElementVNode("input", {
                 "onUpdate:modelValue": $event => ((state.draft.base_url) = $event),
                 type: "url",
                 required: "",
@@ -10028,7 +10578,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
               "onUpdate:modelValue": $event => ((state.draft.allow_private_network) = $event),
               type: "checkbox"
             }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, state.draft.allow_private_network]]), _createTextVNode("O servidor fica na rede privada desta instalação")]), _createElementVNode("p", { class: "muted" }, "Use um hostname HTTPS com certificado válido. Endereços locais e de metadados continuam bloqueados.")]),
-            _createElementVNode("p", { class: "muted" }, "No Mailcow, habilite a API de leitura e escrita e autorize os IPs de saída da aplicação e do worker. O IP do seu celular ou computador não substitui os IPs da instalação."),
+            _createElementVNode("p", { class: "muted" }, "No servidor de e-mail, habilite a API de leitura e escrita e autorize os endereços de saída desta instalação. O endereço do seu celular ou computador não substitui o endereço do servidor da escola."),
             dirty
               ? (_openBlock(), _createElementBlock("p", {
                   key: 0,
@@ -10209,5 +10759,1091 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
           ])])], 8, ["onClick"]))
         : _createCommentVNode("", true)
     ]))
+  }
+},audit:function render(_ctx, _cache) {
+  with (_ctx) {
+    const { toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createElementVNode: _createElementVNode, renderList: _renderList, Fragment: _Fragment, vModelSelect: _vModelSelect, withDirectives: _withDirectives, createTextVNode: _createTextVNode, vModelText: _vModelText, vModelCheckbox: _vModelCheckbox, withModifiers: _withModifiers } = _Vue
+
+    return (_openBlock(), _createElementBlock("section", {
+      class: "admin-console",
+      "aria-label": "Auditoria da instituição"
+    }, [(state.error)
+      ? (_openBlock(), _createElementBlock("div", {
+          key: 0,
+          class: "alert error",
+          role: "alert"
+        }, _toDisplayString(state.error), 1))
+      : _createCommentVNode("", true), (state.notice)
+      ? (_openBlock(), _createElementBlock("div", {
+          key: 1,
+          class: "alert success",
+          role: "status"
+        }, _toDisplayString(state.notice), 1))
+      : _createCommentVNode("", true), _createElementVNode("fieldset", {
+      disabled: state.busy,
+      class: "portal-fieldset"
+    }, [_createElementVNode("header", { class: "admin-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Histórico de operações"), _createElementVNode("p", null, "Identifique quem alterou um registro e acompanhe as operações relacionadas.")]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+      class: "btn btn-secondary",
+      onClick: load
+    }, "Atualizar", 8, ["onClick"]), _createElementVNode("button", {
+      class: "btn btn-primary",
+      onClick: download
+    }, "Exportar auditoria", 8, ["onClick"])])]), _createElementVNode("details", {
+      class: "panel admin-card admin-filter-panel",
+      open: state.filtersOpen,
+      onToggle: $event => (state.filtersOpen=$event.target.open)
+    }, [_createElementVNode("summary", null, "Filtros de consulta"), _createElementVNode("form", {
+      class: "admin-filter",
+      onSubmit: _withModifiers(search, ["prevent"])
+    }, [
+      _createElementVNode("label", null, [_createTextVNode("Operação"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.action) = $event) }, [_createElementVNode("option", { value: "" }, "Todas as operações"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.choices.actions, (v) => {
+        return (_openBlock(), _createElementBlock("option", {
+          key: v,
+          value: v
+        }, _toDisplayString(entityName(v.split('.')[0])) + " · " + _toDisplayString(actionName(v)), 9, ["value"]))
+      }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.action]])]),
+      _createElementVNode("label", null, [_createTextVNode("Tipo de registro"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.entity) = $event) }, [_createElementVNode("option", { value: "" }, "Todos os registros"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.choices.entities, (v) => {
+        return (_openBlock(), _createElementBlock("option", {
+          key: v,
+          value: v
+        }, _toDisplayString(entityName(v)), 9, ["value"]))
+      }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.entity]])]),
+      _createElementVNode("label", null, [_createTextVNode("Autor"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.actor) = $event) }, [_createElementVNode("option", { value: "" }, "Todos os autores"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.choices.actors, (v) => {
+        return (_openBlock(), _createElementBlock("option", {
+          key: v.id,
+          value: v.id
+        }, _toDisplayString(v.name), 9, ["value"]))
+      }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.actor]])]),
+      _createElementVNode("label", null, [_createTextVNode("Desde"), _withDirectives(_createElementVNode("input", {
+        type: "datetime-local",
+        "onUpdate:modelValue": $event => ((state.since) = $event)
+      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.since]])]),
+      _createElementVNode("label", null, [_createTextVNode("Até"), _withDirectives(_createElementVNode("input", {
+        type: "datetime-local",
+        "onUpdate:modelValue": $event => ((state.until) = $event)
+      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.until]])]),
+      _createElementVNode("label", null, [_createTextVNode("Referência da operação"), _withDirectives(_createElementVNode("input", {
+        "onUpdate:modelValue": $event => ((state.reference) = $event),
+        maxlength: "64",
+        placeholder: "Código da ocorrência"
+      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.reference]])]),
+      _createElementVNode("label", null, [_createTextVNode("Identificador do registro"), _withDirectives(_createElementVNode("input", {
+        "onUpdate:modelValue": $event => ((state.entityId) = $event),
+        maxlength: "64",
+        placeholder: "Código do cadastro ou documento"
+      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.entityId]])]),
+      _createElementVNode("label", { class: "admin-checkbox" }, [_withDirectives(_createElementVNode("input", {
+        type: "checkbox",
+        "onUpdate:modelValue": $event => ((state.includeGlobal) = $event),
+        onChange: search
+      }, null, 40, ["onUpdate:modelValue", "onChange"]), [[_vModelCheckbox, state.includeGlobal]]), _createTextVNode("Incluir acessos e configurações da instalação")]),
+      _createElementVNode("div", { class: "actions admin-filter-submit" }, [_createElementVNode("button", {
+        type: "button",
+        class: "btn btn-secondary",
+        onClick: clear
+      }, "Limpar filtros", 8, ["onClick"]), _createElementVNode("button", { class: "btn btn-primary" }, "Aplicar filtros")])
+    ], 40, ["onSubmit"])], 40, ["open", "onToggle"]), _createElementVNode("section", { class: "panel admin-card" }, [
+      _createElementVNode("div", { class: "admin-heading" }, [_createElementVNode("h3", null, _toDisplayString(state.total) + " " + _toDisplayString(state.total===1?'operação encontrada':'operações encontradas'), 1), (state.busy)
+        ? (_openBlock(), _createElementBlock("span", {
+            key: 0,
+            role: "status"
+          }, "Consultando…"))
+        : _createCommentVNode("", true), _createElementVNode("span", { class: "muted" }, "Horários locais")]),
+      (!state.rows.length && !state.busy)
+        ? (_openBlock(), _createElementBlock("p", {
+            key: 0,
+            class: "admin-empty"
+          }, "Nenhuma operação corresponde aos filtros selecionados."))
+        : _createCommentVNode("", true),
+      _createElementVNode("ol", { class: "admin-event-list" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.rows, (item) => {
+        return (_openBlock(), _createElementBlock("li", { key: item.id }, [_createElementVNode("div", { class: "admin-event-main" }, [
+          _createElementVNode("div", null, [_createElementVNode("span", { class: "admin-badge is-info" }, _toDisplayString(actionName(item.action)), 1), _createElementVNode("time", null, _toDisplayString(date(item.created_at)), 1), (item.scope==='institution')
+            ? (_openBlock(), _createElementBlock("span", {
+                key: 0,
+                class: "admin-service"
+              }, "Instalação"))
+            : _createCommentVNode("", true)]),
+          _createElementVNode("strong", null, _toDisplayString(entityName(item.entity_type)) + " · " + _toDisplayString(item.actor_name), 1),
+          _createElementVNode("small", null, _toDisplayString(item.action), 1),
+          _createElementVNode("code", null, _toDisplayString(item.entity_id), 1)
+        ]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+          class: "btn btn-secondary",
+          onClick: $event => (related(item,'record'))
+        }, "Histórico do registro", 8, ["onClick"]), _createElementVNode("button", {
+          class: "btn btn-secondary",
+          "aria-expanded": state.selected===item,
+          onClick: $event => (state.selected=state.selected===item?null:item)
+        }, "Detalhes", 8, ["aria-expanded", "onClick"])]), (state.selected===item)
+          ? (_openBlock(), _createElementBlock("div", {
+              key: 0,
+              class: "admin-event-detail"
+            }, [
+              _createElementVNode("dl", { class: "admin-detail-grid" }, [
+                _createElementVNode("div", null, [_createElementVNode("dt", null, "Autor"), _createElementVNode("dd", null, _toDisplayString(item.actor_name), 1)]),
+                _createElementVNode("div", null, [_createElementVNode("dt", null, "Endereço de origem"), _createElementVNode("dd", null, _toDisplayString(item.ip||'Não registrado'), 1)]),
+                _createElementVNode("div", null, [_createElementVNode("dt", null, "Referência"), _createElementVNode("dd", null, _toDisplayString(item.request_id||'Não registrada'), 1)]),
+                _createElementVNode("div", null, [_createElementVNode("dt", null, "Identificador da auditoria"), _createElementVNode("dd", null, _toDisplayString(item.id), 1)])
+              ]),
+              (item.request_id)
+                ? (_openBlock(), _createElementBlock("div", {
+                    key: 0,
+                    class: "actions"
+                  }, [_createElementVNode("button", {
+                    class: "btn btn-secondary",
+                    onClick: $event => (related(item,'request'))
+                  }, "Operações com esta referência", 8, ["onClick"]), (/^[a-f0-9]{24}$/.test(item.request_id))
+                    ? (_openBlock(), _createElementBlock("button", {
+                        key: 0,
+                        class: "btn btn-secondary",
+                        onClick: $event => (investigate(item))
+                      }, "Investigar diagnóstico", 8, ["onClick"]))
+                    : _createCommentVNode("", true)]))
+                : _createCommentVNode("", true),
+              (changes(item).length)
+                ? (_openBlock(), _createElementBlock("div", {
+                    key: 1,
+                    class: "admin-changes"
+                  }, [_createElementVNode("h4", null, "Alterações registradas"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(changes(item), (change) => {
+                    return (_openBlock(), _createElementBlock("article", { key: change.field }, [_createElementVNode("strong", null, _toDisplayString(change.field), 1), _createElementVNode("div", null, [_createElementVNode("small", null, "Antes"), _createElementVNode("p", null, _toDisplayString(value(change.before)), 1)]), _createElementVNode("div", null, [_createElementVNode("small", null, "Depois"), _createElementVNode("p", null, _toDisplayString(value(change.after)), 1)])]))
+                  }), 128))]))
+                : _createCommentVNode("", true),
+              _createElementVNode("details", { class: "admin-help" }, [_createElementVNode("summary", null, "Detalhes completos"), _createElementVNode("pre", { class: "diagnostic-pre" }, _toDisplayString(pretty(item.details)), 1)])
+            ]))
+          : _createCommentVNode("", true)]))
+      }), 128))]),
+      _createElementVNode("div", { class: "pagination" }, [_createElementVNode("span", null, "Página " + _toDisplayString(state.page), 1), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+        class: "btn btn-secondary",
+        disabled: state.page<=1,
+        onClick: $event => (page(-1))
+      }, "Anterior", 8, ["disabled", "onClick"]), _createElementVNode("button", {
+        class: "btn btn-secondary",
+        disabled: state.page*30>=state.total,
+        onClick: $event => (page(1))
+      }, "Próxima", 8, ["disabled", "onClick"])])])
+    ])], 8, ["disabled"])]))
+  }
+},email:function render(_ctx, _cache) {
+  with (_ctx) {
+    const { createElementVNode: _createElementVNode, toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createTextVNode: _createTextVNode, vModelText: _vModelText, withDirectives: _withDirectives, withModifiers: _withModifiers, renderList: _renderList, Fragment: _Fragment, normalizeClass: _normalizeClass, vModelSelect: _vModelSelect } = _Vue
+
+    return (_openBlock(), _createElementBlock("section", {
+      class: "email-client",
+      "aria-label": "Meu e-mail",
+      "aria-busy": s.busy
+    }, [
+      _createElementVNode("header", { class: "email-page-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "COMUNICAÇÃO"), _createElementVNode("h2", null, "Meu e-mail"), (s.account?.available)
+        ? (_openBlock(), _createElementBlock("p", { key: 0 }, _toDisplayString(s.account.address), 1))
+        : _createCommentVNode("", true)]), _createElementVNode("div", { class: "actions" }, [(props.admin)
+        ? (_openBlock(), _createElementBlock("button", {
+            key: 0,
+            class: "btn btn-secondary",
+            type: "button",
+            onClick: showSettings,
+            disabled: s.busy
+          }, "Configuração", 8, ["onClick", "disabled"]))
+        : _createCommentVNode("", true), (s.account?.connected)
+        ? (_openBlock(), _createElementBlock("button", {
+            key: 1,
+            class: "btn btn-secondary",
+            type: "button",
+            onClick: refresh,
+            disabled: s.busy
+          }, "Atualizar", 8, ["onClick", "disabled"]))
+        : _createCommentVNode("", true), (s.account?.connected)
+        ? (_openBlock(), _createElementBlock("button", {
+            key: 2,
+            class: "btn btn-primary",
+            type: "button",
+            onClick: $event => (begin()),
+            disabled: s.busy
+          }, "Escrever", 8, ["onClick", "disabled"]))
+        : _createCommentVNode("", true)])]),
+      (s.error)
+        ? (_openBlock(), _createElementBlock("p", {
+            key: 0,
+            class: "alert error",
+            role: "alert"
+          }, _toDisplayString(s.error), 1))
+        : _createCommentVNode("", true),
+      (s.notice)
+        ? (_openBlock(), _createElementBlock("p", {
+            key: 1,
+            class: "alert success",
+            role: "status"
+          }, _toDisplayString(s.notice), 1))
+        : _createCommentVNode("", true),
+      (s.loading)
+        ? (_openBlock(), _createElementBlock("div", {
+            key: 2,
+            class: "email-empty",
+            role: "status"
+          }, "Carregando sua caixa de e-mail…"))
+        : (!s.account?.available)
+          ? (_openBlock(), _createElementBlock("div", {
+              key: 3,
+              class: "panel email-start"
+            }, [_createElementVNode("div", {
+              class: "email-empty-symbol",
+              "aria-hidden": "true"
+            }, "@"), _createElementVNode("h3", null, "Sua caixa institucional ainda não está disponível"), _createElementVNode("p", null, "Solicite à administração da escola a criação ou ativação do seu endereço de e-mail.")]))
+          : (!s.account.connected)
+            ? (_openBlock(), _createElementBlock("form", {
+                key: 4,
+                class: "panel email-start",
+                onSubmit: _withModifiers(connect, ["prevent"])
+              }, [
+                _createElementVNode("div", {
+                  class: "email-empty-symbol",
+                  "aria-hidden": "true"
+                }, "@"),
+                _createElementVNode("h3", null, "Conecte seu e-mail"),
+                _createElementVNode("p", null, [_createTextVNode("Use a senha da caixa "), _createElementVNode("strong", null, _toDisplayString(s.account.address), 1), _createTextVNode(". Ela pode ser diferente da senha usada para entrar no sistema escolar.")]),
+                _createElementVNode("label", { class: "field" }, [_createTextVNode("Senha do e-mail"), _withDirectives(_createElementVNode("input", {
+                  "onUpdate:modelValue": $event => ((s.password) = $event),
+                  type: "password",
+                  autocomplete: "current-password",
+                  required: "",
+                  maxlength: "512"
+                }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.password]])]),
+                _createElementVNode("button", {
+                  class: "btn btn-primary",
+                  disabled: s.busy,
+                  type: "submit"
+                }, _toDisplayString(s.busy?'Conectando…':'Conectar e-mail'), 9, ["disabled"]),
+                _createElementVNode("p", { class: "muted" }, "Você pode encerrar esta conexão a qualquer momento, sem apagar suas mensagens.")
+              ], 40, ["onSubmit"]))
+            : _createCommentVNode("", true),
+      (s.account?.connected)
+        ? (_openBlock(), _createElementBlock("div", {
+            key: 5,
+            class: _normalizeClass(["email-workspace", {'email-reading':s.selected}])
+          }, [_createElementVNode("nav", {
+            class: _normalizeClass(["email-folders", {'is-open':s.showFolders}]),
+            "aria-label": "Pastas de e-mail"
+          }, [
+            _createElementVNode("div", { class: "email-folder-heading" }, [_createElementVNode("strong", null, "Suas pastas"), _createElementVNode("button", {
+              class: "email-icon-button email-folders-close",
+              type: "button",
+              onClick: $event => (s.showFolders=false),
+              "aria-label": "Fechar pastas"
+            }, "×", 8, ["onClick"])]),
+            (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.folders, (item) => {
+              return (_openBlock(), _createElementBlock("button", {
+                key: item.id,
+                class: _normalizeClass(["email-folder", {active:s.folder===item.id}]),
+                "aria-current": s.folder===item.id?'page':undefined,
+                type: "button",
+                onClick: $event => (selectFolder(item.id)),
+                disabled: s.busy
+              }, [(_openBlock(), _createElementBlock("svg", {
+                viewBox: "0 0 24 24",
+                "aria-hidden": "true"
+              }, [_createElementVNode("path", { d: "M3 7h7l2 2h9v11H3z M3 7V4h7l2 3" })])), _createElementVNode("span", null, _toDisplayString(folderName(item)), 1), (item.unread)
+                ? (_openBlock(), _createElementBlock("span", {
+                    key: 0,
+                    class: "email-count",
+                    "aria-label": item.unread+' não lidas'
+                  }, _toDisplayString(item.unread), 9, ["aria-label"]))
+                : _createCommentVNode("", true)], 10, ["aria-current", "onClick", "disabled"]))
+            }), 128)),
+            _createElementVNode("button", {
+              class: "email-folder email-create-folder",
+              type: "button",
+              onClick: $event => (s.showNewFolder=!s.showNewFolder),
+              disabled: s.busy
+            }, [_createElementVNode("span", { "aria-hidden": "true" }, "+"), _createElementVNode("span", null, "Nova pasta")], 8, ["onClick", "disabled"]),
+            (s.showNewFolder)
+              ? (_openBlock(), _createElementBlock("form", {
+                  key: 0,
+                  class: "email-new-folder",
+                  onSubmit: _withModifiers(newFolder, ["prevent"])
+                }, [_createElementVNode("label", { class: "field" }, [_createTextVNode("Nome da pasta"), _withDirectives(_createElementVNode("input", {
+                  "onUpdate:modelValue": $event => ((s.newFolder) = $event),
+                  required: "",
+                  maxlength: "80",
+                  autocomplete: "off"
+                }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.newFolder]])]), _createElementVNode("button", {
+                  class: "btn btn-secondary",
+                  type: "submit",
+                  disabled: s.busy
+                }, "Criar pasta", 8, ["disabled"])], 40, ["onSubmit"]))
+              : _createCommentVNode("", true),
+            _createElementVNode("div", { class: "email-connection" }, [_createElementVNode("span", { class: "email-connected" }, "Caixa conectada"), _createElementVNode("button", {
+              class: "email-text-button",
+              type: "button",
+              onClick: $event => (s.disconnectConfirm=true),
+              disabled: s.busy
+            }, "Desconectar", 8, ["onClick", "disabled"])])
+          ], 2), _createElementVNode("section", {
+            class: "email-list",
+            "aria-label": "Mensagens"
+          }, [
+            _createElementVNode("header", { class: "email-list-header" }, [_createElementVNode("button", {
+              class: "email-icon-button email-folder-toggle",
+              type: "button",
+              onClick: $event => (s.showFolders=!s.showFolders),
+              "aria-expanded": s.showFolders,
+              "aria-label": "Abrir pastas"
+            }, "☰", 8, ["onClick", "aria-expanded"]), _createElementVNode("div", null, [_createElementVNode("h3", null, _toDisplayString(folder()?folderName(folder()):'Mensagens'), 1), _createElementVNode("small", null, _toDisplayString(folder()?.unread||0) + " não lidas", 1)]), (folder()?.role==='custom')
+              ? (_openBlock(), _createElementBlock("button", {
+                  key: 0,
+                  class: "email-icon-button",
+                  type: "button",
+                  onClick: manageFolder,
+                  "aria-label": "Gerenciar pasta",
+                  disabled: s.busy
+                }, "⋯", 8, ["onClick", "disabled"]))
+              : _createCommentVNode("", true)]),
+            _createElementVNode("form", {
+              class: "email-search",
+              role: "search",
+              onSubmit: _withModifiers(search, ["prevent"])
+            }, [_createElementVNode("label", {
+              class: "sr-only",
+              for: "email-search"
+            }, "Buscar mensagens"), _withDirectives(_createElementVNode("input", {
+              id: "email-search",
+              "onUpdate:modelValue": $event => ((s.q) = $event),
+              type: "search",
+              placeholder: "Buscar nesta pasta",
+              maxlength: "120"
+            }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.q]]), _createElementVNode("button", {
+              class: "email-icon-button",
+              "aria-label": "Buscar mensagens",
+              type: "submit",
+              disabled: s.busy
+            }, [(_openBlock(), _createElementBlock("svg", {
+              viewBox: "0 0 24 24",
+              "aria-hidden": "true"
+            }, [_createElementVNode("circle", {
+              cx: "10",
+              cy: "10",
+              r: "6"
+            }), _createElementVNode("path", { d: "m15 15 5 5" })]))], 8, ["disabled"])], 40, ["onSubmit"]),
+            _createElementVNode("div", { class: "email-message-list" }, [(!s.items.length)
+              ? (_openBlock(), _createElementBlock("div", {
+                  key: 0,
+                  class: "email-empty"
+                }, [_createElementVNode("h4", null, _toDisplayString(s.activeQuery?'Nenhuma mensagem encontrada':'Tudo em dia por aqui'), 1), _createElementVNode("p", null, _toDisplayString(s.activeQuery?'Tente outro nome ou assunto.':'As mensagens desta pasta aparecerão aqui.'), 1)]))
+              : _createCommentVNode("", true), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.items, (message) => {
+              return (_openBlock(), _createElementBlock("button", {
+                key: message.uid,
+                class: _normalizeClass(["email-message", {unread:!message.seen,selected:s.selected?.uid===message.uid}]),
+                type: "button",
+                onClick: $event => (open(message)),
+                disabled: s.busy,
+                "aria-pressed": s.selected?.uid===message.uid
+              }, [_createElementVNode("span", { class: "email-message-top" }, [_createElementVNode("strong", null, _toDisplayString(message.from||'(Sem remetente)'), 1), (!message.seen)
+                ? (_openBlock(), _createElementBlock("span", {
+                    key: 0,
+                    class: "email-unread-dot",
+                    "aria-label": "Não lida"
+                  }))
+                : _createCommentVNode("", true), (message.flagged)
+                ? (_openBlock(), _createElementBlock("span", {
+                    key: 1,
+                    "aria-label": "Com estrela"
+                  }, "★"))
+                : _createCommentVNode("", true)]), _createElementVNode("span", { class: "email-message-subject" }, _toDisplayString(message.subject||'(Sem assunto)'), 1), _createElementVNode("time", null, _toDisplayString(date(message.date)), 1)], 10, ["onClick", "disabled", "aria-pressed"]))
+            }), 128))]),
+            _createElementVNode("footer", { class: "email-pagination" }, [_createElementVNode("button", {
+              class: "btn btn-secondary",
+              type: "button",
+              onClick: previousPage,
+              disabled: s.busy||!s.cursors.length
+            }, "Anteriores", 8, ["onClick", "disabled"]), _createElementVNode("span", null, "Página " + _toDisplayString(s.cursors.length+1), 1), _createElementVNode("button", {
+              class: "btn btn-secondary",
+              type: "button",
+              onClick: nextPage,
+              disabled: s.busy||s.next===null
+            }, "Próximas", 8, ["onClick", "disabled"])])
+          ]), _createElementVNode("article", {
+            class: "email-reader",
+            "aria-label": "Leitura da mensagem"
+          }, [(!s.selected)
+            ? (_openBlock(), _createElementBlock("div", {
+                key: 0,
+                class: "email-empty email-reader-empty"
+              }, [
+                _createElementVNode("div", {
+                  class: "email-empty-symbol",
+                  "aria-hidden": "true"
+                }, "@"),
+                _createElementVNode("h3", null, "Seu e-mail, aqui na escola"),
+                _createElementVNode("p", null, "Selecione uma mensagem para ler ou escreva uma nova."),
+                _createElementVNode("button", {
+                  class: "btn btn-primary",
+                  type: "button",
+                  onClick: $event => (begin()),
+                  disabled: s.busy
+                }, "Escrever mensagem", 8, ["onClick", "disabled"])
+              ]))
+            : (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [_createElementVNode("div", { class: "email-reader-toolbar" }, [_createElementVNode("button", {
+                class: "btn btn-secondary email-back",
+                type: "button",
+                onClick: $event => (s.selected=null),
+                disabled: s.busy
+              }, "← Mensagens", 8, ["onClick", "disabled"]), _createElementVNode("div", { class: "actions" }, [
+                _createElementVNode("button", {
+                  class: "email-icon-button",
+                  type: "button",
+                  onClick: flag,
+                  disabled: s.busy,
+                  "aria-label": s.selected.flagged?'Remover estrela':'Marcar com estrela',
+                  "aria-pressed": s.selected.flagged
+                }, _toDisplayString(s.selected.flagged?'★':'☆'), 9, ["onClick", "disabled", "aria-label", "aria-pressed"]),
+                (folder()?.role!=='archive')
+                  ? (_openBlock(), _createElementBlock("button", {
+                      key: 0,
+                      class: "btn btn-secondary",
+                      type: "button",
+                      onClick: $event => (moveRole('archive')),
+                      disabled: s.busy
+                    }, "Arquivar", 8, ["onClick", "disabled"]))
+                  : _createCommentVNode("", true),
+                (!['trash','spam'].includes(folder()?.role||''))
+                  ? (_openBlock(), _createElementBlock("button", {
+                      key: 1,
+                      class: "btn btn-secondary",
+                      type: "button",
+                      onClick: $event => (moveRole('trash')),
+                      disabled: s.busy
+                    }, "Lixeira", 8, ["onClick", "disabled"]))
+                  : _createCommentVNode("", true),
+                (['trash','spam'].includes(folder()?.role||''))
+                  ? (_openBlock(), _createElementBlock("button", {
+                      key: 2,
+                      class: "btn btn-secondary",
+                      type: "button",
+                      onClick: $event => (moveRole('inbox')),
+                      disabled: s.busy
+                    }, "Restaurar", 8, ["onClick", "disabled"]))
+                  : _createCommentVNode("", true),
+                _createElementVNode("details", { class: "email-more" }, [_createElementVNode("summary", null, "Mais ações"), _createElementVNode("div", { class: "email-more-menu" }, [
+                  _createElementVNode("button", {
+                    type: "button",
+                    onClick: unread,
+                    disabled: s.busy
+                  }, "Marcar como não lida", 8, ["onClick", "disabled"]),
+                  (folder()?.role!=='spam')
+                    ? (_openBlock(), _createElementBlock("button", {
+                        key: 0,
+                        type: "button",
+                        onClick: $event => (moveRole('spam')),
+                        disabled: s.busy
+                      }, "Mover para spam", 8, ["onClick", "disabled"]))
+                    : _createCommentVNode("", true),
+                  (['trash','spam'].includes(folder()?.role||''))
+                    ? (_openBlock(), _createElementBlock("button", {
+                        key: 1,
+                        type: "button",
+                        onClick: $event => (s.deleteConfirm=true),
+                        disabled: s.busy
+                      }, "Excluir definitivamente", 8, ["onClick", "disabled"]))
+                    : _createCommentVNode("", true),
+                  _createElementVNode("label", { class: "field" }, [_createTextVNode("Mover para"), _withDirectives(_createElementVNode("select", {
+                    "onUpdate:modelValue": $event => ((s.moveTo) = $event),
+                    disabled: s.busy,
+                    onChange: $event => (move(s.moveTo))
+                  }, [_createElementVNode("option", { value: "" }, "Escolha uma pasta"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.folders.filter(x=>x.id!==s.folder), (item) => {
+                    return (_openBlock(), _createElementBlock("option", {
+                      key: item.id,
+                      value: item.id
+                    }, _toDisplayString(folderName(item)), 9, ["value"]))
+                  }), 128))], 40, ["onUpdate:modelValue", "disabled", "onChange"]), [[_vModelSelect, s.moveTo]])])
+                ])])
+              ])]), _createElementVNode("div", { class: "email-reader-body" }, [
+                _createElementVNode("header", { class: "email-message-heading" }, [
+                  _createElementVNode("h3", {
+                    id: "email-reading-title",
+                    tabindex: "-1"
+                  }, _toDisplayString(s.selected.subject||'(Sem assunto)'), 1),
+                  _createElementVNode("p", null, [_createElementVNode("strong", null, "De:"), _createTextVNode(" " + _toDisplayString(s.selected.from), 1)]),
+                  _createElementVNode("p", null, [_createElementVNode("strong", null, "Para:"), _createTextVNode(" " + _toDisplayString(s.selected.to), 1)]),
+                  (s.selected.cc)
+                    ? (_openBlock(), _createElementBlock("p", { key: 0 }, [_createElementVNode("strong", null, "Cc:"), _createTextVNode(" " + _toDisplayString(s.selected.cc), 1)]))
+                    : _createCommentVNode("", true),
+                  (s.selected.bcc)
+                    ? (_openBlock(), _createElementBlock("p", { key: 1 }, [_createElementVNode("strong", null, "Cco:"), _createTextVNode(" " + _toDisplayString(s.selected.bcc), 1)]))
+                    : _createCommentVNode("", true),
+                  _createElementVNode("time", null, _toDisplayString(date(s.selected.date,true)), 1)
+                ]),
+                (s.deleteConfirm)
+                  ? (_openBlock(), _createElementBlock("div", {
+                      key: 0,
+                      class: "email-confirm",
+                      role: "alert"
+                    }, [_createElementVNode("strong", null, "Excluir esta mensagem definitivamente?"), _createElementVNode("p", null, "Ela não poderá ser recuperada por esta aplicação."), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                      class: "btn btn-secondary",
+                      type: "button",
+                      onClick: $event => (s.deleteConfirm=false),
+                      disabled: s.busy
+                    }, "Cancelar", 8, ["onClick", "disabled"]), _createElementVNode("button", {
+                      class: "btn btn-danger",
+                      type: "button",
+                      onClick: remove,
+                      disabled: s.busy
+                    }, "Excluir definitivamente", 8, ["onClick", "disabled"])])]))
+                  : _createCommentVNode("", true),
+                _createElementVNode("div", { class: "email-message-text" }, _toDisplayString(s.selected.text||'Esta mensagem não contém texto para exibição.'), 1),
+                (s.selected.attachments?.length)
+                  ? (_openBlock(), _createElementBlock("section", {
+                      key: 1,
+                      class: "email-attachments",
+                      "aria-label": "Anexos"
+                    }, [_createElementVNode("h4", null, "Anexos · " + _toDisplayString(s.selected.attachments.length), 1), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.selected.attachments, (attachment) => {
+                      return (_openBlock(), _createElementBlock("button", {
+                        key: attachment.part,
+                        class: "email-attachment",
+                        type: "button",
+                        onClick: $event => (download(attachment)),
+                        disabled: s.busy
+                      }, [_createElementVNode("span", null, _toDisplayString(attachment.filename||'Anexo'), 1), _createElementVNode("small", null, _toDisplayString(size(attachment.size)) + " · Baixar", 1)], 8, ["onClick", "disabled"]))
+                    }), 128))]))
+                  : _createCommentVNode("", true),
+                _createElementVNode("div", { class: "email-reply-actions" }, [(folder()?.role==='drafts')
+                  ? (_openBlock(), _createElementBlock("button", {
+                      key: 0,
+                      class: "btn btn-primary",
+                      type: "button",
+                      onClick: editDraft,
+                      disabled: s.busy
+                    }, "Continuar rascunho", 8, ["onClick", "disabled"]))
+                  : (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [_createElementVNode("button", {
+                      class: "btn btn-primary",
+                      type: "button",
+                      onClick: $event => (begin('reply')),
+                      disabled: s.busy
+                    }, "Responder", 8, ["onClick", "disabled"]), _createElementVNode("button", {
+                      class: "btn btn-secondary",
+                      type: "button",
+                      onClick: $event => (begin('all')),
+                      disabled: s.busy
+                    }, "Responder a todos", 8, ["onClick", "disabled"]), _createElementVNode("button", {
+                      class: "btn btn-secondary",
+                      type: "button",
+                      onClick: forward,
+                      disabled: s.busy
+                    }, "Encaminhar", 8, ["onClick", "disabled"])], 64))])
+              ])], 64))])], 2))
+        : _createCommentVNode("", true),
+      (s.folderEdit)
+        ? (_openBlock(), _createElementBlock("div", {
+            key: 6,
+            class: "modal-backdrop"
+          }, [_createElementVNode("section", {
+            class: "modal email-small-dialog",
+            role: "dialog",
+            "aria-modal": "true",
+            "aria-labelledby": "email-folder-edit-title"
+          }, [_createElementVNode("header", { class: "modal-header" }, [_createElementVNode("h2", {
+            id: "email-folder-edit-title",
+            "data-dialog-title": ""
+          }, "Gerenciar pasta"), _createElementVNode("button", {
+            class: "email-icon-button",
+            type: "button",
+            "data-dialog-close": "",
+            onClick: $event => (s.folderEdit=false),
+            "aria-label": "Fechar pasta",
+            disabled: s.busy
+          }, "×", 8, ["onClick", "disabled"])]), _createElementVNode("form", {
+            class: "modal-form",
+            onSubmit: _withModifiers(renameFolder, ["prevent"])
+          }, [_createElementVNode("div", { class: "modal-body" }, [(s.error)
+            ? (_openBlock(), _createElementBlock("p", {
+                key: 0,
+                class: "alert error",
+                role: "alert"
+              }, _toDisplayString(s.error), 1))
+            : _createCommentVNode("", true), _createElementVNode("label", { class: "field" }, [_createTextVNode("Nome da pasta"), _withDirectives(_createElementVNode("input", {
+            "onUpdate:modelValue": $event => ((s.folderRename) = $event),
+            required: "",
+            maxlength: "80",
+            autocomplete: "off"
+          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.folderRename]])]), (s.folderDeleteConfirm)
+            ? (_openBlock(), _createElementBlock("div", {
+                key: 1,
+                class: "email-confirm",
+                role: "alert"
+              }, [_createElementVNode("strong", null, "Excluir esta pasta?"), _createElementVNode("p", null, "Apenas pastas vazias podem ser excluídas. Suas mensagens não serão apagadas por esta ação."), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                class: "btn btn-secondary",
+                type: "button",
+                onClick: $event => (s.folderDeleteConfirm=false),
+                disabled: s.busy
+              }, "Manter pasta", 8, ["onClick", "disabled"]), _createElementVNode("button", {
+                class: "btn btn-danger",
+                type: "button",
+                onClick: deleteFolder,
+                disabled: s.busy
+              }, "Excluir pasta vazia", 8, ["onClick", "disabled"])])]))
+            : (_openBlock(), _createElementBlock("button", {
+                key: 2,
+                class: "email-text-button",
+                type: "button",
+                onClick: $event => (s.folderDeleteConfirm=true),
+                disabled: s.busy
+              }, "Excluir pasta…", 8, ["onClick", "disabled"]))]), _createElementVNode("footer", { class: "modal-footer" }, [_createElementVNode("button", {
+            class: "btn btn-secondary",
+            type: "button",
+            onClick: $event => (s.folderEdit=false),
+            disabled: s.busy
+          }, "Cancelar", 8, ["onClick", "disabled"]), _createElementVNode("button", {
+            class: "btn btn-primary",
+            type: "submit",
+            disabled: s.busy
+          }, "Renomear pasta", 8, ["disabled"])])], 40, ["onSubmit"])])]))
+        : _createCommentVNode("", true),
+      (s.disconnectConfirm)
+        ? (_openBlock(), _createElementBlock("div", {
+            key: 7,
+            class: "modal-backdrop",
+            onClick: _withModifiers($event => (s.disconnectConfirm=false), ["self"])
+          }, [_createElementVNode("section", {
+            class: "modal email-small-dialog",
+            role: "dialog",
+            "aria-modal": "true",
+            "aria-labelledby": "email-disconnect-title"
+          }, [_createElementVNode("header", { class: "modal-header" }, [_createElementVNode("h2", {
+            id: "email-disconnect-title",
+            "data-dialog-title": ""
+          }, "Desconectar e-mail?"), _createElementVNode("button", {
+            type: "button",
+            class: "email-icon-button",
+            "data-dialog-close": "",
+            onClick: $event => (s.disconnectConfirm=false),
+            "aria-label": "Fechar"
+          }, "×", 8, ["onClick"])]), _createElementVNode("div", { class: "modal-body" }, [(s.error)
+            ? (_openBlock(), _createElementBlock("p", {
+                key: 0,
+                class: "alert error",
+                role: "alert"
+              }, _toDisplayString(s.error), 1))
+            : _createCommentVNode("", true), _createElementVNode("p", null, "Suas mensagens serão mantidas. Para acessar esta caixa novamente, será necessário informar a senha do e-mail.")]), _createElementVNode("footer", { class: "modal-footer" }, [_createElementVNode("button", {
+            class: "btn btn-secondary",
+            type: "button",
+            onClick: $event => (s.disconnectConfirm=false)
+          }, "Cancelar", 8, ["onClick"]), _createElementVNode("button", {
+            class: "btn btn-primary",
+            type: "button",
+            onClick: disconnect,
+            disabled: s.busy
+          }, "Desconectar", 8, ["onClick", "disabled"])])])], 8, ["onClick"]))
+        : _createCommentVNode("", true),
+      (s.showSettings)
+        ? (_openBlock(), _createElementBlock("div", {
+            key: 8,
+            class: "modal-backdrop"
+          }, [_createElementVNode("section", {
+            class: "modal email-small-dialog",
+            role: "dialog",
+            "aria-modal": "true",
+            "aria-labelledby": "email-settings-title"
+          }, [_createElementVNode("header", { class: "modal-header" }, [_createElementVNode("h2", {
+            id: "email-settings-title",
+            "data-dialog-title": ""
+          }, "Conexão do e-mail"), _createElementVNode("button", {
+            type: "button",
+            class: "email-icon-button",
+            "data-dialog-close": "",
+            onClick: $event => (s.showSettings=false),
+            "aria-label": "Fechar",
+            disabled: s.busy
+          }, "×", 8, ["onClick", "disabled"])]), _createElementVNode("form", {
+            class: "modal-form",
+            onSubmit: _withModifiers(saveSettings, ["prevent"])
+          }, [_createElementVNode("div", { class: "modal-body" }, [
+            (s.error)
+              ? (_openBlock(), _createElementBlock("p", {
+                  key: 0,
+                  class: "alert error",
+                  role: "alert"
+                }, _toDisplayString(s.error), 1))
+              : _createCommentVNode("", true),
+            _createElementVNode("p", null, "Preencha somente se a escola utiliza endereços diferentes para leitura e envio. Em branco, o endereço institucional será utilizado."),
+            _createElementVNode("label", { class: "field" }, [_createTextVNode("Servidor de recebimento"), _withDirectives(_createElementVNode("input", {
+              "onUpdate:modelValue": $event => ((s.settings.imap_host) = $event),
+              autocomplete: "off",
+              maxlength: "253",
+              placeholder: "mail.escola.edu.br"
+            }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.settings.imap_host]])]),
+            _createElementVNode("label", { class: "field" }, [_createTextVNode("Servidor de envio"), _withDirectives(_createElementVNode("input", {
+              "onUpdate:modelValue": $event => ((s.settings.smtp_host) = $event),
+              autocomplete: "off",
+              maxlength: "253",
+              placeholder: "mail.escola.edu.br"
+            }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.settings.smtp_host]])]),
+            _createElementVNode("label", { class: "field" }, [_createTextVNode("Conexão de envio"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((s.settings.smtp_port) = $event) }, [_createElementVNode("option", { value: 465 }, "Porta 465 — conexão segura", 8, ["value"]), _createElementVNode("option", { value: 587 }, "Porta 587 — conexão segura", 8, ["value"])], 8, ["onUpdate:modelValue"]), [[
+              _vModelSelect,
+              s.settings.smtp_port,
+              void 0,
+              { number: true }
+            ]])])
+          ]), _createElementVNode("footer", { class: "modal-footer" }, [_createElementVNode("button", {
+            class: "btn btn-secondary",
+            type: "button",
+            onClick: $event => (s.showSettings=false),
+            disabled: s.busy
+          }, "Cancelar", 8, ["onClick", "disabled"]), _createElementVNode("button", {
+            class: "btn btn-primary",
+            type: "submit",
+            disabled: s.busy
+          }, "Salvar", 8, ["disabled"])])], 40, ["onSubmit"])])]))
+        : _createCommentVNode("", true),
+      (s.compose)
+        ? (_openBlock(), _createElementBlock("div", {
+            key: 9,
+            class: "modal-backdrop email-compose-backdrop"
+          }, [_createElementVNode("section", {
+            class: "modal email-compose",
+            role: "dialog",
+            "aria-modal": "true",
+            "aria-labelledby": "email-compose-title"
+          }, [_createElementVNode("header", { class: "modal-header" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, _toDisplayString(s.account?.address), 1), _createElementVNode("h2", {
+            id: "email-compose-title",
+            "data-dialog-title": ""
+          }, _toDisplayString(s.compose.draft?'Editar rascunho':'Nova mensagem'), 1)]), _createElementVNode("button", {
+            class: "email-icon-button",
+            type: "button",
+            "data-dialog-close": "",
+            onClick: $event => (closeCompose()),
+            disabled: s.busy,
+            "aria-label": "Fechar mensagem"
+          }, "×", 8, ["onClick", "disabled"])]), _createElementVNode("form", {
+            class: "modal-form",
+            onSubmit: _withModifiers(send, ["prevent"])
+          }, [_createElementVNode("div", { class: "modal-body email-compose-body" }, [
+            (s.discard)
+              ? (_openBlock(), _createElementBlock("div", {
+                  key: 0,
+                  class: "email-confirm",
+                  role: "alert"
+                }, [_createElementVNode("strong", null, _toDisplayString(s.pendingPayload?'Fechar a mensagem?':'Descartar alterações?'), 1), _createElementVNode("p", null, _toDisplayString(s.pendingPayload?'A solicitação já foi registrada. Fechar não cancela o envio. Confira a pasta Enviados antes de enviar outra cópia.':'Salve o rascunho para continuar depois ou descarte o que foi alterado.'), 1), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                  class: "btn btn-secondary",
+                  type: "button",
+                  onClick: $event => (s.discard=false)
+                }, "Continuar aqui", 8, ["onClick"]), _createElementVNode("button", {
+                  class: "btn btn-danger",
+                  type: "button",
+                  onClick: $event => (closeCompose(true))
+                }, _toDisplayString(s.pendingPayload?'Fechar':'Descartar alterações'), 9, ["onClick"])])]))
+              : _createCommentVNode("", true),
+            (s.composeNotice)
+              ? (_openBlock(), _createElementBlock("p", {
+                  key: 1,
+                  class: "alert success",
+                  role: "status"
+                }, _toDisplayString(s.composeNotice), 1))
+              : _createCommentVNode("", true),
+            (s.composeError)
+              ? (_openBlock(), _createElementBlock("p", {
+                  key: 2,
+                  class: "alert error",
+                  role: "alert"
+                }, _toDisplayString(s.composeError), 1))
+              : _createCommentVNode("", true),
+            (s.sendResult)
+              ? (_openBlock(), _createElementBlock("div", {
+                  key: 3,
+                  class: _normalizeClass(["email-send-result", {'is-success':s.sendResult.status==='sent'}]),
+                  role: "status"
+                }, [
+                  _createElementVNode("strong", null, _toDisplayString(s.sendResult.status==='sent'?'Mensagem enviada':s.sendResult.status==='partial'?'Envio parcial':s.sendResult.status==='failed'?'Mensagem não enviada':s.sendResult.status==='sending'?'Envio em andamento':'Confirmação pendente'), 1),
+                  _createElementVNode("p", null, _toDisplayString(s.sendResult.message), 1),
+                  (s.sendResult.refused.length)
+                    ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Destinatários não aceitos: " + _toDisplayString(s.sendResult.refused.join(', ')), 1))
+                    : _createCommentVNode("", true),
+                  (['uncertain','sending','partial'].includes(s.sendResult.status))
+                    ? (_openBlock(), _createElementBlock("p", { key: 1 }, "Não envie outra cópia antes de conferir a situação desta mensagem."))
+                    : _createCommentVNode("", true),
+                  (s.sendResult.status==='sent'&&!s.sendResult.sent_saved)
+                    ? (_openBlock(), _createElementBlock("p", { key: 2 }, "A mensagem foi enviada, mas a cópia não pôde ser salva na pasta Enviados."))
+                    : _createCommentVNode("", true)
+                ], 2))
+              : _createCommentVNode("", true),
+            _createElementVNode("fieldset", {
+              disabled: s.busy||Boolean(s.pendingPayload),
+              class: "email-compose-fields"
+            }, [
+              _createElementVNode("label", { class: "field" }, [_createTextVNode("Para"), _withDirectives(_createElementVNode("input", {
+                "aria-label": "Para",
+                "aria-describedby": "email-recipient-hint",
+                "onUpdate:modelValue": $event => ((s.compose.to) = $event),
+                maxlength: "4000",
+                placeholder: "nome@escola.edu.br",
+                autocomplete: "off",
+                inputmode: "email"
+              }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.compose.to]]), _createElementVNode("small", { id: "email-recipient-hint" }, "Separe os endereços por vírgula.")]),
+              _createElementVNode("button", {
+                class: "email-text-button email-copy-toggle",
+                type: "button",
+                onClick: $event => (s.showCopies=!s.showCopies),
+                "aria-expanded": s.showCopies
+              }, _toDisplayString(s.showCopies?'Ocultar cópias':'Adicionar Cc / Cco'), 9, ["onClick", "aria-expanded"]),
+              (s.showCopies)
+                ? (_openBlock(), _createElementBlock("div", {
+                    key: 0,
+                    class: "email-copy-fields"
+                  }, [_createElementVNode("label", { class: "field" }, [_createTextVNode("Cc"), _withDirectives(_createElementVNode("input", {
+                    "onUpdate:modelValue": $event => ((s.compose.cc) = $event),
+                    maxlength: "4000",
+                    autocomplete: "off",
+                    inputmode: "email"
+                  }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.compose.cc]])]), _createElementVNode("label", { class: "field" }, [_createTextVNode("Cco"), _withDirectives(_createElementVNode("input", {
+                    "aria-label": "Cco",
+                    "onUpdate:modelValue": $event => ((s.compose.bcc) = $event),
+                    maxlength: "4000",
+                    autocomplete: "off",
+                    inputmode: "email"
+                  }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.compose.bcc]]), _createElementVNode("small", null, "Destinatários ocultos dos demais participantes.")])]))
+                : _createCommentVNode("", true),
+              _createElementVNode("label", { class: "field" }, [_createTextVNode("Assunto"), _withDirectives(_createElementVNode("input", {
+                "onUpdate:modelValue": $event => ((s.compose.subject) = $event),
+                maxlength: "998",
+                placeholder: "Assunto da mensagem",
+                autocomplete: "off"
+              }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.compose.subject]])]),
+              _createElementVNode("label", { class: "field email-body-field" }, [_createTextVNode("Mensagem"), _withDirectives(_createElementVNode("textarea", {
+                "onUpdate:modelValue": $event => ((s.compose.text) = $event),
+                rows: "10",
+                maxlength: "1000000",
+                placeholder: "Escreva sua mensagem…"
+              }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.compose.text]])]),
+              _createElementVNode("label", { class: "email-upload btn btn-secondary" }, [_createTextVNode("Adicionar anexos"), _createElementVNode("input", {
+                type: "file",
+                multiple: "",
+                onChange: addFiles,
+                disabled: s.busy||Boolean(s.pendingPayload)
+              }, null, 40, ["onChange", "disabled"])]),
+              _createElementVNode("small", { class: "email-attachment-limit" }, "Até 10 arquivos, total de 5 MB."),
+              (s.compose.attachments.length)
+                ? (_openBlock(), _createElementBlock("ul", {
+                    key: 1,
+                    class: "email-upload-list"
+                  }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.compose.attachments, (attachment, index) => {
+                    return (_openBlock(), _createElementBlock("li", { key: index }, [_createElementVNode("span", null, [_createTextVNode(_toDisplayString(attachment.filename) + " ", 1), _createElementVNode("small", null, _toDisplayString(size(attachment.size)), 1)]), _createElementVNode("button", {
+                      class: "email-icon-button",
+                      type: "button",
+                      onClick: $event => (s.compose.attachments.splice(index,1)),
+                      "aria-label": 'Remover anexo '+attachment.filename
+                    }, "×", 8, ["onClick", "aria-label"])]))
+                  }), 128))]))
+                : _createCommentVNode("", true)
+            ], 8, ["disabled"])
+          ]), _createElementVNode("footer", { class: "modal-footer email-compose-footer" }, [(!s.pendingPayload)
+            ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createElementVNode("button", {
+                class: "btn btn-secondary",
+                type: "button",
+                onClick: saveDraft,
+                disabled: s.busy
+              }, "Salvar rascunho", 8, ["onClick", "disabled"]), _createElementVNode("button", {
+                class: "btn btn-primary",
+                type: "submit",
+                disabled: s.busy
+              }, _toDisplayString(s.busy?'Aguarde…':'Enviar mensagem'), 9, ["disabled"])], 64))
+            : (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [(s.sendResult?.status==='failed')
+                ? (_openBlock(), _createElementBlock("button", {
+                    key: 0,
+                    class: "btn btn-secondary",
+                    type: "button",
+                    onClick: editAfterFailure,
+                    disabled: s.busy
+                  }, "Editar mensagem", 8, ["onClick", "disabled"]))
+                : _createCommentVNode("", true), (['uncertain','sending'].includes(s.sendResult?.status||''))
+                ? (_openBlock(), _createElementBlock("button", {
+                    key: 1,
+                    class: "btn btn-primary",
+                    type: "submit",
+                    disabled: s.busy
+                  }, _toDisplayString(s.busy?'Consultando…':'Consultar envio'), 9, ["disabled"]))
+                : _createCommentVNode("", true), _createElementVNode("button", {
+                class: "btn btn-secondary",
+                type: "button",
+                onClick: $event => (closeCompose()),
+                disabled: s.busy
+              }, "Fechar", 8, ["onClick", "disabled"])], 64))])], 40, ["onSubmit"])])]))
+        : _createCommentVNode("", true)
+    ], 8, ["aria-busy"]))
+  }
+},lifecycle:function render(_ctx, _cache) {
+  with (_ctx) {
+    const { createElementVNode: _createElementVNode, toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, normalizeClass: _normalizeClass, renderList: _renderList, Fragment: _Fragment, createTextVNode: _createTextVNode, vModelText: _vModelText, withDirectives: _withDirectives, vModelCheckbox: _vModelCheckbox, withModifiers: _withModifiers, Teleport: _Teleport, createBlock: _createBlock } = _Vue
+
+    return (_openBlock(), _createBlock(_Teleport, { to: "body" }, [_createElementVNode("div", {
+      class: "modal-backdrop",
+      onClick: _withModifiers(close, ["self"])
+    }, [_createElementVNode("section", {
+      class: "modal lifecycle-dialog",
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": "lifecycle-title",
+      "aria-busy": s.busy
+    }, [_createElementVNode("header", { class: "modal-header" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "GERENCIAR CADASTRO"), _createElementVNode("h2", {
+      id: "lifecycle-title",
+      "data-dialog-title": ""
+    }, "Arquivar ou excluir")]), _createElementVNode("button", {
+      class: "icon-button",
+      type: "button",
+      "data-dialog-close": "",
+      "aria-label": "Fechar gerenciamento do cadastro",
+      disabled: s.busy,
+      onClick: close
+    }, "×", 8, ["disabled", "onClick"])]), _createElementVNode("form", {
+      class: "modal-form",
+      onSubmit: _withModifiers(submit, ["prevent"])
+    }, [_createElementVNode("div", { class: "modal-body" }, [
+      (s.error)
+        ? (_openBlock(), _createElementBlock("div", {
+            key: 0,
+            class: "alert error",
+            role: "alert"
+          }, _toDisplayString(s.error), 1))
+        : _createCommentVNode("", true),
+      (s.busy && !s.preview)
+        ? (_openBlock(), _createElementBlock("p", {
+            key: 1,
+            role: "status"
+          }, "Conferindo o cadastro e seus vínculos…"))
+        : _createCommentVNode("", true),
+      (s.preview)
+        ? (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [
+            _createElementVNode("div", { class: "lifecycle-record" }, [_createElementVNode("span", { class: "small muted" }, _toDisplayString(s.preview.kind), 1), _createElementVNode("h3", null, _toDisplayString(s.preview.label), 1), (s.preview.archived)
+              ? (_openBlock(), _createElementBlock("span", {
+                  key: 0,
+                  class: "badge archived"
+                }, "Arquivado"))
+              : _createCommentVNode("", true)]),
+            (s.preview.preserves_person)
+              ? (_openBlock(), _createElementBlock("p", {
+                  key: 0,
+                  class: "lifecycle-note"
+                }, "Esta operação trata somente deste perfil. A pessoa do Cadastro único e seus outros perfis serão preservados."))
+              : (s.preview.resource==='persons')
+                ? (_openBlock(), _createElementBlock("p", {
+                    key: 1,
+                    class: "lifecycle-note"
+                  }, "Esta operação trata da identidade no Cadastro único, incluindo suas classificações como responsável, fornecedor, cliente ou sócio."))
+                : _createCommentVNode("", true),
+            _createElementVNode("fieldset", {
+              class: "lifecycle-modes",
+              disabled: s.busy
+            }, [_createElementVNode("legend", null, "O que deseja fazer?"), (!s.preview.archived)
+              ? (_openBlock(), _createElementBlock("label", {
+                  key: 0,
+                  class: _normalizeClass({selected:s.action==='archive'})
+                }, [_createElementVNode("input", {
+                  type: "radio",
+                  name: "lifecycle-action",
+                  value: "archive",
+                  checked: s.action==='archive',
+                  onChange: $event => (choose('archive'))
+                }, null, 40, ["checked", "onChange"]), _createElementVNode("span", null, [_createElementVNode("strong", null, "Arquivar"), _createElementVNode("small", null, "Retira das listas de uso. Os dados e o histórico permanecem e podem ser restaurados.")])], 2))
+              : (_openBlock(), _createElementBlock("label", {
+                  key: 1,
+                  class: _normalizeClass({selected:s.action==='restore'})
+                }, [_createElementVNode("input", {
+                  type: "radio",
+                  name: "lifecycle-action",
+                  value: "restore",
+                  checked: s.action==='restore',
+                  onChange: $event => (choose('restore'))
+                }, null, 40, ["checked", "onChange"]), _createElementVNode("span", null, [_createElementVNode("strong", null, "Restaurar"), _createElementVNode("small", null, "Devolve o cadastro às listas, com a situação que tinha antes do arquivamento.")])], 2)), _createElementVNode("label", { class: _normalizeClass({selected:s.action==='delete'}) }, [_createElementVNode("input", {
+              type: "radio",
+              name: "lifecycle-action",
+              value: "delete",
+              checked: s.action==='delete',
+              onChange: $event => (choose('delete'))
+            }, null, 40, ["checked", "onChange"]), _createElementVNode("span", null, [_createElementVNode("strong", null, "Excluir definitivamente"), _createElementVNode("small", null, "Remove este cadastro sem opção de restauração. Disponível somente quando os vínculos permitem.")])], 2)], 8, ["disabled"]),
+            (s.action==='delete')
+              ? (_openBlock(), _createElementBlock("section", {
+                  key: 2,
+                  class: "lifecycle-impact",
+                  "aria-label": "Impacto da exclusão"
+                }, [
+                  _createElementVNode("h3", null, "Conferência de vínculos"),
+                  (!s.preview.delete_permission)
+                    ? (_openBlock(), _createElementBlock("p", { key: 0 }, _toDisplayString(s.preview.delete_note), 1))
+                    : _createCommentVNode("", true),
+                  (s.preview.dependencies.length)
+                    ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [_createElementVNode("p", null, "Estes vínculos impedem a exclusão definitiva:"), _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.preview.dependencies, (item) => {
+                        return (_openBlock(), _createElementBlock("li", { key: item.key }, [_createElementVNode("span", null, _toDisplayString(item.label), 1), _createElementVNode("strong", null, _toDisplayString(item.count), 1)]))
+                      }), 128))]), _createElementVNode("p", { class: "small muted" }, "Matrículas, documentos, registros financeiros e históricos não são apagados por esta operação.")], 64))
+                    : (_openBlock(), _createElementBlock("p", { key: 2 }, "Nenhum vínculo que impeça a exclusão foi encontrado. A conferência será repetida ao confirmar.")),
+                  (s.preview.owned_records.length)
+                    ? (_openBlock(), _createElementBlock("div", { key: 3 }, [_createElementVNode("p", null, "Também serão removidos os metadados próprios deste cadastro:"), _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.preview.owned_records, (item) => {
+                        return (_openBlock(), _createElementBlock("li", { key: item.key }, [_createElementVNode("span", null, _toDisplayString(item.label), 1), _createElementVNode("strong", null, _toDisplayString(item.count), 1)]))
+                      }), 128))])]))
+                    : _createCommentVNode("", true)
+                ]))
+              : (s.action==='archive' && s.preview.archive_blocks.length)
+                ? (_openBlock(), _createElementBlock("section", {
+                    key: 3,
+                    class: "lifecycle-impact"
+                  }, [_createElementVNode("h3", null, "Resolva os vínculos em uso antes de arquivar"), _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.preview.archive_blocks, (item) => {
+                    return (_openBlock(), _createElementBlock("li", { key: item.label }, [_createElementVNode("span", null, _toDisplayString(item.label), 1), _createElementVNode("strong", null, _toDisplayString(item.count), 1)]))
+                  }), 128))])]))
+                : (s.action==='restore' && s.preview.restore_blocks.length)
+                  ? (_openBlock(), _createElementBlock("section", {
+                      key: 4,
+                      class: "lifecycle-impact"
+                    }, [_createElementVNode("h3", null, "Antes de restaurar"), _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.preview.restore_blocks, (item) => {
+                      return (_openBlock(), _createElementBlock("li", { key: item.label }, [_createElementVNode("span", null, _toDisplayString(item.label), 1)]))
+                    }), 128))])]))
+                  : _createCommentVNode("", true),
+            (s.preview.archived && s.preview.archive_reason)
+              ? (_openBlock(), _createElementBlock("p", {
+                  key: 5,
+                  class: "lifecycle-note"
+                }, [_createElementVNode("strong", null, "Motivo do arquivamento:"), _createTextVNode(" " + _toDisplayString(s.preview.archive_reason), 1)]))
+              : _createCommentVNode("", true),
+            (allowed())
+              ? (_openBlock(), _createElementBlock("div", {
+                  key: 6,
+                  class: "lifecycle-confirmation"
+                }, [_createElementVNode("label", { class: "field" }, [_createElementVNode("span", null, [_createTextVNode("Motivo "), _createElementVNode("span", { class: "required" }, "*")]), _withDirectives(_createElementVNode("textarea", {
+                  "onUpdate:modelValue": $event => ((s.reason) = $event),
+                  rows: "3",
+                  required: "",
+                  minlength: "3",
+                  maxlength: "1000",
+                  disabled: s.busy,
+                  placeholder: "Explique por que deseja realizar esta operação."
+                }, null, 8, ["onUpdate:modelValue", "disabled"]), [[_vModelText, s.reason]])]), (s.action==='delete')
+                  ? (_openBlock(), _createElementBlock("label", {
+                      key: 0,
+                      class: "field"
+                    }, [_createTextVNode("Para confirmar, digite: "), _createElementVNode("strong", null, _toDisplayString(s.preview.confirmation), 1), _withDirectives(_createElementVNode("input", {
+                      "onUpdate:modelValue": $event => ((s.confirmation) = $event),
+                      required: "",
+                      maxlength: "200",
+                      autocomplete: "off",
+                      spellcheck: false,
+                      disabled: s.busy
+                    }, null, 8, ["onUpdate:modelValue", "spellcheck", "disabled"]), [[_vModelText, s.confirmation]])]))
+                  : _createCommentVNode("", true), _createElementVNode("label", { class: "lifecycle-acknowledge" }, [_withDirectives(_createElementVNode("input", {
+                  type: "checkbox",
+                  "onUpdate:modelValue": $event => ((s.acknowledged) = $event),
+                  disabled: s.busy
+                }, null, 8, ["onUpdate:modelValue", "disabled"]), [[_vModelCheckbox, s.acknowledged]]), _createElementVNode("span", null, _toDisplayString(s.action==='delete'?'Conferi o cadastro e entendo que a exclusão é definitiva.':'Conferi o cadastro e os efeitos desta operação.'), 1)])]))
+              : _createCommentVNode("", true)
+          ], 64))
+        : _createCommentVNode("", true),
+      (s.error || (s.preview && !allowed()))
+        ? (_openBlock(), _createElementBlock("button", {
+            key: 3,
+            class: "btn btn-secondary lifecycle-refresh",
+            type: "button",
+            disabled: s.busy,
+            onClick: load
+          }, "Atualizar prévia", 8, ["disabled", "onClick"]))
+        : _createCommentVNode("", true)
+    ]), _createElementVNode("footer", { class: "modal-footer" }, [_createElementVNode("button", {
+      type: "button",
+      class: "btn btn-secondary",
+      disabled: s.busy,
+      onClick: close
+    }, "Cancelar", 8, ["disabled", "onClick"]), _createElementVNode("button", {
+      class: _normalizeClass(["btn", s.action==='delete'?'btn-danger':'btn-primary']),
+      disabled: s.busy || !allowed() || !s.acknowledged || s.reason.trim().length<3 || (s.action==='delete' && s.confirmation!==s.preview?.confirmation)
+    }, _toDisplayString(s.busy?'Conferindo…':caption()), 11, ["disabled"])])], 40, ["onSubmit"])], 8, ["aria-busy"])], 8, ["onClick"])]))
   }
 }};

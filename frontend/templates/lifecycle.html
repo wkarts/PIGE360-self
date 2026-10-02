@@ -1,0 +1,40 @@
+<teleport to="body">
+  <div class="modal-backdrop" @click.self="close">
+    <section class="modal lifecycle-dialog" role="dialog" aria-modal="true" aria-labelledby="lifecycle-title" :aria-busy="s.busy">
+      <header class="modal-header"><div><p class="eyebrow">GERENCIAR CADASTRO</p><h2 id="lifecycle-title" data-dialog-title>Arquivar ou excluir</h2></div><button class="icon-button" type="button" data-dialog-close aria-label="Fechar gerenciamento do cadastro" :disabled="s.busy" @click="close">×</button></header>
+      <form class="modal-form" @submit.prevent="submit">
+        <div class="modal-body">
+          <div v-if="s.error" class="alert error" role="alert">{{s.error}}</div>
+          <p v-if="s.busy && !s.preview" role="status">Conferindo o cadastro e seus vínculos…</p>
+          <template v-if="s.preview">
+            <div class="lifecycle-record"><span class="small muted">{{s.preview.kind}}</span><h3>{{s.preview.label}}</h3><span v-if="s.preview.archived" class="badge archived">Arquivado</span></div>
+            <p v-if="s.preview.preserves_person" class="lifecycle-note">Esta operação trata somente deste perfil. A pessoa do Cadastro único e seus outros perfis serão preservados.</p>
+            <p v-else-if="s.preview.resource==='persons'" class="lifecycle-note">Esta operação trata da identidade no Cadastro único, incluindo suas classificações como responsável, fornecedor, cliente ou sócio.</p>
+            <fieldset class="lifecycle-modes" :disabled="s.busy"><legend>O que deseja fazer?</legend>
+              <label v-if="!s.preview.archived" :class="{selected:s.action==='archive'}"><input type="radio" name="lifecycle-action" value="archive" :checked="s.action==='archive'" @change="choose('archive')"><span><strong>Arquivar</strong><small>Retira das listas de uso. Os dados e o histórico permanecem e podem ser restaurados.</small></span></label>
+              <label v-else :class="{selected:s.action==='restore'}"><input type="radio" name="lifecycle-action" value="restore" :checked="s.action==='restore'" @change="choose('restore')"><span><strong>Restaurar</strong><small>Devolve o cadastro às listas, com a situação que tinha antes do arquivamento.</small></span></label>
+              <label :class="{selected:s.action==='delete'}"><input type="radio" name="lifecycle-action" value="delete" :checked="s.action==='delete'" @change="choose('delete')"><span><strong>Excluir definitivamente</strong><small>Remove este cadastro sem opção de restauração. Disponível somente quando os vínculos permitem.</small></span></label>
+            </fieldset>
+            <section v-if="s.action==='delete'" class="lifecycle-impact" aria-label="Impacto da exclusão">
+              <h3>Conferência de vínculos</h3>
+              <p v-if="!s.preview.delete_permission">{{s.preview.delete_note}}</p>
+              <template v-if="s.preview.dependencies.length"><p>Estes vínculos impedem a exclusão definitiva:</p><ul><li v-for="item in s.preview.dependencies" :key="item.key"><span>{{item.label}}</span><strong>{{item.count}}</strong></li></ul><p class="small muted">Matrículas, documentos, registros financeiros e históricos não são apagados por esta operação.</p></template>
+              <p v-else>Nenhum vínculo que impeça a exclusão foi encontrado. A conferência será repetida ao confirmar.</p>
+              <div v-if="s.preview.owned_records.length"><p>Também serão removidos os metadados próprios deste cadastro:</p><ul><li v-for="item in s.preview.owned_records" :key="item.key"><span>{{item.label}}</span><strong>{{item.count}}</strong></li></ul></div>
+            </section>
+            <section v-else-if="s.action==='archive' && s.preview.archive_blocks.length" class="lifecycle-impact"><h3>Resolva os vínculos em uso antes de arquivar</h3><ul><li v-for="item in s.preview.archive_blocks" :key="item.label"><span>{{item.label}}</span><strong>{{item.count}}</strong></li></ul></section>
+            <section v-else-if="s.action==='restore' && s.preview.restore_blocks.length" class="lifecycle-impact"><h3>Antes de restaurar</h3><ul><li v-for="item in s.preview.restore_blocks" :key="item.label"><span>{{item.label}}</span></li></ul></section>
+            <p v-if="s.preview.archived && s.preview.archive_reason" class="lifecycle-note"><strong>Motivo do arquivamento:</strong> {{s.preview.archive_reason}}</p>
+            <div v-if="allowed()" class="lifecycle-confirmation">
+              <label class="field"><span>Motivo <span class="required">*</span></span><textarea v-model="s.reason" rows="3" required minlength="3" maxlength="1000" :disabled="s.busy" placeholder="Explique por que deseja realizar esta operação."></textarea></label>
+              <label v-if="s.action==='delete'" class="field">Para confirmar, digite: <strong>{{s.preview.confirmation}}</strong><input v-model="s.confirmation" required maxlength="200" autocomplete="off" :spellcheck="false" :disabled="s.busy"></label>
+              <label class="lifecycle-acknowledge"><input type="checkbox" v-model="s.acknowledged" :disabled="s.busy"><span>{{s.action==='delete'?'Conferi o cadastro e entendo que a exclusão é definitiva.':'Conferi o cadastro e os efeitos desta operação.'}}</span></label>
+            </div>
+          </template>
+          <button v-if="s.error || (s.preview && !allowed())" class="btn btn-secondary lifecycle-refresh" type="button" :disabled="s.busy" @click="load">Atualizar prévia</button>
+        </div>
+        <footer class="modal-footer"><button type="button" class="btn btn-secondary" :disabled="s.busy" @click="close">Cancelar</button><button class="btn" :class="s.action==='delete'?'btn-danger':'btn-primary'" :disabled="s.busy || !allowed() || !s.acknowledged || s.reason.trim().length<3 || (s.action==='delete' && s.confirmation!==s.preview?.confirmation)">{{s.busy?'Conferindo…':caption()}}</button></footer>
+      </form>
+    </section>
+  </div>
+</teleport>

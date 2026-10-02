@@ -128,7 +128,7 @@ def heartbeat(service, force=False):
     except Exception:pass
 
 
-def recent_events(*, service='', level='', request_id='', since=None, until=None, limit=10000):
+def recent_events(*, service='', level='', request_id='', since=None, until=None, limit=10000, event='', code='', route='', job_id='', min_status=None):
     rows=[]; scanned=0; damaged=0
     root=directory()
     for name in SERVICES if not service else (service,):
@@ -147,6 +147,11 @@ def recent_events(*, service='', level='', request_id='', since=None, until=None
                         if dt.timestamp()<time.time()-RETENTION_DAYS*86400:continue
                         if level and item['level']!=level:continue
                         if request_id and item.get('request_id')!=request_id:continue
+                        if event and event.lower() not in item['event'].lower():continue
+                        if code and item.get('code')!=code:continue
+                        if route and route.lower() not in item.get('route','').lower():continue
+                        if job_id and item.get('job_id')!=job_id:continue
+                        if min_status is not None and item.get('status',0)<min_status:continue
                         if since and dt<since:continue
                         if until and dt>until:continue
                         rows.append(item)

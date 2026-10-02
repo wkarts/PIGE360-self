@@ -6,4 +6,4 @@ declare const Vue: {
   onUnmounted(callback: () => void): void;
   computed<T>(getter: () => T): { readonly value: T };
 };
-declare const PigeRenders: { app: Function; portal: Function; expansion: Function; diagnostics: Function; assist: Function; diary: Function; contracts: Function; signing: Function; reports: Function; legacyImport: Function; learning: Function; community: Function; news: Function; mailcow: Function };
+declare const PigeRenders: { app: Function; portal: Function; expansion: Function; diagnostics: Function; assist: Function; diary: Function; contracts: Function; signing: Function; reports: Function; legacyImport: Function; learning: Function; community: Function; news: Function; mailcow: Function; audit: Function; email: Function; lifecycle: Function };

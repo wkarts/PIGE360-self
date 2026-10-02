@@ -14,6 +14,7 @@ pypdf==5.9.0
 Pillow==12.3.0
 httpx==0.28.1
 cryptography==46.0.4
+lxml==6.1.0
 pyHanko==0.33.0
 boto3==1.37.38
 fonttools==4.63.0

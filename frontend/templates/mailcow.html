@@ -3,14 +3,14 @@
   <p v-if="state.error" class="alert error" role="alert">{{state.error}}</p><p v-if="state.notice" class="alert success" role="status">{{state.notice}}</p>
   <form v-if="state.showConfig" class="panel x-card" @submit.prevent="save($event.submitter?.value==='test')">
     <h3>Servidor da escola</h3><div class="x-grid">
-      <label class="field">Endereço do Mailcow<input v-model="state.draft.base_url" type="url" required placeholder="https://mail.escola.edu.br" maxlength="300" autocomplete="off"></label>
+      <label class="field">Endereço do servidor de e-mail<input v-model="state.draft.base_url" type="url" required placeholder="https://mail.escola.edu.br" maxlength="300" autocomplete="off"></label>
       <label class="field">Domínio de e-mail<input v-model="state.draft.domain" required placeholder="escola.edu.br" maxlength="253" autocomplete="off"></label>
       <label class="field">Chave da API de leitura e escrita<input v-model="state.apiKey" type="password" :placeholder="state.config.api_key_configured?'Chave salva — preencha somente para trocar':'Cole a chave de leitura e escrita'" :required="state.draft.enabled&&!state.config.api_key_configured" autocomplete="new-password" maxlength="512"><small>A chave somente de leitura permite consultar, mas não cria contas.</small></label>
       <label class="field">Cota padrão por caixa (MB)<input v-model.number="state.draft.default_quota_mb" type="number" min="1" max="1048576" required><small>1.024 MB equivalem a 1 GB.</small></label>
     </div>
     <label class="x-check"><input v-model="state.draft.enabled" type="checkbox">Habilitar criação de contas institucionais</label>
     <details><summary>Rede do servidor</summary><label class="x-check"><input v-model="state.draft.allow_private_network" type="checkbox">O servidor fica na rede privada desta instalação</label><p class="muted">Use um hostname HTTPS com certificado válido. Endereços locais e de metadados continuam bloqueados.</p></details>
-    <p class="muted">No Mailcow, habilite a API de leitura e escrita e autorize os IPs de saída da aplicação e do worker. O IP do seu celular ou computador não substitui os IPs da instalação.</p>
+    <p class="muted">No servidor de e-mail, habilite a API de leitura e escrita e autorize os endereços de saída desta instalação. O endereço do seu celular ou computador não substitui o endereço do servidor da escola.</p>
     <p v-if="dirty" class="muted" role="status">Alterações ainda não salvas. Salve e teste para validar esta configuração.</p>
     <div class="actions"><button class="btn btn-primary" type="submit" :disabled="state.busy">Salvar configuração</button><button type="submit" value="test" class="btn btn-secondary" :disabled="state.busy">Salvar e testar</button><button type="button" class="btn btn-secondary" @click="closeConfig" :disabled="state.busy">Cancelar</button></div>
   </form>

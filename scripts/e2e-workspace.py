@@ -131,6 +131,8 @@ try:
         expect(opener).to_have_attribute('aria-expanded','true')
         expect(page.get_by_role('button',name='Fechar menu',exact=True)).to_be_focused()
         assert page.locator('.main-column').evaluate('el=>el.inert')
+        admin_menu=page.get_by_role('button',name='Administração do sistema',exact=True)
+        admin_menu.click();expect(admin_menu).to_have_attribute('aria-expanded','true')
         page.locator('aside').get_by_role('link',name='Auditoria',exact=True).focus()
         page.keyboard.press('Tab');expect(page.get_by_role('button',name='Fechar menu',exact=True)).to_be_focused()
         nav.evaluate('el=>el.scrollTop=0')

@@ -142,6 +142,7 @@ try:
         record('Conta bancária de homologação configurada pela interface com credencial protegida')
         admin.locator('aside').get_by_role('link',name='Cobranças',exact=False).click()
         admin.get_by_role('button',name='+ Nova cobrança',exact=True).click()
+        admin.get_by_label('Tipo de cobrança').select_option('provider')
         admin.get_by_label('Pesquisar aluno / matrícula',exact=True).fill('Lucas')
         admin.get_by_role('button',name='Buscar matrícula',exact=True).click()
         admin.get_by_label('Matrícula / responsável financeiro').select_option(index=1)

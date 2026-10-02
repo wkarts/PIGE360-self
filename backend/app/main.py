@@ -15,7 +15,7 @@ from .storage import ensure_storage
 from starlette.concurrency import run_in_threadpool
 from . import embedding, embedding_settings, mfa, dossiers, ocr, lookups, diagnostics, telemetry, diary
 from . import auth, people, registry, enrollments, documents, contract_templates, reports, portal, admissions, integrations, connect, banking, profiles, support, institution, business_people, account, legacy_import
-from . import contract_signatures, personal_signing, mailcow, school_community
+from . import contract_signatures, personal_signing, mailcow, school_community, email_client, fiscal_signing, certificate_alerts
 
 cfg = settings()
 logger = logging.getLogger('pige360')
@@ -29,7 +29,7 @@ async def lifespan(app):
     engine.dispose()
 
 app = FastAPI(title='PIGE360 Self — Gestão Educacional', version=cfg.app_version, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url='/api/v1/openapi.json')
-for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, contract_templates.router, contract_signatures.router, personal_signing.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router, mfa.router, dossiers.router, ocr.router, lookups.router, diagnostics.router, diary.router, legacy_import.router, mailcow.router, school_community.router]:
+for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, contract_templates.router, contract_signatures.router, personal_signing.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router, mfa.router, dossiers.router, ocr.router, lookups.router, diagnostics.router, diary.router, legacy_import.router, mailcow.router, school_community.router, email_client.router, fiscal_signing.router, certificate_alerts.router]:
     app.include_router(router)
 
 @app.exception_handler(HTTPException)
@@ -78,7 +78,8 @@ async def security_headers(request: Request, call_next):
     hub_style_sources = 'https://fonts.googleapis.com' if hub_origins else ''
     hub_font_sources = 'https://fonts.gstatic.com' if hub_origins else ''
     hub_connect_sources = ' '.join(hub_origins + hub_sockets)
-    response.headers['Content-Security-Policy'] = (
+    # Downloads de conteúdo externo podem declarar uma política mais restrita.
+    response.headers.setdefault('Content-Security-Policy', (
         "default-src 'self'; "
         f"script-src 'self' {hub_script_sources}; "
         f"style-src 'self' 'unsafe-inline' {hub_style_sources}; "
@@ -89,7 +90,7 @@ async def security_headers(request: Request, call_next):
         f"frame-src 'self' {hub_script_sources}; "
         "object-src 'none'; base-uri 'self'; form-action 'self'; "
         + ("frame-ancestors 'self' " + ' '.join(parents) if parents else "frame-ancestors 'none'")
-    )
+    ))
     if request.url.path.startswith('/api') or request.url.path in ('/','/index.html','/online.html','/news.html','/sw.js','/manifest.webmanifest'):
         response.headers['Cache-Control'] = 'no-store'
     # Cache público somente dos ativos de identidade; jamais sessão, perfil ou foto pessoal.

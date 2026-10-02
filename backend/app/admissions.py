@@ -234,7 +234,8 @@ def payment_gate(db,school_id,enrollment_id):
     campaign=db.get(m.AdmissionCampaign,obj.campaign_id) if obj else None
     if campaign and campaign.require_payment_before_enrollment and not charges:
         fail(409,'Cadastre a cobrança obrigatória antes de efetivar a matrícula.')
-    if any(x.status!='received' for x in charges):
+    if any(x.status!='received' and not (x.collection_mode=='manual' and x.status=='received_external'
+            and x.manual_paid_on and x.manual_paid_amount==x.amount and x.manual_received_by) for x in charges):
         fail(409,'Pagamento obrigatório ainda não recebido/conciliado. Confirmado não equivale a recebido.')
 
 

@@ -76,8 +76,8 @@ KNOWN_LINK_TABLES = {"aluno_responsaveis"}
 
 
 def _admin(user: m.User) -> None:
-    if user.role != "admin":
-        fail(403, "Somente o administrador da instalação pode importar dados legados.")
+    from .admin_tools import require_portability
+    require_portability(user)
 
 
 def _safe_member(name: str) -> str | None:

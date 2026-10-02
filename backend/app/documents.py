@@ -20,6 +20,7 @@ from .db import uid, now
 from .storage import put_bytes, read_bytes
 from .common import audit, output
 from .security import Actor, DB, Scope, check_version, fail, lock_school, require, scoped
+from .lifecycle_models import require_available
 
 router = APIRouter(prefix='/api/v1/schools/{school_id}', tags=['Documentos e arquivos'])
 
@@ -123,8 +124,10 @@ def documents(student_id: str, db: DB, user: Actor, school: Scope):
 @router.post('/students/{student_id}/documents', status_code=201)
 def upload(student_id: str, db: DB, user: Actor, school: Scope, request: Request, document_type_id: str = Form(...), expires_on: date | None = Form(None), notes: str = Form(''), file: UploadFile = File(...)):
     require(user, 'documents.write')
-    scoped(db, m.Student, student_id, school.id)
+    lock_school(db, school.id)
+    require_available(db, scoped(db, m.Student, student_id, school.id))
     kind = scoped(db, m.DocumentType, document_type_id, school.id)
+    require_available(db, kind)
     if not kind.active: fail(422, 'Tipo de documento inativo.')
     if len(notes) > 4000: fail(422, 'Observação muito extensa.')
     maximum = settings().max_upload_mb * 1024 * 1024
@@ -151,7 +154,9 @@ def review(document_id: str, data: s.DocumentReview, db: DB, user: Actor, school
 @router.post('/students/{student_id}/document-waivers', status_code=201)
 def waive(student_id: str, data: s.WaiverInput, db: DB, user: Actor, school: Scope, request: Request):
     require(user, 'documents.waive')
-    scoped(db, m.Student, student_id, school.id); scoped(db, m.DocumentType, data.document_type_id, school.id)
+    lock_school(db, school.id)
+    require_available(db, scoped(db, m.Student, student_id, school.id))
+    require_available(db, scoped(db, m.DocumentType, data.document_type_id, school.id))
     obj = m.StudentDocument(school_id=school.id, student_id=student_id, document_type_id=data.document_type_id, status='waived', notes=data.reason, validated_by=user.id)
     db.add(obj); db.flush(); audit(db, request, user, 'document.waived', obj, school.id, {'reason': data.reason})
     return doc_output(db, obj)
@@ -159,6 +164,9 @@ def waive(student_id: str, data: s.WaiverInput, db: DB, user: Actor, school: Sco
 @router.get('/files/{file_id}/download')
 def download(file_id: str, db: DB, user: Actor, school: Scope, request: Request):
     obj = scoped(db, m.FileRecord, file_id, school.id)
+    if obj.file_kind == 'fiscal_xml':
+        from .fiscal_signing import authorize_fiscal
+        authorize_fiscal(user)
     try:
         data = read_bytes(obj)
     except (FileNotFoundError, KeyError):

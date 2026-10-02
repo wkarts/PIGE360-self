@@ -7,9 +7,14 @@ import html
 import json
 import shutil
 import time
+import re
+import secrets
+import unicodedata
+from collections import Counter
+from urllib.parse import urlsplit
 import zipfile
 from typing import Literal
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, func, text
@@ -24,7 +29,8 @@ router=APIRouter(prefix='/api/v1/diagnostics',tags=['Diagnóstico da instalaçã
 
 
 def admin_only(user):
-    if user.role!='admin':fail(403,'O diagnóstico técnico é restrito ao administrador da instalação.')
+    from .admin_tools import require_admin
+    require_admin(user)
 
 
 def snapshot(db):
@@ -36,7 +42,7 @@ def snapshot(db):
                      'scope':'app, worker e worker-ocr; sem logs do host/proxy/PostgreSQL'},
           'configuration':{'https':cfg.app_url.startswith('https://'),'secure_cookies':cfg.cookie_secure,
                            'storage_backend':cfg.storage_backend,'smtp_configured':bool(cfg.smtp_host and cfg.smtp_from)},
-          'queues':{},'portal':[]}
+          'queues':{},'portal':[], 'installation_slug': installation_slug(db)}
     try:
         data=json.loads((cfg.frontend_path/'build-info.json').read_text())
         info['build']={k:data.get(k) for k in ('version','build_id','pipeline')}
@@ -70,11 +76,42 @@ def snapshot(db):
     return info
 
 
-def filters(service='',level='',request_id='',since=None,until=None):
+def installation_slug(db):
+    from .institution import identity_data
+    name = identity_data(db).get('display_name') or urlsplit(settings().app_url).hostname or 'escola'
+    ascii_name = unicodedata.normalize('NFKD', name).encode('ascii', 'ignore').decode().lower()
+    return re.sub(r'[^a-z0-9]+', '-', ascii_name).strip('-')[:64] or 'escola'
+
+
+def download_filename(db, prefix='diagnostico'):
+    stamp = datetime.now(timezone.utc).strftime('%Y-%m-%d_%H-%M-%S')
+    return f'{prefix}-{installation_slug(db)}-{stamp}-UTC-{secrets.token_hex(3)}.zip'
+
+
+def filters(service='', level='', request_id='', since=None, until=None,
+            event='', code='', route='', job_id='', min_status=None):
     if service and service not in telemetry.SERVICES:fail(422,'Serviço inválido.')
     since=utc(since) if since else None;until=utc(until) if until else None
     if since and until and since>until:fail(422,'O início deve ser anterior ao fim do período.')
-    return dict(service=service,level=level,request_id=request_id,since=since,until=until)
+    return dict(service=service,level=level,request_id=request_id,since=since,until=until,
+                event=event,code=code,route=route,job_id=job_id,min_status=min_status)
+
+
+def event_filters(service:Literal['','app','worker','worker-ocr']='',level:Literal['','INFO','WARNING','ERROR']='',
+                  request_id:str=Query('',pattern=r'^([a-f0-9]{24})?$'),since:datetime|None=None,until:datetime|None=None,
+                  event:str=Query('',max_length=120,pattern=r'^[A-Za-z0-9_.:-]*$'),
+                  code:str=Query('',max_length=120,pattern=r'^[A-Za-z0-9_.:-]*$'),
+                  route:str=Query('',max_length=180,pattern=r'^[A-Za-z0-9_/{\}:.\-]*$'),
+                  job_id:str=Query('',pattern=r'^([a-f0-9-]{36})?$'),min_status:int|None=Query(None,ge=100,le=599)):
+    return filters(service,level,request_id,since,until,event,code,route,job_id,min_status)
+
+
+def event_statistics(rows):
+    levels=Counter(item['level'] for item in rows)
+    errors=Counter((item['event'],item.get('code',''),item.get('route','')) for item in rows
+                   if item['level'] in ('ERROR','WARNING') or item.get('status',0)>=400)
+    return {'levels':dict(levels),'http_errors':sum(item.get('status',0)>=400 for item in rows),
+            'recurring':[{'event':key[0],'code':key[1],'route':key[2],'count':value} for key,value in errors.most_common(8)]}
 
 
 @router.get('/summary')
@@ -85,15 +122,14 @@ def summary(db:DB,user:Actor,request:Request):
 
 
 @router.get('/events')
-def events(user:Actor,db:DB,request:Request,
-           service:Literal['','app','worker','worker-ocr']='',level:Literal['','INFO','WARNING','ERROR']='',
-           request_id:str=Query('',pattern=r'^([a-f0-9]{24})?$'),since:datetime|None=None,until:datetime|None=None,
+def events(user:Actor,db:DB,request:Request,options:dict=Depends(event_filters),
            page:int=Query(1,ge=1,le=100),page_size:int=Query(50,ge=1,le=100)):
     admin_only(user)
-    found=telemetry.recent_events(**filters(service,level,request_id,since,until))
+    found=telemetry.recent_events(**options)
     rows=found.pop('items');total=len(rows)
-    audit(db,request,user,'diagnostics.logs_viewed',user,details={'service':service,'level':level})
-    return {**found,'items':rows[(page-1)*page_size:page*page_size],'total':total,'page':page,'page_size':page_size}
+    audit(db,request,user,'diagnostics.logs_viewed',user,details={'service':options['service'],'level':options['level']})
+    return {**found,'items':rows[(page-1)*page_size:page*page_size],'total':total,'page':page,'page_size':page_size,
+            'statistics':event_statistics(rows)}
 
 
 def bundle(db,options):
@@ -120,15 +156,13 @@ def bundle(db,options):
 
 
 @router.get('/export')
-def export(db:DB,user:Actor,request:Request,
-           service:Literal['','app','worker','worker-ocr']='',level:Literal['','INFO','WARNING','ERROR']='',
-           request_id:str=Query('',pattern=r'^([a-f0-9]{24})?$'),since:datetime|None=None,until:datetime|None=None):
+def export(db:DB,user:Actor,request:Request,options:dict=Depends(event_filters)):
     admin_only(user)
     from .portal import rate_limit
     rate_limit(db,request,'diagnostics-export',user.id,6,600)
-    data=bundle(db,filters(service,level,request_id,since,until))
-    audit(db,request,user,'diagnostics.exported',user,details={'bytes':len(data),'service':service,'level':level})
-    return Response(data,media_type='application/zip',headers={'Content-Disposition':'attachment; filename="diagnostico-escola.zip"','Cache-Control':'no-store'})
+    data=bundle(db,options)
+    audit(db,request,user,'diagnostics.exported',user,details={'bytes':len(data),'service':options['service'],'level':options['level']})
+    return Response(data,media_type='application/zip',headers={'Content-Disposition':f'attachment; filename="{download_filename(db)}"','Cache-Control':'no-store'})
 
 
 class ClientEvent(BaseModel):

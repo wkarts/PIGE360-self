@@ -29,7 +29,7 @@ env = {**os.environ, 'PYTHONPATH':str(ROOT/'backend'), 'DATABASE_URL':'sqlite://
        'ALLOW_SQLITE':'true', 'APP_ENV':'test', 'APP_URL':URL, 'ALLOWED_HOSTS':'127.0.0.1,localhost',
        'APP_SECRET_KEY':'test-only-management-key-01234567890123456789',
        'SETUP_TOKEN':'test-only-setup-01234567890123456789', 'STORAGE_PATH':str(TEMP/'files'),
-       'FRONTEND_PATH':str(TEMP/'frontend'), 'COOKIE_SECURE':'false'}
+       'FRONTEND_PATH':str(TEMP/'frontend'), 'COOKIE_SECURE':'false', 'PORTABILITY_ENABLED':'true'}
 shutil.copytree(ROOT/'frontend/dist', TEMP/'frontend')
 subprocess.run([sys.executable,'-m','alembic','upgrade','head'],cwd=ROOT/'backend',env=env,check=True)
 legacy = TEMP/'legacy.sqlite'
@@ -70,6 +70,7 @@ try:
             page.get_by_label('Senha',exact=True).fill(PASSWORD)
             page.get_by_role('button',name='Entrar na aplicação').click()
             expect(page.locator('h1')).to_have_text('Visão geral')
+            page.locator('aside').get_by_role('button',name='Administração do sistema',exact=True).click()
             page.locator('aside').get_by_role('link',name='Portabilidade de dados',exact=True).click()
             page.locator('.import-workspace input[type=file]').first.set_input_files(legacy)
             page.get_by_role('button',name='Analisar arquivo',exact=True).click()

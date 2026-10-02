@@ -65,11 +65,13 @@ nos aparelhos usados pela escola.
 
 ## Publicação e reversão
 
-Não há dependência, variável de ambiente ou migration nova. O CI compila os
-ativos e atualiza o identificador do cache da PWA. Siga o fluxo de imagens já
-adotado pelo projeto; não copie CSS isolado sobre um build anterior. Após
-publicar a imagem aprovada, atualize a aplicação quando o aviso aparecer.
+A correção visual isolada preserva o esquema do banco. A PR foi ampliada com
+novos recursos, quatro migrações, configuração de portabilidade e assinatura
+fiscal; o procedimento completo está em
+[GESTAO-ESCOLAR-INTEGRADA.md](GESTAO-ESCOLAR-INTEGRADA.md).
 
-Para reverter, restaure a imagem anterior pelo fluxo existente. Não é
-necessário reverter banco de dados. Esta PR não executa merge, release ou
-deploy externo.
+O CI compila os ativos e atualiza o identificador do cache da PWA. Siga o fluxo
+de imagens já adotado; não copie CSS isolado sobre um build anterior.
+O retorno da evolução integrada exige conferir as novas operações e a
+compatibilidade do banco. Não faça downgrade automático com dados novos.
+Esta PR não executa merge, release ou deploy externo.

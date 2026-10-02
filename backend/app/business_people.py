@@ -7,6 +7,7 @@ from . import models as m, schemas as s
 from .people import create_person, update_person, ensure_person_type, person_output
 from .common import audit
 from .security import Actor, DB, Scope, require, scoped, lock_school, check_version, fail
+from .lifecycle_models import require_available
 
 router = APIRouter(prefix='/api/v1/schools/{school_id}', tags=['Cadastros por vínculo'])
 BusinessType = Literal['supplier', 'service_provider', 'customer', 'partner']
@@ -58,6 +59,7 @@ def create_business_person(type_code: BusinessType, data: BusinessInput, db: DB,
     lock_school(db, school.id)
     if data.person_id:
         person = scoped(db, m.Person, data.person_id, school.id)
+        require_available(db, person)
         check_version(person, data.version)
         existing = db.scalar(select(m.PersonTypeLink.id).where(
             m.PersonTypeLink.person_id == person.id, m.PersonTypeLink.school_id == school.id,
@@ -101,6 +103,7 @@ def add_responsible(person_id: str, data: s.Edit, db: DB, user: Actor, school: S
     require(user, 'people.write')
     lock_school(db, school.id)
     person = scoped(db, m.Person, person_id, school.id)
+    require_available(db, person)
     check_version(person, data.version)
     if person.entity_kind != 'individual':
         fail(422, 'O responsável por aluno deve ser pessoa física.')

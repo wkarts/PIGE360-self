@@ -216,12 +216,8 @@ def protocol_pdf(protocol_id: str, db: DB, user: Actor, school: Scope, request: 
     return Response(content, media_type='application/pdf', headers={'Content-Disposition':'attachment; filename="protocolo.pdf"', 'Cache-Control':'no-store'})
 
 
-@router.get('/audit')
-def audit_list(db: DB, user: Actor, school: Scope, page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100)):
-    require(user, 'audit.read')
-    stmt = select(m.AuditEvent).where(m.AuditEvent.school_id == school.id)
-    total = db.scalar(select(func.count()).select_from(stmt.subquery()))
-    return {'items':[output(x) for x in db.scalars(stmt.order_by(m.AuditEvent.created_at.desc()).offset((page-1)*page_size).limit(page_size))], 'total':total, 'page':page, 'page_size':page_size}
+from .audit_console import router as audit_router
+router.include_router(audit_router)
 
 @router.get('/reports/class/{class_id}')
 def class_report(class_id: str, db: DB, user: Actor, school: Scope):

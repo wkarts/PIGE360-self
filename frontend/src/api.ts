@@ -12,7 +12,7 @@ namespace PigeAPI {
     emergency_contact_name: string; emergency_contact_phone: string;
     photo_file_id?: string | null; role_keys?: string[]; roles?: string[]; access_role_keys?: string[]; person_types?: string[]; person_type_labels?: string[]; student_id?: string | null; active: boolean;
   }
-  export interface User { id: string; version: number; name: string; email: string; role: string; role_label?: string; active: boolean; person_id?: string | null; has_photo?:boolean; photo_revision?:string; created_at?:string; permissions: string[]; school_ids: string[] }
+  export interface User { id: string; version: number; name: string; email: string; role: string; role_label?: string; active: boolean; person_id?: string | null; has_photo?:boolean; photo_revision?:string; created_at?:string; permissions: string[]; school_ids: string[]; admin_tools?: {portability:boolean;diagnostics:boolean;audit:boolean;develop_build:boolean} }
   export type Value = string | number | boolean | null | string[];
   export type FormDataMap = Record<string, Value>;
   // Registros de catálogo usam um mapa tipado; dados pessoais têm contrato próprio acima.
@@ -61,21 +61,30 @@ namespace PigeAPI {
   }
   export function post<T>(path: string, body: unknown): Promise<T> { return request<T>(path, { method: 'POST', body: JSON.stringify(body) }); }
   export function patch<T>(path: string, body: unknown): Promise<T> { return request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }); }
-  async function blob(path: string): Promise<Blob> {
+  async function fileResponse(path: string): Promise<Response> {
     let response = await fetch('/api/v1' + path, { headers: { Authorization: `Bearer ${token}` }, credentials: 'same-origin', cache: 'no-store' });
     if (response.status === 401 && token) {
       await refresh();
       response = await fetch('/api/v1' + path, { headers: { Authorization: `Bearer ${token}` }, credentials: 'same-origin', cache: 'no-store' });
     }
     if (!response.ok) throw await error(response);
-    return response.blob();
+    return response;
+  }
+  function downloadName(response:Response,fallback:string):string {
+    const disposition=response.headers.get('Content-Disposition')||'';
+    const encoded=disposition.match(/filename\*=UTF-8\'\'([^;]+)/i);
+    const quoted=disposition.match(/filename="([^"\r\n]+)"/i);
+    let name=quoted?.[1]||'';
+    try { if(encoded)name=decodeURIComponent(encoded[1]); } catch { return fallback; }
+    return name && name.length<=180 && !/[\/\\\x00-\x1f\x7f]/.test(name) && !name.startsWith('.') ? name : fallback;
   }
   export async function objectUrl(path: string): Promise<string> {
-    return URL.createObjectURL(await blob(path));
+    return URL.createObjectURL(await (await fileResponse(path)).blob());
   }
   export async function download(path: string, filename: string): Promise<void> {
-    const url = URL.createObjectURL(await blob(path));
-    const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; anchor.click();
+    const response=await fileResponse(path);
+    const url = URL.createObjectURL(await response.blob());
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = downloadName(response,filename); anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
   export async function downloadPost(path: string, body: unknown, filename: string): Promise<void> {
@@ -87,7 +96,7 @@ namespace PigeAPI {
     if (response.status === 401 && token) { await refresh(); response = await send(); }
     if (!response.ok) throw await error(response);
     const url = URL.createObjectURL(await response.blob());
-    const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; anchor.click();
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = downloadName(response,filename); anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
 }

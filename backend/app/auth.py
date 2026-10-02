@@ -14,12 +14,14 @@ DUMMY_PASSWORD_HASH = hash_password('not-an-account-password-93401980')
 
 def user_output(db, user):
     from .models import UserProfile
+    from .admin_tools import capabilities
     profile = db.get(UserProfile, user.id)
     return {**output(user, ('password_hash',)),
             'has_photo': bool(profile and profile.photo_hash),
             'photo_revision': profile.photo_hash if profile else '',
             'role_label': ROLE_LABELS.get(user.role, user.role),
             'permissions': sorted(PERMISSIONS.get(user.role, set())),
+            'admin_tools': capabilities(user),
             'school_ids': list(db.scalars(select(SchoolAccess.school_id).where(SchoolAccess.user_id == user.id)))}
 
 def set_refresh(response, session, secret, db):
@@ -160,6 +162,12 @@ def check_schools(db, ids):
 
 
 def check_profile_link(db, role, person_id, school_ids):
+    from .lifecycle_models import require_available
+    from .models import TeacherProfile
+    if person_id:
+        linked = db.get(Person, person_id)
+        if linked:
+            require_available(db, linked)
     individual_roles = {'teacher', 'student', 'guardian'}
     if role not in individual_roles:
         return
@@ -170,8 +178,15 @@ def check_profile_link(db, role, person_id, school_ids):
     person = db.get(Person, person_id)
     if not person or person.school_id != school_ids[0]:
         fail(422, 'A pessoa vinculada não pertence à escola informada.')
-    if role == 'student' and not db.scalar(select(Student.id).where(Student.person_id == person.id, Student.school_id == person.school_id)):
-        fail(422, 'O perfil Aluno exige um cadastro de aluno vinculado à pessoa.')
+    if role == 'student':
+        student = db.scalar(select(Student).where(Student.person_id == person.id, Student.school_id == person.school_id))
+        if not student:
+            fail(422, 'O perfil Aluno exige um cadastro de aluno vinculado à pessoa.')
+        require_available(db, student)
+    if role == 'teacher':
+        profile = db.scalar(select(TeacherProfile).where(TeacherProfile.person_id == person.id, TeacherProfile.school_id == person.school_id))
+        if profile:
+            require_available(db, profile)
     if role == 'guardian' and not db.scalar(select(GuardianLink.id).where(GuardianLink.person_id == person.id, GuardianLink.school_id == person.school_id, GuardianLink.active.is_(True))):
         fail(422, 'O perfil Responsável exige um vínculo ativo com pelo menos um aluno.')
 

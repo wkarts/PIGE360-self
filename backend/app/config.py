@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     max_upload_mb: int = 10
     max_photo_mb: int = 5
     legacy_import_max_mb: int = 128
+    portability_enabled: bool = False
     allow_sqlite: bool = False
     integration_encryption_key: str = ''
     signature_trust_roots_dir: Path | None = Path('/data/trust-roots')

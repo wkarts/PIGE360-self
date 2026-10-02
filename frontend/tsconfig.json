@@ -32,6 +32,9 @@
     "src/learning.ts",
     "src/community.ts",
     "src/mailcow.ts",
+    "src/audit.ts",
+    "src/email.ts",
+    "src/lifecycle.ts",
     "src/app.ts"
   ]
 }

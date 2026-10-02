@@ -51,13 +51,13 @@ ALL_PERMISSIONS = {
 
 PERMISSIONS = {
     'admin': set(ALL_PERMISSIONS),
-    'direction': set(ALL_PERMISSIONS) - {'integrations.manage'},
+    'direction': set(ALL_PERMISSIONS) - {'integrations.manage', 'audit.read'},
     'coordination': {
         'read', 'dashboard.read', 'people.read', 'people.write', 'students.read', 'students.write',
         'guardians.read', 'guardians.write', 'academic.read', 'academic.write',
         'enrollments.read', 'enrollments.write', 'documents.read', 'documents.validate',
         'documents.waive', 'documents.generate', 'protocols.read', 'protocols.write',
-        'reports.read', 'audit.read', 'admissions.read', 'admissions.manage',
+        'reports.read', 'admissions.read', 'admissions.manage',
         'communications.send', 'profile.read', 'staff.assignments.read', 'staff.assignments.write',
         'diary.read', 'diary.write', 'diary.attendance', 'diary.assessments', 'diary.review', 'diary.close', 'diary.reopen', 'diary.reports', 'diary.configure',
     },
@@ -66,7 +66,7 @@ PERMISSIONS = {
         'guardians.read', 'guardians.write', 'academic.read', 'academic.write',
         'enrollments.read', 'enrollments.write', 'documents.read', 'documents.write',
         'documents.validate', 'documents.waive', 'documents.generate',
-        'protocols.read', 'protocols.write', 'reports.read', 'audit.read',
+        'protocols.read', 'protocols.write', 'reports.read',
         'admissions.read', 'admissions.write', 'banking.read', 'communications.send',
         'profile.read', 'diary.read', 'diary.reports',
     },
