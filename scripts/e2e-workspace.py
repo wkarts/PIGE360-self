@@ -10,6 +10,7 @@ from playwright.sync_api import sync_playwright, expect
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'evidence/0.3.0/workspace';OUT.mkdir(parents=True,exist_ok=True)
 TEMP=Path(tempfile.mkdtemp(prefix='pige-workspace-'))
+shutil.copytree(ROOT/'frontend/dist', TEMP/'frontend')
 with socket.socket() as sock:
     sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
 URL=f'http://127.0.0.1:{port}'
@@ -18,7 +19,7 @@ BRIDGE=os.getenv('PIGE_UI_BRIDGE')=='1'
 env={**os.environ,'PYTHONPATH':str(ROOT/'backend'),'DATABASE_URL':'sqlite:///'+str(TEMP/'e2e.db'),
      'ALLOW_SQLITE':'true','APP_ENV':'test','APP_URL':URL,'ALLOWED_HOSTS':'127.0.0.1,localhost',
      'APP_SECRET_KEY':'test-only-workspace-secret-01234567890123456789','SETUP_TOKEN':'test-only-setup-01234567890123456789',
-     'STORAGE_PATH':str(TEMP/'files'),'FRONTEND_PATH':str(ROOT/'frontend/dist'),'COOKIE_SECURE':'false'}
+     'STORAGE_PATH':str(TEMP/'files'),'FRONTEND_PATH':str(TEMP/'frontend'),'COOKIE_SECURE':'false'}
 subprocess.run([sys.executable,'-m','alembic','upgrade','head'],cwd=ROOT/'backend',env=env,check=True)
 log=(OUT/'server.log').open('w')
 proc=subprocess.Popen([sys.executable,'-m','uvicorn','app.main:app','--host','127.0.0.1','--port',str(port)],cwd=ROOT/'backend',env=env,stdout=log,stderr=log)
@@ -142,7 +143,7 @@ try:
         assert page.locator('.main-column').evaluate('el=>el.inert')
         admin_menu=page.get_by_role('button',name='Administração do sistema',exact=True)
         admin_menu.click();expect(admin_menu).to_have_attribute('aria-expanded','true')
-        page.locator('aside').get_by_role('link',name='Auditoria',exact=True).focus()
+        page.locator('aside a:visible').last.focus()
         page.keyboard.press('Tab');expect(page.get_by_role('button',name='Fechar menu',exact=True)).to_be_focused()
         nav.evaluate('el=>el.scrollTop=0')
         wait_until(lambda: page.locator('#school-navigation').evaluate('el=>Math.abs(el.getBoundingClientRect().x)<.5'), 'O menu móvel deve concluir sua abertura')

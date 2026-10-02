@@ -68,6 +68,7 @@ def create_record(data, school, db, user, request, previous=None):
 
 @router.get('/enrollments')
 def list_enrollments(db: DB, user: Actor, school: Scope, status: str = '', class_group_id: str = '', student_id: str = '', academic_year_id: str = '', q: str = Query('', max_length=160), page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100)):
+    require(user, 'enrollments.read')
     stmt = select(m.Enrollment).where(m.Enrollment.school_id == school.id)
     if status and status not in ALLOWED:
         fail(422, 'Situação de matrícula inválida.')
@@ -93,6 +94,7 @@ def create_enrollment(data: s.EnrollmentInput, db: DB, user: Actor, school: Scop
 
 @router.get('/enrollments/{enrollment_id}')
 def enrollment_detail(enrollment_id: str, db: DB, user: Actor, school: Scope):
+    require(user, 'enrollments.read')
     from .documents import checklist
     obj = scoped(db, m.Enrollment, enrollment_id, school.id)
     group = db.get(m.ClassGroup, obj.class_group_id)

@@ -86,7 +86,7 @@ def test_audit_filters_scope_redaction_csv(client,admin,api):
     assert r['items'][0]['created_at'].endswith('+00:00')
     assert 'never-export' not in json.dumps(r)
     r=api.get('/audit?include_global=true&request_id='+ref)
-    assert {x['id'] for x in r['items']}=={ids[0],ids[2]}
+    assert {x['id'] for x in r['items']}=={ids[0]}  # parâmetro legado não amplia o recorte ativo
     r=api.get('/audit?actor_id='+actor_id+'&entity_id=record-0&action=students.updated&entity_type=students')
     assert r['total']==1
     opts=api.get('/audit/options')

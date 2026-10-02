@@ -192,3 +192,11 @@ não valida modelos físicos de celulares nem a permissão configurada no HUB re
 Inspeção local em harness não substitui cookies/HTTPS/CSP do navegador real.
 Use os checks da revisão publicada como evidência conclusiva; não há deploy,
 merge ou release automática nesta PR.
+
+## Correção da leitura híbrida e captura
+
+PDFs com texto jurídico de assinatura e identidade armazenada em imagens são processados pelas duas fontes. O motor usa o texto digital útil e reconhece as imagens de resolução suficiente; não encerra a leitura por encontrar apenas a camada textual. Imagens recebem tratamento de escala, contraste, segmentação e orientação. O parser associa rótulos e valores, valida CPF e rejeita datas/identidades ambíguas. Cache de versão antiga é reprocessado no reenvio.
+
+A câmera abre em uma janela própria, com revisão, refazer, giro de 90°, troca de câmera, seleção de arquivo e ajustes de zoom/luz quando o dispositivo oferece esses recursos. Captura a resolução do sensor sem recortar o documento. O celular acompanha retrato/paisagem; fechar, trocar entidade ou sair da aplicação encerra as trilhas de vídeo. Fotos de perfil respeitam 2 MiB; documentos respeitam os limites existentes.
+
+A leitura continua assistida: a qualidade da captura determina os campos recuperáveis. Fotos pequenas, desfocadas ou com reflexos pedem nova captura ou PDF original. Nenhum campo é aplicado sem conferência; não existe garantia de reconhecer qualquer documento ou imagem.

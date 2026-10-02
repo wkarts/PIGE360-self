@@ -1,8 +1,9 @@
-"""Administração da instância global da ARGWS Connect API."""
+"""Administração das instâncias de WhatsApp da instituição ativa."""
+import hashlib
 import re
 from datetime import UTC, datetime
 from fastapi import APIRouter, Query, Request
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from . import models as m, online_schemas as s
 from .common import audit, output
@@ -59,9 +60,10 @@ def _instance(db, school, instance_id):
     obj = db.scalar(select(m.ConnectInstance).where(
         m.ConnectInstance.id == instance_id,
         m.ConnectInstance.company_id == company.id,
+        m.ConnectInstance.school_id == school.id,
     ))
     if not obj:
-        fail(404, "Instância de WhatsApp não encontrada nesta empresa.")
+        fail(404, "Instância de WhatsApp não encontrada nesta instituição.")
     return obj
 
 
@@ -113,7 +115,7 @@ def _remote_rows(response):
 
 
 def _set_preferred(db, school, obj):
-    if obj.company_id != school.company_id or not obj.enabled or obj.status == "deleted":
+    if obj.school_id != school.id or obj.company_id != school.company_id or not obj.enabled or obj.status == "deleted":
         fail(409, "A instância não está disponível para esta escola.")
     binding = db.get(m.ConnectSchoolBinding, school.id)
     if binding:
@@ -132,7 +134,7 @@ def _set_preferred(db, school, obj):
 def _set_unit_preferred(db, school, unit, obj):
     if unit.school_id != school.id or not unit.active:
         fail(422, "Unidade inválida ou inativa.")
-    if obj.company_id != school.company_id or not obj.enabled or obj.status == "deleted":
+    if obj.school_id != school.id or obj.company_id != school.company_id or not obj.enabled or obj.status == "deleted":
         fail(409, "A instância não está disponível para esta unidade.")
     binding = db.get(m.ConnectUnitBinding, unit.id)
     if binding:
@@ -164,10 +166,11 @@ def connect_overview(db: DB, user: Actor, school: Scope):
     company = _company(db, school)
     instances = db.scalars(select(m.ConnectInstance).where(
         m.ConnectInstance.company_id == company.id,
+        m.ConnectInstance.school_id == school.id,
         m.ConnectInstance.status != "deleted",
     ).order_by(m.ConnectInstance.primary.desc(), m.ConnectInstance.created_at)).all()
     binding = db.get(m.ConnectSchoolBinding, school.id)
-    preferred_id = binding.instance_id if binding else ""
+    preferred_id = binding.instance_id if binding and binding.instance_id in {item.id for item in instances} else ""
     cfg = settings()
     base_host = ""
     if cfg.connect_api_base_url:
@@ -184,16 +187,44 @@ def connect_overview(db: DB, user: Actor, school: Scope):
             "effective_host": base_host,
         },
         "preferred_instance_id": preferred_id,
+        "legacy_binding_requires_review": bool(
+            binding and db.scalar(select(m.ConnectInstance.id).where(m.ConnectInstance.id == binding.instance_id, m.ConnectInstance.school_id.is_(None)))
+            or db.scalar(select(m.ConnectUnitBinding.unit_id).join(m.Unit, m.Unit.id == m.ConnectUnitBinding.unit_id).join(
+                m.ConnectInstance, m.ConnectInstance.id == m.ConnectUnitBinding.instance_id).where(
+                m.Unit.school_id == school.id, m.ConnectInstance.school_id.is_(None)).limit(1))
+        ),
         "items": [_instance_output(item, preferred_id) for item in instances],
         "units": [
             {
                 "id": unit.id,
                 "name": unit.name,
-                "preferred_instance_id": (db.get(m.ConnectUnitBinding, unit.id).instance_id if db.get(m.ConnectUnitBinding, unit.id) else ""),
+                "preferred_instance_id": (db.get(m.ConnectUnitBinding, unit.id).instance_id if db.get(m.ConnectUnitBinding, unit.id) and db.get(m.ConnectUnitBinding, unit.id).instance_id in {item.id for item in instances} else ""),
             }
             for unit in db.scalars(select(m.Unit).where(m.Unit.school_id == school.id, m.Unit.active.is_(True)).order_by(m.Unit.name))
         ],
     }
+
+
+@router.post("/connect/legacy-bindings/release")
+def release_legacy_bindings(data: s.Reason, db: DB, user: Actor, school: Scope, request: Request):
+    require(user, "connect.manage")
+    lock_school(db, school.id)
+    # Não remove a instância do provedor nem vínculos de outra instituição.
+    removed = 0
+    current = db.get(m.ConnectSchoolBinding, school.id)
+    if current:
+        instance = db.get(m.ConnectInstance, current.instance_id)
+        if instance and instance.school_id is None:
+            db.delete(current)
+            removed += 1
+    rows = list(db.scalars(select(m.ConnectUnitBinding).join(m.Unit, m.Unit.id == m.ConnectUnitBinding.unit_id).join(
+        m.ConnectInstance, m.ConnectInstance.id == m.ConnectUnitBinding.instance_id).where(
+        m.Unit.school_id == school.id, m.ConnectInstance.school_id.is_(None))))
+    for row in rows:
+        db.delete(row)
+        removed += 1
+    audit(db, request, user, "connect.legacy_bindings.released", school, school.id, {"reason": data.reason, "removed": removed})
+    return {"released": removed}
 
 
 @router.get("/connect/jobs")
@@ -230,12 +261,15 @@ def remote_connect_instances(db: DB, user: Actor, school: Scope):
         item.name: item
         for item in db.scalars(select(m.ConnectInstance).where(
             m.ConnectInstance.company_id == company.id,
+            m.ConnectInstance.school_id == school.id,
             m.ConnectInstance.status != "deleted",
         ))
     }
     items = []
     for row in _remote_rows(response):
         current = local.get(row["name"])
+        if not current:
+            continue
         items.append({
             **row,
             "registered": bool(current),
@@ -256,15 +290,36 @@ def adopt_connect_instance(
     require(user, "connect.manage")
     lock_school(db, school.id)
     company = _company(db, school)
+    if db.bind.dialect.name == 'postgresql':
+        # O provedor usa um namespace global; escolas distintas não podem adotar
+        # o mesmo nome simultaneamente durante a primeira vinculação.
+        lock_key = int.from_bytes(hashlib.sha256(('connect-name:' + data.instance_name).encode()).digest()[:8], 'big', signed=True)
+        db.execute(text('SELECT pg_advisory_xact_lock(:key)'), {'key': lock_key})
+    claimed = list(db.scalars(select(m.ConnectInstance).where(m.ConnectInstance.name == data.instance_name).with_for_update()))
+    if any(item.school_id and item.school_id != school.id for item in claimed):
+        fail(409, "Esta instância já pertence a outra instituição.")
+    if any(item.company_id != company.id for item in claimed):
+        fail(409, "Esta instância já está vinculada a outra mantenedora.")
+    legacy = next((item for item in claimed if item.school_id is None), None)
+    if legacy:
+        school_bindings = list(db.scalars(select(m.ConnectSchoolBinding.school_id).where(m.ConnectSchoolBinding.instance_id == legacy.id)))
+        unit_schools = list(db.scalars(select(m.Unit.school_id).join(m.ConnectUnitBinding, m.ConnectUnitBinding.unit_id == m.Unit.id).where(m.ConnectUnitBinding.instance_id == legacy.id)))
+        if any(sid != school.id for sid in school_bindings + unit_schools):
+            fail(409, "A instância anterior possui vínculos com outras instituições. Revise esses vínculos antes de definir a instituição responsável.")
     response = _remote_call(lambda: ConnectApiClient().fetch_instance(data.instance_name))
     rows = [row for row in _remote_rows(response) if row["name"] == data.instance_name]
     if not rows:
         fail(404, "Instância não encontrada no provedor de WhatsApp configurado.")
     row = rows[0]
-    obj = db.scalar(select(m.ConnectInstance).where(
+    obj = legacy or db.scalar(select(m.ConnectInstance).where(
         m.ConnectInstance.company_id == company.id,
+        m.ConnectInstance.school_id == school.id,
         m.ConnectInstance.name == row["name"],
     ))
+    if obj and obj.school_id is None:
+        obj.school_id = school.id
+        obj.version += 1
+        audit(db, request, user, "connect.instance.assigned", obj, school.id)
     if obj and obj.status != "deleted":
         if data.primary:
             _set_preferred(db, school, obj)
@@ -284,6 +339,7 @@ def adopt_connect_instance(
     else:
         obj = m.ConnectInstance(
             company_id=company.id,
+            school_id=school.id,
             name=row["name"],
             display_name=row["name"],
             document=re.sub(r"\D", "", company.document or ""),
@@ -359,12 +415,13 @@ def create_connect_instance(
     company = _company(db, school)
     existing = db.scalars(select(m.ConnectInstance).where(
         m.ConnectInstance.company_id == company.id,
+        m.ConnectInstance.school_id == school.id,
         m.ConnectInstance.status != "deleted",
     ).order_by(m.ConnectInstance.created_at)).all()
     primary = data.primary or not existing
     sequence = len(existing) + 1 if existing else 0
-    name = build_instance_name(company, data.label, sequence if existing and not data.label.strip() else 0)
-    if db.scalar(select(m.ConnectInstance.id).where(m.ConnectInstance.company_id == company.id, m.ConnectInstance.name == name)):
+    name = build_instance_name(company, data.label, sequence if existing and not data.label.strip() else 0, school.id)
+    if db.scalar(select(m.ConnectInstance.id).where(m.ConnectInstance.name == name)):
         fail(409, "Já existe uma instância local com este nome.")
     response = _remote_call(lambda: ConnectApiClient().create_instance(name))
     if isinstance(response, dict) and response.get("error") is True:
@@ -372,8 +429,9 @@ def create_connect_instance(
     status, state = _remote_status(response)
     obj = m.ConnectInstance(
         company_id=company.id,
+        school_id=school.id,
         name=name,
-        display_name=(company.name + (f" — {data.label.strip()}" if data.label.strip() else ""))[:160],
+        display_name=(school.name + (f" — {data.label.strip()}" if data.label.strip() else ""))[:160],
         document=re.sub(r"\D", "", company.document or ""),
         primary=primary,
         enabled=True,

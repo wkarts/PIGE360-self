@@ -102,7 +102,7 @@ def process_one():
         # Uma tentativa expirada/cancelada não pode sobrescrever outra execução.
         db.execute(update(OcrJob).execution_options(synchronize_session=False).where(OcrJob.id==ident,OcrJob.status=='processing',
             OcrJob.lease_token==token,OcrJob.expires_at>now()).values(**values));db.commit()
-        emit('ocr.job_finished', service='worker-ocr', level='INFO' if values['status']=='succeeded' else 'WARNING', job_id=ident, state=values['status'], code=values['error_code'])
+        emit('ocr.job_finished', service='worker-ocr', level='INFO' if values['status']=='succeeded' else 'WARNING', school_id=row.school_id, job_id=ident, state=values['status'], code=values['error_code'])
         return True
 
 

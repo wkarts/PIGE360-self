@@ -16,13 +16,20 @@ def user_output(db, user):
     from .models import UserProfile
     from .admin_tools import capabilities
     profile = db.get(UserProfile, user.id)
+    from .access_security import permissions_for
+    from .access_models import SchoolAccessProfile
+    school_id = getattr(user, '_active_school_id', None)
+    access = db.get(SchoolAccess, (user.id, school_id)) if school_id else None
+    access_profile = db.get(SchoolAccessProfile, access.access_profile_id) if access and access.access_profile_id else None
     return {**output(user, ('password_hash',)),
             'has_photo': bool(profile and profile.photo_hash),
             'photo_revision': profile.photo_hash if profile else '',
             'role_label': ROLE_LABELS.get(user.role, user.role),
-            'permissions': sorted(PERMISSIONS.get(user.role, set())),
+            'permissions': sorted(permissions_for(user, db)),
+            'access_profile_id': access.access_profile_id if access else None,
+            'access_profile_name': access_profile.name if access_profile else ROLE_LABELS.get(user.role, user.role),
             'admin_tools': capabilities(user),
-            'school_ids': list(db.scalars(select(SchoolAccess.school_id).where(SchoolAccess.user_id == user.id)))}
+            'school_ids': list(db.scalars(select(SchoolAccess.school_id).where(SchoolAccess.user_id == user.id, SchoolAccess.active.is_(True), SchoolAccess.archived_at.is_(None))))}
 
 def set_refresh(response, session, secret, db):
     cfg = settings()
@@ -60,6 +67,7 @@ def setup(data: Setup, db: DB, request: Request, x_setup_token: str = Header(def
     db.add(AcademicYear(school_id=school.id, name=str(data.academic_year), starts_on=date(data.academic_year, 1, 1), ends_on=date(data.academic_year, 12, 31)))
     user = User(name=data.admin_name, email=str(data.admin_email).lower(), password_hash=hash_password(data.admin_password), role='admin')
     db.add(user); db.flush()
+    db.add(SchoolAccess(user_id=user.id, school_id=school.id))
     install.configured = True; install.configured_at = now()
     audit(db, request, user, 'installation.configured', school, school.id)
     db.flush()
@@ -151,9 +159,9 @@ def change_password(data: PasswordChange, db: DB, user: Actor, request: Request)
     return {'message': 'Senha alterada. Entre novamente.'}
 
 @router.get('/users')
-def list_users(db: DB, user: Actor):
-    require(user, 'users.manage')
-    return [user_output(db, u) for u in db.scalars(select(User).order_by(User.name)).all()]
+def list_users(db: DB, user: Actor, school_id: str | None = None):
+    from .user_access import select_school, list_in_school
+    return list_in_school(db, user, select_school(db, user, school_id))
 
 def check_schools(db, ids):
     for school_id in set(ids):
@@ -193,48 +201,13 @@ def check_profile_link(db, role, person_id, school_ids):
 
 @router.post('/users', status_code=201)
 def create_user(data: UserInput, db: DB, user: Actor, request: Request):
-    require(user, 'users.manage')
-    check_schools(db, data.school_ids)
-    if data.role != 'admin' and not data.school_ids:
-        fail(422, 'Vincule ao menos uma escola ao usuário.')
-    check_profile_link(db, data.role, data.person_id, data.school_ids)
-    obj = User(name=data.name, email=str(data.email).lower(), password_hash=hash_password(data.password), role=data.role, person_id=data.person_id)
-    db.add(obj); db.flush()
-    for sid in set(data.school_ids):
-        db.add(SchoolAccess(user_id=obj.id, school_id=sid))
-    mailbox = None
-    if data.create_mailbox:
-        if user.role != 'admin':
-            fail(403, 'Somente o administrador pode criar uma caixa institucional.')
-        if not data.mailbox_school_id or data.mailbox_school_id not in data.school_ids:
-            fail(422, 'Selecione a escola que fornecerá a caixa de e-mail e vincule o usuário a ela.')
-        from .mailcow import queue_mailbox, mailbox_output
-        mailbox = queue_mailbox(db, data.mailbox_school_id, obj, data.mailbox_local_part, data.mailbox_quota_mb)
-    audit(db, request, user, 'users.created', obj, details={'role': obj.role})
-    db.flush()
-    result = user_output(db, obj)
-    if mailbox:
-        result['mailbox'] = mailbox_output(db, mailbox)
-    return result
+    from .user_access import select_school, create_in_school
+    return create_in_school(data, db, user, request, select_school(db, user, school_ids=data.school_ids))
 
 @router.patch('/users/{user_id}')
 def edit_user(user_id: str, data: UserEdit, db: DB, user: Actor, request: Request):
-    require(user, 'users.manage')
-    obj = db.scalar(select(User).where(User.id == user_id).with_for_update())
-    if not obj:
-        fail(404, 'Usuário não encontrado.')
-    if obj.id == user.id and (not data.active or data.role != 'admin'):
-        fail(422, 'Não é permitido remover seu próprio acesso administrativo.')
-    check_version(obj, data.version); check_schools(db, data.school_ids)
-    if data.role != 'admin' and not data.school_ids:
-        fail(422, 'Vincule ao menos uma escola ao usuário.')
-    check_profile_link(db, data.role, data.person_id, data.school_ids)
-    obj.name, obj.role, obj.active, obj.person_id = data.name, data.role, data.active, data.person_id
-    obj.version += 1
-    db.execute(delete(SchoolAccess).where(SchoolAccess.user_id == obj.id))
-    for sid in set(data.school_ids):
-        db.add(SchoolAccess(user_id=obj.id, school_id=sid))
-    db.execute(update(AuthSession).where(AuthSession.user_id == obj.id).values(revoked=True))
-    audit(db, request, user, 'users.updated', obj, details={'role': obj.role, 'active': obj.active})
-    db.flush()
-    return user_output(db, obj)
+    from .user_access import select_school, edit_in_school
+    return edit_in_school(user_id, data, db, user, request, select_school(db, user, school_ids=data.school_ids))
+
+from .user_access import router as user_access_router
+router.include_router(user_access_router)

@@ -103,6 +103,7 @@ def doc_output(db, doc):
 
 @router.get('/students/{student_id}/documents')
 def documents(student_id: str, db: DB, user: Actor, school: Scope):
+    require(user, 'documents.read')
     scoped(db, m.Student, student_id, school.id)
     enrollment = db.scalar(select(m.Enrollment).where(m.Enrollment.student_id == student_id, m.Enrollment.school_id == school.id).order_by(m.Enrollment.created_at.desc()).limit(1))
     grade_id = db.get(m.ClassGroup, enrollment.class_group_id).grade_id if enrollment else None
@@ -163,6 +164,7 @@ def waive(student_id: str, data: s.WaiverInput, db: DB, user: Actor, school: Sco
 
 @router.get('/files/{file_id}/download')
 def download(file_id: str, db: DB, user: Actor, school: Scope, request: Request):
+    require(user, 'documents.read')
     obj = scoped(db, m.FileRecord, file_id, school.id)
     if obj.file_kind == 'fiscal_xml':
         from .fiscal_signing import authorize_fiscal

@@ -25,13 +25,13 @@ def own_profile_students(db, user, school_id=''):
     if user.role not in ('student', 'guardian'):
         fail(403, 'Este espaço é destinado a estudantes e responsáveis vinculados.')
     require(user, 'student.self.read' if user.role == 'student' else 'guardian.self.read')
-    schools = list(db.scalars(select(m.School.id).join(
-        m.SchoolAccess, m.SchoolAccess.school_id == m.School.id,
-    ).where(m.SchoolAccess.user_id == user.id, m.School.active.is_(True))))
+    from .profiles import school_ids, allowed_school
+    active_id = getattr(user, '_active_school_id', None)
+    if school_id and active_id and school_id != active_id:
+        fail(409, 'A instituição ativa foi alterada. Reabra a tela antes de continuar.')
     if school_id:
-        if school_id not in schools:
-            fail(404, 'Escola não encontrada para este acesso.')
-        schools = [school_id]
+        allowed_school(db, user, school_id)
+    schools = school_ids(db, user)
     if not schools or not user.person_id:
         return []
     person = db.scalar(select(m.Person).where(

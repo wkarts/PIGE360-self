@@ -52,11 +52,14 @@ with SessionLocal.begin() as db:
             install(page,ROOT,URL,OUT)
         else:page.goto(URL)
         page.get_by_label('E-mail',exact=True).fill('assist@example.com');page.get_by_label('Senha',exact=True).fill(PASSWORD);page.get_by_role('button',name='Entrar na aplicação').click()
-        expect(page.locator('.workspace')).to_be_visible()
+        expect(page.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible()
         def nav(name):
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
             b=page.get_by_role('button',name='Cadastros',exact=True)
             if name in ['Cadastro único','Alunos'] and b.get_attribute('aria-expanded')=='false':b.click()
+            if name=='Instituição':
+                settings=page.locator('aside').get_by_role('button',name='Configurações',exact=True)
+                if settings.get_attribute('aria-expanded')=='false':settings.click()
             page.locator('aside').get_by_role('link',name=name,exact=True).click()
         def dialog():return page.get_by_role('dialog')
         def apply(panel):
@@ -100,9 +103,10 @@ with SessionLocal.begin() as db:
         nav('Cadastro único');page.get_by_role('button',name='+ Nova pessoa',exact=True).click();assist=dialog().locator('.assist').first
         assist.get_by_role('button',name='Ler documento',exact=True).click()
         if not BRIDGE:
-            assist.get_by_role('button',name='Abrir câmera com guia',exact=True).click();expect(assist.locator('video')).to_be_visible()
-            page.evaluate("window.testTrack=document.querySelector('.assist video').srcObject.getTracks()[0]")
-            assist.get_by_role('button',name='Cancelar câmera',exact=True).click();assert page.evaluate("window.testTrack.readyState==='ended'")
+            assist.get_by_role('button',name='Abrir câmera com guia',exact=True).click();expect(page.locator('.camera-dialog video')).to_be_visible()
+            page.wait_for_function("() => document.querySelector('.camera-dialog video')?.srcObject?.getVideoTracks().some(t=>t.readyState==='live')")
+            page.evaluate("window.testTrack=document.querySelector('.camera-dialog video').srcObject.getTracks()[0]")
+            page.get_by_role('button',name='Fechar câmera',exact=True).click();assert page.evaluate("window.testTrack.readyState==='ended'")
             record('Captura com câmera sintética nativa respeita a política e encerra a trilha ao cancelar')
         assist.get_by_role('button',name='Fechar / descartar leitura',exact=True).click();dialog().get_by_role('button',name='Cancelar',exact=True).click();expect(dialog()).to_have_count(0)
         # Portal: o mesmo documento já anexado é lido para a conta certa, sem novo upload.

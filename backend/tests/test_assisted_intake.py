@@ -164,6 +164,22 @@ def test_results_cannot_be_read_by_another_user_even_same_school(api,client,admi
     r=client.get(api.base+'/ocr/jobs/'+job['id'],headers={'Authorization':'Bearer '+token});assert r.status_code==404,r.text
 
 
+def test_custom_profile_restrictions_apply_to_ocr_and_lookups(api,client,monkeypatch):
+    profile=api.post('/access-profiles',{'name':'Cadastro assistido restrito','base_role':'secretary','permissions':['read','people.read','people.write']})
+    email='assistant-'+uuid.uuid4().hex+'@example.com'
+    api.post('/users',{'name':'Usuário assistido','email':email,'password':PASSWORD,'role':'secretary','access_profile_id':profile['id']})
+    token=client.post('/api/v1/auth/login',json={'email':email,'password':PASSWORD}).json()['access_token']
+    headers={'Authorization':'Bearer '+token,'X-School-Id':api.school['id']}
+    r=client.post(api.base+'/ocr/jobs',headers=headers,files={'file':('synthetic.png',image_bytes(),'image/png')})
+    assert r.status_code==202,r.text
+    job=r.json()
+    api.patch('/access-profiles/'+profile['id'],{'name':profile['name'],'base_role':'secretary','permissions':['read','people.read'],'active':True,'version':profile['version'],'reason':'Restringir cadastro assistido'})
+    assert client.get(api.base+'/ocr/jobs/'+job['id'],headers=headers).status_code==403
+    assert client.post(api.base+'/ocr/jobs',headers=headers,files={'file':('synthetic.png',image_bytes(),'image/png')}).status_code==403
+    monkeypatch.setattr(lookups,'fetch_public',lambda url:pytest.fail('Perfil somente leitura não pode consultar cadastro externo'))
+    assert client.post(api.base+'/lookups/cep',headers=headers,json={'value':'40020000'}).status_code==403
+
+
 @pytest.mark.parametrize('raw,name',[ (b'not a pdf','x.pdf'),(b'<svg></svg>','x.svg'),(b'fake png','x.png'),(b'anything','x.heic')])
 def test_invalid_upload_never_queued(api,raw,name):upload(api,raw,name,status=422)
 
@@ -222,6 +238,78 @@ def test_pdf_existing_text_does_not_call_tesseract(tmp_path,monkeypatch):
     monkeypatch.setattr(ocr_engine,'command',lambda *a:pytest.fail('PDF com texto não precisa de OCR'))
     result=ocr_engine.extract(p,'application/pdf','identity',tmp_path)
     assert result['pages'][0]['source']=='pdf_text' and result['confidence'] is None
+
+
+def test_hybrid_pdf_reads_scanned_identity_instead_of_legal_footer(api,tmp_path):
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.utils import ImageReader
+    p=tmp_path/'synthetic-hybrid.pdf';c=canvas.Canvas(str(p))
+    c.drawImage(ImageReader(io.BytesIO(image_bytes())),25,300,width=550,height=315)
+    c.drawString(25,200,'Documento assinado digitalmente. Consulte o codigo para validar a assinatura.')
+    c.save()
+    job=upload(api,p.read_bytes(),'synthetic-hybrid.pdf')
+    assert ocr_worker.process_one()
+    result=api.get('/ocr/jobs/'+job['id'])['result']
+    fields={r['field']:r['value'] for r in result['suggestions']}
+    assert fields['name']=='PESSOA SINTETICA TESTE'
+    assert fields['cpf']=='52998224725' and fields['birth_date']=='2000-05-15'
+    assert result['pages'][0]['source']=='pdf_hybrid' and result['quality']=='fields_found'
+    assert all(row['requires_review'] for row in result['suggestions'])
+
+
+def test_numbered_cnh_labels_split_date_and_issuer_without_guessing_parents():
+    text='1 NOME\nPESSOA FICTICIA TESTE\nDOC. IDENTIDADE/ORG EMISSOR/UF\n12345678 SSP BA\nCPF\nDATA NASCIMENTO\n529.982.247-25\n15/05/2000\nFILIACAO\nPRIMEIRO RESPONSAVEL TESTE\nSEGUNDO RESPONSAVEL TESTE'
+    fields={r['field']:r['value'] for r in ocr_engine.suggestions(text,'identity',95)}
+    assert fields['name']=='PESSOA FICTICIA TESTE' and fields['birth_date']=='2000-05-15'
+    assert fields['rg']=='12345678' and fields['rg_issuer']=='SSP/BA'
+    assert 'father_name' not in fields and 'mother_name' not in fields
+
+
+def test_cnh_name_and_surname_label_is_not_used_as_the_person_name():
+    text='2 e 1 NOME E SOBRENOME\nPESSOA FICTICIA TESTE\n3 DATA, LOCAL E UF DE NASCIMENTO\n15/05/2000\n4a DATA EMISSAO\n02/02/2020'
+    fields={r['field']:r['value'] for r in ocr_engine.suggestions(text,'identity',95)}
+    assert fields['name']=='PESSOA FICTICIA TESTE' and fields['birth_date']=='2000-05-15'
+
+
+def test_cnh_parallel_dates_are_not_silently_assigned_to_birth():
+    rows=ocr_engine.suggestions('DATA NASCIMENTO\n15/05/2000 02/02/2020\nVALIDADE\n15/05/2030','identity',95)
+    assert not any(r['field']=='birth_date' for r in rows)
+
+
+def test_spatial_name_cannot_replace_the_holder_with_parent_name():
+    def line(text,y,confidence):
+        return [{'text':word,'box':[40+n*50,y,45,15],'confidence':confidence} for n,word in enumerate(text.split())]
+    lines=[line('NOME',20,90),line('PESSOA TESTE',45,80),
+        line('NOME DA MAE',90,99),line('MARIA RESPONSAVEL TESTE',115,99)]
+    candidate={'text':'NOME\nPESSOA TESTE\nNOME DA MAE\nMARIA RESPONSAVEL TESTE',
+        'confidence':95,'tokens':[token for row in lines for token in row],'lines':lines}
+    fields={r['field']:r['value'] for r in ocr_engine._proposals([candidate],'identity')}
+    assert fields['name']=='PESSOA TESTE' and fields['mother_name']=='MARIA RESPONSAVEL TESTE'
+
+
+def test_old_success_is_reprocessed_after_ocr_engine_upgrade(api):
+    first=upload(api)
+    with SessionLocal.begin() as db:
+        row=db.get(OcrJob,first['id']);row.status='succeeded'
+        row.encrypted_result=ocr.seal({'schema_version':1,'suggestions':[],'text':'Texto legal ficticio'})
+    second=upload(api)
+    assert second['id']!=first['id'] and second['status']=='queued'
+    assert upload(api)['id']==second['id']
+
+
+def test_unreadable_image_reports_actionable_quality_instead_of_empty_success(tmp_path):
+    p=tmp_path/'blank.png';Image.new('RGB',(600,300),'white').save(p)
+    result=ocr_engine.extract(p,'image/png','identity',tmp_path)
+    assert result['suggestions']==[] and result['quality']=='needs_better_source'
+    assert any('original' in warning for warning in result['warnings'])
+
+
+def test_rotated_scan_recovers_validated_identity(tmp_path):
+    p=tmp_path/'rotated.png'
+    Image.open(io.BytesIO(image_bytes())).rotate(90,expand=True).save(p)
+    result=ocr_engine.extract(p,'image/png','identity',tmp_path)
+    fields={r['field']:r['value'] for r in result['suggestions']}
+    assert fields['cpf']=='52998224725' and fields['birth_date']=='2000-05-15'
 
 
 def test_settings_disable_processing_and_lookup_without_disabling_manual(api,client,admin,monkeypatch):

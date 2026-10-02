@@ -14,6 +14,7 @@
   "files": [
     "src/vue-globals.d.ts",
     "src/institution.ts",
+    "src/support-widget.ts",
     "src/community.ts",
     "src/dialogs.ts",
     "src/news.ts"

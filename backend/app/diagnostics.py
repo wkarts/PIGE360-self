@@ -33,7 +33,7 @@ def admin_only(user):
     require_admin(user)
 
 
-def snapshot(db):
+def snapshot(db, school_id=None):
     cfg=settings()
     info={'generated_at':datetime.now(timezone.utc).isoformat(),'version':cfg.app_version,
           'database':{'status':'unavailable'},'build':{},'storage':{},'services':[],
@@ -42,7 +42,7 @@ def snapshot(db):
                      'scope':'app, worker e worker-ocr; sem logs do host/proxy/PostgreSQL'},
           'configuration':{'https':cfg.app_url.startswith('https://'),'secure_cookies':cfg.cookie_secure,
                            'storage_backend':cfg.storage_backend,'smtp_configured':bool(cfg.smtp_host and cfg.smtp_from)},
-          'queues':{},'portal':[], 'installation_slug': installation_slug(db)}
+          'queues':{},'portal':[], 'installation_slug': installation_slug(db, school_id), 'school_id': school_id}
     try:
         data=json.loads((cfg.frontend_path/'build-info.json').read_text())
         info['build']={k:data.get(k) for k in ('version','build_id','pipeline')}
@@ -67,25 +67,28 @@ def snapshot(db):
         revision=list(db.scalars(text('SELECT version_num FROM alembic_version')))
         info['database']={'status':'ok','dialect':db.bind.dialect.name,'migrations':revision}
         from .assisted_models import OcrJob
-        for label,model in [('integrations',m.IntegrationJob),('communication',m.ConnectMessageJob),('ocr',OcrJob)]:
-            info['queues'][label]=dict(db.execute(select(model.status,func.count()).group_by(model.status)).all())
-        for school in db.scalars(select(m.School).order_by(m.School.name).limit(100)):
-            info['portal'].append({'school_name':school.name,**readiness(db,school)})
+        if school_id:
+            for label,model in [('integrations',m.IntegrationJob),('communication',m.ConnectMessageJob),('ocr',OcrJob)]:
+                info['queues'][label]=dict(db.execute(select(model.status,func.count()).where(model.school_id == school_id).group_by(model.status)).all())
+            school = db.get(m.School, school_id)
+            if school:
+                info['portal'].append({'school_name':school.name,**readiness(db,school)})
     except Exception as exc:
         db.rollback();info['database']={'status':'unavailable','error_type':type(exc).__name__}
     return info
 
 
-def installation_slug(db):
+def installation_slug(db, school_id=None):
     from .institution import identity_data
-    name = identity_data(db).get('display_name') or urlsplit(settings().app_url).hostname or 'escola'
+    school = db.get(m.School, school_id) if school_id else None
+    name = (school.name if school else identity_data(db).get('display_name')) or urlsplit(settings().app_url).hostname or 'escola'
     ascii_name = unicodedata.normalize('NFKD', name).encode('ascii', 'ignore').decode().lower()
     return re.sub(r'[^a-z0-9]+', '-', ascii_name).strip('-')[:64] or 'escola'
 
 
-def download_filename(db, prefix='diagnostico'):
+def download_filename(db, prefix='diagnostico', school_id=None):
     stamp = datetime.now(timezone.utc).strftime('%Y-%m-%d_%H-%M-%S')
-    return f'{prefix}-{installation_slug(db)}-{stamp}-UTC-{secrets.token_hex(3)}.zip'
+    return f'{prefix}-{installation_slug(db, school_id)}-{stamp}-UTC-{secrets.token_hex(3)}.zip'
 
 
 def filters(service='', level='', request_id='', since=None, until=None,
@@ -117,29 +120,31 @@ def event_statistics(rows):
 @router.get('/summary')
 def summary(db:DB,user:Actor,request:Request):
     admin_only(user)
-    audit(db,request,user,'diagnostics.viewed',user,details={'scope':'technical_summary'})
-    return snapshot(db)
+    school_id = getattr(user, '_active_school_id', None)
+    audit(db,request,user,'diagnostics.viewed',user,school_id,details={'scope':'technical_summary'})
+    return snapshot(db, school_id)
 
 
 @router.get('/events')
 def events(user:Actor,db:DB,request:Request,options:dict=Depends(event_filters),
            page:int=Query(1,ge=1,le=100),page_size:int=Query(50,ge=1,le=100)):
     admin_only(user)
-    found=telemetry.recent_events(**options)
+    school_id = getattr(user, '_active_school_id', None)
+    found=telemetry.recent_events(**options, school_id=school_id or '')
     rows=found.pop('items');total=len(rows)
-    audit(db,request,user,'diagnostics.logs_viewed',user,details={'service':options['service'],'level':options['level']})
+    audit(db,request,user,'diagnostics.logs_viewed',user,school_id,details={'service':options['service'],'level':options['level']})
     return {**found,'items':rows[(page-1)*page_size:page*page_size],'total':total,'page':page,'page_size':page_size,
             'statistics':event_statistics(rows)}
 
 
-def bundle(db,options):
-    summary=snapshot(db)
-    found=telemetry.recent_events(**options)
+def bundle(db,options,school_id=None):
+    summary=snapshot(db, school_id)
+    found=telemetry.recent_events(**options, school_id=school_id or '')
     serialize=lambda x:json.dumps(x,ensure_ascii=False,indent=2,default=str).encode()
     # Exportação limitada ao recorte retido; nunca exporta .env, dump de banco ou anexos.
     files={'system.json':serialize(summary),
            'events.jsonl':b''.join((json.dumps(r,ensure_ascii=False)+'\n').encode() for r in found['items']),
-           'manifest.json':serialize({'created_at':summary['generated_at'],'filters':options,'records':len(found['items']),
+           'manifest.json':serialize({'created_at':summary['generated_at'],'filters':{**options,'school_id':school_id},'records':len(found['items']),
                'truncated':found['truncated'],'unreadable_records':found['unreadable_records'],'schema_version':1}),
            'LEIA-ME.txt':('Diagnóstico da instalação escolar. Horários em UTC.\n'
                'Logs técnicos sanitizados do período retido, sem senhas, cookies, CPF, OCR, anexos, corpos de requisições ou SQL.\n'
@@ -160,9 +165,10 @@ def export(db:DB,user:Actor,request:Request,options:dict=Depends(event_filters))
     admin_only(user)
     from .portal import rate_limit
     rate_limit(db,request,'diagnostics-export',user.id,6,600)
-    data=bundle(db,options)
-    audit(db,request,user,'diagnostics.exported',user,details={'bytes':len(data),'service':options['service'],'level':options['level']})
-    return Response(data,media_type='application/zip',headers={'Content-Disposition':f'attachment; filename="{download_filename(db)}"','Cache-Control':'no-store'})
+    school_id = getattr(user, '_active_school_id', None)
+    data=bundle(db,options,school_id)
+    audit(db,request,user,'diagnostics.exported',user,school_id,details={'bytes':len(data),'service':options['service'],'level':options['level']})
+    return Response(data,media_type='application/zip',headers={'Content-Disposition':f'attachment; filename="{download_filename(db, school_id=school_id)}"','Cache-Control':'no-store'})
 
 
 class ClientEvent(BaseModel):

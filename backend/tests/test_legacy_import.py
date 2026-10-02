@@ -160,7 +160,8 @@ def test_legacy_import_preview_apply_archive_photos_and_idempotency(client, admi
     assert photo.headers["content-type"] == "image/png"
     assert photo.content.startswith(b"\x89PNG\r\n\x1a\n")
 
-    users = client.get("/api/v1/users", headers=admin)
+    users = client.get(f"/api/v1/schools/{school['id']}/users", headers=admin)
+    assert users.status_code == 200, users.text
     imported_user = next(row for row in users.json() if row["email"] == "legacy-import@example.test")
     assert imported_user["active"] is False
     assert imported_user["role"] == "viewer"

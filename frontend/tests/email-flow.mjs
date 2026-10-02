@@ -11,10 +11,11 @@ const template=fs.readFileSync(path.join(root,'templates/email.html'),'utf8');
 assert.ok(!/v-html|<iframe|<object/i.test(template),'A leitura não injeta HTML recebido');
 const folders=['inbox','sent','drafts','spam','trash','archive'].map(role=>({id:role,name:role,role,total:2,unread:1}));
 const message={uid:3,uidvalidity:7,subject:'Reunião da escola',from:'Secretaria <secretaria@example.com>',to:'Docente <docente@example.com>',cc:'Coordenação <coordenacao@example.com>',date:'2026-10-02T12:00:00Z',seen:false,flagged:false,size:500,text:'Texto seguro <img src=x onerror=alert(1)>',message_id:'<sample@example.com>',attachments:[]};
-const calls=[];let connected=false,sendResponse='timeout',pageResponse=null;
+const calls=[];let connected=false,eligible=true,sendResponse='timeout',pageResponse=null;
 async function request(url,options={}){
   const body=options.body?JSON.parse(options.body):null;const method=options.method||'GET';calls.push({url,method,body});
-  if(url.endsWith('/account'))return{available:true,connected,address:'docente@example.com',display_name:'Docente',needs_password:!connected,limits:{attachment_bytes:5242880,recipients:50,message_bytes:10485760}};
+  if(url.endsWith('/reconcile')){eligible=false;return{available:true,connected:false,can_reconcile:false,address:'docente@example.com',needs_password:true};}
+  if(url.endsWith('/account'))return{available:!eligible,can_reconcile:eligible,candidate_address:eligible?'docente@example.com':'',connected,address:'docente@example.com',display_name:'Docente',needs_password:!connected,limits:{attachment_bytes:5242880,recipients:50,message_bytes:10485760}};
   if(url.endsWith('/connection')){connected=method==='POST';return{connected};}
   if(url.endsWith('/folders'))return method==='POST'?{id:'new',name:body.name,role:'custom'}:{items:structuredClone(folders)};
   if(url.includes('/messages?'))return pageResponse||{items:[structuredClone(message)],folder:'inbox',uidvalidity:7,next_before_uid:2};
@@ -26,11 +27,14 @@ async function request(url,options={}){
   if(url.endsWith('/send')){if(sendResponse==='timeout')throw new Error('network disconnected');if(sendResponse==='invalid')throw Object.assign(new Error('Destinatário inválido'),{status:422});return{status:'sent',message_id:'<sent@example.com>',sent_saved:true,refused:[],message:'Mensagem enviada.'};}
   throw new Error('Unexpected request '+method+' '+url);
 }
-const mounted=[],unmounted=[];
-const context=vm.createContext({Vue:{reactive:v=>v,computed:fn=>({get value(){return fn();}}),onMounted:fn=>mounted.push(fn),onUnmounted:fn=>unmounted.push(fn),nextTick:async()=>{}},PigeRenders:{email(){}},PigeAPI:{request,post:(url,body)=>request(url,{method:'POST',body:JSON.stringify(body)}),patch:(url,body)=>request(url,{method:'PATCH',body:JSON.stringify(body)}),download:async()=>{}},URLSearchParams,Intl,Date,crypto:webcrypto,window:{addEventListener(){},removeEventListener(){}},document:{getElementById:()=>({focus(){}})},console,Uint8Array,btoa,fetch});
+const mounted=[],unmounted=[],events=[];
+const context=vm.createContext({Vue:{reactive:v=>v,computed:fn=>({get value(){return fn();}}),onMounted:fn=>mounted.push(fn),onUnmounted:fn=>unmounted.push(fn),nextTick:async()=>{}},PigeRenders:{email(){}},PigeAPI:{request,post:(url,body)=>request(url,{method:'POST',body:JSON.stringify(body)}),patch:(url,body)=>request(url,{method:'PATCH',body:JSON.stringify(body)}),download:async()=>{}},URLSearchParams,Intl,Date,crypto:webcrypto,CustomEvent,window:{addEventListener(){},removeEventListener(){},dispatchEvent(event){events.push(event);return true;}},document:{getElementById:()=>({focus(){}})},console,Uint8Array,btoa,fetch});
 vm.runInContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/email.ts'),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText,context);
 const ui=context.PigeEmail.component.setup({schoolId:'school-one',admin:false});
-await ui.refresh();assert.equal(ui.s.account.connected,false);
+await ui.refresh();assert.equal(ui.s.account.connected,false);assert.equal(ui.s.account.can_reconcile,true);
+await ui.reconcile();assert.equal(ui.s.account.available,true);assert.equal(ui.s.account.needs_password,true);assert.equal(ui.s.account.connected,false);
+assert.deepEqual(calls.find(call=>call.url.endsWith('/reconcile')).body,{},'Own account reconciliation cannot select a different user or pass a password');
+assert.equal(events.at(-1).type,'pige:email-account-changed');assert.equal(events.at(-1).detail.schoolId,'school-one');
 ui.s.password='Synthetic-mail-password';await ui.connect();assert.equal(ui.s.password,'');assert.equal(ui.s.account.connected,true);assert.equal(ui.s.folder,'inbox');assert.equal(ui.s.items.length,1);
 await ui.open(ui.s.items[0]);assert.equal(ui.s.selected.text,message.text);assert.equal(ui.s.selected.seen,true);assert.ok(calls.some(c=>c.url.endsWith('/flags')&&c.body.seen===true));
 ui.begin('all');assert.equal(ui.s.compose.to,'secretaria@example.com');assert.equal(ui.s.compose.cc,'coordenacao@example.com');assert.equal(ui.s.compose.in_reply_to,message.message_id);assert.ok(!ui.s.compose.cc.includes('docente@example.com'));

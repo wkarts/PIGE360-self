@@ -11,7 +11,8 @@ OUT=Path(os.getenv('PIGE_E2E_OUT', str(ROOT/'evidence/0.3.0')));OUT.mkdir(parent
 TEMP=Path(tempfile.mkdtemp(prefix='pige360-e2e-'))
 with socket.socket() as s:s.bind(('127.0.0.1',0));PORT=s.getsockname()[1]
 URL=f'http://127.0.0.1:{PORT}'
-env={**os.environ,'PYTHONPATH':str(ROOT/'backend'),'DATABASE_URL':'sqlite:///'+str(TEMP/'e2e.db'),'ALLOW_SQLITE':'true','APP_ENV':'test','APP_URL':URL,'ALLOWED_HOSTS':'127.0.0.1,localhost','APP_SECRET_KEY':'e2e-test-only-secret-key-01234567890123456789','SETUP_TOKEN':'e2e-test-only-setup-token-0123456789','STORAGE_PATH':str(TEMP/'files'),'FRONTEND_PATH':str(ROOT/'frontend/dist'),'COOKIE_SECURE':'false'}
+shutil.copytree(ROOT/'frontend/dist', TEMP/'frontend')
+env={**os.environ,'PYTHONPATH':str(ROOT/'backend'),'DATABASE_URL':'sqlite:///'+str(TEMP/'e2e.db'),'ALLOW_SQLITE':'true','APP_ENV':'test','APP_URL':URL,'ALLOWED_HOSTS':'127.0.0.1,localhost','APP_SECRET_KEY':'e2e-test-only-secret-key-01234567890123456789','SETUP_TOKEN':'e2e-test-only-setup-token-0123456789','STORAGE_PATH':str(TEMP/'files'),'FRONTEND_PATH':str(TEMP/'frontend'),'COOKIE_SECURE':'false'}
 subprocess.run([sys.executable,'-m','alembic','upgrade','head'],cwd=ROOT/'backend',env=env,check=True,stdout=subprocess.DEVNULL)
 log=(OUT/'e2e-server.log').open('w')
 process=subprocess.Popen([sys.executable,'-m','uvicorn','app.main:app','--host','127.0.0.1','--port',str(PORT)],cwd=ROOT/'backend',env=env,stdout=log,stderr=log)
@@ -47,7 +48,12 @@ try:
         expect(page.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible();checks.append('Instalação inicial e login pela interface')
         def nav(name):
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
-            page.locator('aside').get_by_role('link',name=name).click()
+            sidebar=page.locator('aside')
+            group='Configurações' if name in {'Instituição','Certificados A1'} else 'Documentação' if name in {'Pendências documentais','Assinaturas pendentes','Conferência de assinaturas'} else None
+            if group:
+                toggle=sidebar.get_by_role('button',name=group,exact=True)
+                if toggle.get_attribute('aria-expanded')=='false':toggle.click()
+            sidebar.get_by_role('link',name=name,exact=True).click()
         def dialog():return page.get_by_role('dialog')
         def form_field(name, **kwargs):
             locator=dialog().get_by_label(name, **kwargs)
@@ -231,7 +237,7 @@ try:
         checks.append('Protocolos acessíveis dentro da ficha do aluno')
         nav('Estrutura acadêmica');page.get_by_role('button',name='Tipos de documento',exact=True).click();page.get_by_role('button',name='+ Cadastrar',exact=True).click()
         form_field('Nome do documento').fill('Comprovante de residência');form_field('Obrigatório para matrícula').check();save()
-        nav('Documentação');page.get_by_label('Pesquisar na lista').fill('Lucas');page.get_by_role('button',name='Aplicar filtros').click()
+        nav('Pendências documentais');page.get_by_label('Pesquisar na lista').fill('Lucas');page.get_by_role('button',name='Aplicar filtros').click()
         expect(page.get_by_text('1 pendência documental',exact=True)).to_be_visible()
         if BRIDGE:
             page.get_by_role('button',name='Exportar CSV',exact=True).click();page.wait_for_function("window.__downloads.includes('pendencias-documentais.csv')")

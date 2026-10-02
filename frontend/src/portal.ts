@@ -5,6 +5,13 @@ namespace PigePortal {
   type DiaryAccess={consent_version:string;consent_required:boolean;eligible_student_count:number;eligible_students:EligibleDiaryStudent[];students:DiaryStudent[]};
   type DiaryCommunication={id:string;student_id:string;student_name:string;title:string;message:string;sent_at:string;read_at:string|null;occurrence_title:string|null};
   const state=Vue.reactive({schools:[] as {id:string;name:string}[],schoolId:new URLSearchParams(location.search).get('school')||'',catalogFailed:false,assistSource:'',profileReadSource:'',profileOpen:false,ready:false,busy:false,section:'admissions',step:0,diaryError:'',error:'',notice:'',online:navigator.onLine,diaryConsent:{version:'',text:''},diaryConsentAccepted:false,diaryAccess:{consent_version:'',consent_required:false,eligible_student_count:0,eligible_students:[],students:[]} as DiaryAccess,diaryCommunications:[] as DiaryCommunication[],registrationTerms:{version:'',text:''},account:null as Account|null,campaign:null as Campaign|null,campaigns:[] as Campaign[],slug:new URLSearchParams(location.search).get('campaign')||'',mode:'login',registerPurpose:'admission',rows:[] as Admission[],total:0,page:1,selected:null as Admission|null,editing:false,charges:[] as PigeOnline.Charge[],code:'',verifyChannel:'email',message:'',documentType:'',acceptTerms:false,legal:false,register:{name:'',email:'',password:'',cpf:'',phone:'',address:'',accept_privacy:false,whatsapp_opt_in:false},login:{email:'',password:''},reset:{email:'',code:'',password:''},form:{student:PigeOnline.person(),class_group_id:'',previous_school:'',relationship:'Responsável legal',notes:'',client_key:PigeOnline.newId()}});
+  let supportContext='';
+  function syncSupport():void{
+    const area:PigeSupport.Area=state.account&&state.section!=='admissions'?'guardian_portal':'online_enrollment';
+    const key=[state.schoolId,area,state.account?.id||'public'].join('|');
+    if(!state.ready||key===supportContext)return;
+    supportContext=key;void PigeSupport.load(state.schoolId,area,state.account?.id||'public');
+  }
   let selectedFile:File|null=null;
   let signedContractFile:File|null=null;
   const signing=Vue.reactive({method:'',password:'',fileName:'',consent:false,pending:false,sessionId:'',admissionId:'',integrated:false});
@@ -43,7 +50,7 @@ namespace PigePortal {
     return await response.json() as T;
   }
   const post=<T>(path:string,value:unknown):Promise<T>=>request<T>(path,{method:'POST',body:JSON.stringify(value)});
-  async function run(action:()=>Promise<void>):Promise<void>{if(state.busy)return;state.busy=true;state.error='';state.notice='';try{await action();}catch(e){state.error=e instanceof Error?e.message:String(e);}finally{state.busy=false;if(state.error)focusError();}}
+  async function run(action:()=>Promise<void>):Promise<void>{if(state.busy)return;state.busy=true;state.error='';state.notice='';try{await action();}catch(e){state.error=e instanceof Error?e.message:String(e);}finally{state.busy=false;syncSupport();if(state.error)focusError();}}
   async function loadList():Promise<void>{const data=await request<PigeOnline.Page<Admission>>('/admissions?page='+state.page);state.rows=data.items;state.total=data.total;}
   async function loadRegistrationTerms():Promise<void>{if(!state.schoolId)return;state.registrationTerms=await request<{version:string;text:string}>('/registration-terms?school_id='+encodeURIComponent(state.schoolId));}
   async function openRegistration():Promise<void>{state.mode='register';state.registerPurpose=state.campaign?.accepting?'admission':'portal';state.register.accept_privacy=false;state.error='';if(state.registerPurpose==='portal')await run(loadRegistrationTerms);}
@@ -78,10 +85,10 @@ namespace PigePortal {
       try{state.account=await request<Account>('/me');state.schoolId=state.account.school_id;await loadList();await loadDiaryPortal();}catch(e){if((e as {status?:number}).status===401)state.account=null;else if(!state.error)state.error=e instanceof Error?e.message:'Não foi possível recuperar a sessão.';}
       if(state.campaign&&state.schoolId!==state.campaign.school_id){state.campaign=null;state.slug='';}
       if(!state.campaign&&!state.catalogFailed){const rows=visibleCampaigns();if(rows.length===1){state.slug=rows[0].slug;await loadCampaign();}}
-    });state.ready=true;
+    });state.ready=true;syncSupport();
   }
-  async function selectSchool():Promise<void>{await run(async()=>{state.slug='';state.campaign=null;state.register.accept_privacy=false;const rows=visibleCampaigns();if(rows.length===1){state.slug=rows[0].slug;await loadCampaign();}else history.replaceState({},'','/online.html?school='+encodeURIComponent(state.schoolId));await loadRegistrationTerms();});}
-  async function selectCampaign():Promise<void>{await run(async()=>{state.selected=null;state.editing=false;state.register.accept_privacy=false;await loadCampaign();});}
+  async function selectSchool():Promise<void>{PigeSupport.dispose();supportContext='';await run(async()=>{state.slug='';state.campaign=null;state.register.accept_privacy=false;const rows=visibleCampaigns();if(rows.length===1){state.slug=rows[0].slug;await loadCampaign();}else history.replaceState({},'','/online.html?school='+encodeURIComponent(state.schoolId));await loadRegistrationTerms();});}
+  async function selectCampaign():Promise<void>{PigeSupport.dispose();supportContext='';await run(async()=>{state.selected=null;state.editing=false;state.register.accept_privacy=false;await loadCampaign();});}
   async function afterMFA(result:Record<string,unknown>):Promise<void>{state.account=result as unknown as Account;state.schoolId=state.account.school_id;state.page=1;state.section='admissions';if(state.campaign?.school_id!==state.schoolId){state.campaign=null;state.slug='';const rows=visibleCampaigns();if(rows.length===1){state.slug=rows[0].slug;await loadCampaign();}}await loadList();await loadDiaryPortal();}
   async function mfaRequest<T>(path:string,options:RequestInit={}):Promise<T>{const headers=new Headers(options.headers);headers.set('X-CSRF-Protection','1');if(options.body)headers.set('Content-Type','application/json');const r=await fetch('/api/v1'+path,{...options,headers,credentials:'same-origin',cache:'no-store'});const data=await r.json();if(!r.ok)throw new Error(data.detail||'Não foi possível confirmar a autenticação.');return data as T;}
   async function login():Promise<void>{await run(async()=>{if(!state.schoolId)throw new Error('Selecione a unidade para acessar sua conta.');const result=await post<Record<string,unknown>>('/login',{...state.login,...authContext()});state.login.password='';if(await PigeMFA.accept(result))return;await afterMFA(result);});}
@@ -101,13 +108,13 @@ namespace PigePortal {
     await afterMFA(result);
     state.notice='Conta criada. Confirme um contato para validar o vínculo com o cadastro escolar.';
   });}
-  async function logout():Promise<void>{state.assistSource='';state.profileReadSource='';state.profileOpen=false;await run(async()=>{await post('/logout',{});state.account=null;state.rows=[];state.diaryAccess={consent_version:'',consent_required:false,eligible_student_count:0,eligible_students:[],students:[]};state.diaryCommunications=[];state.diaryConsentAccepted=false;state.selected=null;state.charges=[];state.editing=false;state.register={name:'',email:'',password:'',cpf:'',phone:'',address:'',accept_privacy:false,whatsapp_opt_in:false};state.login.password='';state.form.student=PigeOnline.person();resetSigning();if(signingTimer)window.clearInterval(signingTimer);});if(!state.account&&signing.sessionId)location.assign('/api/v1/portal/signing/govbr/logout');}
+  async function logout():Promise<void>{PigeSupport.dispose();supportContext='';state.assistSource='';state.profileReadSource='';state.profileOpen=false;await run(async()=>{await post('/logout',{});state.account=null;state.rows=[];state.diaryAccess={consent_version:'',consent_required:false,eligible_student_count:0,eligible_students:[],students:[]};state.diaryCommunications=[];state.diaryConsentAccepted=false;state.selected=null;state.charges=[];state.editing=false;state.register={name:'',email:'',password:'',cpf:'',phone:'',address:'',accept_privacy:false,whatsapp_opt_in:false};state.login.password='';state.form.student=PigeOnline.person();resetSigning();if(signingTimer)window.clearInterval(signingTimer);});if(!state.account&&signing.sessionId)location.assign('/api/v1/portal/signing/govbr/logout');}
   async function verifyRequest():Promise<void>{await run(async()=>{await post('/verification/request',{channel:state.verifyChannel});state.notice='Código solicitado. Confira seu e-mail ou WhatsApp. O código vale por 10 minutos.';});}
   async function verifyConfirm():Promise<void>{await run(async()=>{state.account=await post<Account>('/verification/confirm',{code:state.code});state.code='';await loadDiaryPortal();state.notice='Contato confirmado.';});}
   async function resetRequest():Promise<void>{await run(async()=>{await post('/password/request',{email:state.reset.email,...authContext()});state.notice='Caso exista uma conta elegível, o código será enviado ao e-mail informado.';});}
   async function resetConfirm():Promise<void>{await run(async()=>{await post('/password/confirm',{...state.reset,...authContext()});state.reset.password='';state.reset.code='';state.mode='login';state.notice='Senha redefinida. Entre novamente.';});}
-  function newAdmission():void{state.assistSource='';state.error='';state.notice='';state.step=0;state.section='admissions';selectedFile=null;if(!state.campaign||!state.campaign.accepting){state.error='Selecione um processo aberto.';return;}if(state.account?.school_id!==state.campaign.school_id){state.error='Esta conta pertence a outra escola. Entre com a conta da unidade escolhida.';return;}state.selected=null;state.form={student:PigeOnline.person(),class_group_id:'',previous_school:'',relationship:'Responsável legal',notes:'',client_key:PigeOnline.newId()};state.editing=true;}
-  function edit():void{state.assistSource='';state.step=0;state.section='admissions';selectedFile=null;const a=state.selected;if(!a)return;const {previous_school,...student}=a.student_data;state.form={student:{...student},class_group_id:a.class_group_id,previous_school:previous_school||'',relationship:a.relationship,notes:a.notes,client_key:PigeOnline.newId()};state.editing=true;}
+  function newAdmission():void{state.assistSource='';state.error='';state.notice='';state.step=0;state.section='admissions';syncSupport();selectedFile=null;if(!state.campaign||!state.campaign.accepting){state.error='Selecione um processo aberto.';return;}if(state.account?.school_id!==state.campaign.school_id){state.error='Esta conta pertence a outra escola. Entre com a conta da unidade escolhida.';return;}state.selected=null;state.form={student:PigeOnline.person(),class_group_id:'',previous_school:'',relationship:'Responsável legal',notes:'',client_key:PigeOnline.newId()};state.editing=true;}
+  function edit():void{state.assistSource='';state.step=0;state.section='admissions';syncSupport();selectedFile=null;const a=state.selected;if(!a)return;const {previous_school,...student}=a.student_data;state.form={student:{...student},class_group_id:a.class_group_id,previous_school:previous_school||'',relationship:a.relationship,notes:a.notes,client_key:PigeOnline.newId()};state.editing=true;}
   async function openRecord(id:string):Promise<void>{state.assistSource='';selectedFile=null;signedContractFile=null;const a=await request<Admission>('/admissions/'+id);state.selected=a;state.editing=false;state.acceptTerms=false;state.legal=false;state.charges=await request<PigeOnline.Charge[]>('/admissions/'+id+'/charges');state.campaign=await request<Campaign>('/admissions/'+id+'/campaign');state.slug=state.campaign.slug;state.schoolId=state.account?.school_id||state.campaign.school_id;state.documentType=a.document_types.find(d=>!a.attachments.some(f=>f.document_type_id===d.id&&f.review_status!=='rejected'))?.id||a.document_types[0]?.id||'';resetSigning();await loadSigningMethods();}
   async function view(id:string):Promise<void>{await run(()=>openRecord(id));}
   async function backToAdmissions():Promise<void>{await run(async()=>{state.selected=null;state.editing=false;selectedFile=null;signedContractFile=null;state.assistSource='';if(!state.campaign?.accepting){state.campaign=null;state.slug='';const campaigns=visibleCampaigns();if(campaigns.length===1){state.slug=campaigns[0].slug;await loadCampaign();}}});}
@@ -139,7 +146,7 @@ namespace PigePortal {
   function readAttachment(id:string,who:'student'|'guardian'):void{
     if(!state.selected)return;const source='/portal/admissions/'+state.selected.id+'/attachments/'+id+'/ocr';
     if(who==='student'){edit();state.assistSource=source;}
-    else{state.section='account';state.profileOpen=true;state.profileReadSource=source;void Vue.nextTick(()=>document.getElementById('portal-profile')?.scrollIntoView({block:'start'}));}
+    else{state.section='account';syncSupport();state.profileOpen=true;state.profileReadSource=source;void Vue.nextTick(()=>document.getElementById('portal-profile')?.scrollIntoView({block:'start'}));}
   }
 
 
@@ -184,7 +191,7 @@ namespace PigePortal {
     if(state.step<2){state.step++;void Vue.nextTick(()=>document.querySelector<HTMLElement>('#admission-step-title')?.focus());return;}
     await save();
   }
-  function selectSection(section:string):void{state.section=section;state.error='';state.notice='';if(section==='diary')void loadDiaryPortal();}
+  function selectSection(section:string):void{state.section=section;state.error='';state.notice='';if(section==='diary')void loadDiaryPortal();syncSupport();}
   function useGuardianAddress():void{
     const account=state.account;if(!account)return;state.form.student.address=account.address;
     for(const key of ['postal_code','street','address_number','address_complement','district','city','state','country'] as const)state.form.student[key]=account[key]||'';

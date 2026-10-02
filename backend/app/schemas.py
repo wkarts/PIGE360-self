@@ -356,7 +356,11 @@ class CompanyInput(Input):
     legal_nature: str = Field(default='', max_length=180)
     main_activity: str = Field(default='', max_length=180)
 
+SupportArea = Literal['online_enrollment', 'student_portal', 'teacher_portal', 'guardian_portal', 'internal', 'login', 'news']
+
+
 class SupportHubInput(Input):
+    enabled_areas: list[SupportArea] = Field(default_factory=lambda: ['online_enrollment'], max_length=7)
     version: int | None = Field(default=None, ge=1)
     enabled: bool = False
     base_url: str = Field(default='', max_length=500)
@@ -392,6 +396,7 @@ class UserInput(Input):
     mailbox_school_id: str | None = None
     mailbox_local_part: str = Field(default='', max_length=64)
     mailbox_quota_mb: int | None = Field(default=None, ge=1, le=1048576)
+    access_profile_id: str | None = None
 
 class UserEdit(Input):
     name: str = Field(min_length=2, max_length=160)
@@ -400,6 +405,8 @@ class UserEdit(Input):
     school_ids: list[str] = Field(default_factory=list, max_length=100)
     person_id: str | None = None
     version: int = Field(ge=1)
+    access_profile_id: str | None = None
+    reason: str = Field(default='', max_length=1000)
 
 class PasswordChange(Input):
     current_password: str = Field(min_length=1, max_length=128)

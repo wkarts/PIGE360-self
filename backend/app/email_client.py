@@ -16,7 +16,7 @@ import socket
 import ssl
 import time
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
@@ -29,7 +29,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from pydantic import ConfigDict, EmailStr, Field, field_validator
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, select
+from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -38,9 +38,9 @@ from .common import audit
 from .config import settings
 from .db import Base, Record, now
 from .integration_core import IntegrationFailure, seal, unseal
-from .mailcow import MailcowConfig, SchoolMailbox, _base_url
+from .mailcow import MailcowConfig, SchoolMailbox, _base_url, reconciliation_candidate, reconcile_mailbox
 from .schemas import Input
-from .security import Actor, DB, fail, lock_school
+from .security import Actor, DB, fail, lock_school, utc
 
 router = APIRouter(prefix='/api/v1/schools/{school_id}/email', tags=['Meu e-mail'])
 MAX_MESSAGE = 10 * 1024 * 1024
@@ -73,6 +73,8 @@ class EmailConnection(Record, m.Scoped, Base):
     user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
     encrypted_secret: Mapped[str] = mapped_column(Text, default='')
     validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str] = mapped_column(String(40), default='')
     __table_args__ = (UniqueConstraint('school_id', 'user_id'),)
 
 
@@ -170,7 +172,8 @@ def _school(school_id: str, db: DB, user: Actor):
     school = db.get(m.School, school_id)
     if not school or not school.active:
         fail(404, 'Escola não encontrada.')
-    if user.role != 'admin' and not db.get(m.SchoolAccess, (user.id, school_id)):
+    membership = db.get(m.SchoolAccess, (user.id, school_id))
+    if not membership or not membership.active:
         fail(403, 'Acesso não autorizado a esta escola.')
     return school
 
@@ -194,24 +197,47 @@ def _connection(db, mailbox):
 def provision_connection(db, mailbox, password):
     """Cópia separada para o titular; nunca reativa uma conexão desconectada."""
     if password and not _connection(db, mailbox):
-        db.add(EmailConnection(mailbox_id=mailbox.id, user_id=mailbox.user_id,
-               school_id=mailbox.school_id, encrypted_secret=seal({'password': password})))
+        connection = EmailConnection(mailbox_id=mailbox.id, user_id=mailbox.user_id,
+               school_id=mailbox.school_id, encrypted_secret=seal({'password': password}))
+        db.add(connection)
+        return connection
+    return _connection(db, mailbox)
 
 
 def _server(db, school_id):
     return db.scalar(select(EmailServerSettings).where(EmailServerSettings.school_id == school_id))
 
 
-def _settings_output(server):
-    return {'imap_host': server.imap_host if server else '', 'smtp_host': server.smtp_host if server else '',
+def _settings_output(server, config=None):
+    host = urlsplit(config.base_url).hostname if config else ''
+    return {'imap_host': server.imap_host if server and server.imap_host else host,
+            'smtp_host': server.smtp_host if server and server.smtp_host else host,
             'smtp_port': server.smtp_port if server else 465}
 
 
+def _recoverable(db, mailbox, connection):
+    if connection:
+        return bool(connection.encrypted_secret and connection.last_error != 'EMAIL_AUTH')
+    if not mailbox or not mailbox.encrypted_password:
+        return False
+    job = db.get(m.IntegrationJob, mailbox.job_id)
+    return bool(job and job.kind == 'mailbox_provision')
+
+
 def _account_output(db, mailbox):
-    available = bool(mailbox and mailbox.provisioned_at and mailbox.remote_active)
+    config = db.get(MailcowConfig, mailbox.config_id) if mailbox else None
+    available = bool(mailbox and mailbox.provisioned_at and mailbox.remote_active and config and config.enabled)
     connection = _connection(db, mailbox) if mailbox else None
-    connected = bool(available and connection and connection.encrypted_secret)
-    return {'available': available, 'connected': connected, 'needs_password': available and not connected,
+    connected = bool(available and connection and connection.encrypted_secret and connection.validated_at and not connection.last_error)
+    automatic = bool(available and not connected and _recoverable(db, mailbox, connection))
+    parameters = _settings_output(_server(db, mailbox.school_id), config) if mailbox else {}
+    return {'available': available, 'connected': connected, 'needs_password': available and not connected and not automatic,
+            'can_auto_connect': automatic,
+            'connection_state': 'ready' if connected else 'preparing' if automatic else 'password_required' if available else 'unavailable',
+            'connection_error': ERRORS.get(connection.last_error, '') if connection else '',
+            'connection_error_code': connection.last_error if connection else '',
+            'validated_at': connection.validated_at.isoformat() if connection and connection.validated_at else None,
+            'connection_parameters': {**parameters, 'username': mailbox.address, 'imap_port': 993, 'imap_security': 'TLS', 'smtp_security': 'TLS' if parameters.get('smtp_port') == 465 else 'STARTTLS'} if mailbox else {},
             'address': mailbox.address if mailbox else '', 'display_name': mailbox.display_name if mailbox else '',
             'limits': {'message_bytes': MAX_MESSAGE, 'attachment_bytes': MAX_ATTACHMENTS,
                        'recipients': MAX_RECIPIENTS, 'attachment_count': 10}}
@@ -623,14 +649,17 @@ class MailClient:
 
 @contextmanager
 def _client(db, user, school, password=None):
+    connection = None
     mailbox = _owned(db, user, school)
     config = db.get(MailcowConfig, mailbox.config_id)
-    if not config or config.school_id != school.id:
+    if not config or not config.enabled or config.school_id != school.id:
         fail(409, 'O e-mail institucional precisa ser configurado pelo administrador.')
     if password is None:
         connection = _connection(db, mailbox)
         if not connection or not connection.encrypted_secret:
             fail(409, 'Conecte sua caixa de e-mail com a senha atual para continuar.')
+        if not connection.validated_at or connection.last_error:
+            fail(409, 'A conexão do seu e-mail precisa ser validada antes de acessar as mensagens.')
         try:
             password = unseal(connection.encrypted_secret).get('password')
         except IntegrationFailure:
@@ -641,7 +670,13 @@ def _client(db, user, school, password=None):
         with MailClient(config, _server(db, school.id), mailbox, password) as client:
             yield client, mailbox
     except (OSError, imaplib.IMAP4.error, IntegrationFailure) as error:
-        _safe_fail(_mapped_error(error))
+        mapped = _mapped_error(error)
+        if mapped.code == 'EMAIL_AUTH' and connection:
+            # A recusa de uma credencial antes validada precisa sobreviver ao
+            # retorno de erro para o titular poder informar a senha atual.
+            connection.validated_at, connection.checked_at, connection.last_error = None, now(), 'EMAIL_AUTH'
+            db.commit()
+        _safe_fail(mapped)
 
 
 def _header(message, name, limit=1000):
@@ -769,14 +804,24 @@ def _compose(data, mailbox, message_id, draft=False):
 
 @router.get('/account')
 def account(db: DB, user: Actor, school: EmailScope):
-    return _account_output(db, _owned(db, user, school, False))
+    mailbox = _owned(db, user, school, False)
+    candidate = reconciliation_candidate(db, school.id, user) if not mailbox else ''
+    return {**_account_output(db, mailbox), 'can_reconcile': bool(candidate), 'candidate_address': candidate}
+
+
+@router.post('/reconcile')
+def reconcile_own_account(db: DB, user: Actor, school: EmailScope, request: Request):
+    mailbox = reconcile_mailbox(db, school.id, user)
+    audit(db, request, user, 'email.mailbox_reconciled', mailbox, school.id)
+    return {**_account_output(db, mailbox), 'can_reconcile': False, 'candidate_address': ''}
 
 
 @router.get('/settings')
 def server_settings(db: DB, user: Actor, school: EmailScope):
     if user.role != 'admin':
         fail(403, 'Somente o administrador pode configurar o servidor de e-mail.')
-    return _settings_output(_server(db, school.id))
+    config = db.scalar(select(MailcowConfig).where(MailcowConfig.school_id == school.id))
+    return _settings_output(_server(db, school.id), config)
 
 
 @router.put('/settings')
@@ -789,8 +834,54 @@ def save_server_settings(data: SettingsInput, db: DB, user: Actor, school: Email
         server = EmailServerSettings(school_id=school.id); db.add(server)
     for key, value in data.model_dump().items():
         setattr(server, key, value)
+    server.version = (server.version or 0) + 1
+    db.execute(update(EmailConnection).where(EmailConnection.school_id == school.id).values(validated_at=None, checked_at=None, last_error=''))
     db.flush(); audit(db, request, user, 'email.settings_updated', server, school.id)
-    return _settings_output(server)
+    config = db.scalar(select(MailcowConfig).where(MailcowConfig.school_id == school.id))
+    return _settings_output(server, config)
+
+
+@router.post('/connection/automatic')
+def automatic_connection(db: DB, user: Actor, school: EmailScope, request: Request):
+    """Valida apenas credenciais já conhecidas; nunca cria ou troca senha remota."""
+    lock_school(db, school.id)
+    mailbox = _owned(db, user, school)
+    connection = _connection(db, mailbox)
+    if not _recoverable(db, mailbox, connection):
+        return _account_output(db, mailbox)
+    if connection and connection.validated_at and not connection.last_error:
+        return _account_output(db, mailbox)
+    if connection and connection.checked_at and utc(connection.checked_at) + timedelta(seconds=10) > now():
+        return _account_output(db, mailbox)
+    if not connection:
+        try:
+            password = unseal(mailbox.encrypted_password).get('password')
+        except IntegrationFailure:
+            fail(409, 'A credencial salva não está disponível. Conecte com a senha atual da caixa.')
+        connection = provision_connection(db, mailbox, password)
+        if not connection:
+            fail(409, 'Conecte com a senha atual da caixa.')
+        db.flush()
+    try:
+        password = unseal(connection.encrypted_secret).get('password')
+        if not isinstance(password, str) or not password:
+            raise IntegrationFailure('EMAIL_AUTH')
+        config = db.get(MailcowConfig, mailbox.config_id)
+        if not config or not config.enabled or config.school_id != school.id:
+            fail(409, 'O e-mail institucional precisa ser habilitado pelo administrador.')
+        with MailClient(config, _server(db, school.id), mailbox, password) as client:
+            with client.smtp():
+                pass
+        connection.validated_at, connection.last_error = now(), ''
+        audit(db, request, user, 'email.connected_automatically', connection, school.id)
+    except (OSError, imaplib.IMAP4.error, IntegrationFailure) as error:
+        mapped = _mapped_error(error)
+        connection.validated_at = None
+        connection.last_error = mapped.code if mapped.code in ERRORS else 'EMAIL_PROTOCOL'
+        audit(db, request, user, 'email.connection_validation_failed', connection, school.id, details={'code': connection.last_error})
+    connection.checked_at = now()
+    db.flush()
+    return _account_output(db, mailbox)
 
 
 @router.post('/connection')
@@ -805,6 +896,7 @@ def connect(data: ConnectionInput, db: DB, user: Actor, school: EmailScope, requ
             connection = EmailConnection(school_id=school.id, mailbox_id=mailbox.id, user_id=user.id)
             db.add(connection)
         connection.encrypted_secret, connection.validated_at = seal({'password': data.password}), now()
+        connection.checked_at, connection.last_error = now(), ''
         db.flush(); audit(db, request, user, 'email.connected', connection, school.id)
         return _account_output(db, mailbox)
 
@@ -813,10 +905,13 @@ def connect(data: ConnectionInput, db: DB, user: Actor, school: EmailScope, requ
 def disconnect(db: DB, user: Actor, school: EmailScope, request: Request):
     mailbox = _owned(db, user, school)
     connection = _connection(db, mailbox)
-    if connection:
-        # Mantém linha vazia como escolha persistente; uma reconciliação não reativa.
-        connection.encrypted_secret, connection.validated_at = '', None
-        audit(db, request, user, 'email.disconnected', connection, school.id)
+    if not connection:
+        connection = EmailConnection(school_id=school.id, mailbox_id=mailbox.id, user_id=user.id)
+        db.add(connection); db.flush()
+    # Mantém linha vazia como escolha persistente; uma reconciliação não reativa.
+    connection.encrypted_secret, connection.validated_at = '', None
+    connection.checked_at, connection.last_error = None, ''
+    audit(db, request, user, 'email.disconnected', connection, school.id)
     return {'connected': False}
 
 

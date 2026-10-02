@@ -157,6 +157,7 @@ def test_expiry_alerts_opt_in_dedupe_and_recheck(api, tmp_path, monkeypatch):
     from app.integration_core import unseal
     notice = api.get('/signing-certificate/alerts')['items'][0]
     assert notice['kind'] == 'certificate_expiry' and notice['days_remaining'] == 29
+    assert notice['route'] == 'certificate'
     pref = api.get('/signing-certificate/alert-preferences')
     assert not pref['email_enabled'] and not pref['whatsapp_enabled']
     bad = api.client.put(api.base + '/signing-certificate/alert-preferences', headers=api.headers,
@@ -177,6 +178,22 @@ def test_expiry_alerts_opt_in_dedupe_and_recheck(api, tmp_path, monkeypatch):
         payload = unseal(jobs[0].encrypted_payload)
         alerts.execute_certificate_alert(db, jobs[0], payload, sent.append)
         assert len(sent) == 1 and sent[0]['to'] == pref['email']
+        assert 'Configurações > Certificados A1' in sent[0]['text']
+        admin_user = db.query(m.User).filter_by(email='admin@example.com').one()
+        membership = db.get(m.SchoolAccess, (admin_user.id, api.school['id']))
+        assert membership is not None
+        # Mesmo um administrador não recebe dados de uma entidade sem vínculo ativo.
+        membership.active = False
+        db.flush()
+        assert not alerts._access(db, admin_user, api.school['id'])
+        assert alerts.execute_certificate_alert(db, jobs[0], payload, sent.append) == 'cancelled-precondition'
+        membership.active = True
+        membership.archived_at = datetime.now(UTC)
+        db.flush()
+        assert alerts.execute_certificate_alert(db, jobs[0], payload, sent.append) == 'cancelled-precondition'
+        membership.archived_at = None
+        db.flush()
+        assert len(sent) == 1
         current = db.query(alerts.CertificateAlertPreference).filter_by(school_id=api.school['id']).one()
         current.email_enabled = False
         db.flush()

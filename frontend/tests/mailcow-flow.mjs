@@ -7,8 +7,8 @@ import {webcrypto as crypto} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
-const sandbox={crypto,console,document:{createElement:()=>({}),querySelector:()=>null,querySelectorAll:()=>[],title:''},navigator:{onLine:true},location:{hash:'',pathname:'/',origin:'http://test'},history:{replaceState(){}},localStorage:{getItem:()=>null,setItem(){}},URLSearchParams,URL,Intl,Headers,FormData,Blob,File,Event,CustomEvent,setTimeout,clearTimeout};
-sandbox.window=sandbox;sandbox.addEventListener=()=>{};
+const sandbox={crypto,console,document:{createElement:()=>({}),querySelector:()=>null,querySelectorAll:()=>[],title:''},navigator:{onLine:true},location:{hash:'',pathname:'/',origin:'http://test'},history:{replaceState(){}},localStorage:{getItem:()=>null,setItem(){}},URLSearchParams,URL,Intl,Headers,FormData,Blob,File,Event,CustomEvent,AbortController,AbortSignal,setTimeout,clearTimeout};
+sandbox.window=sandbox;sandbox.addEventListener=()=>{};const events=[];sandbox.dispatchEvent=event=>{events.push(event);return true;};
 sandbox.fetch=()=>{throw new Error('Mailcow smoke does not access a real server.');};
 vm.createContext(sandbox);
 for(const file of ['vendor/vue-3.5.13.global.prod.js','renders.js'])vm.runInContext(fs.readFileSync(path.join(root,'dist',file),'utf8'),sandbox);
@@ -16,7 +16,9 @@ sandbox.Vue.onMounted=()=>{};sandbox.Vue.onUnmounted=()=>{};
 sandbox.Vue.createApp=()=>({mount(){}});
 vm.runInContext(fs.readFileSync(path.join(root,'dist/app.js'),'utf8'),sandbox);
 let config={configured:true,enabled:true,base_url:'https://mail.example.test',domain:'example.test',default_quota_mb:1024,allow_private_network:false,api_key_configured:true,version:1,last_test_ok:true};
-const calls=[];
+const calls=[],boxes=[];let linked=false;
+const candidate={user_id:'user-school-test',name:'Docente Exemplo',address:'docente@example.test'};
+const user={id:candidate.user_id,name:candidate.name,email:candidate.address,role:'teacher',active:true,school_ids:['school-test']};
 let failTest=false;
 sandbox.PigeAPI.request=async(url,options={})=>{
   calls.push({url,method:options.method||'GET',body:options.body});
@@ -27,11 +29,14 @@ sandbox.PigeAPI.request=async(url,options={})=>{
     }
     return {...config};
   }
-  if(url.endsWith('/mailboxes')||url==='/users')return [];
+  if(url==='/schools/school-test/users')return [user];
+  if(url.endsWith('/mailboxes'))return [...boxes];
+  if(url.includes('/mailboxes/candidates?'))return {items:linked?[]:[candidate],total:linked?0:1,offset:0,limit:20};
   throw new Error('Unexpected request '+url);
 };
-sandbox.PigeAPI.post=async(url)=>{
-  calls.push({url,method:'POST'});
+sandbox.PigeAPI.post=async(url,body)=>{
+  calls.push({url,method:'POST',body});
+  if(url.endsWith('/mailboxes/reconcile')){assert.deepEqual({...body},{user_id:candidate.user_id});linked=true;const box={id:'box-existing',user_id:user.id,user_name:user.name,address:user.email,quota_mb:1024,quota_used_bytes:0,status:'active',job_status:'completed',attempts:0,error_code:'',credentials_available:false,origin:'existing'};boxes.push(box);return box;}
   assert.ok(url.endsWith('/test'));
   return {ok:!failTest,code:failTest?'MAILCOW_READ_ONLY_KEY':'',message:failTest?'A chave salva permite apenas leitura.':'Consulta ao domínio validada. A permissão de criação será confirmada ao provisionar uma caixa.',read_authenticated:!failTest,write_verified:false};
 };
@@ -72,4 +77,12 @@ assert.equal(context.state.config.enabled,false,'A disabled integration can be t
 assert.equal(context.state.config.last_test_ok,true);
 context.state.credentials={address:'test@example.test',password:'synthetic-only-password',webmail_url:'https://mail.example.test/SOGo/'};
 assert.ok(nodes(render()).some(node=>node.type==='button'&&node.props?.['data-dialog-close']!==undefined),'Initial credentials can be closed with Escape');
-console.log('Mailcow flow: isolated draft, save-before-test, failure state, read-only result, key clearing and credential dialog OK.');
+await context.existingPage();assert.equal(context.state.candidates.length,1);
+const beforeReconcile=calls.length;await context.reconcile(context.state.candidates[0]);
+assert.equal(context.state.mailboxes[0].origin,'existing');assert.equal(context.state.candidates.length,0);
+assert.match(context.state.notice,/senha atual/);
+assert.ok(calls.slice(beforeReconcile).some(call=>call.url.endsWith('/mailboxes/reconcile')));
+assert.ok(calls.slice(beforeReconcile).every(call=>!call.url.endsWith('/credentials')&&!call.url.endsWith('/connection')),'Linking does not request or change another user password');
+assert.equal(events.at(-1).type,'pige:email-account-changed');assert.equal(events.at(-1).detail.schoolId,'school-test');
+assert.ok(calls.every(call=>call.url!=='/users'),'Users are read only from the active school');
+console.log('Mailcow flow: isolated draft, save-before-test, failure state, read-only result, key clearing and credential dialog, scoped candidates and existing-mailbox linking without password OK.');

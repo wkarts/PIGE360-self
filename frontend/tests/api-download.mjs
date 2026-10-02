@@ -8,7 +8,7 @@ import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const downloads=[];
 let disposition='';
-const sandbox={URL:{createObjectURL:()=> 'blob:test',revokeObjectURL(){}},Headers,Response,Blob,setTimeout:()=>0,
+const sandbox={URL:{createObjectURL:()=> 'blob:test',revokeObjectURL(){}},Headers,Response,Blob,AbortController,AbortSignal,setTimeout:()=>0,
   document:{createElement:()=>({href:'',download:'',click(){downloads.push(this.download);}})},
   fetch:async()=>new Response('synthetic content',{headers:{'Content-Disposition':disposition}})};
 vm.createContext(sandbox);

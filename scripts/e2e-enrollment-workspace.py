@@ -100,6 +100,9 @@ try:
                 opener = page.get_by_role('button', name='Abrir menu', exact=True)
                 if opener.is_visible():
                     opener.click()
+                if name=='Instituição':
+                    settings=page.get_by_role('button',name='Configurações',exact=True)
+                    if settings.get_attribute('aria-expanded')=='false':settings.click()
                 page.locator('.sidebar').get_by_role('link', name=name, exact=True).click()
                 expect(page.locator('h1')).to_have_text(name)
 

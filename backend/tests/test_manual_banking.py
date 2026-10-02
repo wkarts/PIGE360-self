@@ -52,7 +52,7 @@ def test_integral_receipt_is_audited_idempotent_and_printable(api):
     path='/bank-charges/'+row['id'];data=receipt(row)
     api.call('GET',path+'/receipt.pdf',expect=409)
     api.post(path+'/manual-receipt',{**data,'amount':'80.00'},422)
-    api.post(path+'/manual-receipt',{**data,'paid_on':(date.today()+timedelta(days=1)).isoformat()},422)
+    api.post(path+'/manual-receipt',{**data,'paid_on':(school_today()+timedelta(days=1)).isoformat()},422)
     api.post(path+'/manual-receipt',{**data,'version':row['version']+1},409)
     paid=api.post(path+'/manual-receipt',data,200)
     assert paid['status']=='received_external' and paid['manual_paid_amount']=='120.15'
