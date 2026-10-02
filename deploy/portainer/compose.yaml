@@ -172,6 +172,7 @@ services:
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
+    cap_add: ["CHOWN"]
     logging:
       driver: json-file
       options: {max-size: "10m", max-file: "3"}
