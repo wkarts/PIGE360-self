@@ -63,7 +63,7 @@ assert.equal(admin.context.state.emailStatus,'configured');
 const adminTree=admin.render();
 for(const link of ['#/connect','#/email','#/integrations'])assert.ok(hrefs(adminTree).includes(link),link+' visível para administrador');
 for(const oldLabel of ['Financeiro / ASAAS','Connect API'])assert.ok(!content(adminTree).includes(oldLabel),'Menu antigo ausente: '+oldLabel);
-assert.match(content(adminTree),/SMTP configurado na instalação/);
+assert.match(content(adminTree),/Envio de e-mail configurado/);
 assert.ok(admin.calls.includes('/diagnostics/summary'));
 await admin.context.navigate('connect');assert.equal(admin.context.state.page,'connect');
 await admin.context.navigate('integrations');assert.equal(admin.context.state.page,'integrations');

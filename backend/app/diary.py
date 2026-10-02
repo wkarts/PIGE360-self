@@ -15,6 +15,7 @@ from .db import now
 from .documents import render_pdf
 from .portal_access import PORTAL_DIARY_ACCESS_CONSENT_VERSION, verified_guardian_contact_matches
 from .security import Actor, DB, PERMISSIONS, check_version, current_user, fail, lock_school, require
+from .lifecycle_models import require_available
 
 
 router = APIRouter(prefix="/api/v1/schools/{school_id}", tags=["Diário Escolar Digital"])
@@ -332,7 +333,9 @@ def periods(db: DB, user: Actor, school: DiaryScope, academic_year_id: str = "")
 @router.post("/academic-periods", status_code=201)
 def create_period(data: s.AcademicPeriodInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     require(user, "diary.configure")
+    lock_school(db, school.id)
     year = _scoped(db, m.AcademicYear, data.academic_year_id, school.id)
+    require_available(db, year)
     if data.starts_on < year.starts_on or data.ends_on > year.ends_on:
         fail(422, "O período deve estar contido nas datas do ano letivo.")
     obj = m.AcademicPeriod(school_id=school.id, **data.model_dump())
@@ -379,7 +382,10 @@ def plans(db: DB, user: Actor, school: DiaryScope, class_group_id: str = "", com
 @router.post("/curriculum-plans", status_code=201)
 def create_plan(data: s.CurriculumPlanInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     require(user, "diary.write")
+    lock_school(db, school.id)
     group = _scoped(db, m.ClassGroup, data.class_group_id, school.id)
+    require_available(db, group)
+    require_available(db, _scoped(db, m.AcademicYear, group.academic_year_id, school.id))
     _scoped(db, m.CurriculumComponent, data.component_id, school.id)
     if data.academic_period_id: _period(db, school.id, data.academic_period_id, group.academic_year_id)
     if data.teacher_assignment_id:
@@ -412,6 +418,7 @@ def create_plan(data: s.CurriculumPlanInput, db: DB, user: Actor, school: DiaryS
 @router.patch("/curriculum-plans/{plan_id}")
 def edit_plan(plan_id: str, data: s.PlanEdit, db: DB, user: Actor, school: DiaryScope, request: Request):
     require(user, "diary.write")
+    lock_school(db, school.id)
     obj = _scoped(db, m.CurriculumPlan, plan_id, school.id)
     check_version(obj, data.version)
     assignment = db.get(m.TeacherAssignment, obj.teacher_assignment_id) if obj.teacher_assignment_id else None
@@ -419,6 +426,9 @@ def edit_plan(plan_id: str, data: s.PlanEdit, db: DB, user: Actor, school: Diary
         fail(403, "O planejamento não pertence a uma atribuição docente do usuário.")
     values = data.model_dump(exclude={"version"})
     group = _scoped(db, m.ClassGroup, data.class_group_id, school.id)
+    if group.id != obj.class_group_id or data.status != 'archived':
+        require_available(db, group)
+        require_available(db, _scoped(db, m.AcademicYear, group.academic_year_id, school.id))
     _scoped(db, m.CurriculumComponent, data.component_id, school.id)
     if data.academic_period_id:
         _period(db, school.id, data.academic_period_id, group.academic_year_id)
@@ -460,7 +470,10 @@ def diaries(db: DB, user: Actor, school: DiaryScope, class_group_id: str = ""):
 @router.post("/diaries", status_code=201)
 def create_diary(data: s.DiaryInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     require(user, "diary.configure")
+    lock_school(db, school.id)
     group = _scoped(db, m.ClassGroup, data.class_group_id, school.id)
+    require_available(db, group)
+    require_available(db, _scoped(db, m.AcademicYear, group.academic_year_id, school.id))
     _scoped(db, m.CurriculumComponent, data.component_id, school.id)
     assignment = None
     if data.teacher_assignment_id:

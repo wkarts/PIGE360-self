@@ -35,25 +35,25 @@ MAX_QUOTA_MB = 1_048_576
 LOCAL_PART = re.compile(r'[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?')
 DOMAIN = re.compile(r'(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{1,62}')
 ERROR_MESSAGES = {
-    'MAILCOW_KEY_REJECTED': 'A chave da API foi recusada pelo Mailcow. Confira se a API está habilitada e substitua a chave salva pela chave de leitura e escrita do servidor.',
-    'MAILCOW_IP_NOT_ALLOWED': 'O Mailcow bloqueou o IP de origem da conexão. Autorize os IPs de saída da aplicação e do worker na lista de acesso da API Mailcow.',
-    'MAILCOW_READ_ONLY_KEY': 'A chave salva permite apenas leitura. Substitua-a pela chave de leitura e escrita do Mailcow para criar caixas de e-mail.',
-    'MAILCOW_ACCESS_DENIED': 'O Mailcow recusou o acesso à API. Confira a chave de leitura e escrita e autorize os IPs de saída da aplicação e do worker na lista de acesso do Mailcow.',
-    'MAILCOW_WRITE_DENIED': 'O Mailcow recusou a criação pela API. Use a chave de leitura e escrita, confirme que essa API está habilitada e autorize o IP de saída do worker no Mailcow.',
-    'MAILCOW_KEY_MISSING': 'Salve uma chave da API de leitura e escrita do Mailcow antes de testar a conexão.',
-    'MAILCOW_DOMAIN_UNAVAILABLE': 'O domínio informado não foi encontrado ativo no Mailcow. Confira o domínio de e-mail e sua ativação no servidor.',
-    'MAILCOW_DNS_UNAVAILABLE': 'O servidor da aplicação não conseguiu resolver o endereço do Mailcow. Confira o hostname e o DNS da instalação.',
-    'MAILCOW_ADDRESS_BLOCKED': 'O endereço do Mailcow foi bloqueado pela configuração de rede. Se o servidor está em uma rede privada, habilite essa opção e mantenha um hostname HTTPS válido.',
-    'MAILCOW_TLS_ERROR': 'O certificado HTTPS do Mailcow não pôde ser validado. Confira o hostname, a validade e a cadeia de certificados do servidor.',
-    'MAILCOW_NETWORK_ERROR': 'Não foi possível conectar ao Mailcow. Confira a disponibilidade do servidor, a porta HTTPS e o firewall de saída da instalação.',
-    'MAILCOW_UNAVAILABLE': 'O Mailcow está temporariamente indisponível ou limitou as requisições. Aguarde antes de tentar novamente.',
-    'MAILCOW_INVALID_RESPONSE': 'O endereço configurado não retornou uma resposta válida da API Mailcow. Confira o servidor e as regras do proxy.',
-    'MAILCOW_HTTP_REJECTED': 'O servidor recusou a requisição à API Mailcow. Confira o endereço HTTPS e as regras do proxy ou firewall.',
-    'MAILCOW_ADDRESS_CONFLICT': 'Este endereço já existe no Mailcow sem o vínculo deste cadastro. Escolha outro endereço; a caixa existente não será alterada.',
+    'MAILCOW_KEY_REJECTED': 'A chave da API foi recusada pelo servidor de e-mail. Confira se a API está habilitada e substitua a chave salva pela chave de leitura e escrita do servidor.',
+    'MAILCOW_IP_NOT_ALLOWED': 'O servidor de e-mail bloqueou o IP de origem da conexão. Autorize os IPs de saída da aplicação e do serviço de processamento na lista de acesso da API do servidor de e-mail.',
+    'MAILCOW_READ_ONLY_KEY': 'A chave salva permite apenas leitura. Substitua-a pela chave de leitura e escrita do servidor de e-mail para criar caixas de e-mail.',
+    'MAILCOW_ACCESS_DENIED': 'O servidor de e-mail recusou o acesso à API. Confira a chave de leitura e escrita e autorize os IPs de saída da aplicação e do serviço de processamento na lista de acesso do servidor de e-mail.',
+    'MAILCOW_WRITE_DENIED': 'O servidor de e-mail recusou a criação pela API. Use a chave de leitura e escrita, confirme que essa API está habilitada e autorize o IP de saída do serviço de processamento no servidor de e-mail.',
+    'MAILCOW_KEY_MISSING': 'Salve uma chave da API de leitura e escrita do servidor de e-mail antes de testar a conexão.',
+    'MAILCOW_DOMAIN_UNAVAILABLE': 'O domínio informado não foi encontrado ativo no servidor de e-mail. Confira o domínio de e-mail e sua ativação no servidor.',
+    'MAILCOW_DNS_UNAVAILABLE': 'O servidor da aplicação não conseguiu resolver o endereço do servidor de e-mail. Confira o hostname e o DNS da instalação.',
+    'MAILCOW_ADDRESS_BLOCKED': 'O endereço do servidor de e-mail foi bloqueado pela configuração de rede. Se o servidor está em uma rede privada, habilite essa opção e mantenha um hostname HTTPS válido.',
+    'MAILCOW_TLS_ERROR': 'O certificado HTTPS do servidor de e-mail não pôde ser validado. Confira o hostname, a validade e a cadeia de certificados do servidor.',
+    'MAILCOW_NETWORK_ERROR': 'Não foi possível conectar ao servidor de e-mail. Confira a disponibilidade do servidor, a porta HTTPS e o firewall de saída da instalação.',
+    'MAILCOW_UNAVAILABLE': 'O servidor de e-mail está temporariamente indisponível ou limitou as requisições. Aguarde antes de tentar novamente.',
+    'MAILCOW_INVALID_RESPONSE': 'O endereço configurado não retornou uma resposta válida da API do servidor de e-mail. Confira o servidor e as regras do proxy.',
+    'MAILCOW_HTTP_REJECTED': 'O servidor recusou a requisição à API do servidor de e-mail. Confira o endereço HTTPS e as regras do proxy ou firewall.',
+    'MAILCOW_ADDRESS_CONFLICT': 'Este endereço já existe no servidor de e-mail sem o vínculo deste cadastro. Escolha outro endereço; a caixa existente não será alterada.',
     'MAILCOW_DISABLED': 'A criação de contas está desativada. Habilite a integração antes de tentar novamente.',
-    'MAILCOW_CREATE_REJECTED': 'O Mailcow recusou a criação. Confira a disponibilidade do endereço, as cotas do domínio e as permissões de escrita da API.',
+    'MAILCOW_CREATE_REJECTED': 'O servidor de e-mail recusou a criação. Confira a disponibilidade do endereço, as cotas do domínio e as permissões de escrita da API.',
     'MAILCOW_CONFIRMATION_PENDING': 'O pedido foi enviado, mas a caixa ainda não foi confirmada. A próxima tentativa consultará o servidor antes de criar novamente.',
-    'MAILCOW_REMOTE_MAILBOX_MISSING': 'A caixa anteriormente criada não foi encontrada no Mailcow. Confira o endereço no servidor antes de tentar novamente.',
+    'MAILCOW_REMOTE_MAILBOX_MISSING': 'A caixa anteriormente criada não foi encontrada no servidor de e-mail. Confira o endereço no servidor antes de tentar novamente.',
     'MAILCOW_USER_INACTIVE': 'O usuário está desativado. Reative o cadastro antes de tentar criar sua caixa.',
     'MAILCOW_SCHOOL_INACTIVE': 'A escola está desativada. Reative a escola antes de tentar criar a caixa.',
     'MAILCOW_USER_ACCESS_REMOVED': 'O usuário não tem mais acesso à escola. Confira seu vínculo antes de tentar criar a caixa.',
@@ -62,7 +62,7 @@ ERROR_MESSAGES = {
 
 def error_message(code: str) -> str:
     # Messages are application-owned: provider bodies can echo credentials.
-    return ERROR_MESSAGES.get(code, 'Não foi possível concluir a operação no Mailcow. Confira a configuração e tente novamente.')
+    return ERROR_MESSAGES.get(code, 'Não foi possível concluir a operação no servidor de e-mail. Confira a configuração e tente novamente.')
 
 
 def _access_error(status: int, content: bytes, method: str) -> str:
@@ -158,7 +158,7 @@ def _base_url(value: str) -> str:
         fail(422, 'Porta inválida no endereço do servidor de e-mail.')
     if (parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password
             or parsed.query or parsed.fragment or parsed.path not in ('', '/') or port not in (443, 8443)):
-        fail(422, 'Use o endereço HTTPS do Mailcow, sem caminho ou credenciais, nas portas 443 ou 8443.')
+        fail(422, 'Use o endereço HTTPS do servidor de e-mail, sem caminho ou credenciais, nas portas 443 ou 8443.')
     host = parsed.hostname.rstrip('.').lower()
     if host in ('localhost', 'localhost.localdomain') or host.endswith(('.localhost', '.internal', '.local')):
         fail(422, 'Use o hostname completo do servidor de e-mail.')
@@ -369,7 +369,11 @@ def provision_job(db, job, payload):
     client = MailcowClient(config)
     remote = client.mailbox(mailbox.address)
     if remote:
+        first_confirmation = not mailbox.provisioned_at
         _apply_remote(mailbox, remote)
+        if first_confirmation:
+            from .email_client import provision_connection
+            provision_connection(db, mailbox, unseal(mailbox.encrypted_password).get('password'))
         return mailbox.address
     if mailbox.provisioned_at:
         raise IntegrationFailure('MAILCOW_REMOTE_MAILBOX_MISSING')
@@ -382,6 +386,8 @@ def provision_job(db, job, payload):
     if not remote:
         raise IntegrationFailure('MAILCOW_CONFIRMATION_PENDING', retryable=True)
     _apply_remote(mailbox, remote)
+    from .email_client import provision_connection
+    provision_connection(db, mailbox, password)
     return mailbox.address
 
 

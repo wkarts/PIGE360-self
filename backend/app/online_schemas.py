@@ -187,17 +187,34 @@ class ChargeInput(Input):
     amount: Decimal = Field(gt=0,max_digits=12,decimal_places=2)
     due_on: date
     description: str = Field(min_length=3,max_length=500)
-    billing_type: Literal['PIX','BOLETO'] = 'PIX'
+    collection_mode: Literal['manual','provider'] = 'provider'
+    billing_type: Literal['PIX','BOLETO','MANUAL'] = 'PIX'
     client_key: str = Field(min_length=12,max_length=80)
     installment_count: int = Field(default=1,ge=1,le=24)
     required_for_enrollment: bool = False
     @model_validator(mode='after')
     def links(self):
         if bool(self.admission_id) == bool(self.enrollment_id): raise ValueError('Selecione uma inscrição OU uma matrícula.')
-        if self.due_on < date.today(): raise ValueError('Informe vencimento atual ou futuro.')
+        if self.collection_mode == 'manual': self.billing_type = 'MANUAL'
+        elif self.billing_type == 'MANUAL': raise ValueError('Selecione Pix ou boleto para emissão bancária.')
+        if self.collection_mode == 'provider' and self.due_on < date.today(): raise ValueError('Informe vencimento atual ou futuro para emissão bancária.')
         if self.required_for_enrollment and self.installment_count > 1: raise ValueError('Pagamento obrigatório de matrícula deve ser avulso, separado das mensalidades.')
         if self.installment_count > 1 and len(self.client_key) > 70: raise ValueError('Chave de parcelamento: máximo 70 caracteres.')
         return self
+
+class ManualReceipt(Input):
+    version: int = Field(ge=1)
+    client_key: str = Field(min_length=12,max_length=80)
+    amount: Decimal = Field(gt=0,max_digits=12,decimal_places=2)
+    paid_on: date
+    payment_method: Literal['cash','pix','transfer','card','other']
+    reference: str = Field(min_length=3,max_length=200)
+    @field_validator('paid_on')
+    @classmethod
+    def paid_date(cls,value):
+        from .portal_access import today
+        if value > today(): raise ValueError('A data de recebimento não pode estar no futuro.')
+        return value
 
 class Reason(Input):
     reason: str = Field(min_length=5,max_length=1000)

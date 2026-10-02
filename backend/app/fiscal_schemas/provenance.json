@@ -1,0 +1,18 @@
+{
+  "source": "https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/nfse-esquemas_xsd-v1-01-20260209.zip",
+  "archive_sha256": "e7935cbd9470527c6cc32984c1b2263e614183bf0139ce2733eaaed2de9a8072",
+  "downloaded_on": "2026-10-02",
+  "files": {
+    "nfse-1.00-xmldsig.xsd": {
+      "archive_path": "Schemas/1.00/xmldsig-core-schema.xsd",
+      "source_sha256": "d87432c5f6ebb2bd61a1de357797401c203f14daefde834b73946f25f926a216",
+      "sha256": "adbfc03b4d0b3ee8a18198383f81ec7b7857a5285f480717dfafd4696ce9f9be"
+    },
+    "nfse-1.01-xmldsig.xsd": {
+      "archive_path": "Schemas/1.01/xmldsig-core-schema.xsd",
+      "source_sha256": "49848f732663aecb618d72ad6130c5c3240f0a10f3a1a8544b7d48a6c726046f",
+      "sha256": "58dede7aaeb706b5c681302353567e6abd973f2110d3349187d62ca8f1b807d2"
+    }
+  },
+  "normalization": "CRLF converted to LF; line-end whitespace removed. XML structure unchanged."
+}

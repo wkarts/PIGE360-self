@@ -1,0 +1,25 @@
+.lifecycle-dialog { max-width: 660px; }
+.lifecycle-dialog .modal-form > .modal-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.lifecycle-record { padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+.lifecycle-record h3 { margin: 5px 0 10px; font-size: 20px; line-height: 1.4; overflow-wrap: anywhere; }
+.lifecycle-note { margin-top: 18px; font-size: 13px; line-height: 1.65; color: var(--muted); overflow-wrap: anywhere; }
+.lifecycle-modes { margin: 22px 0; padding: 0; border: 0; display: grid; gap: 10px; min-width: 0; }
+.lifecycle-modes legend { margin-bottom: 12px; font-weight: 650; }
+.lifecycle-modes > label { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+.lifecycle-modes > label.selected { border-color: var(--primary); background: var(--surface-subtle, #f7f9fb); }
+.lifecycle-modes input[type=radio], .lifecycle-acknowledge input[type=checkbox] { flex: 0 0 20px; width: 20px; min-height: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--primary); }
+.lifecycle-modes label span { min-width: 0; }
+.lifecycle-modes strong, .lifecycle-modes small { display: block; line-height: 1.5; }
+.lifecycle-modes small { margin-top: 5px; color: var(--muted); font-size: 13px; }
+.lifecycle-impact { padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--background); font-size: 13px; line-height: 1.65; }
+.lifecycle-impact h3 { margin-bottom: 8px; }
+.lifecycle-impact ul { list-style: none; padding: 0; margin: 12px 0; }
+.lifecycle-impact li { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.lifecycle-impact li strong { flex: 0 0 auto; }
+.lifecycle-impact li:last-child { border: 0; }
+.lifecycle-confirmation { display: grid; gap: 18px; margin-top: 22px; }
+.lifecycle-confirmation .field { gap: 8px; }
+.lifecycle-confirmation textarea { resize: vertical; }
+.lifecycle-acknowledge { display: flex; gap: 12px; align-items: flex-start; min-height: 44px; padding-block: 8px; font-size: 13px; line-height: 1.6; cursor: pointer; }
+.lifecycle-refresh { margin-top: 18px; }
+@media (max-width: 600px) { .lifecycle-modes > label, .lifecycle-impact { padding: 14px; } .lifecycle-record h3 { font-size: 18px; } }

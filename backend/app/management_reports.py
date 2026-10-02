@@ -210,7 +210,8 @@ def financial(db, school_id, f):
         groups = scoped_groups(db, school_id, f)
         stmt = stmt.where(or_(m.BankCharge.enrollment_id.in_(select(m.Enrollment.id).where(m.Enrollment.school_id == school_id, m.Enrollment.class_group_id.in_(groups))),
                              m.BankCharge.admission_id.in_(select(m.Admission.id).where(m.Admission.school_id == school_id, m.Admission.class_group_id.in_(groups)))))
-    if f['status']: stmt = stmt.where(m.BankCharge.status == f['status'])
+    from .banking import effective_status, effective_status_expression
+    if f['status']: stmt = stmt.where(effective_status_expression() == f['status'])
     if f['q']: stmt = stmt.where(or_(m.BankCharge.description.icontains(f['q'], autoescape=True), m.BankCharge.payer_snapshot['name'].as_string().icontains(f['q'], autoescape=True)))
     data = [entry[0] for entry in limited(db, stmt.order_by(m.BankCharge.due_on, m.BankCharge.created_at, m.BankCharge.id))]
     today = now().astimezone(TZ).date()
@@ -226,8 +227,8 @@ def financial(db, school_id, f):
         is_overdue = charge.status in open_states and charge.due_on < today
         if is_overdue: sums['overdue'] += charge.amount
         rows.append(dict(payer=(charge.payer_snapshot or {}).get('name', ''), description=charge.description,
-                         due_on=iso(charge.due_on), amount=amount(charge.amount), billing_type={'PIX': 'Pix', 'BOLETO': 'Boleto'}.get(charge.billing_type, charge.billing_type),
-                         status=label(charge.status), overdue_days=(today - charge.due_on).days if is_overdue else 0,
+                         due_on=iso(charge.due_on), amount=amount(charge.amount), billing_type={'PIX': 'Pix', 'BOLETO': 'Boleto', 'MANUAL':'Cobrança interna'}.get(charge.billing_type, charge.billing_type),
+                         status='Recebido manualmente' if charge.collection_mode=='manual' and charge.status=='received_external' else label(effective_status(charge)), overdue_days=(today - charge.due_on).days if is_overdue else 0,
                          _date=iso(charge.due_on), _amount=charge.amount))
     summary = [metric('total', 'Cobranças', len(rows)), metric('nominal', 'Valor nominal', amount(sums['nominal']), 'currency'),
                metric('received', 'Recebidas', amount(sums['received']), 'currency'), metric('external', 'Recebidas externamente', amount(sums['external']), 'currency'),
@@ -237,7 +238,8 @@ def financial(db, school_id, f):
     columns = [col('payer', 'Pagador', width=1.8), col('description', 'Cobrança', width=2), col('due_on', 'Vencimento', 'date'), col('amount', 'Valor', 'currency'), col('billing_type', 'Meio'), col('status', 'Situação', width=1.3), col('overdue_days', 'Dias em atraso', 'number', .8)]
     notes = ['As cobranças são selecionadas pelo vencimento, e não pela data de pagamento. Este relatório não é fluxo de caixa nem extrato bancário.',
              'Confirmado não é somado a recebido. Valores são nominais, sem dedução de tarifas; estornos parciais e contestações ficam em conferência.',
-             'Em aberto inclui cobranças pendentes e vencidas já emitidas. Atraso é calculado até a data de emissão deste relatório.']
+             'Em aberto inclui cobranças internas e bancárias pendentes ou vencidas. Atraso é calculado até a data de emissão deste relatório.',
+             'Recebidas externamente inclui baixas manuais registradas pela escola; esses valores são separados dos recebimentos conciliados no banco.']
     return rows, columns, summary, notes
 
 

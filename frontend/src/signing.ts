@@ -10,13 +10,15 @@ namespace PigeSigning {
   const statuses:Record<string,string>={unsigned:'Sem assinatura',company_signed:'Assinado pela escola',pending_validation:'Assinatura do responsável em revisão',verified:'Conferido pela Direção',rejected:'Devolvido para correção'};
   export const component={props:['schoolId','permissions','role','enrollmentId','issuedId'],render:PigeRenders.signing,setup(props:Props){
     const state=Vue.reactive({
-      busy:false,loading:false,error:'',notice:'',
+      busy:false,loading:false,error:'',notice:'',tab:'documents',
+      fiscalItems:[] as Row[],fiscalProfiles:[] as {id:string;label:string}[],fiscalTotal:0,fiscalOffset:0,fiscalProfile:'nfe_4',fiscalFilename:'',fiscalConsent:false,
+      alerts:{email_enabled:false,whatsapp_enabled:false,email:'',phone_available:false},
       configured:false,certificate:null as Certificate|null,certificateName:'',certificatePassword:'',
       pending:[] as QueueItem[],pendingTotal:0,offset:0,limit:30,unsigned:[] as QueueItem[],unsignedTotal:0,unsignedOffset:0,removeCertificateOpen:false,
       enrollmentIssued:[] as Row[],review:null as Review|null,
       reportName:'',signerCpf:'',validationReference:'',confirmedReview:false,rejectionReason:''
     });
-    let certificateFile:File|null=null,reportFile:File|null=null;
+    let certificateFile:File|null=null,reportFile:File|null=null,fiscalFile:File|null=null;
     const base=()=>'/schools/'+props.schoolId;
     const can=(permission:string)=>props.permissions.includes(permission);
     const canManageA1=()=>can('schools.manage')&&['admin','direction'].includes(props.role);
@@ -41,7 +43,7 @@ namespace PigeSigning {
       state.enrollmentIssued=(result.issued||[]).filter(row=>row.kind==='template'&&row.enrollment_id===props.enrollmentId);
     }
     async function load():Promise<void>{state.loading=true;state.error='';try{
-      await Promise.all([loadCertificate(),loadPending(),loadUnsigned(),loadEnrollmentIssued()]);
+      await Promise.all([loadCertificate(),loadPending(),loadUnsigned(),loadEnrollmentIssued(),loadFiscal(),loadAlertPreferences()]);
       if(props.issuedId)await loadReview(props.issuedId);
     }catch(error){state.error=error instanceof Error?error.message:String(error);}finally{state.loading=false;}}
     async function loadReview(id:string):Promise<void>{state.review=await PigeAPI.request<Review>(base()+'/issued-documents/'+id+'/signatures');state.confirmedReview=false;state.rejectionReason='';}
@@ -53,7 +55,7 @@ namespace PigeSigning {
       if(!password){state.error='Informe a senha do certificado A1.';return;}
       await run(async()=>{const form=new FormData();form.append('file',file);form.append('password',password);
         const saved=await PigeAPI.request<Certificate>(base()+'/signing-certificate/a1',{method:'PUT',body:form});
-        state.certificate=saved;state.configured=true;state.notice='Certificado A1 configurado. Confira sujeito e validade antes de emitir contratos que exigem assinatura.';
+        state.certificate=saved;state.configured=true;state.notice='Certificado A1 configurado para documentos escolares e perfis fiscais compatíveis.';
       });
       // Senha e arquivo permanecem somente na memória deste formulário durante o envio.
       clearCertificateInput();
@@ -82,8 +84,24 @@ namespace PigeSigning {
         await Promise.all([loadReview(id),loadPending(),loadEnrollmentIssued()]);state.notice='Assinatura devolvida. O responsável poderá reenviar uma nova revisão do PDF.';
       });
     }
+    async function loadFiscal():Promise<void>{if(!canManageA1())return;
+      const result=await PigeAPI.request<{items:Row[];total:number;profiles:{id:string;label:string}[]}>(base()+`/fiscal-signatures?limit=20&offset=${state.fiscalOffset}`);
+      state.fiscalItems=result.items;state.fiscalTotal=result.total;state.fiscalProfiles=result.profiles;
+    }
+    async function fiscalPage(delta:number):Promise<void>{const next=state.fiscalOffset+delta*20;if(next<0||next>=state.fiscalTotal)return;state.fiscalOffset=next;await run(loadFiscal);}
+    function fiscalChanged(event:Event):void{fiscalFile=(event.target as HTMLInputElement).files?.[0]||null;state.fiscalFilename=fiscalFile?.name||'';state.fiscalConsent=false;}
+    async function signFiscal():Promise<void>{if(!fiscalFile||!state.fiscalConsent||!canManageA1())return;
+      if(!/\.xml$/i.test(fiscalFile.name)||fiscalFile.size>2*1024*1024){state.error='Selecione um XML de até 2 MB.';return;}
+      await run(async()=>{const form=new FormData();form.append('file',fiscalFile!);form.append('profile',state.fiscalProfile);form.append('consent','true');
+        await PigeAPI.request(base()+'/fiscal-signatures',{method:'POST',body:form});
+        fiscalFile=null;state.fiscalFilename='';state.fiscalConsent=false;state.fiscalOffset=0;const input=document.getElementById('fiscal-xml-file') as HTMLInputElement|null;if(input)input.value='';
+        await loadFiscal();state.notice='XML assinado. Baixe o arquivo para seu fluxo fiscal. Nenhuma nota foi transmitida ou autorizada.';
+      });
+    }
+    async function loadAlertPreferences():Promise<void>{if(canManageA1())state.alerts=await PigeAPI.request<typeof state.alerts>(base()+'/signing-certificate/alert-preferences');}
+    async function saveAlertPreferences():Promise<void>{await run(async()=>{state.alerts=await PigeAPI.request<typeof state.alerts>(base()+'/signing-certificate/alert-preferences',{method:'PUT',body:JSON.stringify({email_enabled:state.alerts.email_enabled,whatsapp_enabled:state.alerts.whatsapp_enabled})});state.notice='Preferências de aviso atualizadas.';});}
     Vue.onMounted(()=>{void load();});
-    Vue.onUnmounted(()=>{clearCertificateInput();reportFile=null;state.signerCpf='';state.validationReference='';});
-    return{state,can,canManageA1,canDecide,certificateExpired,str,date,label,load,loadPending,openReview,loadUnsigned,unsignedPage,signDocument,certificateChanged,saveCertificate,removeCertificate,page,download,reportChanged,validate,reject};
+    Vue.onUnmounted(()=>{clearCertificateInput();reportFile=null;fiscalFile=null;state.signerCpf='';state.validationReference='';});
+    return{state,loadFiscal,fiscalPage,fiscalChanged,signFiscal,saveAlertPreferences,can,canManageA1,canDecide,certificateExpired,str,date,label,load,loadPending,openReview,loadUnsigned,unsignedPage,signDocument,certificateChanged,saveCertificate,removeCertificate,page,download,reportChanged,validate,reject};
   }};
 }

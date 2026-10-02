@@ -3,7 +3,8 @@ from sqlalchemy import or_, select
 from . import models as m, schemas as s
 from .common import audit, output
 from .registry import validate
-from .security import Actor, DB, ROLE_LABELS, Scope, check_version, fail, require, scoped
+from .security import Actor, DB, ROLE_LABELS, Scope, check_version, fail, require, scoped, lock_school
+from .lifecycle_models import require_available
 
 router = APIRouter(prefix='/api/v1', tags=['Perfis e espaços de trabalho'])
 
@@ -220,9 +221,21 @@ def list_teacher_assignments(db: DB, user: Actor, school: Scope):
     return [assignment_output(db, row) for row in rows]
 
 
+def validate_assignment_available(db, school_id, group, person):
+    require_available(db, group)
+    require_available(db, scoped(db, m.AcademicYear, group.academic_year_id, school_id))
+    if person:
+        require_available(db, person)
+        profile = db.scalar(select(m.TeacherProfile).where(
+            m.TeacherProfile.person_id == person.id, m.TeacherProfile.school_id == school_id))
+        if profile:
+            require_available(db, profile)
+
+
 @router.post('/schools/{school_id}/teacher-assignments', status_code=201)
 def create_teacher_assignment(data: s.TeacherAssignmentInput, db: DB, user: Actor, school: Scope, request: Request):
     require(user, 'staff.assignments.write')
+    lock_school(db, school.id)
     teacher = db.get(m.User, data.teacher_user_id) if data.teacher_user_id else None
     person = scoped(db, m.Person, data.teacher_person_id, school.id) if data.teacher_person_id else None
     if teacher:
@@ -240,6 +253,7 @@ def create_teacher_assignment(data: s.TeacherAssignmentInput, db: DB, user: Acto
     if not teacher and not person:
         fail(422, 'Informe um usuário de acesso ou uma pessoa docente.')
     group = scoped(db, m.ClassGroup, data.class_group_id, school.id)
+    validate_assignment_available(db, school.id, group, person or (db.get(m.Person, teacher.person_id) if teacher and teacher.person_id else None))
     obj = m.TeacherAssignment(
         school_id=school.id,
         teacher_user_id=teacher.id if teacher else None,
@@ -258,6 +272,7 @@ def create_teacher_assignment(data: s.TeacherAssignmentInput, db: DB, user: Acto
 @router.patch('/schools/{school_id}/teacher-assignments/{assignment_id}')
 def update_teacher_assignment(assignment_id: str, data: s.Edit, db: DB, user: Actor, school: Scope, request: Request):
     require(user, 'staff.assignments.write')
+    lock_school(db, school.id)
     obj = scoped(db, m.TeacherAssignment, assignment_id, school.id)
     check_version(obj, data.version)
     values = validate(s.TeacherAssignmentInput, data.data)
@@ -277,6 +292,8 @@ def update_teacher_assignment(assignment_id: str, data: s.Edit, db: DB, user: Ac
     if not teacher and not person:
         fail(422, 'Informe um usuário de acesso ou uma pessoa docente.')
     group = scoped(db, m.ClassGroup, values.class_group_id, school.id)
+    if values.active:
+        validate_assignment_available(db, school.id, group, person or (db.get(m.Person, teacher.person_id) if teacher and teacher.person_id else None))
     obj.teacher_user_id = teacher.id if teacher else None
     obj.teacher_person_id = person.id if person else (teacher.person_id if teacher and teacher.person_id else None)
     obj.class_group_id = group.id

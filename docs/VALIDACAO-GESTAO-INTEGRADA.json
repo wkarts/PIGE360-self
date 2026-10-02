@@ -1,0 +1,247 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-02T02:27:30.869555+00:00",
+  "product": "PIGE360 Self",
+  "validation_status": "local_validation_recorded_final_gates_pending",
+  "source": {
+    "repository": "wkarts/PIGE360-self",
+    "base_branch": "develop",
+    "base_commit": "4565bf35747fb86eca4eeb6170b8061bc107fd8c",
+    "base_note": "Base real após integração da PR 38. Este registro documenta o trabalho local posterior e não depende do número de uma PR futura.",
+    "working_tree_changes_committed": false,
+    "deployment_performed": false,
+    "production_data_modified": false
+  },
+  "frontend_build": {
+    "product": "PIGE360 Self",
+    "version": "0.10.0",
+    "vue": "3.5.13",
+    "build_id": "0fcf6a960fa33272",
+    "pipeline": "typescript-vue-precompiled",
+    "external_cdn": false
+  },
+  "local_runtime": {
+    "python": "3.13.15",
+    "backend_database": "disposable_sqlite",
+    "browser": "Chromium com emulação de toque",
+    "lxml": {
+      "repository_requirement": "6.1.0",
+      "local_installed": "6.1.3",
+      "exact_pinned_version_tested_locally": false,
+      "note": "A suíte local executou com lxml 6.1.3. A instalação da dependência fixada em 6.1.0 e sua validação permanecem como gate do CI final."
+    }
+  },
+  "local_checks": {
+    "backend_full": {
+      "status": "passed_with_skip",
+      "passed": 414,
+      "subtests_passed": 5,
+      "skipped": 1,
+      "warnings": 39,
+      "elapsed_seconds": 75.69,
+      "database": "disposable_sqlite",
+      "skips": [
+        {
+          "test": "backend/tests/test_secretary.py:273",
+          "reason": "Requer PostgreSQL real para validar SELECT FOR UPDATE."
+        }
+      ],
+      "local_log": "expanded-backend-all.log",
+      "sha256": "1f161c69f3dea54ecdbb4f9368876afce0b240967e621dbd71db93be1420eee0"
+    },
+    "ci_policies": {
+      "status": "passed",
+      "passed": 97,
+      "local_log": "expanded-ci-policy.log",
+      "sha256": "d64a9b9e8bc910f29cf21b00741ba9a73c608f4638cb853876c86557e28c4de1"
+    },
+    "frontend": {
+      "status": "passed",
+      "build_id": "0fcf6a960fa33272",
+      "typescript": "passed_by_build",
+      "checks": [
+        "render-smoke",
+        "integration-navigation",
+        "diary-flow",
+        "mailcow-flow",
+        "download-flow",
+        "email-flow"
+      ],
+      "additional_render_checks": [
+        "login",
+        "portal_empty_and_failure_states",
+        "contracts",
+        "signing",
+        "campaigns",
+        "whatsapp",
+        "assisted_forms",
+        "support",
+        "admissions"
+      ],
+      "local_log": "expanded-build-final4.log",
+      "sha256": "c5869f2ca0de8f4b4cf081175030663fb76b49f6ea4cadf17d5af65f2ec84367"
+    },
+    "backend_email_and_provisioning": {
+      "status": "passed",
+      "passed": 42,
+      "email_tests": 19,
+      "provisioning_tests": 23,
+      "test_files": [
+        "backend/tests/test_email_client.py",
+        "backend/tests/test_mailcow.py"
+      ],
+      "transport": "Protocolos simulados e clientes da biblioteca padrão contra servidores TLS locais descartáveis.",
+      "external_delivery_performed": false,
+      "local_log": "email-backend-final.log",
+      "sha256": "f0d60011ee0686dc101455cc625b9c819eb317992d56d7a79da3086ec8de05d8"
+    },
+    "backend_admin_focused": {
+      "status": "passed_with_skip",
+      "passed": 55,
+      "skipped": 1,
+      "skip_reason": "Teste de SELECT FOR UPDATE exige PostgreSQL real.",
+      "local_log": "admin-console-final-backend.log",
+      "sha256": "a7159e81f2a8fd45e1eafaa2d0005e57b097620ba33143ea8a0b9cb666c32f2e"
+    },
+    "counting_note": "As suítes focadas se sobrepõem à suíte completa; seus resultados não devem ser somados ao total de 414."
+  },
+  "e2e_evidence": {
+    "email_client": {
+      "status": "passed",
+      "directory": "evidence/0.10.0/email-client",
+      "result_file": "evidence/0.10.0/email-client/result.json",
+      "result_sha256": "128c62bcfdcaced6028b432cff6b73fc13cb76cdfd8b52e1bd15ff3be686f60a",
+      "frontend_build_id": null,
+      "build_id_source": "not_recorded_in_result",
+      "png_count": 5,
+      "external_providers_tested": false,
+      "checks_passed": 9
+    },
+    "fiscal_signing": {
+      "status": "passed",
+      "directory": "evidence/0.10.0/fiscal-signing",
+      "result_file": "evidence/0.10.0/fiscal-signing/results.json",
+      "result_sha256": "d80439b54ff4f139ffa9fdc19274a1aeed6d5c04c006962add587f372553d0ae",
+      "frontend_build_id": "e79a1574f6bec042",
+      "build_id_source": "embedded_in_result",
+      "png_count": 14,
+      "external_providers_tested": false,
+      "checks_passed": 6
+    },
+    "record_lifecycle": {
+      "status": "passed",
+      "directory": "evidence/0.10.0/record-lifecycle",
+      "result_file": "evidence/0.10.0/record-lifecycle/results.json",
+      "result_sha256": "0dfe26e03e680e990e5b06c490a3ca39cfca7ebba4bbe4a0c373d9a8c866fed7",
+      "frontend_build_id": "e79a1574f6bec042",
+      "build_id_source": "execution_checkpoint; result does not embed build id",
+      "png_count": 3,
+      "external_providers_tested": false,
+      "checks_passed": 5
+    },
+    "admin_console": {
+      "status": "passed",
+      "directory": "evidence/admin-console",
+      "result_file": "evidence/admin-console/result.json",
+      "result_sha256": "b06c46fc641c13a859006c53e0fb9d5981ebab8271c51264d074ab9f087f66b1",
+      "frontend_build_id": "d0b512ab8150487e",
+      "build_id_source": "execution_checkpoint; result does not embed build id",
+      "png_count": 8,
+      "external_providers_tested": false,
+      "checks_passed": 7
+    },
+    "mobile_shell": {
+      "status": "passed",
+      "directory": "evidence/0.10.0/mobile",
+      "result_file": "evidence/0.10.0/mobile/results.json",
+      "result_sha256": "9e60b7ae10f474f1d740caefb620da463f004b0fd7f48d6d159bfaa528a79c79",
+      "frontend_build_id": "d0b512ab8150487e",
+      "build_id_source": "embedded_in_result",
+      "png_count": 20,
+      "external_providers_tested": false,
+      "checks_passed": 13
+    },
+    "manual_billing": {
+      "status": "passed",
+      "directory": "evidence/0.10.0/manual-billing",
+      "result_file": "evidence/0.10.0/manual-billing/result.json",
+      "result_sha256": "05402250ba484a6bc3f48669f924daa95b7188e86784a1b91b026ac82eb2c031",
+      "frontend_build_id": null,
+      "build_id_source": "not_recorded_in_result",
+      "png_count": 3,
+      "external_providers_tested": false,
+      "checks_passed": 4
+    },
+    "enrollment_institution_academic_structure": {
+      "status": "passed",
+      "directory": "evidence/0.10.0/enrollment-workspace",
+      "result_file": "evidence/0.10.0/enrollment-workspace/result.json",
+      "result_sha256": "fc15c588d492951df4a282a7643d2bd230244a759cc2a5661bc38705ec91d3fb",
+      "frontend_build_id": "0fcf6a960fa33272",
+      "build_id_source": "execution_checkpoint_confirmed_by_root; result build metadata being recorded",
+      "png_count": 13,
+      "external_providers_tested": false,
+      "checks_passed": 7,
+      "page_errors": [],
+      "http_failures": [],
+      "pdf_pages": 2,
+      "validated_flows": [
+        "Matrícula responsiva, validação, pesquisa e persistência do rascunho",
+        "Ficha de matrícula PDF real em duas páginas",
+        "Quatro abas da instituição",
+        "Filtros combinados da estrutura acadêmica"
+      ]
+    }
+  },
+  "snapshot_provenance": {
+    "current_build": "0fcf6a960fa33272",
+    "intermediate_builds": {
+      "e79a1574f6bec042": [
+        "fiscal_signing",
+        "record_lifecycle"
+      ],
+      "d0b512ab8150487e": [
+        "admin_console",
+        "mobile_shell"
+      ]
+    },
+    "changes_after_intermediate_snapshots": [
+      "CSS do formulário de matrícula",
+      "rótulos da interface"
+    ],
+    "note": "Capturas dos snapshots intermediários não são apresentadas como capturas do build atual. Os relatórios de e-mail e cobrança sem build embutido preservam build_id nulo; não é inferida identidade exata do binário.",
+    "failed_or_debug_artifacts": "Diretórios de depuração e arquivos failure.png remanescentes de tentativas anteriores não constituem evidência de aprovação."
+  },
+  "pending_gates": {
+    "enrollment_e2e_final_acceptance": "passed",
+    "final_remote_ci": "pending",
+    "postgresql_full_suite": "pending_final_ci",
+    "docker_smoke": "pending_final_ci",
+    "pinned_dependency_installation": "pending_final_ci",
+    "note": "Atualizar estes estados apenas depois de observar o resultado correspondente. Um build local aprovado não substitui CI, PostgreSQL ou Docker."
+  },
+  "external_limitations": [
+    "O cliente de e-mail foi validado com mensagens sintéticas e servidores de protocolo/TLS locais. Nenhum servidor institucional real foi autenticado, nenhuma caixa real foi criada e nenhum e-mail externo foi enviado nesta validação.",
+    "A API de provisionamento e os protocolos de caixa de e-mail são integrações distintas. O diagnóstico anterior de recusa não comprova correção de chave, lista de IPs permitidos, firewall ou credenciais do servidor real.",
+    "Leitura de e-mail é limitada a 10 MiB por mensagem; composição aceita até 10 anexos somando 5 MiB e 50 destinatários. O conteúdo recebido é texto, sem execução de HTML ou carregamento de rastreadores externos.",
+    "Envio SMTP pode ter resultado incerto após timeout. A tentativa registrada não é reenviada automaticamente; o usuário precisa conferir o resultado antes de criar nova tentativa.",
+    "Assinaturas XML foram exercitadas com certificado, cadeia e documentos sintéticos. Não houve transmissão, emissão ou homologação junto à SEFAZ, prefeitura ou ambiente nacional da NFS-e.",
+    "Os perfis implementados são NF-e 4.00, NFC-e 4.00 e DPS nacional 1.00/1.01. A assinatura criptográfica não equivale à validação integral do leiaute, autorização fiscal ou cobertura de qualquer leiaute municipal.",
+    "A checagem criptográfica não afirma consulta de revogação online. Certificados A3 e fluxos reais externos de assinatura não foram testados nesta rodada.",
+    "Alertas de certificado são opt-in e foram exercitados com transportes simulados. Não houve entrega real de e-mail ou WhatsApp.",
+    "Cobranças internas, recebimento manual e comprovante foram validados sem conexão bancária. Isso não comprova emissão de boleto/Pix, recebimento externo ou conciliação bancária.",
+    "A validação de interface utiliza Chromium com toque emulado. Safari/iOS, teclado físico do aparelho e combinações reais de navegador/dispositivo não foram executados.",
+    "A redução da janela e a simulação de VisualViewport não equivalem a todos os comportamentos do teclado nativo. A ampliação por gesto simulada não substitui validação de zoom desktop com reflow.",
+    "O teste de concorrência que exige PostgreSQL foi explicitamente ignorado na suíte local SQLite e permanece pendente do CI final.",
+    "Nenhum deploy em produção ou alteração de dados reais foi realizado."
+  ],
+  "handoff": {
+    "update_after_final_ci": [
+      "pending_gates.final_remote_ci",
+      "pending_gates.postgresql_full_suite",
+      "pending_gates.docker_smoke",
+      "pending_gates.pinned_dependency_installation"
+    ],
+    "note": "Matrícula aceita no build 0fcf6a960fa33272; gates remotos continuam pendentes."
+  }
+}

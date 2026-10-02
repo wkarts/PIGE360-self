@@ -6,6 +6,13 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor
 
 from PIL import Image
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def enable_portability(monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings(), "portability_enabled", True)
 
 
 def _sample_archives():

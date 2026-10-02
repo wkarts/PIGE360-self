@@ -163,6 +163,9 @@ def execute(db, job):
     if job.kind == 'mailbox_provision':
         from .mailcow import provision_job
         return provision_job(db, job, payload)
+    if job.kind == 'certificate_expiry_alert':
+        from .certificate_alerts import execute_certificate_alert
+        return execute_certificate_alert(db, job, payload, send_email)
     if job.kind == 'smtp_email': return send_email(payload)
     raise IntegrationFailure('UNKNOWN_JOB_KIND')
 
@@ -333,7 +336,12 @@ def main():
         diagnostic_heartbeat('worker')
         try:
             if time.monotonic() >= next_reconcile:
-                schedule_reconciliations(); next_reconcile=time.monotonic()+60
+                schedule_reconciliations()
+                from .certificate_alerts import schedule_certificate_alerts
+                with Session(engine, expire_on_commit=False) as db:
+                    schedule_certificate_alerts(db)
+                    db.commit()
+                next_reconcile=time.monotonic()+60
             worked = process_one() or process_connect_one()
         except Exception:
             emit('worker.loop_failed',service='worker',level='ERROR',code='WORKER_DATABASE_OR_CONFIGURATION_ERROR')
