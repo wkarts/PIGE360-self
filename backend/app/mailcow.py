@@ -216,6 +216,32 @@ class MailcowClient:
     def request(self, path: str, method: str = 'GET', data=None):
         if not path.startswith('/api/v1/') or '?' in path or '#' in path or '..' in path:
             raise IntegrationFailure('MAILCOW_INVALID_PATH')
+        cfg = settings()
+        if cfg.mail_agent_url and cfg.mail_agent_shared_key:
+            try:
+                with httpx.Client(timeout=httpx.Timeout(cfg.integration_timeout_seconds), trust_env=False,
+                                  follow_redirects=False) as client:
+                    response = client.post(cfg.mail_agent_url.rstrip('/') + '/v1/providers/mailcow/request',
+                        headers={'Authorization': 'Bearer ' + cfg.mail_agent_shared_key},
+                        json={'provider':'mailcow','host':self.config.domain,'domain':self.config.domain,
+                              'allow_private_network':self.config.allow_private_network,'base_url':self.config.base_url,
+                              'api_key':self.key,'path':path,'method':method,'payload':data})
+                if response.status_code in (429, 503):
+                    raise IntegrationFailure('MAILCOW_UNAVAILABLE', retryable=True)
+                if response.status_code in (401, 403):
+                    raise IntegrationFailure(_access_error(response.status_code, b'', method))
+                if response.status_code == 404 and method == 'GET':
+                    return None
+                if response.status_code != 200:
+                    raise IntegrationFailure('MAILCOW_HTTP_REJECTED')
+                result = response.json()
+                if not isinstance(result, dict) or 'result' not in result:
+                    raise IntegrationFailure('MAILCOW_RESPONSE_INVALID')
+                return result['result']
+            except IntegrationFailure:
+                raise
+            except (httpx.HTTPError, OSError, ValueError):
+                raise IntegrationFailure('MAILCOW_UNAVAILABLE', retryable=True) from None
         target, authority, hostname = _pinned_target(self.config)
         headers = {'X-API-Key': self.key, 'Host': authority, 'Accept': 'application/json'}
         try:

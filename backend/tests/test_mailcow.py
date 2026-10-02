@@ -339,3 +339,28 @@ def test_tls_verification_failure_is_not_reported_as_an_api_key_problem(monkeypa
     monkeypatch.setattr(mailcow.httpx, 'Client', lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs))
     with pytest.raises(IntegrationFailure, match='MAILCOW_TLS_ERROR'):
         mailcow.MailcowClient(config).domain()
+
+
+def test_admin_mailcow_requests_are_forwarded_through_internal_agent(monkeypatch):
+    from types import SimpleNamespace
+    calls=[]
+    class FakeResponse:
+        status_code=200
+        def json(self): return {'result':{'domain_name':'example.test','active':1}}
+    class FakeClient:
+        def __init__(self,**kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self,*args): return None
+        def post(self,url,headers,json):
+            calls.append((url,headers,json));return FakeResponse()
+    monkeypatch.setattr(mailcow,'settings',lambda:SimpleNamespace(mail_agent_url='http://mail-agent:8090',
+        mail_agent_shared_key='internal-only-token',integration_timeout_seconds=8))
+    monkeypatch.setattr(mailcow.httpx,'Client',FakeClient)
+    client=object.__new__(mailcow.MailcowClient)
+    client.config=SimpleNamespace(domain='example.test',base_url='https://mail.example.test',allow_private_network=True)
+    client.key='provider-admin-secret'
+    assert client.request('/api/v1/get/domain/example.test')=={'domain_name':'example.test','active':1}
+    assert calls[0][0]=='http://mail-agent:8090/v1/providers/mailcow/request'
+    assert calls[0][1]['Authorization']=='Bearer internal-only-token'
+    assert calls[0][2]['api_key']=='provider-admin-secret' and calls[0][2]['provider']=='mailcow'
+    assert calls[0][2]['path']=='/api/v1/get/domain/example.test'

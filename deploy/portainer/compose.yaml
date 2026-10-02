@@ -107,6 +107,10 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
       SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+      MAIL_AGENT_URL: http://mail-agent:8090
+      MAIL_AGENT_SHARED_KEY: ${MAIL_AGENT_SHARED_KEY:?Defina MAIL_AGENT_SHARED_KEY no arquivo de ambiente}
+      SOGO_UPSTREAM_URL: ${SOGO_UPSTREAM_URL:-http://sogo}
+      SOGO_DB_PASSWORD: ${SOGO_DB_PASSWORD:?Defina SOGO_DB_PASSWORD no arquivo de ambiente}
     ports:
       - "${APP_BIND:-127.0.0.1}:${APP_PORT:-58080}:8000"
     volumes:
@@ -120,6 +124,51 @@ services:
     depends_on:
       db: {condition: service_healthy}
       storage-init: {condition: service_healthy}
+      mail-agent: {condition: service_healthy}
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  mail-agent:
+    image: ${MAIL_AGENT_IMAGE:-ghcr.io/wkarts/pige360-self-mail-agent:develop}
+    build: {context: ../../services/mail-agent, dockerfile: Dockerfile}
+    pull_policy: ${APP_PULL_POLICY:-always}
+    environment:
+      MAIL_AGENT_API_KEY: ${MAIL_AGENT_SHARED_KEY:?Defina MAIL_AGENT_SHARED_KEY no arquivo de ambiente}
+      MAIL_AGENT_TIMEOUT_SECONDS: ${INTEGRATION_TIMEOUT_SECONDS:-15}
+    expose: ["8090"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health/ready', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  sogo:
+    image: ${SOGO_IMAGE:-ghcr.io/wkarts/pige360-self-sogo:develop}
+    build: {context: ../../services/sogo, dockerfile: Dockerfile}
+    pull_policy: ${APP_PULL_POLICY:-always}
+    environment:
+      SOGO_DATABASE_URL: postgresql://pige360_sogo:${SOGO_DB_PASSWORD:?Defina SOGO_DB_PASSWORD no arquivo de ambiente}@db:5432/${POSTGRES_DB:-pige360}
+      SOGO_SMTP_SERVER: ${SOGO_SMTP_SERVER:-}
+      TZ: ${TZ:-America/Bahia}
+    expose: ["80"]
+    depends_on:
+      app: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1/SOGo/', timeout=5)"]
+      interval: 20s
+      timeout: 8s
+      start_period: 60s
+      retries: 12
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
@@ -132,7 +181,9 @@ services:
     pull_policy: ${APP_PULL_POLICY:-always}
     command: ["worker"]
     init: true
-    environment: *application_environment
+    environment:
+      <<: *application_environment
+      SOGO_DB_PASSWORD: ""
     volumes:
       - ./data-documents:/data
     depends_on:
@@ -156,7 +207,12 @@ services:
     pull_policy: ${APP_PULL_POLICY:-always}
     command: ["worker-ocr"]
     init: true
-    environment: *application_environment
+    environment:
+      <<: *application_environment
+      MAIL_AGENT_URL: ""
+      MAIL_AGENT_SHARED_KEY: ""
+      SOGO_UPSTREAM_URL: ""
+      SOGO_DB_PASSWORD: ""
     volumes:
       - ./data-documents:/data
     depends_on:

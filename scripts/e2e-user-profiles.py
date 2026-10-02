@@ -96,6 +96,20 @@ try:
         record('A interface e a API impedem remover o próprio administrador')
 
         workspace.get_by_role('tab', name=re.compile('Perfis de acesso')).click()
+        standard_card = workspace.locator('.access-standard-card').filter(has_text='Professor').first
+        expect(standard_card).to_be_visible()
+        standard_card.get_by_role('button', name='Duplicar e editar', exact=True).click()
+        expect(workspace.get_by_label('Nome do perfil', exact=True)).to_have_value('Professor personalizado')
+        expect(workspace.locator('form.access-editor .access-fields select').first).to_have_value('teacher')
+        workspace.get_by_role('button', name='Salvar perfil', exact=True).click()
+        teacher_copy = workspace.locator('.access-profile-card').filter(has_text='Professor personalizado')
+        expect(teacher_copy).to_be_visible()
+        teacher_copy.get_by_role('button', name='Excluir', exact=True).click()
+        workspace.get_by_label('Motivo', exact=True).fill('Remover cópia sintética do modelo')
+        workspace.get_by_label('Digite Professor personalizado para confirmar', exact=True).fill('Professor personalizado')
+        workspace.get_by_role('button', name='Excluir perfil', exact=True).click()
+        expect(teacher_copy).to_have_count(0)
+        record('Modelos padrão podem ser duplicados e personalizados sem alterar o perfil global')
         workspace.get_by_role('button', name='+ Criar perfil', exact=True).click()
         workspace.get_by_label('Nome do perfil', exact=True).fill('Secretaria — consulta')
         for button in workspace.locator('.access-group-actions').get_by_role('button', name='Limpar', exact=True).all():
@@ -109,6 +123,17 @@ try:
         assert set(profile['permissions']) == {'read', 'dashboard.read', 'people.read'}
         assert not client.get(base_b+'/access-profiles', headers=headers).json()
         record('Perfil de consulta criado pela UI pertence somente à escola Alfa')
+        profile_card.get_by_role('button', name='Duplicar', exact=True).click()
+        workspace.get_by_label('Nome do perfil', exact=True).fill('Secretaria — consulta 2')
+        workspace.get_by_role('button', name='Salvar perfil', exact=True).click()
+        duplicate_card=workspace.locator('.access-profile-card').filter(has_text='Secretaria — consulta 2')
+        expect(duplicate_card).to_be_visible()
+        duplicate_card.get_by_role('button', name='Excluir', exact=True).click()
+        workspace.get_by_label('Motivo', exact=True).fill('Remover cópia sintética do teste')
+        workspace.get_by_label('Digite Secretaria — consulta 2 para confirmar', exact=True).fill('Secretaria — consulta 2')
+        workspace.get_by_role('button', name='Excluir perfil', exact=True).click()
+        expect(duplicate_card).to_have_count(0)
+        record('Perfis personalizados também podem ser duplicados antes da edição')
 
         workspace.get_by_role('tab', name=re.compile('^Usuários')).click()
         workspace.get_by_role('button', name='+ Criar usuário', exact=True).click()

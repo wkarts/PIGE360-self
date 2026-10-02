@@ -16,7 +16,7 @@ def inspect(ref):
     return result
 
 def promote(channel, image, digest, version):
-    if not re.fullmatch(r'ghcr\.io/wkarts/pige360-self',image):raise ValueError('Imagem fora do escopo')
+    if not re.fullmatch(r'ghcr\.io/wkarts/pige360-self(?:-(?:mail-agent|sogo))?',image):raise ValueError('Imagem fora do escopo')
     if not re.fullmatch(r'sha256:[0-9a-f]{64}',digest):raise ValueError('Digest inválido')
     stable=version.split('-develop.',1)[0];major,minor,_=parse(stable)
     if channel=='develop':tags=['develop',f'develop-{stable}',f'develop-{major}.{minor}',f'develop-{major}']

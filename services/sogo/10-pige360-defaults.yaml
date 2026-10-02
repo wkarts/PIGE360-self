@@ -1,0 +1,37 @@
+SOGoPageTitle: "E-mail"
+SOGoLoginModule: Mail
+SOGoTimeZone: America/Bahia
+SOGoLanguage: BrazilianPortuguese
+SOGoProfileURL: "${SOGO_DATABASE_URL}/sogo_user_profile"
+OCSFolderInfoURL: "${SOGO_DATABASE_URL}/sogo_folder_info"
+OCSSessionsFolderURL: "${SOGO_DATABASE_URL}/sogo_sessions_folder"
+SOGoIMAPServer: "imaps://127.0.0.1:993"
+SOGoSieveServer: "sieve://127.0.0.1:4190"
+SOGoSMTPServer: "${SOGO_SMTP_SERVER}"
+SOGoMailingMechanism: smtp
+SOGoSMTPAuthenticationType: PLAIN
+SOGoForceExternalLoginWithEmail: YES
+SOGoUserSources:
+  - type: sql
+    id: pige360-mailboxes
+    viewURL: "${SOGO_DATABASE_URL}/sogo_users"
+    canAuthenticate: true
+    isAddressBook: true
+    displayName: "PIGE360"
+    UIDFieldName: c_uid
+    IDFieldName: c_name
+    CNFieldName: c_cn
+    MailFieldNames: [mail]
+    LoginFieldNames: [c_uid]
+    IMAPHostFieldName: c_imap_host
+    IMAPLoginFieldName: c_imap_login
+    SieveHostFieldName: c_sieve_host
+    DomainFieldName: c_domain
+    userPasswordAlgorithm: none
+SOGoMailDisableXForward: true
+SOGoExternalAvatarsEnabled: false
+SOGoGravatarEnabled: false
+# Only the private PIGE360 proxy may reach this service. It injects these
+# identity/password headers after verifying the current school, account and
+# IMAP/SMTP credentials; the browser cannot set trusted proxy headers.
+SOGoTrustProxyAuthentication: true

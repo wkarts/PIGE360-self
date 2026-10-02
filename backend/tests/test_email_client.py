@@ -1,5 +1,6 @@
 """E-mail pessoal usa servidores de protocolo simulados, nunca envia e-mail real."""
 import base64
+import hashlib
 import imaplib
 import socket
 import ssl
@@ -154,6 +155,7 @@ class FakeSMTP:
 
     def login(self, address, password):
         assert password == self.state['password']
+        self.state.setdefault('smtp_logins', []).append(address)
 
     def sendmail(self, sender, recipients, content):
         self.state['sent'].append((sender, recipients, content))
@@ -616,6 +618,34 @@ def test_automatic_auth_rejection_requests_current_password_without_reset(mailbo
     assert result.status_code==200 and result.json()['connected']
 
 
+def test_owner_can_reconnect_an_existing_same_domain_mailbox(mailbox_api):
+    a=mailbox_api
+    alternate='secretaria@escola.example.test'
+    result=a['client'].post(a['base']+'/connection',headers=a['headers'],json={'address':alternate,'password':a['state']['password']})
+    assert result.status_code==200,result.text
+    assert result.json()['connected'] and result.json()['address']==alternate
+    assert a['state']['logins'][-1][0]==alternate
+    assert a['state']['smtp_logins'][-1]==alternate
+    assert a['client'].get(a['base']+'/folders',headers=a['headers']).status_code==200
+    assert a['state']['logins'][-1][0]==alternate
+    sent=a['client'].post(a['base']+'/send',headers=a['headers'],json={'to':['family@example.com'],'text':'Teste','request_id':str(uuid.uuid4())})
+    assert sent.status_code==200 and sent.json()['status']=='sent'
+    assert a['state']['sent'][-1][0]==alternate
+    assert BytesParser(policy=policy.default).parsebytes(a['state']['sent'][-1][2])['From'].addresses[0].addr_spec==alternate
+    with SessionLocal() as db:
+        connection=db.scalar(select(e.EmailConnection).where(e.EmailConnection.user_id==a['user']['id']))
+        assert connection.address_override==alternate
+        assert unseal(connection.encrypted_secret)['password']==a['state']['password']
+
+
+def test_alternate_mailbox_must_belong_to_active_school_domain(mailbox_api):
+    a=mailbox_api
+    response=a['client'].post(a['base']+'/connection',headers=a['headers'],json={'address':'outsider@example.net','password':a['state']['password']})
+    assert response.status_code==422
+    assert 'domínio' in response.json()['detail']
+    assert a['client'].get(a['base']+'/account',headers=a['headers']).json()['address']==a['user']['mailbox']['address']
+
+
 def test_changed_server_configuration_requires_revalidation(mailbox_api):
     a=mailbox_api
     result=a['client'].put(a['base']+'/settings',headers=a['admin'],json={'imap_host':'imap.escola.example.test','smtp_host':'smtp.escola.example.test','smtp_port':587})
@@ -624,3 +654,73 @@ def test_changed_server_configuration_requires_revalidation(mailbox_api):
     assert not account['connected'] and account['can_auto_connect'] and not account['needs_password']
     assert account['connection_parameters']['imap_host']=='imap.escola.example.test'
     assert account['connection_parameters']['smtp_port']==587 and account['connection_parameters']['smtp_security']=='STARTTLS'
+
+
+def test_sogo_ticket_is_one_use_cookie_bound_to_school_and_user(mailbox_api, monkeypatch):
+    from types import SimpleNamespace
+    a=mailbox_api
+    monkeypatch.setattr(e,'settings',lambda:SimpleNamespace(sogo_upstream_url='http://sogo:20000',cookie_secure=False))
+    response=a['client'].post(a['base']+'/webmail-ticket',headers={**a['headers'],'X-CSRF-Protection':'1'},json={})
+    assert response.status_code==200,response.text
+    ticket=response.json()['ticket']
+    launch=a['client'].post(f"/webmail/{a['school']['id']}/launch",data={'ticket':ticket},follow_redirects=False)
+    assert launch.status_code==303 and launch.headers['location']==f"/webmail/{a['school']['id']}/SOGo/"
+    cookie=next(item for item in launch.headers.get_list('set-cookie') if item.startswith('pige_webmail_'))
+    assert 'HttpOnly' in cookie and 'SameSite=lax' in cookie and 'Path=/webmail/' in cookie
+    replay=a['client'].post(f"/webmail/{a['school']['id']}/launch",data={'ticket':ticket},follow_redirects=False)
+    assert replay.status_code==401
+    with SessionLocal() as db:
+        session=db.scalar(select(e.WebmailSession).where(e.WebmailSession.school_id==a['school']['id']))
+        assert session.user_id==a['user']['id'] and session.mailbox_id==a['user']['mailbox']['id']
+        assert session.redeemed_at and len(session.token_hash)==64 and session.token_hash != hashlib.sha256(ticket.encode()).hexdigest()
+
+
+def test_sogo_proxy_injects_credentials_server_side_and_rewrites_same_origin_paths(mailbox_api, monkeypatch):
+    from types import SimpleNamespace
+    import httpx
+    a=mailbox_api
+    monkeypatch.setattr(e,'settings',lambda:SimpleNamespace(sogo_upstream_url='http://sogo:20000',cookie_secure=False))
+    sent=[]
+    class FakeAsyncClient:
+        def __init__(self,**kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self,*args): return None
+        def build_request(self,method,url,headers,content=None):
+            return httpx.Request(method,url,headers=headers,content=content)
+        async def send(self,request,stream=False):
+            sent.append((request.method,str(request.url),dict(request.headers),request.content))
+            return httpx.Response(200,content=b'<html><head></head><body><a href="/SOGo/Mail">Inbox</a></body></html>',headers={'content-type':'text/html; charset=utf-8','set-cookie':'SOGo=sample; Path=/; HttpOnly'})
+    monkeypatch.setattr(e.httpx,'AsyncClient',FakeAsyncClient)
+    response=a['client'].post(a['base']+'/webmail-ticket',headers={**a['headers'],'X-CSRF-Protection':'1'},json={})
+    launch=a['client'].post(f"/webmail/{a['school']['id']}/launch",data={'ticket':response.json()['ticket']},follow_redirects=False)
+    cookie=launch.headers['set-cookie'].split(';',1)[0]
+    value=cookie.split('=',1)[1]
+    name=cookie.split('=',1)[0]
+    result=a['client'].get(f"/webmail/{a['school']['id']}/SOGo/",cookies={name:value})
+    assert result.status_code==200
+    assert sent[0][1]=='http://sogo:20000/SOGo/'
+    assert sent[0][2]['x-webobjects-remote-user']==a['user']['id']+'@'+a['school']['id']
+    assert base64.b64decode(sent[0][2]['authorization'].split()[1]).decode().endswith(':'+a['state']['password'])
+    assert f"/webmail/{a['school']['id']}/SOGo/Mail" in result.text
+    assert 'SAMEORIGIN' in result.headers['x-frame-options'] and 'frame-ancestors \'self\'' in result.headers['content-security-policy']
+    assert 'Path=/webmail/'+a['school']['id']+'/' in result.headers['set-cookie']
+
+
+def test_sogo_proxy_rejects_path_traversal_and_non_webmail_resources():
+    from fastapi import HTTPException
+    for resource in ('../admin', 'SOGo/../../admin', 'SOGo/%252e%252e/admin', 'SOGo/%5cadmin', 'private/file'):
+        with pytest.raises(HTTPException) as error:
+            e._validated_webmail_resource(resource)
+        assert error.value.status_code == 404
+
+
+def test_sogo_proxy_rejects_cookie_replayed_for_another_school(mailbox_api, monkeypatch):
+    from types import SimpleNamespace
+    a=mailbox_api
+    monkeypatch.setattr(e,'settings',lambda:SimpleNamespace(sogo_upstream_url='http://sogo:20000',cookie_secure=False))
+    response=a['client'].post(a['base']+'/webmail-ticket',headers={**a['headers'],'X-CSRF-Protection':'1'},json={})
+    launch=a['client'].post(f"/webmail/{a['school']['id']}/launch",data={'ticket':response.json()['ticket']},follow_redirects=False)
+    cookie=launch.headers['set-cookie'].split(';',1)[0]
+    name,value=cookie.split('=',1)
+    wrong=a['client'].get('/webmail/another-school/SOGo/',cookies={name:value})
+    assert wrong.status_code==401

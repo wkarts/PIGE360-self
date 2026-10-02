@@ -116,6 +116,8 @@ jobs:
           export APP_SECRET_KEY=ci-only-long-random-looking-application-key-1234567890
           export SETUP_TOKEN=ci-only-setup-token-1234567890
           export POSTGRES_PASSWORD=ci-only-postgres-password-1234567890
+          export MAIL_AGENT_SHARED_KEY=ci-only-mail-agent-key-1234567890
+          export SOGO_DB_PASSWORD=ci-only-sogo-db-password-1234567890
           for adapter in docker dockge portainer cloudpanel; do
             for channel in develop production; do
               docker compose --env-file "deploy/$adapter/.env.$channel.example" \

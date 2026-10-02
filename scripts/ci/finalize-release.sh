@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-: "${VERSION:?}" "${TARGET_SHA:?}" "${IMAGE:?}" "${DIGEST:?}"
+: "${VERSION:?}" "${TARGET_SHA:?}" "${IMAGE:?}" "${DIGEST:?}" "${MAIL_AGENT_IMAGE:?}" "${MAIL_AGENT_DIGEST:?}" "${SOGO_IMAGE:?}" "${SOGO_DIGEST:?}"
 [[ "$GITHUB_REF" == refs/heads/main || "$GITHUB_EVENT_NAME" == pull_request ]]
 [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
 [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]
@@ -25,7 +25,7 @@ else
 fi
 mkdir -p release
 python scripts/ci/package.py --version "$VERSION" --commit "$TARGET_SHA" --image "$IMAGE@$DIGEST" --output "release/PIGE360-Self-$VERSION.zip"
-printf '# PIGE360 Self %s\n\nCommit: `%s`\n\nImagem: `%s@%s`\n\nTestes, build e smoke do candidato concluídos pelo pipeline.\nImplantação Docker self-hosted; nenhum deploy externo executado.\n' "$VERSION" "$TARGET_SHA" "$IMAGE" "$DIGEST" > release/NOTES.md
+printf '# PIGE360 Self %s\n\nCommit: `%s`\n\nImagem da aplicação: `%s@%s`\nAgente de e-mail: `%s@%s`\nWebmail: `%s@%s`\n\nTestes, builds e smoke da stack concluídos pelo pipeline.\nImplantação Docker self-hosted; nenhum deploy externo executado.\n' "$VERSION" "$TARGET_SHA" "$IMAGE" "$DIGEST" "$MAIL_AGENT_IMAGE" "$MAIL_AGENT_DIGEST" "$SOGO_IMAGE" "$SOGO_DIGEST" > release/NOTES.md
 if ! gh release view "$VERSION" >/dev/null 2>&1; then
   gh release create "$VERSION" --verify-tag --draft --title "PIGE360 Self $VERSION" --notes-file release/NOTES.md
 fi
@@ -33,4 +33,6 @@ DRAFT="$(gh release view "$VERSION" --json isDraft --jq '.isDraft')"
 [[ "$DRAFT" == true ]] || { echo 'Release já publicada; sem alterações.'; exit 0; }
 gh release upload "$VERSION" "release/PIGE360-Self-$VERSION.zip" "release/PIGE360-Self-$VERSION.zip.sha256" --clobber
 python scripts/ci/promote.py release
+IMAGE="$MAIL_AGENT_IMAGE" DIGEST="$MAIL_AGENT_DIGEST" python scripts/ci/promote.py release
+IMAGE="$SOGO_IMAGE" DIGEST="$SOGO_DIGEST" python scripts/ci/promote.py release
 gh release edit "$VERSION" --draft=false --latest --notes-file release/NOTES.md

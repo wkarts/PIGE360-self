@@ -49,7 +49,7 @@ try:
         def nav(name):
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
             sidebar=page.locator('aside')
-            group='Configurações' if name in {'Instituição','Certificados A1'} else 'Documentação' if name in {'Pendências documentais','Assinaturas pendentes','Conferência de assinaturas'} else None
+            group='Configurações' if name=='Certificados A1' else 'Documentos' if name in {'Pendências documentais','Modelos e contratos','Assinaturas pendentes','Conferência de assinaturas'} else None
             if group:
                 toggle=sidebar.get_by_role('button',name=group,exact=True)
                 if toggle.get_attribute('aria-expanded')=='false':toggle.click()

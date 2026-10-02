@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     smtp_password: str = ''
     smtp_from: str = ''
     smtp_security: str = 'starttls'
+    sogo_upstream_url: str = ''
+    mail_agent_url: str = ''
+    mail_agent_shared_key: str = ''
+    sogo_db_password: str = ''
     worker_poll_seconds: int = 5
     bank_reconcile_interval_seconds: int = 900
     ocr_max_upload_mb: int = 8

@@ -10,10 +10,16 @@ mkdir -p ci-evidence
 # data-postgres/data-documents de uma instalacao real para o smoke test.
 STACK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/pige360-smoke.XXXXXXXX")"
 cp deploy/docker/compose.yaml "$STACK_DIR/compose.yaml"
+mkdir -p "$STACK_DIR/services"
+cp -a services/mail-agent services/sogo "$STACK_DIR/services/"
+sed -i 's#../../services/#./services/#g' "$STACK_DIR/compose.yaml"
 touch "$STACK_DIR/.pige360-smoke-owned"
 ENVFILE="$STACK_DIR/.env.ci"
 PROJECT="pige360-ci-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-${RANDOM}"
 export APP_IMAGE="$IMAGE" APP_PULL_POLICY=never COMPOSE_PROJECT_NAME="$PROJECT"
+if [[ "$MODE" == local ]]; then
+  export MAIL_AGENT_IMAGE=pige360-mail-agent:ci SOGO_IMAGE=pige360-sogo:ci
+fi
 export POSTGRES_IMAGE="${POSTGRES_IMAGE:-ghcr.io/wkarts/pige360-self-postgres:17-bookworm}"
 python - "$ENVFILE" <<'PYCONF'
 import base64, os, secrets, sys
@@ -21,7 +27,9 @@ values={'APP_SECRET_KEY':secrets.token_urlsafe(48),'SETUP_TOKEN':secrets.token_u
         'POSTGRES_PASSWORD':secrets.token_urlsafe(36), 'APP_ENV':'production',
         'APP_URL':'http://localhost','APP_PORT':'0','APP_BIND':'127.0.0.1',
         'COOKIE_SECURE':'false','ALLOWED_HOSTS':'localhost,127.0.0.1',
-        'INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()}
+        'INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(),
+        'MAIL_AGENT_SHARED_KEY':secrets.token_urlsafe(48),'SOGO_DB_PASSWORD':secrets.token_urlsafe(36),
+        'SOGO_UPSTREAM_URL':'http://sogo','SOGO_SMTP_SERVER':'smtp://smtp.example.invalid'}
 with open(sys.argv[1],'w') as f:f.writelines(f'{k}={v}\n' for k,v in values.items())
 os.chmod(sys.argv[1],0o600)
 PYCONF
@@ -47,14 +55,19 @@ cleanup() {
   exit "$code"
 }
 trap cleanup EXIT
-if [[ "$MODE" == remote ]]; then docker pull "$IMAGE"; fi
+if [[ "$MODE" == remote ]]; then
+  : "${MAIL_AGENT_IMAGE:?Informe a imagem do agente pelo digest}" "${SOGO_IMAGE:?Informe a imagem SOGo pelo digest}"
+  docker pull "$IMAGE"
+  docker pull "$MAIL_AGENT_IMAGE"
+  docker pull "$SOGO_IMAGE"
+fi
 docker pull "$POSTGRES_IMAGE"
 compose config --quiet
 compose up -d --wait --wait-timeout 240
 # Nenhum serviço de longa duração pode permanecer Exited (inclui storage-init).
 assert_healthy_services() {
   local service container
-  for service in db storage-init app worker worker-ocr; do
+  for service in db storage-init app mail-agent sogo worker worker-ocr; do
     container="$(compose ps -q "$service")"
     [[ -n "$container" ]] || { echo "Serviço ausente: $service"; return 1; }
     [[ "$(docker inspect --format '{{.State.Status}}/{{.State.Health.Status}}' "$container")" == running/healthy ]] \
@@ -86,7 +99,7 @@ compose stop --timeout 10 storage-init
 compose start storage-init
 compose up -d --wait --wait-timeout 240
 assert_healthy_services
-printf '{"services":["db","storage-init","app","worker","worker-ocr"],"all_running_healthy":true,"storage_restart":true,"storage_stop_exit_code":0,"monitor_uid":10001,"monitor_capabilities":0}\n' > ci-evidence/docker-storage-health.json
+printf '{"services":["db","storage-init","app","mail-agent","sogo","worker","worker-ocr"],"all_running_healthy":true,"storage_restart":true,"storage_stop_exit_code":0,"monitor_uid":10001,"monitor_capabilities":0}\n' > ci-evidence/docker-storage-health.json
 # O mesmo runtime publicado deve reconhecer uma imagem sintética como usuário sem root.
 compose exec -T worker-ocr python - <<'PYOCR'
 import json, os, subprocess, sys, tempfile

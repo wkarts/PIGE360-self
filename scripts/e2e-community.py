@@ -40,6 +40,7 @@ try:
             admin=browser.new_page(viewport={'width':1440,'height':1050},locale='pt-BR');admin.set_default_timeout(12000);admin.on('pageerror',lambda error:errors.append(str(error)))
             admin.goto(URL);admin.get_by_label('E-mail',exact=True).fill('community@example.com');admin.get_by_label('Senha',exact=True).fill(PASSWORD);admin.get_by_role('button',name='Entrar na aplicação').click()
             expect(admin.locator('h1')).to_have_text('Visão geral')
+            admin.get_by_role('button',name='Publicidade',exact=True).click()
             admin.locator('aside').get_by_role('link',name='Notícias e eventos',exact=True).click()
             expect(admin.get_by_role('heading',name='Notícias e agenda',exact=True)).to_be_visible()
             admin.get_by_role('button',name='+ Nova publicação',exact=True).click();dialog=admin.get_by_role('dialog')

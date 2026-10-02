@@ -107,6 +107,10 @@ jobs:
           TARGET_SHA: ${{ needs.version.outputs.sha }}
           IMAGE: ${{ needs.candidate.outputs.image }}
           DIGEST: ${{ needs.candidate.outputs.digest }}
+          MAIL_AGENT_IMAGE: ghcr.io/wkarts/pige360-self-mail-agent
+          MAIL_AGENT_DIGEST: ${{ needs.candidate.outputs.mail_agent_digest }}
+          SOGO_IMAGE: ghcr.io/wkarts/pige360-self-sogo
+          SOGO_DIGEST: ${{ needs.candidate.outputs.sogo_digest }}
         run: bash scripts/ci/finalize-release.sh
       - uses: actions/upload-artifact@v4
         if: always()
