@@ -11,9 +11,30 @@ namespace PigeWorkspace {
     let locked:HTMLElement|null=null;
     let wasInert=false;
     let pendingFocus=0;
+    let pendingViewport=0;
+    const viewport=window.visualViewport;
+    const viewportHost=document.documentElement;
     const sidebar=()=>root.querySelector<HTMLElement>('#school-navigation');
     const toggle=()=>root.querySelector<HTMLButtonElement>('.menu-button');
-    const hasDialog=()=>Boolean(root.querySelector('[role="dialog"][aria-modal="true"]'));
+    const hasDialog=()=>Boolean(document.querySelector('[role="dialog"][aria-modal="true"]'));
+    function fitDialogViewport():void {
+      cancelAnimationFrame(pendingViewport);
+      pendingViewport=requestAnimationFrame(()=>{
+        // O teclado pode reduzir somente o visualViewport (Safari/iOS).
+        // Não reposicionar durante pinch zoom: a ampliação continua nativa.
+        const fitting=viewport&&hasDialog()&&Math.abs(viewport.scale-1)<.05;
+        if(!fitting){
+          viewportHost.style.removeProperty('--dialog-viewport-height');
+          viewportHost.style.removeProperty('--dialog-viewport-top');
+          viewportHost.removeAttribute('data-dialog-short-viewport');
+          return;
+        }
+        // O ancestral comum também alcança os diálogos teleportados ao body.
+        viewportHost.style.setProperty('--dialog-viewport-height',`${Math.round(viewport.height)}px`);
+        viewportHost.style.setProperty('--dialog-viewport-top',`${Math.max(0,Math.round(viewport.offsetTop))}px`);
+        viewportHost.toggleAttribute('data-dialog-short-viewport',viewport.height<500);
+      });
+    }
     function restore():void {
       if(locked){locked.inert=wasInert;locked=null;}
     }
@@ -34,6 +55,7 @@ namespace PigeWorkspace {
         .filter(el=>!el.matches(':disabled')&&!el.closest('[inert]')&&el.getClientRects().length>0&&getComputedStyle(el).visibility!=='hidden');
     }
     function sync():void {
+      fitDialogViewport();
       const nav=sidebar();
       if(!nav){restore();opened=false;previousPage='';return;}
       const page=nav.querySelector<HTMLAnchorElement>('nav a[aria-current="page"]')?.getAttribute('href')||'';
@@ -79,7 +101,10 @@ namespace PigeWorkspace {
       if(opened&&!hasDialog()&&!sidebar()?.contains(event.target as Node))controls()[0]?.focus({preventScroll:true});
     });
     compact.addEventListener('change',()=>{if(!compact.matches)close();sync();});
-    new MutationObserver(sync).observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['class','aria-current']});
+    viewport?.addEventListener('resize',fitDialogViewport);
+    viewport?.addEventListener('scroll',fitDialogViewport);
+    // Inclui abertura/fechamento de teleports sem observar as variáveis no html.
+    new MutationObserver(sync).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','aria-current']});
     sync();
   }
   // Scripts defer encontram #app antes de a aplicação Vue montar o workspace.

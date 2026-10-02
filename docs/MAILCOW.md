@@ -7,7 +7,7 @@ A configuração fica em **Integrações → E-mail**, por escola. O cadastro de
 1. Cadastre e ative previamente o domínio no Mailcow. DNS, MX, SPF, DKIM, DMARC, certificados e entrega de mensagens são administrados no servidor de e-mail.
 2. Habilite a API de leitura e escrita do Mailcow e autorize o IP de saída desta instalação na lista de acesso da API.
 3. Na aplicação, informe o endereço HTTPS do Mailcow, o domínio, a chave da API e a cota padrão por caixa em MB. Exemplo: `https://mail.escola.edu.br`, domínio `escola.edu.br`, cota `2048` MB.
-4. Habilite a criação de contas, salve e use **Testar conexão**. Esse teste consulta o domínio; não cria uma caixa e não comprova permissão de escrita ou entrega de mensagens.
+4. Use **Salvar e testar** para gravar e conferir a configuração editada. A criação pode continuar desabilitada durante esse teste de consulta; habilite-a quando estiver pronto para provisionar. Esse teste consulta o domínio; não cria uma caixa e não comprova permissão de escrita ou entrega de mensagens.
 5. Mantenha o serviço worker ativo para processar a fila.
 
 A chave da API é criptografada com a mesma `INTEGRATION_ENCRYPTION_KEY` já exigida pelas integrações da instalação. Ela não é devolvida pelas consultas. Não há uma variável de ambiente específica para definir o Mailcow ou seu domínio: essas configurações são feitas na aplicação.
@@ -53,3 +53,42 @@ Testes automatizados usam HTTP e Mailcow simulados, cobrindo fila sem bloqueio d
 Não houve homologação contra um servidor Mailcow real nem criação de caixas reais. A implantação deve validar a versão instalada, permissões de escrita da API, domínio, cotas, funcionamento do worker e acesso ao webmail. Este módulo não administra DNS, não instala Mailcow e não configura o SMTP de envio transacional da aplicação.
 
 Referência oficial de contrato: [OpenAPI do Mailcow](https://github.com/mailcow/mailcow-dockerized/blob/master/data/web/api/openapi.yaml). Operações utilizadas: `GET /api/v1/get/domain/{domain}`, `GET /api/v1/get/mailbox/{email}` e `POST /api/v1/add/mailbox`, autenticadas por `X-API-Key`.
+
+
+## Diagnóstico de acesso recusado
+
+A correção de interface móvel também torna as falhas de conexão identificáveis.
+O diagnóstico recebido nesta investigação registrou cinco tentativas de
+`mailbox_provision` com `MAILCOW_ACCESS_DENIED`, com worker ativo. O formato
+anterior agrupava HTTP 401 e 403 e não guardava o resultado funcional dos
+testes de conexão. Portanto, esse arquivo comprova recusa de acesso, mas não
+permite atribuí-la especificamente a uma chave inválida, IP ou chave de leitura.
+
+| Resultado novo | Ação no servidor Mailcow |
+| --- | --- |
+| `MAILCOW_KEY_REJECTED` | Habilitar a API e salvar na aplicação a chave correta de leitura e escrita. |
+| `MAILCOW_IP_NOT_ALLOWED` | Autorizar o IP de saída visto pelo Mailcow; conferir aplicação e worker se estiverem em servidores diferentes. |
+| `MAILCOW_READ_ONLY_KEY` | Substituir a chave somente leitura pela chave de leitura e escrita. |
+| `MAILCOW_ACCESS_DENIED` / `MAILCOW_WRITE_DENIED` | Conferir chave, permissões, lista de IPs e eventual proxy; a resposta não permite classificação mais específica. |
+| `MAILCOW_TLS_ERROR` | Corrigir hostname, validade ou cadeia do certificado HTTPS. |
+
+Após corrigir a configuração, use **Salvar e testar** e depois **Tentar
+novamente** na caixa que falhou. O pedido existente será reconciliado com o
+endereço remoto antes de uma nova criação. Não crie outro usuário para repetir
+uma caixa que já está na fila.
+
+A edição fica separada da configuração em uso. **Testar conexão** exige salvar
+as alterações pendentes; um teste malsucedido elimina o estado de sucesso
+anterior. O teste valida leitura do domínio e retorna `write_verified: false`:
+a permissão de escrita só é confirmada pelo provisionamento efetivo. Não há
+criação de caixa fictícia como efeito colateral do teste.
+
+Os códigos são classificados apenas a partir de mensagens conhecidas do
+Mailcow. Corpos arbitrários da resposta, credenciais e senhas não são exibidos
+nem registrados. Os novos eventos operacionais registram o resultado e o
+código seguro para que um próximo diagnóstico permita distinguir o bloqueio.
+As regras de TLS, rede privada autorizada, isolamento por escola e repetição
+segura permanecem ativas.
+
+Fontes primárias para as recusas de autenticação: [sessão da API](https://github.com/mailcow/mailcow-dockerized/blob/master/data/web/inc/sessions.inc.php)
+e [controle de escrita](https://github.com/mailcow/mailcow-dockerized/blob/master/data/web/json_api.php).

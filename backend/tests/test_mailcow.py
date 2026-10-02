@@ -231,3 +231,111 @@ def test_provider_redirect_is_not_followed(monkeypatch):
     with pytest.raises(IntegrationFailure, match='MAILCOW_HTTP_REJECTED'):
         mailcow.MailcowClient(config).mailbox('aluno@example.com')
     assert len(requests) == 1
+
+
+@pytest.mark.parametrize('status,body,method,code', [
+    (401, {'type': 'error', 'msg': 'authentication failed'}, 'GET', 'MAILCOW_KEY_REJECTED'),
+    (401, {'type': 'error', 'msg': 'api access denied for ip 203.0.113.42'}, 'GET', 'MAILCOW_IP_NOT_ALLOWED'),
+    (401, {'type': 'error', 'msg': 'api access denied for ip 2001:db8::42'}, 'POST', 'MAILCOW_IP_NOT_ALLOWED'),
+    (403, {'type': 'error', 'msg': 'API read/write access denied'}, 'POST', 'MAILCOW_READ_ONLY_KEY'),
+    (401, {'type': 'error', 'msg': 'api access denied for ip secret-value-not-an-ip'}, 'GET', 'MAILCOW_ACCESS_DENIED'),
+    (403, {'type': 'error', 'msg': 'proxy denied ' + API_KEY}, 'POST', 'MAILCOW_WRITE_DENIED'),
+    (403, '<html>proxy denied secret-value</html>', 'GET', 'MAILCOW_ACCESS_DENIED'),
+])
+def test_mailcow_authentication_errors_are_classified_without_echoing_provider_body(monkeypatch, status, body, method, code):
+    config = mailcow.MailcowConfig(base_url='https://mail.example.test', domain='example.test',
+                                  allow_private_network=False, encrypted_secret=mailcow.seal({'api_key': API_KEY}))
+    monkeypatch.setattr(mailcow.socket, 'getaddrinfo', lambda *args, **kwargs: [(2, 1, 6, '', ('8.8.8.8', 443))])
+    def handler(request):
+        assert request.headers['X-API-Key'] == API_KEY
+        return httpx.Response(status, json=body) if isinstance(body, dict) else httpx.Response(status, text=body)
+    real_client = httpx.Client
+    monkeypatch.setattr(mailcow.httpx, 'Client', lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs))
+    with pytest.raises(IntegrationFailure) as raised:
+        mailcow.MailcowClient(config).request('/api/v1/get/domain/example.test', method)
+    assert raised.value.code == code
+    assert API_KEY not in str(raised.value)
+    assert 'secret-value' not in str(raised.value)
+    assert '203.0.113.42' not in str(raised.value)
+    assert not raised.value.retryable
+
+
+def test_saved_config_can_be_tested_before_enabled_and_does_not_claim_write_permission(client, admin, school, monkeypatch):
+    base, config = configure(client, admin, school)
+    response = client.put(base + '/config', headers=admin, json={
+        'enabled': False, 'base_url': config['base_url'], 'domain': config['domain'],
+        'api_key': '\n  ' + API_KEY + '  \r\n', 'version': config['version']})
+    assert response.status_code == 200
+    calls, _ = fake_mailcow(monkeypatch)
+    result = client.post(base + '/test', headers=admin)
+    assert result.status_code == 200, result.text
+    assert result.json()['ok'] is True
+    assert result.json()['read_authenticated'] is True
+    assert result.json()['write_verified'] is False
+    assert 'confirmada ao provisionar' in result.json()['message']
+    assert len(calls) == 1 and calls[0][0] == 'GET'
+    stored = client.get(base + '/config', headers=admin).json()
+    assert stored['enabled'] is False and stored['last_test_ok'] is True
+    with SessionLocal() as db:
+        assert unseal(db.get(mailcow.MailcowConfig, config['id']).encrypted_secret)['api_key'] == API_KEY
+
+
+def test_failed_connection_clears_success_and_emits_only_safe_diagnostic_code(client, admin, school, monkeypatch):
+    base, _ = configure(client, admin, school)
+    fake_mailcow(monkeypatch)
+    assert client.post(base + '/test', headers=admin).json()['ok'] is True
+    events = []
+    monkeypatch.setattr(mailcow, 'emit', lambda event, **kwargs: events.append((event, kwargs)))
+    def denied(self):
+        raise IntegrationFailure('MAILCOW_IP_NOT_ALLOWED')
+    monkeypatch.setattr(mailcow.MailcowClient, 'domain', denied)
+    result = client.post(base + '/test', headers=admin)
+    assert result.status_code == 200
+    assert result.json()['ok'] is False and result.json()['read_authenticated'] is False
+    assert result.json()['write_verified'] is False
+    assert result.json()['code'] == 'MAILCOW_IP_NOT_ALLOWED'
+    assert 'IPs de saída' in result.json()['message']
+    assert client.get(base + '/config', headers=admin).json()['last_test_ok'] is False
+    assert events == [('mailcow.connection_test', {'level': 'WARNING', 'state': 'failed', 'code': 'MAILCOW_IP_NOT_ALLOWED'})]
+    assert API_KEY not in json.dumps(events)
+
+
+def test_worker_reports_read_only_key_without_creating_or_revealing_credentials(client, admin, school, monkeypatch):
+    base, _ = configure(client, admin, school)
+    requests = []
+    monkeypatch.setattr(mailcow.socket, 'getaddrinfo', lambda *args, **kwargs: [(2, 1, 6, '', ('8.8.8.8', 443))])
+    def handler(request):
+        requests.append((request.method, request.url.path))
+        if request.method == 'POST':
+            return httpx.Response(403, json={'type': 'error', 'msg': 'API read/write access denied', 'log': API_KEY})
+        if '/get/domain/' in request.url.path:
+            return httpx.Response(200, json={'domain_name': 'escola.example.test', 'active': 1})
+        return httpx.Response(200, json={})
+    real_client = httpx.Client
+    monkeypatch.setattr(mailcow.httpx, 'Client', lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs))
+    user = new_user(client, admin, school, create_mailbox=True, mailbox_school_id=school['id'], mailbox_local_part='somente.leitura')
+    assert client.post(base + '/test', headers=admin).json()['ok'] is True
+    assert process_one(user['mailbox']['job_id'])
+    listed = client.get(base + '/mailboxes', headers=admin)
+    box = listed.json()[0]
+    assert box['status'] == 'failed' and box['error_code'] == 'MAILCOW_READ_ONLY_KEY'
+    assert 'apenas leitura' in box['error_message']
+    assert box['credentials_available'] is False
+    assert len([request for request in requests if request[0] == 'POST']) == 1
+    assert API_KEY not in listed.text
+
+
+def test_tls_verification_failure_is_not_reported_as_an_api_key_problem(monkeypatch):
+    import ssl
+    config = mailcow.MailcowConfig(base_url='https://mail.example.test', domain='example.test',
+                                  allow_private_network=False, encrypted_secret=mailcow.seal({'api_key': API_KEY}))
+    monkeypatch.setattr(mailcow.socket, 'getaddrinfo', lambda *args, **kwargs: [(2, 1, 6, '', ('8.8.8.8', 443))])
+    def handler(request):
+        try:
+            raise ssl.SSLCertVerificationError('certificate verification failed')
+        except ssl.SSLCertVerificationError as cause:
+            raise httpx.ConnectError('connection failed') from cause
+    real_client = httpx.Client
+    monkeypatch.setattr(mailcow.httpx, 'Client', lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs))
+    with pytest.raises(IntegrationFailure, match='MAILCOW_TLS_ERROR'):
+        mailcow.MailcowClient(config).domain()

@@ -21,7 +21,7 @@ namespace PigeUI {
     embeddingProbe:{busy:false,message:'',frame_policy:'',x_frame_options:''},
     assistSource:'',
     ready:false, configured:true, embedded:window.self!==window.top, online:navigator.onLine, loginBusy:false, busy:false, loading:false,
-    error:'', success:'', menuOpen:false, user:null as PigeAPI.User|null, userPhotoUrl:'', profilePhotoPreview:'',
+    error:'', success:'', menuOpen:false, loginPasswordVisible:false, registryFiltersOpen:false, user:null as PigeAPI.User|null, userPhotoUrl:'', profilePhotoPreview:'',
     schools:[] as PigeAPI.School[], schoolId:'', page:'dashboard', q:'', pageNumber:1, total:0,
     rows:[] as Row[], dashboard:{} as Row, catalogs:{} as Record<string,Row[]>, catalog:'class-groups',
     selectedStudent:null as Student|null, studentTab:'cadastro', contractEnrollmentId:'', contractReviewIssuedId:'', profileContext:{} as Row, studentDocs:{items:[],checklist:[],issued:[]} as {items:Row[];checklist:Row[];issued:Row[]}, history:[] as Row[],
@@ -191,7 +191,7 @@ namespace PigeUI {
     state.ready=true;
   }
   async function login():Promise<void> {
-    state.loginBusy=true;state.error='';
+    state.loginBusy=true;state.error='';state.loginPasswordVisible=false;
     try{const result=await PigeAPI.post<Record<string,unknown>>('/auth/login',state.login);state.login.password='';if(await PigeMFA.accept(result))return;await afterMFA(result);}
     catch(error){notify(error);}finally{state.loginBusy=false;}
   }
@@ -237,7 +237,7 @@ namespace PigeUI {
       return;
     }
     if(page!=='contracts'&&contractDirty()&&!window.confirm('Descartar as alterações não salvas no modelo?'))return;
-    resetFilters();state.registryFilter={type_code:'',entity_kind:'',active:''};if(registryPages.includes(page))state.cadastresOpen=true;state.page=page;state.pageNumber=1;state.q='';state.selectedStudent=null;state.error='';state.menuOpen=false;if(page!=='contracts'){state.contractEnrollmentId='';state.contractReviewIssuedId='';}
+    resetFilters();state.registryFilter={type_code:'',entity_kind:'',active:''};state.registryFiltersOpen=false;if(registryPages.includes(page))state.cadastresOpen=true;state.page=page;state.pageNumber=1;state.q='';state.selectedStudent=null;state.error='';state.menuOpen=false;if(page!=='contracts'){state.contractEnrollmentId='';state.contractReviewIssuedId='';}
     history.replaceState({},'',`#/${page}`);await safe(loadPage);
   }
   async function loadPage():Promise<void>{
@@ -812,7 +812,7 @@ namespace PigeUI {
   async function logout():Promise<void>{
     try{await PigeAPI.post('/auth/logout',{});}catch{/* Limpar a interface mesmo sem rede. */}
     if(state.userPhotoUrl)URL.revokeObjectURL(state.userPhotoUrl);state.userPhotoUrl='';clearProfilePreview();
-    PigeAPI.clear();state.user=null;state.page='dashboard';history.replaceState(null,'','#/dashboard');state.selectedStudent=null;state.contractEnrollmentId='';state.rows=[];state.dashboard={} as Row;state.studentDocs={items:[],checklist:[],issued:[]};state.history=[];state.studentProtocols=[];state.studentProtocolTotal=0;resetFilters();state.personChoices=[];state.studentChoices=[];clearPhotos();state.catalogs={};state.reportRows=[];state.companies=[];state.schools=[];state.supportHub={id:'',company_id:'',enabled:false,base_url:'',position:'left',widget_type:'expanded_bubble',launcher_title:'Suporte',token_configured:false,version:1};state.modal=blankModal();state.error='';state.login.password='';
+    PigeAPI.clear();state.user=null;state.page='dashboard';history.replaceState(null,'','#/dashboard');state.selectedStudent=null;state.contractEnrollmentId='';state.rows=[];state.dashboard={} as Row;state.studentDocs={items:[],checklist:[],issued:[]};state.history=[];state.studentProtocols=[];state.studentProtocolTotal=0;resetFilters();state.personChoices=[];state.studentChoices=[];clearPhotos();state.catalogs={};state.reportRows=[];state.companies=[];state.schools=[];state.supportHub={id:'',company_id:'',enabled:false,base_url:'',position:'left',widget_type:'expanded_bubble',launcher_title:'Suporte',token_configured:false,version:1};state.modal=blankModal();state.error='';state.login.password='';state.loginPasswordVisible=false;
   }
   async function install():Promise<void>{if(installEvent){await installEvent.prompt();installEvent=null;state.canInstall=false;}}
   function updateApp():void{if(waitingWorker&&!state.modal.kind)waitingWorker.postMessage({type:'SKIP_WAITING'});}

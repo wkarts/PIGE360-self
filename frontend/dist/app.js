@@ -676,9 +676,30 @@ var PigeWorkspace;
         let locked = null;
         let wasInert = false;
         let pendingFocus = 0;
+        let pendingViewport = 0;
+        const viewport = window.visualViewport;
+        const viewportHost = document.documentElement;
         const sidebar = () => root.querySelector('#school-navigation');
         const toggle = () => root.querySelector('.menu-button');
-        const hasDialog = () => Boolean(root.querySelector('[role="dialog"][aria-modal="true"]'));
+        const hasDialog = () => Boolean(document.querySelector('[role="dialog"][aria-modal="true"]'));
+        function fitDialogViewport() {
+            cancelAnimationFrame(pendingViewport);
+            pendingViewport = requestAnimationFrame(() => {
+                // O teclado pode reduzir somente o visualViewport (Safari/iOS).
+                // Não reposicionar durante pinch zoom: a ampliação continua nativa.
+                const fitting = viewport && hasDialog() && Math.abs(viewport.scale - 1) < .05;
+                if (!fitting) {
+                    viewportHost.style.removeProperty('--dialog-viewport-height');
+                    viewportHost.style.removeProperty('--dialog-viewport-top');
+                    viewportHost.removeAttribute('data-dialog-short-viewport');
+                    return;
+                }
+                // O ancestral comum também alcança os diálogos teleportados ao body.
+                viewportHost.style.setProperty('--dialog-viewport-height', `${Math.round(viewport.height)}px`);
+                viewportHost.style.setProperty('--dialog-viewport-top', `${Math.max(0, Math.round(viewport.offsetTop))}px`);
+                viewportHost.toggleAttribute('data-dialog-short-viewport', viewport.height < 500);
+            });
+        }
         function restore() {
             if (locked) {
                 locked.inert = wasInert;
@@ -709,6 +730,7 @@ var PigeWorkspace;
                 .filter(el => !el.matches(':disabled') && !el.closest('[inert]') && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden');
         }
         function sync() {
+            fitDialogViewport();
             const nav = sidebar();
             if (!nav) {
                 restore();
@@ -790,7 +812,10 @@ var PigeWorkspace;
         });
         compact.addEventListener('change', () => { if (!compact.matches)
             close(); sync(); });
-        new MutationObserver(sync).observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'aria-current'] });
+        viewport?.addEventListener('resize', fitDialogViewport);
+        viewport?.addEventListener('scroll', fitDialogViewport);
+        // Inclui abertura/fechamento de teleports sem observar as variáveis no html.
+        new MutationObserver(sync).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'aria-current'] });
         sync();
     }
     PigeWorkspace.install = install;
@@ -2301,8 +2326,15 @@ var PigeMailcow;
 (function (PigeMailcow) {
     const defaults = () => ({ configured: false, enabled: false, base_url: '', domain: '', default_quota_mb: 1024, allow_private_network: false, api_key_configured: false, version: null });
     PigeMailcow.component = { props: ['schoolId'], render: PigeRenders.mailcow, setup(props) {
-            const state = Vue.reactive({ busy: false, error: '', notice: '', config: defaults(), apiKey: '', mailboxes: [], users: [], showConfig: false, showNew: false, userId: '', localPart: '', quota: 1024, credentials: null });
+            const state = Vue.reactive({ busy: false, error: '', notice: '', config: defaults(), draft: defaults(), apiKey: '', testResult: null, mailboxes: [], users: [], showConfig: false, showNew: false, userId: '', localPart: '', quota: 1024, credentials: null });
             const base = () => '/schools/' + props.schoolId + '/mailcow';
+            const dirty = Vue.computed(() => state.apiKey.trim() !== '' || ['enabled', 'base_url', 'domain', 'default_quota_mb', 'allow_private_network'].some(key => state.draft[key] !== state.config[key]));
+            function openConfig() { state.draft = { ...state.config }; state.apiKey = ''; state.showConfig = true; state.error = ''; }
+            function closeConfig() { state.draft = { ...state.config }; state.apiKey = ''; state.showConfig = false; }
+            function toggleConfig() { if (state.showConfig)
+                closeConfig();
+            else
+                openConfig(); }
             async function run(action) { if (state.busy)
                 return; state.busy = true; state.error = ''; state.notice = ''; try {
                 await action();
@@ -2313,12 +2345,44 @@ var PigeMailcow;
             finally {
                 state.busy = false;
             } }
-            async function load() { const [config, mailboxes, users] = await Promise.all([PigeAPI.request(base() + '/config'), PigeAPI.request(base() + '/mailboxes'), PigeAPI.request('/users')]); state.config = config; state.mailboxes = mailboxes; state.users = users.filter(user => user.active && (user.role === 'admin' || user.school_ids.includes(props.schoolId))); state.quota = config.default_quota_mb; if (!config.configured)
+            async function load() { const [config, mailboxes, users] = await Promise.all([PigeAPI.request(base() + '/config'), PigeAPI.request(base() + '/mailboxes'), PigeAPI.request('/users')]); state.config = config; state.draft = { ...config }; state.mailboxes = mailboxes; state.users = users.filter(user => user.active && (user.role === 'admin' || user.school_ids.includes(props.schoolId))); state.quota = config.default_quota_mb; if (!config.configured)
                 state.showConfig = true; }
-            async function refresh() { await run(load); }
-            async function save() { await run(async () => { const c = state.config; state.config = await PigeAPI.request(base() + '/config', { method: 'PUT', body: JSON.stringify({ enabled: c.enabled, base_url: c.base_url, domain: c.domain, default_quota_mb: Number(c.default_quota_mb), allow_private_network: c.allow_private_network, version: c.version, api_key: state.apiKey }) }); state.apiKey = ''; state.notice = 'Configuração de e-mail salva.'; state.showConfig = false; }); }
-            async function test() { await run(async () => { const result = await PigeAPI.post(base() + '/test', {}); if (!result.ok)
-                throw new Error(result.message); state.config.last_test_ok = true; state.notice = result.message; }); }
+            async function refresh() { await run(async () => { if (dirty.value)
+                throw new Error('Salve ou cancele as alterações do servidor antes de atualizar.'); await load(); }); }
+            async function testSaved() {
+                state.testResult = null;
+                state.config.last_test_ok = null;
+                try {
+                    const result = await PigeAPI.post(base() + '/test', {});
+                    state.config.last_test_ok = result.ok;
+                    state.testResult = result;
+                    if (!result.ok)
+                        throw new Error(result.message);
+                    state.notice = result.message;
+                }
+                catch (error) {
+                    state.config.last_test_ok = false;
+                    throw error;
+                }
+            }
+            async function save(testAfter = false) {
+                await run(async () => {
+                    const c = state.draft;
+                    state.config = await PigeAPI.request(base() + '/config', { method: 'PUT', body: JSON.stringify({ enabled: c.enabled, base_url: c.base_url.trim(), domain: c.domain.trim(), default_quota_mb: Number(c.default_quota_mb), allow_private_network: c.allow_private_network, version: c.version, api_key: state.apiKey.trim() }) });
+                    state.draft = { ...state.config };
+                    state.apiKey = '';
+                    state.testResult = null;
+                    state.notice = 'Configuração de e-mail salva.';
+                    if (testAfter) {
+                        await testSaved();
+                    }
+                    else {
+                        state.showConfig = false;
+                    }
+                });
+            }
+            async function test() { await run(async () => { if (dirty.value)
+                throw new Error('Há alterações não salvas. Use Salvar e testar para validar a nova configuração.'); await testSaved(); }); }
             function beginNew() { state.showNew = true; state.userId = ''; state.localPart = ''; state.quota = state.config.default_quota_mb; state.error = ''; }
             function selectUser() { state.localPart = state.users.find(user => user.id === state.userId)?.email.split('@')[0] || ''; }
             const availableUsers = Vue.computed(() => state.users.filter(user => !state.mailboxes.some(box => box.user_id === user.id)));
@@ -2327,11 +2391,17 @@ var PigeMailcow;
             async function action(box, kind) { await run(async () => { await PigeAPI.post(base() + '/mailboxes/' + box.id + '/' + kind, {}); state.mailboxes = await PigeAPI.request(base() + '/mailboxes'); state.notice = kind === 'retry' ? 'A criação será tentada novamente.' : 'Situação da caixa atualizada.'; }); }
             async function credentials(box) { await run(async () => { state.credentials = await PigeAPI.post(base() + '/mailboxes/' + box.id + '/credentials', {}); box.credentials_available = false; }); }
             const status = (value) => ({ active: 'Ativa', disabled: 'Desativada', pending: 'Aguardando criação', processing: 'Criando', retry: 'Nova tentativa agendada', failed: 'Requer atenção', uncertain: 'Aguardando conferência', completed: 'Concluída' }[value] || 'Aguardando');
-            const issue = (box) => ({ MAILCOW_ADDRESS_CONFLICT: 'Este endereço já existe no servidor e pertence a outro cadastro.', MAILCOW_ACCESS_DENIED: 'A chave não possui acesso à API. Confira as permissões no servidor.', MAILCOW_DOMAIN_UNAVAILABLE: 'O domínio precisa estar ativo no servidor de e-mail.', MAILCOW_DISABLED: 'A integração está desativada.', MAILCOW_CREATE_REJECTED: 'O servidor recusou a criação. Confira as cotas e a disponibilidade do endereço.', MAILCOW_ADDRESS_BLOCKED: 'O endereço do servidor não atende à configuração de rede.', MAILCOW_NETWORK_ERROR: 'O servidor não respondeu. A criação será tentada novamente.', MAILCOW_REMOTE_MAILBOX_MISSING: 'A caixa não foi encontrada no servidor.' }[box.error_code] || 'Confira a configuração do servidor e tente novamente.');
+            const issue = (box) => box.error_message || ({ MAILCOW_ADDRESS_CONFLICT: 'Este endereço já existe no servidor e pertence a outro cadastro.', MAILCOW_ACCESS_DENIED: 'A API recusou o acesso. Confira a chave de leitura e escrita e os IPs de saída autorizados no Mailcow.', MAILCOW_DOMAIN_UNAVAILABLE: 'O domínio precisa estar ativo no servidor de e-mail.', MAILCOW_DISABLED: 'A integração está desativada.', MAILCOW_CREATE_REJECTED: 'O servidor recusou a criação. Confira as cotas e a disponibilidade do endereço.', MAILCOW_ADDRESS_BLOCKED: 'O endereço do servidor não atende à configuração de rede.', MAILCOW_NETWORK_ERROR: 'O servidor não respondeu. A criação será tentada novamente.', MAILCOW_REMOTE_MAILBOX_MISSING: 'A caixa não foi encontrada no servidor.' }[box.error_code] || 'Confira a configuração do servidor e tente novamente.');
             const usage = (bytes) => bytes >= 1073741824 ? (bytes / 1073741824).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' GB' : (bytes / 1048576).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' MB';
-            Vue.onMounted(() => { void refresh(); });
-            Vue.onUnmounted(() => { state.apiKey = ''; state.credentials = null; });
-            return { state, availableUsers, refresh, save, test, beginNew, selectUser, create, action, credentials, status, issue, usage };
+            let poll;
+            let disposed = false;
+            Vue.onMounted(() => { void refresh(); poll = window.setInterval(() => { if (!state.busy && state.mailboxes.some(box => ['pending', 'processing', 'retry'].includes(box.job_status))) {
+                void PigeAPI.request(base() + '/mailboxes').then(boxes => { if (!disposed)
+                    state.mailboxes = boxes; }).catch(() => { });
+            } }, 10000); });
+            Vue.onUnmounted(() => { disposed = true; if (poll !== undefined)
+                window.clearInterval(poll); state.apiKey = ''; state.credentials = null; });
+            return { state, dirty, openConfig, closeConfig, toggleConfig, availableUsers, refresh, save, test, beginNew, selectUser, create, action, credentials, status, issue, usage };
         } };
 })(PigeMailcow || (PigeMailcow = {}));
 var PigeUI;
@@ -2348,7 +2418,7 @@ var PigeUI;
         embeddingProbe: { busy: false, message: '', frame_policy: '', x_frame_options: '' },
         assistSource: '',
         ready: false, configured: true, embedded: window.self !== window.top, online: navigator.onLine, loginBusy: false, busy: false, loading: false,
-        error: '', success: '', menuOpen: false, user: null, userPhotoUrl: '', profilePhotoPreview: '',
+        error: '', success: '', menuOpen: false, loginPasswordVisible: false, registryFiltersOpen: false, user: null, userPhotoUrl: '', profilePhotoPreview: '',
         schools: [], schoolId: '', page: 'dashboard', q: '', pageNumber: 1, total: 0,
         rows: [], dashboard: {}, catalogs: {}, catalog: 'class-groups',
         selectedStudent: null, studentTab: 'cadastro', contractEnrollmentId: '', contractReviewIssuedId: '', profileContext: {}, studentDocs: { items: [], checklist: [], issued: [] }, history: [],
@@ -2592,6 +2662,7 @@ var PigeUI;
     async function login() {
         state.loginBusy = true;
         state.error = '';
+        state.loginPasswordVisible = false;
         try {
             const result = await PigeAPI.post('/auth/login', state.login);
             state.login.password = '';
@@ -2707,6 +2778,7 @@ var PigeUI;
             return;
         resetFilters();
         state.registryFilter = { type_code: '', entity_kind: '', active: '' };
+        state.registryFiltersOpen = false;
         if (registryPages.includes(page))
             state.cadastresOpen = true;
         state.page = page;
@@ -3825,6 +3897,7 @@ var PigeUI;
         state.modal = blankModal();
         state.error = '';
         state.login.password = '';
+        state.loginPasswordVisible = false;
     }
     async function install() { if (installEvent) {
         await installEvent.prompt();
