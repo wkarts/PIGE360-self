@@ -38,6 +38,25 @@ cleanup() {
   code=$?
   compose ps --all > ci-evidence/docker-ps.txt 2>&1 || true
   compose logs --no-color --tail=150 > ci-evidence/docker-smoke.log 2>&1 || true
+  if [[ "$code" -ne 0 ]]; then
+    echo "Falha no smoke Docker; diagnóstico sanitizado do SOGo:"
+    compose ps --all sogo || true
+    python - "$ENVFILE" ci-evidence/docker-smoke.log <<'PYREDACT'
+import pathlib, sys
+env_path, log_path = map(pathlib.Path, sys.argv[1:])
+content = log_path.read_text(errors="replace")
+for line in env_path.read_text().splitlines():
+    key, sep, value = line.partition("=")
+    if sep and value:
+        content = content.replace(value, "[REDACTED]")
+print("\\n".join(line for line in content.splitlines() if "sogo" in line.lower())[-12000:])
+PYREDACT
+    container="$(compose ps -q sogo)"
+    if [[ -n "$container" ]]; then
+      docker inspect --format '{{json .State.Health}}' "$container" | \\
+        python -c 'import json,sys; d=json.load(sys.stdin); [print(json.dumps(x)) for x in d.get("Log", [])[-5:]]' || true
+    fi
+  fi
   # Secrets gerados nunca são publicados junto aos logs. O marker foi criado
   # no mesmo diretorio temporario retornado pelo mktemp desta execucao.
   if [[ "$PROJECT" == pige360-ci-* ]]; then
