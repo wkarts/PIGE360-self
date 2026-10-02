@@ -1,0 +1,67 @@
+{
+  "base_commit": "68bcefac27cad91417274f30cf2aaa56fb534d43",
+  "branch": "fix/isolamento-acessos-documentos-ocr",
+  "frontend_build": "24041658d92b9974",
+  "backend": {
+    "passed": 459,
+    "subtests_passed": 5,
+    "skipped": 1,
+    "skip_reason": "Teste de bloqueio SELECT FOR UPDATE requer PostgreSQL; execução local usa SQLite descartável."
+  },
+  "ci_policy_tests": 97,
+  "frontend": {
+    "typecheck": "passed",
+    "build": "passed",
+    "smoke_flows": [
+      "render",
+      "navigation",
+      "diary",
+      "mailbox_reconciliation",
+      "download",
+      "active_school_isolation",
+      "email_client"
+    ]
+  },
+  "http_browser_checks": {
+    "core": 26,
+    "mobile": 14,
+    "workspace": 10,
+    "certificates_and_school_signatures": 7,
+    "camera": 4,
+    "support_areas": 5,
+    "user_profiles": 10,
+    "whatsapp_entity_scope": 5,
+    "diagnostics": 7,
+    "email_client": 9,
+    "registrations": 15,
+    "access_2fa": 6,
+    "assisted_ocr": 8,
+    "enrollment_workspace": 7,
+    "whitelabel_iframe_profile": 12
+  },
+  "ocr_real_document_private_verification": {
+    "type": "hybrid_identity_pdf",
+    "verified_fields": [
+      "name",
+      "cpf",
+      "birth_date",
+      "rg",
+      "rg_issuer"
+    ],
+    "matched_fields": 5,
+    "values_stored_in_repository": false,
+    "low_resolution_capture": "rejected_for_unreliable_fields"
+  },
+  "external_provider_validation": "Transportes e caixas sintéticos; sem envio real, criação remota real ou alteração de senhas institucionais.",
+  "limitations": [
+    "Docker e PostgreSQL real ficam nos gates do GitHub Actions.",
+    "Câmera testada com mídia sintética Chromium e redimensionamento; hardware iOS/Android físico não foi testado.",
+    "Leitura OCR depende da qualidade da imagem e permanece sujeita à conferência."
+  ],
+  "migrations": [
+    "0031_user_access_profiles",
+    "0032_support_areas",
+    "0033_connect_school_ownership",
+    "0034_email_auto_connection"
+  ]
+}

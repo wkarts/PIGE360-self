@@ -19,8 +19,9 @@ const decodeEntities=(value)=>value.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|a
 });
 const sandbox={console,document:{createElement(){return {textContent:'',get innerHTML(){return this.textContent},set innerHTML(value){this.textContent=decodeEntities(value);this.children=[{getAttribute(){return decodeEntities(value.slice(10,-2))}}]}}}}};vm.createContext(sandbox);vm.runInContext(source,sandbox);
 execFileSync(compiler,['-p',path.join(root,'tsconfig.portal.json')],{stdio:'inherit'});
+execFileSync(compiler,['-p',path.join(root,'tsconfig.news.json')],{stdio:'inherit'});
 const renders={};
-for(const name of ['app','portal','expansion','assist','diagnostics','diary','contracts','signing']){
+for(const name of ['app','portal','expansion','camera','users','assist','diagnostics','diary','contracts','signing','reports','legacyImport','learning','community','news','mailcow','audit','email','lifecycle']){
  const fragment=key=>fs.readFileSync(path.join(root,'templates',key+'.html'),'utf8');
  const template=fs.readFileSync(path.join(root,'templates',name+'.html'),'utf8').replaceAll('<!-- MFA-MANAGE -->',fragment('mfa-manage')).replaceAll('<!-- MFA-CHALLENGE -->',fragment('mfa-challenge')).replaceAll('<!-- FAMILY -->',fragment('family')).replaceAll('<!-- FORM-FIELDS -->',fragment('form-fields'));
  const errors=[];
@@ -33,7 +34,7 @@ fs.writeFileSync(path.join(dist,'renders.js'),'/* Vue pré-compilado; sem eval e
 fs.cpSync(path.join(root,'public'),dist,{recursive:true});
 fs.mkdirSync(path.join(dist,'vendor'),{recursive:true});fs.copyFileSync(path.join(root,'vendor/vue-3.5.13.global.prod.js'),path.join(dist,'vendor/vue-3.5.13.global.prod.js'));
 fs.copyFileSync(path.join(root,'src/app.css'),path.join(dist,'app.css'));
-const staticFiles=['/','/index.html','/app.js','/portal.js','/renders.js','/app.css','/vendor/vue-3.5.13.global.prod.js'];
+const staticFiles=['/','/index.html','/app.js','/portal.js','/news.js','/renders.js','/app.css','/vendor/vue-3.5.13.global.prod.js'];
 function collectPublic(dir,prefix='') { for(const entry of fs.readdirSync(dir,{withFileTypes:true})) {
  const name=prefix+'/'+entry.name;
  if(entry.isDirectory()){if(!['/branding','/fonts'].includes(name))collectPublic(path.join(dir,entry.name),name);}
@@ -43,7 +44,7 @@ collectPublic(path.join(root,'public'));
 const fingerprint=createHash('sha256');fingerprint.update(version);
 for(const asset of [...new Set(staticFiles.map(f=>f==='/'?'/index.html':f))].sort()){fingerprint.update(asset);fingerprint.update(fs.readFileSync(path.join(dist,asset.slice(1))));}
 const hash=fingerprint.digest('hex').slice(0,16);
-for(const name of ['index.html','online.html']){
+for(const name of ['index.html','online.html','news.html']){
  const file=path.join(dist,name);
  fs.writeFileSync(file,fs.readFileSync(file,'utf8').replace(/(src|href)="(\/(?!api\/)[^"?]+\.(?:js|css))"/g,(_,attr,url)=>`${attr}="${url}?v=${hash}"`));
 }
@@ -57,7 +58,7 @@ self.addEventListener('fetch',event=>{
  const publicIdentity=url.pathname==='/manifest.webmanifest'||url.pathname==='/api/v1/institution/identity'||url.pathname==='/api/v1/institution/theme.css'||url.pathname==='/api/v1/institution/icon.png'||url.pathname.startsWith('/api/v1/institution/assets/');
  if(publicIdentity){event.respondWith(caches.open('pige360-public-identity').then(async cache=>{try{const response=await fetch(event.request);if(response.ok){await cache.put(event.request,response.clone());const keys=await cache.keys();await Promise.all(keys.slice(0,Math.max(0,keys.length-24)).map(key=>cache.delete(key)));}return response;}catch(error){const cached=await cache.match(event.request);if(cached)return cached;throw error;}}));return;}
  if(url.pathname.startsWith('/api/')||url.pathname.startsWith('/health/'))return;
- if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).catch(()=>caches.match(url.pathname==='/online.html'?'/online.html':'/index.html')));return;}
+ if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).catch(()=>caches.match(url.pathname==='/online.html'?'/online.html':url.pathname==='/news.html'?'/news.html':'/index.html')));return;}
  // Nunca atender uma URL de outro build com bytes deste cache.
  if(ASSETS.includes(url.pathname))event.respondWith((url.searchParams.has('v')&&url.searchParams.get('v')!=='${hash}')?fetch(event.request):caches.open(CACHE).then(cache=>cache.match(event.request,{ignoreSearch:true})).then(cached=>cached||fetch(event.request)));
 });\n`;
@@ -65,4 +66,9 @@ fs.writeFileSync(path.join(dist,'sw.js'),sw);
 fs.writeFileSync(path.join(dist,'build-info.json'),JSON.stringify({product:'PIGE360 Self',version,vue:'3.5.13',build_id:hash,pipeline:'typescript-vue-precompiled',external_cdn:false},null,2)+'\n');
 execFileSync(process.execPath,[path.join(root,'tests/render-smoke.mjs')],{stdio:'inherit'});
 execFileSync(process.execPath,[path.join(root,'tests/integration-navigation.mjs')],{stdio:'inherit'});
+execFileSync(process.execPath,[path.join(root,'tests/diary-flow.mjs')],{stdio:'inherit'});
+execFileSync(process.execPath,[path.join(root,'tests/mailcow-flow.mjs')],{stdio:'inherit'});
+execFileSync(process.execPath,[path.join(root,'tests/api-download.mjs')],{stdio:'inherit'});
+execFileSync(process.execPath,[path.join(root,'tests/active-school.mjs')],{stdio:'inherit'});
+execFileSync(process.execPath,[path.join(root,'tests/email-flow.mjs')],{stdio:'inherit'});
 console.log('PWA compilada:',hash);

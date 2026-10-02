@@ -53,7 +53,9 @@ def safe_event(event):
     route = event.get('route','')
     if isinstance(route,str) and re.fullmatch(r'[A-Za-z0-9_/{\}:.\-]{1,180}',route):
         result['route'] = route
-    if re.fullmatch(r'[a-f0-9-]{36}',str(event.get('job_id',''))):result['job_id']=event['job_id']
+    for key in ('job_id', 'school_id'):
+        if re.fullmatch(r'[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}',str(event.get(key,''))):
+            result[key]=event[key]
     frames = []
     for item in event.get('frames',[])[:15]:
         if isinstance(item,dict):
@@ -128,7 +130,7 @@ def heartbeat(service, force=False):
     except Exception:pass
 
 
-def recent_events(*, service='', level='', request_id='', since=None, until=None, limit=10000):
+def recent_events(*, service='', level='', request_id='', since=None, until=None, limit=10000, event='', code='', route='', job_id='', min_status=None, school_id=None):
     rows=[]; scanned=0; damaged=0
     root=directory()
     for name in SERVICES if not service else (service,):
@@ -145,8 +147,14 @@ def recent_events(*, service='', level='', request_id='', since=None, until=None
                         except (ValueError,TypeError,AttributeError):damaged+=1;continue
                         scanned+=1
                         if dt.timestamp()<time.time()-RETENTION_DAYS*86400:continue
+                        if school_id is not None and item.get('school_id', '') != school_id:continue
                         if level and item['level']!=level:continue
                         if request_id and item.get('request_id')!=request_id:continue
+                        if event and event.lower() not in item['event'].lower():continue
+                        if code and item.get('code')!=code:continue
+                        if route and route.lower() not in item.get('route','').lower():continue
+                        if job_id and item.get('job_id')!=job_id:continue
+                        if min_status is not None and item.get('status',0)<min_status:continue
                         if since and dt<since:continue
                         if until and dt>until:continue
                         rows.append(item)
@@ -185,6 +193,6 @@ class RequestTelemetry:
             route=getattr(scope.get('route'),'path','/unmatched')
             if scope['path'].startswith('/api/') or status>=400:
                 await run_in_threadpool(emit,'http.response',level='ERROR' if error or status>=500 else 'WARNING' if status>=400 else 'INFO',
-                    request_id=state['request_id'],route=route,method=scope['method'],status=status,
+                    request_id=state['request_id'],school_id=state.get('school_id') or scope.get('path_params', {}).get('school_id'),route=route,method=scope['method'],status=status,
                     duration_ms=(time.monotonic()-started)*1000,error_type=error,frames=frames[-15:])
             await run_in_threadpool(heartbeat,'app')

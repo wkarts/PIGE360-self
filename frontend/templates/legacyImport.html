@@ -1,0 +1,43 @@
+<div class="import-workspace">
+  <ol class="import-steps" aria-label="Etapas da importação"><li :class="{active:!state.inventory}"><span>1</span> Escolher arquivo</li><li :class="{active:state.inventory && !state.preview}"><span>2</span> Selecionar dados</li><li :class="{active:!!state.preview}"><span>3</span> Conferir e importar</li></ol>
+  <div v-if="state.error" class="alert error" role="alert">{{ state.error }}</div>
+  <div v-if="state.result" class="alert success" role="status">Importação concluída em {{ schoolName }}. Os detalhes estão disponíveis no histórico abaixo.</div>
+  <section class="panel x-card">
+    <div class="x-heading"><div><h2>Importar da aplicação anterior</h2><p>Escolha exatamente os cadastros que deseja trazer para esta escola.</p></div></div>
+    <div class="import-destination"><span>Instituição de destino</span><strong>{{ schoolName }}</strong><small>A importação mantém esta instituição.</small></div>
+    <fieldset :disabled="state.busy" class="report-filter-fields"><div class="x-grid">
+      <label>Arquivo SQLite ou backup ZIP<input type="file" accept=".zip,.db,.sqlite,.sqlite3" @change="fileChange($event,'backup')"><small v-if="state.backupName">{{ state.backupName }}</small></label>
+      <label>Fotos e documentos em ZIP <span class="muted">(opcional)</span><input type="file" accept=".zip" @change="fileChange($event,'media')"><small v-if="state.mediaName">{{ state.mediaName }}</small></label>
+    </div><div class="report-generate-row"><span class="muted small">O arquivo será analisado antes de qualquer gravação.</span><button class="btn btn-primary" :disabled="!state.backupName" @click="analyze">{{ state.busy?'Aguarde…':'Analisar arquivo' }}</button></div></fieldset>
+  </section>
+  <section v-if="state.inventory" class="panel x-card">
+    <h2>O que deseja importar?</h2><p class="muted">Marque as categorias e escolha todos os registros ou apenas os que você indicar.</p>
+    <fieldset :disabled="state.busy" class="report-filter-fields">
+      <label>Unidade de destino<select v-model="state.selection.unit_id" @change="destinationChanged"><option value="">Não definir uma unidade</option><option v-for="unit in units" :key="unit.id" :value="unit.id">{{ unit.name }}</option></select><small class="muted">Ao escolher uma unidade existente, as unidades do arquivo não serão criadas.</small></label>
+      <div class="import-selection"><article v-for="table in categories()" :key="table.name" class="import-category" :class="{selected:state.selection.tables.includes(table.name)}">
+        <label class="import-check"><input type="checkbox" :checked="state.selection.tables.includes(table.name)" :disabled="table.name==='unidades_escolares' && !!state.selection.unit_id" @change="toggleTable(table.name)"><span><strong>{{ tableName(table.name) }}</strong><small>{{ table.rows }} registro(s) disponível(is)</small></span></label>
+        <div v-if="state.selection.tables.includes(table.name)" class="import-category-actions"><span class="badge">{{ count(table.name,table.rows) }} selecionado(s)</span><button class="link-button" @click="chooseRecords(table.name)">Escolher registros</button><button v-if="table.name in state.selection.record_ids" class="link-button" @click="allRecords(table.name)">Selecionar todos</button></div>
+      </article></div>
+      <section v-if="state.recordTable && state.records" class="import-records">
+        <div class="x-heading"><h3>{{ tableName(state.recordTable) }} · seleção individual</h3><button class="btn btn-secondary small-button" @click="state.recordTable='';state.records=null">Concluir seleção</button></div>
+        <form class="filter-bar" @submit.prevent="loadRecords(1)"><label class="sr-only" for="import-record-search">Pesquisar registro</label><input id="import-record-search" type="search" v-model="state.recordQuery" placeholder="Pesquisar pelo nome ou código"><button class="btn btn-secondary" type="submit">Pesquisar</button></form>
+        <div class="import-record-list"><label v-for="record in state.records.items" :key="record.id" class="import-check"><input type="checkbox" :checked="(state.selection.record_ids[state.recordTable] || []).includes(record.id)" @change="toggleRecord(record.id)"><span>{{ record.name || record.id }}<small>Código {{ record.id }}</small></span></label></div>
+        <p v-if="!state.records.items.length" class="empty-state">Nenhum registro encontrado.</p>
+        <div class="pagination"><button class="btn btn-secondary" :disabled="state.records.page<=1" @click="loadRecords(state.records.page-1)">Anterior</button><span>{{ state.records.total }} resultado(s) · página {{ state.records.page }}</span><button class="btn btn-secondary" :disabled="state.records.page*state.records.page_size>=state.records.total" @click="loadRecords(state.records.page+1)">Próxima</button></div>
+      </section>
+      <div class="import-media-options"><label class="import-check"><input type="checkbox" v-model="state.selection.include_photos" @change="invalidate"><span>Importar fotos dos registros selecionados</span></label><label class="import-check"><input type="checkbox" v-model="state.selection.include_media" @change="invalidate"><span>Importar documentos e arquivos vinculados</span></label></div>
+      <details v-if="extras().length"><summary>Outros dados do arquivo</summary><p class="muted small">Estas categorias serão preservadas somente no histórico da importação, sem criar cadastros na aplicação.</p><label v-for="table in extras()" :key="table.name" class="import-check"><input type="checkbox" :checked="state.selection.tables.includes(table.name)" @change="toggleTable(table.name)"><span>{{ tableName(table.name) }} · {{ table.rows }} registro(s)</span></label></details>
+      <div class="report-generate-row"><p class="muted small">Responsáveis, vínculos e matrículas devem ser selecionados quando você quiser trazê-los também.</p><button class="btn btn-primary" :disabled="!state.selection.tables.length" @click="review">Conferir seleção</button></div>
+    </fieldset>
+  </section>
+  <section v-if="state.preview" class="panel x-card">
+    <h2>Confira antes de importar</h2><p><strong>{{ state.preview.selected_record_count }} registro(s)</strong> para {{ state.preview.destination.school_name }}<span v-if="state.preview.destination.unit_name"> · {{ state.preview.destination.unit_name }}</span>.</p>
+    <div class="table-scroll"><table><thead><tr><th>Categoria</th><th>Selecionados</th><th>Destino</th></tr></thead><tbody><tr v-for="table in state.preview.tables.filter(t=>t.selected_rows>0)" :key="table.name"><td>{{ tableName(table.name) }}</td><td>{{ table.selected_rows }}</td><td>{{ table.destination }}</td></tr></tbody></table></div>
+    <div v-if="state.preview.issues?.length" class="alert error"><ul><li v-for="issue in state.preview.issues" :key="issue">{{ issue }}</li></ul></div>
+    <details v-if="state.preview.warnings?.length"><summary>Observações da conferência ({{ state.preview.warnings.length }})</summary><ul><li v-for="warning in state.preview.warnings" :key="warning">{{ warning }}</li></ul></details>
+    <p class="small muted">Cadastros existentes serão preservados. Revise as categorias acima antes de confirmar.</p>
+    <label>Digite IMPORTAR para confirmar<input v-model="state.confirmation" :disabled="state.busy" maxlength="20" autocomplete="off"></label>
+    <button class="btn btn-primary" :disabled="state.busy || !state.preview.can_apply || state.confirmation.trim().toUpperCase()!=='IMPORTAR'" @click="apply">{{ state.busy?'Importando…':'Confirmar importação' }}</button>
+  </section>
+  <section class="panel x-card"><h2>Histórico de importações</h2><div v-if="!state.runs.length" class="empty-state"><p>Nenhuma importação concluída nesta escola.</p></div><div v-for="run in state.runs" :key="run.id" class="x-line"><div><strong>{{ date(run.created_at) }}</strong><small class="muted">{{ run.source_system }}</small></div><button class="btn btn-secondary" :disabled="state.busy" @click="download(run.id)">Baixar detalhes</button></div></section>
+</div>

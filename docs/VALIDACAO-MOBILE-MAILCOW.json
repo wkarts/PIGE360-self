@@ -1,0 +1,42 @@
+{
+  "base_commit": "c0755cb5d88880f6a6b6812083727aa7e699bffb",
+  "frontend_build": {
+    "product": "PIGE360 Self",
+    "version": "0.10.0",
+    "vue": "3.5.13",
+    "build_id": "1eea12f1d6ec77de",
+    "pipeline": "typescript-vue-precompiled",
+    "external_cdn": false
+  },
+  "local_checks": {
+    "ci_unittest": {
+      "passed": 97
+    },
+    "frontend_build": "passed; render-smoke, integration-navigation, diary-flow, mailcow-flow",
+    "typescript": "passed by build",
+    "structural_validation": "passed",
+    "e2e_mobile": {
+      "passed": 13,
+      "javascript_errors": []
+    },
+    "e2e_workspace": {
+      "passed": 9
+    },
+    "e2e_cadastres": {
+      "passed": 15
+    },
+    "e2e_whitelabel": {
+      "passed": 12
+    },
+    "backend_mailcow": {
+      "passed": 23
+    }
+  },
+  "limitations": [
+    "Mailcow real: o diagnóstico comprova recusa HTTP401/403, sem distinguir a causa externa anterior; nenhuma caixa real criada ou credencial alterada.",
+    "Chromium HTTP com toque emulado; Safari/iOS e teclado nativo não executados.",
+    "VisualViewport e ampliação por gesto simulados, sem equivalência a teclado físico/zoom desktop.",
+    "Docker e PostgreSQL completos não executados localmente; aguardam o CI remoto. Esta validação local utiliza SQLite descartável."
+  ],
+  "deployment_performed": false
+}

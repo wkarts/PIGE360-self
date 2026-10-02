@@ -10,6 +10,7 @@ from playwright.sync_api import sync_playwright, expect
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'evidence/0.3.0/workspace';OUT.mkdir(parents=True,exist_ok=True)
 TEMP=Path(tempfile.mkdtemp(prefix='pige-workspace-'))
+shutil.copytree(ROOT/'frontend/dist', TEMP/'frontend')
 with socket.socket() as sock:
     sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
 URL=f'http://127.0.0.1:{port}'
@@ -18,7 +19,7 @@ BRIDGE=os.getenv('PIGE_UI_BRIDGE')=='1'
 env={**os.environ,'PYTHONPATH':str(ROOT/'backend'),'DATABASE_URL':'sqlite:///'+str(TEMP/'e2e.db'),
      'ALLOW_SQLITE':'true','APP_ENV':'test','APP_URL':URL,'ALLOWED_HOSTS':'127.0.0.1,localhost',
      'APP_SECRET_KEY':'test-only-workspace-secret-01234567890123456789','SETUP_TOKEN':'test-only-setup-01234567890123456789',
-     'STORAGE_PATH':str(TEMP/'files'),'FRONTEND_PATH':str(ROOT/'frontend/dist'),'COOKIE_SECURE':'false'}
+     'STORAGE_PATH':str(TEMP/'files'),'FRONTEND_PATH':str(TEMP/'frontend'),'COOKIE_SECURE':'false'}
 subprocess.run([sys.executable,'-m','alembic','upgrade','head'],cwd=ROOT/'backend',env=env,check=True)
 log=(OUT/'server.log').open('w')
 proc=subprocess.Popen([sys.executable,'-m','uvicorn','app.main:app','--host','127.0.0.1','--port',str(port)],cwd=ROOT/'backend',env=env,stdout=log,stderr=log)
@@ -79,6 +80,15 @@ try:
         expect(page.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible()
         expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
         wait_until(lambda: page.locator('.sidebar-logo').evaluate('el=>el.complete && el.naturalWidth>0'), 'Logotipo institucional não carregou')
+        crest=page.locator('.sidebar-logo').bounding_box();brand=page.locator('.sidebar-brand').bounding_box()
+        assert crest and brand and 140<=crest['height']<=180,crest
+        assert abs(crest['x']+crest['width']/2-brand['x']-brand['width']/2)<=2,{'crest':crest,'brand':brand}
+        guide=page.get_by_role('button',name='Guia de uso',exact=True)
+        guide_box=guide.bounding_box();heading=page.get_by_role('heading',name='Visão geral',exact=True).bounding_box()
+        assert guide_box and heading and guide_box['x']>=1666*.7 and guide_box['y']<=heading['y']+heading['height'],{'guide':guide_box,'heading':heading}
+        assert guide_box['height']>=43.5,guide_box
+        assert guide.evaluate("el=>parseFloat(getComputedStyle(el).borderTopWidth)>=1 && parseFloat(getComputedStyle(el).paddingLeft)>=10 && getComputedStyle(el).textDecorationLine==='none'"),'Guia precisa preservar o botão com borda, espaçamento e texto sem sublinhado'
+        record('Sidebar mantém brasão ampliado e centralizado; Guia aparece como botão com borda à direita do cabeçalho')
         nav=page.locator('.sidebar-scroll');main=page.locator('#main-content')
         def top(el):return el.evaluate('el=>el.scrollTop')
         def fixed():return page.evaluate("JSON.stringify(['.sidebar-brand','.topbar'].map(s=>{const r=document.querySelector(s).getBoundingClientRect();return [r.x,r.y,r.width,r.height]}))")
@@ -131,7 +141,9 @@ try:
         expect(opener).to_have_attribute('aria-expanded','true')
         expect(page.get_by_role('button',name='Fechar menu',exact=True)).to_be_focused()
         assert page.locator('.main-column').evaluate('el=>el.inert')
-        page.locator('aside').get_by_role('link',name='Auditoria',exact=True).focus()
+        admin_menu=page.get_by_role('button',name='Administração do sistema',exact=True)
+        admin_menu.click();expect(admin_menu).to_have_attribute('aria-expanded','true')
+        page.locator('aside a:visible').last.focus()
         page.keyboard.press('Tab');expect(page.get_by_role('button',name='Fechar menu',exact=True)).to_be_focused()
         nav.evaluate('el=>el.scrollTop=0')
         wait_until(lambda: page.locator('#school-navigation').evaluate('el=>Math.abs(el.getBoundingClientRect().x)<.5'), 'O menu móvel deve concluir sua abertura')

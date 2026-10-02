@@ -5,3 +5,150 @@
 .dossier-fieldset{border:0;min-width:0;margin:0;padding:0}
 
 .person-complements{margin-top:20px;border-top:1px solid var(--border,#dce5ed);padding-top:16px}.person-complements summary{cursor:pointer;padding:8px 0;font-weight:600}.person-complements .form-grid{margin-top:16px}
+
+/* Ficha da pessoa: vínculos e perfis seguem a mesma hierarquia dos cadastros. */
+.modal-header .person-type-picker { margin-inline: 16px; gap: 7px; }
+.person-type-picker > small { color: var(--muted); font-size: 12px; }
+.person-type-chip { min-height: 32px; padding: 6px 11px; font-size: 12px; background: var(--surface-subtle, #f7f9fb); border-radius: 8px; }
+.person-type-chip:disabled { opacity: 1; }
+.person-type-picker summary { min-height: 34px; padding: 7px 10px; color: var(--primary); font-size: 12px; font-weight: 600; }
+.person-type-options { border-radius: 12px; width: 280px; box-shadow: 0 12px 32px #172b4724; }
+.person-type-options input { border: 1px solid var(--field-border, #bdcbd6); border-radius: 8px; margin-bottom: 8px; }
+.person-type-options button { border-radius: 7px; min-height: 42px; font-size: 13px; }
+.family-editor { gap: 20px; }
+.family-draft { padding: 20px; border-radius: 12px; background: var(--surface-subtle, #f7f9fb); gap: 18px; }
+.family-flags { gap: 12px 20px; padding: 15px 0 0; border-top: 1px solid var(--border); font-size: 13px; }
+.family-flags label { gap: 9px; cursor: pointer; line-height: 1.5; }
+.family-flags input[type=checkbox] { flex: 0 0 18px; width: 18px; height: 18px; }
+.family-row { padding: 18px; border-radius: 12px; background: var(--surface, #fff); gap: 18px; }
+.family-row strong { font-size: 14px; }
+.family-row span, .family-row small { color: var(--muted); line-height: 1.6; }
+.family-row .actions { justify-content: flex-end; }
+.family-row.inactive { opacity: .75; background: var(--surface-subtle, #f7f9fb); }
+.family-matches { display: grid; gap: 7px; }
+.family-matches button { padding: 13px 15px; border-radius: 8px; font-size: 13px; line-height: 1.5; }
+.family-editor input:not([type=checkbox]), .family-editor select { min-height: 44px; border-color: var(--field-border, #bdcbd6); border-radius: 9px; font-size: 14px; background: var(--surface, #fff); color: var(--ink); }
+.family-editor .form-grid { gap: 18px 20px; }
+.person-complements { padding: 0; margin-top: 24px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface, #fff); }
+.person-complements > summary { padding: 15px 18px; font-size: 13px; color: var(--ink); }
+.person-complements[open] { padding: 0 18px 20px; }
+.person-complements[open] > summary { margin: 0 -18px 16px; border-bottom: 1px solid var(--border); }
+.person-complements > p { font-size: 12px; line-height: 1.65; }
+.person-complements .form-grid { margin-top: 18px; }
+@media (max-width: 760px) {
+  .family-editor input:not([type=checkbox]), .family-editor select { font-size: 16px; }
+  .modal-header .person-type-picker { margin-inline: 0; }
+}
+@media (max-width: 700px) {
+  .family-draft, .family-row { padding: 17px; }
+  .family-row .actions { width: 100%; justify-content: flex-start; }
+  .family-row .actions .btn { flex: 1; }
+  .family-flags { gap: 14px; }
+}
+
+/* Rótulos acessíveis da lista permanecem no contêiner de rolagem do cadastro. */
+.workspace .record-list { position: relative; }
+
+/* Cadastro ampliado: cabeçalho e ações fixos; somente o conteúdo da ficha rola. */
+.modal-backdrop:has(> .modal-person) { padding: 24px; overflow: hidden; }
+.modal-backdrop > .modal.modal-person {
+  width: min(1440px, calc(100vw - 48px)); max-width: 1440px;
+  height: min(960px, calc(var(--dialog-viewport-height, 100dvh) - 48px));
+  max-height: calc(var(--dialog-viewport-height, 100dvh) - 48px);
+}
+.modal.modal-person .modal-header { padding: 18px 24px; gap: 12px; }
+.modal.modal-person .modal-form { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: hidden; }
+.modal.modal-person .modal-workspace.sectioned { flex: 1 1 auto; height: auto; max-height: none; min-width: 0; min-height: 0; overflow: hidden; }
+.modal.modal-person .form-section-nav { width: 224px; min-width: 0; padding: 20px 12px; scroll-padding-block: 12px; }
+.modal.modal-person .form-section-nav > button { min-height: 48px; line-height: 1.4; }
+.modal.modal-person .form-section-nav > p { display: none; }
+.modal.modal-person .modal-workspace > .modal-body {
+  min-width: 0; min-height: 0; padding: 24px 32px;
+  overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable;
+}
+.modal.modal-person .form-section-heading { margin-bottom: 20px; }
+.modal.modal-person .modal-footer { min-height: 70px; gap: 12px; padding: 12px 24px; }
+.modal.modal-person .modal-footer > span { flex: 1; min-width: 0; }
+.modal.modal-person .modal-footer .btn { min-height: 44px; }
+.modal.modal-person .person-type-picker { margin-inline: 16px; }
+.modal.modal-person .person-type-picker details:not([open]) .person-type-options { display: none; }
+.modal.modal-person .person-type-options { z-index: 20; max-height: min(320px, calc(var(--dialog-viewport-height, 100dvh) - 200px)); }
+
+@media (max-width: 1100px) and (min-width: 801px) {
+  .modal.modal-person .form-section-nav { width: 200px; }
+  .modal.modal-person .modal-workspace > .modal-body { padding: 24px; }
+}
+
+@media (max-width: 800px) {
+  .modal-backdrop:has(> .modal-person) { padding: 0; }
+  .modal-backdrop > .modal.modal-person {
+    width: 100%; max-width: none; height: var(--dialog-viewport-height, 100dvh);
+    max-height: var(--dialog-viewport-height, 100dvh); border: 0; border-radius: 0;
+  }
+  .modal.modal-person .modal-header {
+    display: grid; grid-template-columns: minmax(0, 1fr) 44px;
+    align-items: center; padding: max(8px, env(safe-area-inset-top)) 16px 10px; gap: 6px 12px;
+  }
+  .modal.modal-person .modal-header > .icon-button { grid-column: 2; grid-row: 1; }
+  .modal.modal-person .modal-header .eyebrow { display: none; }
+  .modal.modal-person .modal-header h2 { font-size: 19px; line-height: 1.35; }
+  .modal.modal-person .person-type-picker {
+    grid-column: 1 / -1; order: 0; flex-basis: auto; margin: 0; gap: 6px;
+    align-items: center; font-size: 12px;
+  }
+  .modal.modal-person .person-type-picker > small { display: none; }
+  .modal.modal-person .person-type-picker summary { min-height: 36px; display: flex; align-items: center; padding: 6px 8px; }
+  .modal.modal-person .person-type-options { position: fixed; inset-inline: 16px; top: calc(var(--dialog-viewport-top, 0px) + 96px); width: auto; max-width: none; }
+  .modal.modal-person .modal-workspace.sectioned { flex-direction: column; }
+  .modal.modal-person .form-section-nav {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px;
+    width: 100%; padding: 8px; flex: 0 0 auto;
+    overflow: visible; border-right: 0; border-bottom: 1px solid var(--border);
+  }
+  .modal.modal-person .form-section-nav > button {
+    width: 100%; min-width: 0; min-height: 48px; margin: 0; padding: 8px 6px;
+    justify-content: center; text-align: center; white-space: normal;
+    font-size: 12px; line-height: 1.35; overflow-wrap: anywhere;
+  }
+  .modal.modal-person .form-section-nav > button :is(span, i),
+  .modal.modal-person .form-section-nav .form-profile { display: none; }
+  .modal.modal-person .modal-workspace > .modal-body { flex: 1 1 auto; padding: 18px 16px; scrollbar-gutter: auto; }
+  .modal.modal-person .form-grid { gap: 18px; }
+  .modal.modal-person .form-section-heading { margin-bottom: 16px; }
+  .modal.modal-person .modal-footer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); min-height: 0; gap: 8px; padding: 10px 16px max(10px, env(safe-area-inset-bottom)); }
+  .modal.modal-person .modal-footer > span { grid-column: 1 / -1; font-size: 11px; }
+  .modal.modal-person .modal-footer > span > small { display: none; }
+  .modal.modal-person .modal-footer .btn { min-width: 0; width: 100%; }
+}
+
+/* Paisagem reserva largura à navegação para não consumir a altura do formulário. */
+@media (min-width: 601px) and (max-height: 500px) and (max-width: 1100px) {
+  .modal-backdrop:has(> .modal-person) { padding: 0; }
+  .modal-backdrop > .modal.modal-person { width: 100%; max-width: none; height: var(--dialog-viewport-height, 100dvh); max-height: var(--dialog-viewport-height, 100dvh); border: 0; border-radius: 0; }
+  .modal.modal-person .modal-header { display: flex; padding: 6px 16px; gap: 12px; flex-wrap: nowrap; }
+  .modal.modal-person .modal-header > div:first-child { flex: 0 1 auto; }
+  .modal.modal-person .modal-header .eyebrow { display: none; }
+  .modal.modal-person .modal-header h2 { font-size: 17px; }
+  .modal.modal-person .person-type-picker { flex: 1; margin: 0; }
+  .modal.modal-person .person-type-picker > small { display: none; }
+  .modal.modal-person .modal-workspace.sectioned { flex-direction: row; }
+  .modal.modal-person .form-section-nav { display: flex; flex-direction: column; gap: 4px; width: 172px; padding: 8px; overflow-y: auto; border-bottom: 0; border-right: 1px solid var(--border); }
+  .modal.modal-person .form-section-nav > button { flex: 0 0 auto; justify-content: flex-start; min-height: 44px; white-space: normal; padding: 8px; text-align: left; font-size: 12px; }
+  .modal.modal-person .form-section-nav .form-profile,
+  .modal.modal-person .form-section-nav > button :is(span, i) { display: none; }
+  .modal.modal-person .modal-workspace > .modal-body { padding: 16px 20px; }
+  .modal.modal-person .modal-footer { display: flex; padding: 8px 16px; }
+  .modal.modal-person .modal-footer > span { display: none; }
+  .modal.modal-person .modal-footer .btn { flex: 0 0 auto; width: auto; min-width: 120px; }
+}
+@media (max-width: 600px) and (max-height: 500px) {
+  .modal.modal-person .modal-header { padding-block: 6px; gap: 2px 12px; }
+  .modal.modal-person .modal-header h2 { font-size: 17px; }
+  .modal.modal-person .form-section-nav { padding-block: 6px; }
+  .modal.modal-person .modal-footer > span { display: none; }
+}
+html[data-dialog-short-viewport] .modal-backdrop:has(> .modal-person) { padding: 0; }
+html[data-dialog-short-viewport] .modal-backdrop > .modal.modal-person { width: 100%; max-width: none; height: var(--dialog-viewport-height, 100dvh); max-height: var(--dialog-viewport-height, 100dvh); border-radius: 0; }
+html[data-dialog-short-viewport] .modal.modal-person .modal-header { padding-block: 6px; gap: 2px 12px; }
+html[data-dialog-short-viewport] .modal.modal-person .modal-header h2 { font-size: 17px; }
+html[data-dialog-short-viewport] .modal.modal-person .modal-footer > span { display: none; }

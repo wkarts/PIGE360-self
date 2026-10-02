@@ -120,8 +120,9 @@ class AdmissionAttachment(Record, Scoped, Base):
     student_document_id: Mapped[str | None] = mapped_column(ForeignKey('student_documents.id'))
 
 class ConnectInstance(Record, Base):
-    """Instância global da Connect API vinculada à empresa/tenant."""
+    """Instância de WhatsApp pertencente a uma instituição."""
     __tablename__ = 'connect_instances'
+    school_id: Mapped[str | None] = mapped_column(ForeignKey('schools.id'), index=True)
     company_id: Mapped[str] = mapped_column(ForeignKey('companies.id'), index=True)
     name: Mapped[str] = mapped_column(String(100))
     display_name: Mapped[str] = mapped_column(String(160), default='')
@@ -203,7 +204,8 @@ class IntegrationJob(Record, Scoped, Base):
 
 class BankCharge(Record, Scoped, Base):
     __tablename__ = 'bank_charges'
-    connection_id: Mapped[str] = mapped_column(ForeignKey('integration_connections.id'))
+    connection_id: Mapped[str | None] = mapped_column(ForeignKey('integration_connections.id'))
+    collection_mode: Mapped[str] = mapped_column(String(16), default='provider', server_default='provider')
     admission_id: Mapped[str | None] = mapped_column(ForeignKey('admissions.id'), index=True)
     enrollment_id: Mapped[str | None] = mapped_column(ForeignKey('enrollments.id'), index=True)
     account_id: Mapped[str | None] = mapped_column(ForeignKey('portal_accounts.id'))
@@ -226,8 +228,17 @@ class BankCharge(Record, Scoped, Base):
     pix_image: Mapped[str] = mapped_column(Text, default='')
     pix_expires_at: Mapped[str] = mapped_column(String(60), default='')
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    manual_paid_on: Mapped[date | None] = mapped_column(Date)
+    manual_paid_amount: Mapped[Decimal | None] = mapped_column(Numeric(12,2))
+    manual_payment_method: Mapped[str] = mapped_column(String(24), default='', server_default='')
+    manual_reference: Mapped[str] = mapped_column(String(200), default='', server_default='')
+    manual_receipt_key: Mapped[str | None] = mapped_column(String(80))
+    manual_received_by: Mapped[str | None] = mapped_column(ForeignKey('users.id'))
     created_by: Mapped[str] = mapped_column(ForeignKey('users.id'))
-    __table_args__ = (UniqueConstraint('school_id','client_key'), UniqueConstraint('connection_id','remote_payment_id'), CheckConstraint('amount > 0', name='charge_amount'), CheckConstraint("billing_type IN ('PIX','BOLETO')", name='charge_type'))
+    __table_args__ = (UniqueConstraint('school_id','client_key'), UniqueConstraint('connection_id','remote_payment_id'),
+        UniqueConstraint('school_id','manual_receipt_key',name='uq_bank_charges_manual_receipt'),
+        CheckConstraint('amount > 0', name='charge_amount'), CheckConstraint("billing_type IN ('PIX','BOLETO','MANUAL')", name='charge_type'),
+        CheckConstraint("(collection_mode = 'manual' AND connection_id IS NULL AND billing_type = 'MANUAL') OR (collection_mode = 'provider' AND connection_id IS NOT NULL AND billing_type IN ('PIX','BOLETO'))",name='charge_collection_mode'))
 
 class BankEvent(Record, Scoped, Base):
     __tablename__ = 'bank_events'

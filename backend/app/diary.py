@@ -14,7 +14,8 @@ from .common import audit, output
 from .db import now
 from .documents import render_pdf
 from .portal_access import PORTAL_DIARY_ACCESS_CONSENT_VERSION, verified_guardian_contact_matches
-from .security import Actor, DB, PERMISSIONS, check_version, current_user, fail, lock_school, require
+from .security import Actor, DB, check_version, current_user, fail, lock_school, require
+from .lifecycle_models import require_available
 
 
 router = APIRouter(prefix="/api/v1/schools/{school_id}", tags=["Diário Escolar Digital"])
@@ -24,6 +25,8 @@ def diary_school_scope(school_id: str, db: DB, user: Actor):
     school = db.get(m.School, school_id)
     if not school or not school.active:
         fail(404, "Escola não encontrada.")
+    from .access_security import bind_access
+    bind_access(db, user, school_id)
     if user.role == "admin":
         return school
     if user.role in {"direction","coordination","secretary","viewer"}:
@@ -332,7 +335,9 @@ def periods(db: DB, user: Actor, school: DiaryScope, academic_year_id: str = "")
 @router.post("/academic-periods", status_code=201)
 def create_period(data: s.AcademicPeriodInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     require(user, "diary.configure")
+    lock_school(db, school.id)
     year = _scoped(db, m.AcademicYear, data.academic_year_id, school.id)
+    require_available(db, year)
     if data.starts_on < year.starts_on or data.ends_on > year.ends_on:
         fail(422, "O período deve estar contido nas datas do ano letivo.")
     obj = m.AcademicPeriod(school_id=school.id, **data.model_dump())
@@ -364,17 +369,31 @@ def plans(db: DB, user: Actor, school: DiaryScope, class_group_id: str = "", com
     stmt = select(m.CurriculumPlan).where(m.CurriculumPlan.school_id == school.id)
     if class_group_id: stmt = stmt.where(m.CurriculumPlan.class_group_id == class_group_id)
     if component_id: stmt = stmt.where(m.CurriculumPlan.component_id == component_id)
+    if user.role == "teacher":
+        ownership = m.TeacherAssignment.teacher_user_id == user.id
+        if user.person_id:
+            ownership = ownership | (m.TeacherAssignment.teacher_person_id == user.person_id)
+        assignments = select(m.TeacherAssignment.id).where(
+            m.TeacherAssignment.school_id == school.id,
+            m.TeacherAssignment.active.is_(True), ownership,
+        )
+        stmt = stmt.where(m.CurriculumPlan.teacher_assignment_id.in_(assignments))
     return [output(x) for x in db.scalars(stmt.order_by(m.CurriculumPlan.created_at.desc()))]
 
 
 @router.post("/curriculum-plans", status_code=201)
 def create_plan(data: s.CurriculumPlanInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     require(user, "diary.write")
+    lock_school(db, school.id)
     group = _scoped(db, m.ClassGroup, data.class_group_id, school.id)
+    require_available(db, group)
+    require_available(db, _scoped(db, m.AcademicYear, group.academic_year_id, school.id))
     _scoped(db, m.CurriculumComponent, data.component_id, school.id)
     if data.academic_period_id: _period(db, school.id, data.academic_period_id, group.academic_year_id)
     if data.teacher_assignment_id:
         assignment = _scoped(db, m.TeacherAssignment, data.teacher_assignment_id, school.id)
+        if not assignment.active:
+            fail(422, "A atribuição docente está inativa.")
         if assignment.class_group_id != group.id:
             fail(422, "A atribuição docente pertence a outra turma.")
         if user.role == "teacher" and not (assignment.teacher_user_id == user.id or (user.person_id and assignment.teacher_person_id == user.person_id)):
@@ -401,12 +420,28 @@ def create_plan(data: s.CurriculumPlanInput, db: DB, user: Actor, school: DiaryS
 @router.patch("/curriculum-plans/{plan_id}")
 def edit_plan(plan_id: str, data: s.PlanEdit, db: DB, user: Actor, school: DiaryScope, request: Request):
     require(user, "diary.write")
+    lock_school(db, school.id)
     obj = _scoped(db, m.CurriculumPlan, plan_id, school.id)
     check_version(obj, data.version)
     assignment = db.get(m.TeacherAssignment, obj.teacher_assignment_id) if obj.teacher_assignment_id else None
-    if user.role == "teacher" and (not assignment or not (assignment.teacher_user_id == user.id or (user.person_id and assignment.teacher_person_id == user.person_id))):
+    if user.role == "teacher" and (not assignment or not assignment.active or not (assignment.teacher_user_id == user.id or (user.person_id and assignment.teacher_person_id == user.person_id))):
         fail(403, "O planejamento não pertence a uma atribuição docente do usuário.")
     values = data.model_dump(exclude={"version"})
+    group = _scoped(db, m.ClassGroup, data.class_group_id, school.id)
+    if group.id != obj.class_group_id or data.status != 'archived':
+        require_available(db, group)
+        require_available(db, _scoped(db, m.AcademicYear, group.academic_year_id, school.id))
+    _scoped(db, m.CurriculumComponent, data.component_id, school.id)
+    if data.academic_period_id:
+        _period(db, school.id, data.academic_period_id, group.academic_year_id)
+    if data.teacher_assignment_id:
+        target = _scoped(db, m.TeacherAssignment, data.teacher_assignment_id, school.id)
+        if not target.active or target.class_group_id != group.id:
+            fail(422, "Selecione uma atribuição ativa desta turma.")
+        if user.role == "teacher" and not (target.teacher_user_id == user.id or (user.person_id and target.teacher_person_id == user.person_id)):
+            fail(403, "A atribuição docente não pertence ao usuário.")
+    elif user.role == "teacher":
+        fail(422, "Professor deve informar sua atribuição docente.")
     for key,value in values.items(): setattr(obj,key,value)
     obj.version += 1
     audit(db, request, user, "diary.plan.updated", obj, school.id)
@@ -437,7 +472,10 @@ def diaries(db: DB, user: Actor, school: DiaryScope, class_group_id: str = ""):
 @router.post("/diaries", status_code=201)
 def create_diary(data: s.DiaryInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     require(user, "diary.configure")
+    lock_school(db, school.id)
     group = _scoped(db, m.ClassGroup, data.class_group_id, school.id)
+    require_available(db, group)
+    require_available(db, _scoped(db, m.AcademicYear, group.academic_year_id, school.id))
     _scoped(db, m.CurriculumComponent, data.component_id, school.id)
     assignment = None
     if data.teacher_assignment_id:
@@ -560,6 +598,7 @@ def save_attendance(diary_id: str, lesson_id: str, data: s.AttendanceInput, db: 
         if not row: fail(422,"A chamada contém matrícula fora desta turma.")
         obj=db.scalar(select(m.DiaryAttendance).where(m.DiaryAttendance.lesson_id==lesson.id,m.DiaryAttendance.enrollment_id==item.enrollment_id))
         if obj:
+            if item.version is not None: check_version(obj,item.version)
             obj.status=item.status; obj.note=item.note; obj.recorded_by=user.id; obj.version += 1
         else:
             obj=m.DiaryAttendance(school_id=school.id,lesson_id=lesson.id,enrollment_id=item.enrollment_id,student_id=row["student_id"],status=item.status,note=item.note,recorded_by=user.id)
@@ -596,6 +635,34 @@ def create_assessment(diary_id: str, data: s.AssessmentInstrumentInput, db: DB, 
     return output(obj)
 
 
+@router.patch("/diaries/{diary_id}/assessments/{instrument_id}")
+def edit_assessment(diary_id: str, instrument_id: str, data: s.AssessmentInstrumentEdit, db: DB, user: Actor, school: DiaryScope, request: Request):
+    diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.assessments")
+    _require_open_diary(diary)
+    obj=_scoped(db,m.AssessmentInstrument,instrument_id,school.id)
+    if obj.diary_id!=diary.id: fail(404,"Avaliação não encontrada neste diário.")
+    check_version(obj,data.version)
+    year=db.get(m.AcademicYear,diary.academic_year_id)
+    if not year.starts_on <= data.assessment_date <= year.ends_on:
+        fail(422,"A data da avaliação está fora do ano letivo.")
+    if data.academic_period_id:
+        period=_period(db,school.id,data.academic_period_id,diary.academic_year_id)
+        if not period.starts_on <= data.assessment_date <= period.ends_on:
+            fail(422,"A data da avaliação está fora do período informado.")
+    results=list(db.scalars(select(m.AssessmentResult).where(m.AssessmentResult.instrument_id==obj.id)))
+    if results and data.value_type!=obj.value_type:
+        fail(409,"A avaliação já possui resultados. Preserve o tipo de nota ou conceito.")
+    for result in results:
+        _enrollment_for_diary(db,diary,result.enrollment_id,data.assessment_date)
+        if data.max_score is not None and result.numeric_score is not None and result.numeric_score>data.max_score:
+            fail(422,"O valor máximo não pode ser menor que uma nota já registrada.")
+    before=output(obj)
+    for key,value in data.model_dump(exclude={"version"}).items(): setattr(obj,key,value)
+    obj.version+=1
+    audit(db,request,user,"diary.assessment.updated",obj,school.id,_json_safe({"before":before,"after":output(obj)}))
+    return output(obj)
+
+
 @router.get("/diaries/{diary_id}/assessments/{instrument_id}/results")
 def assessment_results(diary_id: str, instrument_id: str, db: DB, user: Actor, school: DiaryScope):
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.read")
@@ -627,6 +694,7 @@ def save_assessment_results(diary_id: str, instrument_id: str, data: s.Assessmen
             numeric=None
         obj=db.scalar(select(m.AssessmentResult).where(m.AssessmentResult.instrument_id==instrument.id,m.AssessmentResult.enrollment_id==enrollment.id))
         if obj:
+            if item.version is not None: check_version(obj,item.version)
             obj.numeric_score=numeric;obj.concept=concept;obj.note=item.note;obj.recorded_by=user.id;obj.version+=1
         else:
             obj=m.AssessmentResult(school_id=school.id,instrument_id=instrument.id,enrollment_id=enrollment.id,student_id=enrollment.student_id,numeric_score=numeric,concept=concept,note=item.note,recorded_by=user.id)
@@ -992,12 +1060,13 @@ def consolidate_period(diary_id: str, period_id: str, data: s.DiaryTransitionInp
         attendance_trace = []
         for lesson in lessons:
             if enrollment_id not in {r["enrollment_id"] for r in _attendance_roster(db, diary, lesson.lesson_date)}: continue
-            attendance_total += 1
+            lesson_units = max(1, int(lesson.lesson_count))
+            attendance_total += lesson_units
             mark = marks[lesson.id].get(enrollment_id)
             if not mark: flags.append("chamada_pendente"); continue
             credited = mark.status == "present" or (mark.status == "justified_absence" and rule.justified_absence_counts_as_present is True)
-            attendance_credit += int(credited)
-            attendance_trace.append({"lesson_id":lesson.id,"status":mark.status})
+            attendance_credit += lesson_units if credited else 0
+            attendance_trace.append({"lesson_id":lesson.id,"status":mark.status,"lesson_count":lesson_units})
         attendance_pct = Decimal(attendance_credit)*Decimal(100)/Decimal(attendance_total) if attendance_total else None
         if rule.minimum_attendance_percent is not None and (attendance_pct is None or attendance_pct < Decimal(str(rule.minimum_attendance_percent))): flags.append("frequencia_abaixo_do_limite")
         opinion = opinions.get(enrollment_id)
@@ -1015,7 +1084,7 @@ def consolidate_period(diary_id: str, period_id: str, data: s.DiaryTransitionInp
             if "frequencia_abaixo_do_limite" in flags: status = "attendance_below_minimum"
             elif "parecer_final_pendente" in flags: status = "opinion_pending"
         if status == "pending": pending += 1
-        source = _json_safe({"rule":output(rule),"assessments":source_items,"aggregation":{"regular":base_trace,"recovery":rec_trace},"attendance":attendance_trace,"attendance_percent":str(attendance_pct) if attendance_pct is not None else None,"opinion_status":opinion.status if opinion else None})
+        source = _json_safe({"rule":output(rule),"assessments":source_items,"aggregation":{"regular":base_trace,"recovery":rec_trace},"attendance":attendance_trace,"attendance_basis":"lesson_count","attendance_percent":str(attendance_pct) if attendance_pct is not None else None,"opinion_status":opinion.status if opinion else None})
         canonical = json.dumps(source,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
         digest = hashlib.sha256(canonical).hexdigest()
         obj = db.scalar(select(m.PeriodResult).where(
@@ -1044,7 +1113,7 @@ def period_results(diary_id: str, period_id: str, db: DB, user: Actor, school: D
     items=[]
     for row in rows:
         student=db.get(m.Student,row.student_id);person=db.get(m.Person,student.person_id) if student else None
-        items.append({**output(row),"student_name":person.name if person else "","student_number":student.number if student else ""})
+        items.append({**output(row),"student_name":person.name if person else "","student_number":student.number if student else "", "requires_recalculation": (row.calculation or {}).get("attendance_basis") != "lesson_count"})
     rule=_assessment_rule_data(db,diary,period)
     return {"rule":output(rule) if rule else None,"items":items}
 
@@ -1056,18 +1125,26 @@ def _student_label(db, enrollment_id):
 
 def _report_attendance(db, snapshot):
     students={item["enrollment_id"]:item for item in snapshot.get("roster",[])}
+    lessons={item["id"]:item for item in snapshot.get("lessons",[])}
+    rules={item["academic_period_id"]:item for item in snapshot.get("assessment_rules",[])}
+    scoped_period=(snapshot.get("period") or {}).get("id")
     counts={}
     for row in snapshot["attendance"]:
-        entry=counts.setdefault(row["enrollment_id"],{"present":0,"absent":0,"justified_absence":0})
-        entry[row["status"]]=entry.get(row["status"],0)+1
+        lesson=lessons.get(row["lesson_id"],{})
+        units=max(1,int(lesson.get("lesson_count") or 1))
+        entry=counts.setdefault(row["enrollment_id"],{"present":0,"absent":0,"justified_absence":0,"credited":0})
+        entry[row["status"]]=entry.get(row["status"],0)+units
+        rule=rules.get(lesson.get("academic_period_id") or scoped_period,{})
+        if row["status"]=="present" or (row["status"]=="justified_absence" and rule.get("justified_absence_counts_as_present") is True):
+            entry["credited"]+=units
         if row["enrollment_id"] not in students:
             e=db.get(m.Enrollment,row["enrollment_id"]);st=db.get(m.Student,e.student_id) if e else None;p=db.get(m.Person,st.person_id) if st else None
             if e and st and p:students[e.id]={"enrollment_id":e.id,"name":p.name,"number":st.number}
     rows=[]
     for student in students.values():
-        v=counts.get(student["enrollment_id"],{});total=sum(v.values());credited=v.get("present",0)+v.get("justified_absence",0)
-        rate=f"{credited*100/total:.1f}%" if total else "—"
-        rows.append((student["name"]+" · "+student["number"],f"Presentes: {v.get('present',0)}; faltas: {v.get('absent',0)}; justificadas: {v.get('justified_absence',0)}; frequência nos registros: {rate}"))
+        v=counts.get(student["enrollment_id"],{});total=sum(v.get(key,0) for key in ("present","absent","justified_absence"));credited=v.get("credited",0)
+        rate=f"{credited*100/total:.1f}%".replace(".",",") if total else "—"
+        rows.append((student["name"]+" · "+student["number"],f"Presenças: {v.get('present',0)} aula(s); faltas: {v.get('absent',0)}; justificadas: {v.get('justified_absence',0)}; frequência nas aulas com chamada: {rate}. Justificadas só geram crédito quando a regra do período autoriza."))
     return rows
 
 

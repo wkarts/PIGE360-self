@@ -5,7 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Literal
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from sqlalchemy import func, select, update
 from PIL import Image
@@ -16,7 +16,8 @@ from .assisted_common import enabled, quota
 from .common import audit
 from .config import settings
 from .db import now, uid
-from .security import Actor, DB, Scope, PERMISSIONS, fail, require, scoped, utc
+from .security import Actor, DB, Scope, fail, require, scoped, utc
+from .access_security import permissions_for
 from .portal import Parent, own_admission
 from .storage import put_bytes
 from .schemas import Input
@@ -40,8 +41,17 @@ def output(row):
 
 
 def access(user):
-    if not {'people.write','documents.write','schools.manage'}.intersection(PERMISSIONS.get(user.role,set())):
+    if not {'people.write','documents.write','schools.manage'}.intersection(permissions_for(user)):
         fail(403,'Seu perfil não pode solicitar a leitura de documentos.')
+
+
+def reusable(row):
+    if row is None:return False
+    if row.status!='succeeded':return True
+    # Uma atualização do motor precisa reler documentos cujo resultado antigo
+    # ignorou imagens de PDFs híbridos; não reutilizar o erro por mais 24 horas.
+    try:return json.loads(cipher().decrypt(row.encrypted_result.encode())).get('schema_version')==2
+    except (ValueError,TypeError,AttributeError,InvalidToken):return False
 
 
 def validate(data:bytes, filename:str):
@@ -68,7 +78,7 @@ def submit(db,school_id,owner_kind,owner_id,purpose,data,filename,request):
     previous=db.scalar(select(OcrJob).where(OcrJob.school_id==school_id,OcrJob.owner_kind==owner_kind,
         OcrJob.owner_id==owner_id,OcrJob.sha256==sha,OcrJob.purpose==purpose,
         OcrJob.expires_at>now(),OcrJob.status.in_(['queued','processing','succeeded'])).order_by(OcrJob.created_at.desc()).limit(1))
-    if previous:return output(previous)
+    if reusable(previous):return output(previous)
     quota(db,'ocr:'+owner_kind+':'+owner_id,30)
     # Serializa admissão na fila por escola, sem manter o lock durante OCR.
     from .security import lock_school
@@ -76,7 +86,7 @@ def submit(db,school_id,owner_kind,owner_id,purpose,data,filename,request):
     previous=db.scalar(select(OcrJob).where(OcrJob.school_id==school_id,OcrJob.owner_kind==owner_kind,
         OcrJob.owner_id==owner_id,OcrJob.sha256==sha,OcrJob.purpose==purpose,
         OcrJob.expires_at>now(),OcrJob.status.in_(['queued','processing','succeeded'])).order_by(OcrJob.created_at.desc()).limit(1))
-    if previous:return output(previous)
+    if reusable(previous):return output(previous)
     criteria=[OcrJob.school_id==school_id,OcrJob.status.in_(['queued','processing']),OcrJob.expires_at>now()]
     if db.scalar(select(func.count()).select_from(OcrJob).where(*criteria))>=50:
         fail(429,'Fila da escola cheia. Aguarde ou continue preenchendo manualmente.')

@@ -18,7 +18,7 @@ for(const filename of fs.readdirSync(path.join(root,'templates')).filter(name=>n
 }
 const applications=[];
 const document={createElement:()=>({}),querySelector:()=>null,querySelectorAll:()=>[],title:''};
-const sandbox={crypto,console,document,navigator:{onLine:true},location:{hash:'',pathname:'/',origin:'http://test'},history:{replaceState(){}},localStorage:{getItem:()=>null,setItem:()=>{}},URLSearchParams,URL,Intl,Headers,FormData,Blob,File,Event,CustomEvent,setTimeout,clearTimeout};
+const sandbox={crypto,console,document,navigator:{onLine:true},location:{hash:'',pathname:'/',origin:'http://test'},history:{replaceState(){}},localStorage:{getItem:()=>null,setItem:()=>{}},URLSearchParams,URL,Intl,Headers,FormData,Blob,File,Event,CustomEvent,AbortController,AbortSignal,setTimeout,clearTimeout};
 sandbox.window=sandbox;sandbox.addEventListener=()=>{};
 sandbox.fetch=()=>{throw new Error('O teste de renderização não pode acessar a rede.');};
 vm.createContext(sandbox);
@@ -52,7 +52,7 @@ loginTree=render();assert.equal(loginLink(loginTree).length,0,'Ocultar o atalho 
 context.identity.show_preenrollment_button=true;
 assert.equal(loginLink(render()).length,1,'Reativar o atalho sem mudar de tela');
 console.log('Login smoke: remoções pontuais, slogan preservado e atalho configurável OK.');
-context.state.user={id:'test-admin',name:'Administrador',role:'admin',permissions:[...new Set([...fs.readFileSync(path.join(root,'templates/app.html'),'utf8').matchAll(/can\('([^']+)'\)/g)].map(match=>match[1]))]};
+context.state.user={id:'test-admin',name:'Administrador',role:'admin',admin_tools:{portability:true,diagnostics:true,audit:true,develop_build:false},permissions:[...new Set([...fs.readFileSync(path.join(root,'templates/app.html'),'utf8').matchAll(/can\('([^']+)'\)/g)].map(match=>match[1]))]};
 context.state.schoolId='school-test';context.state.schools=[{id:'school-test',company_id:'company-test',name:'Escola de teste'}];
 const originalObjectUrl=sandbox.PigeAPI.objectUrl;
 let activePhotos=0,maxActivePhotos=0;
@@ -74,12 +74,26 @@ assert.equal(photoRequests.length,9,'Cada foto é solicitada uma única vez dura
 assert.ok(maxActivePhotos<=4,'Os downloads de foto permanecem limitados durante toda a fila');
 sandbox.PigeAPI.objectUrl=originalObjectUrl;
 for(const page of Object.keys(context.pageLabels)){context.state.page=page;render();}
-context.state.page='legacy-import';context.state.legacyImport.preview={fingerprint:'a'.repeat(64),source_system:'School Desktop Suite',source_database:'app.db',source_record_count:5,table_count:5,max_package_mb:128,tables:[{name:'alunos',rows:1,destination:'alunos e pessoas'}],media:{inline_photos_convertible:1,container_files_candidate_count:0,container_unsupported_files_ignored:0,container_unsafe_or_cache_paths_ignored:0,unresolved_media_references:0,container_magento_paths_ignored:0},warnings:['Aviso de teste']};
-const legacyImportTree=render();assert.match(loginText(legacyImportTree),/Gerar prévia segura/);assert.match(loginText(legacyImportTree),/Confirme a importação/);assert.match(loginText(legacyImportTree),/alunos e pessoas/);
-assert.equal(typeof context.previewLegacyImport,'function');assert.equal(typeof context.applyLegacyImport,'function');
-context.state.legacyImport.preview=null;
+context.state.page='legacy-import';
+assert.ok(nodes(render()).some(n=>n.type==='legacy-import-panel'||n.type===sandbox.PigeLegacyImport.component),'Importação monta componente seletivo');
+const importContext=sandbox.PigeLegacyImport.component.setup({schoolId:'school-test',schoolName:'Escola de teste',units:[]});
+const importRender=()=>sandbox.PigeRenders.legacyImport.call(importContext,importContext,[]);
+assert.match(loginText(importRender()),/Analisar arquivo/);
+importContext.state.inventory={tables:[{name:'alunos',rows:2,selected_rows:0,destination:'Alunos'}],records:{}};
+importContext.toggleTable('alunos');
+assert.deepEqual(Array.from(importContext.state.selection.tables),['alunos']);
+assert.match(loginText(importRender()),/Escolher registros/);
+importContext.state.preview={can_apply:true,selected_record_count:2,destination:{school_name:'Escola de teste'},tables:[{name:'alunos',selected_rows:2,destination:'Alunos'}],issues:[],warnings:[]};
+assert.match(loginText(importRender()),/Confira antes de importar/);
+importContext.toggleTable('alunos');assert.equal(importContext.state.preview,null,'Mudar seleção invalida a confirmação');
+const reportContext=sandbox.PigeReports.component.setup({schoolId:'school-test',catalogs:{}});
+const reportRender=()=>sandbox.PigeRenders.reports.call(reportContext,reportContext,[]);
+reportContext.period();assert.ok(reportContext.state.dateFrom<reportContext.state.dateTo);
+assert.match(loginText(reportRender()),/Últimos três meses completos/);
+reportContext.state.result={title:'Matrículas',period:{label:'Teste',date_from:'2026-07-01',date_to:'2026-09-30'},summary:[{key:'total',label:'Total',value:1,type:'integer'}],filters:[],columns:[{key:'name',label:'Aluno',type:'text'}],items:[{name:'Aluno Sintético'}],total:1,page_size:30,monthly:[],notes:[]};
+assert.match(loginText(reportRender()),/Aluno Sintético/);
 context.state.page='help';let guideTree=render();assert.match(loginText(guideTree),/Siga a ordem da rotina escolar/);assert.match(loginText(guideTree),/Cadastre cada pessoa uma vez/);
-context.state.page='students';assert.match(loginText(render()),/Pesquise antes de criar uma nova identidade/);
+context.state.page='students';assert.match(loginText(render()),/Novo aluno/);assert.ok(!loginText(render()).includes('Pesquise antes de criar uma nova identidade'),'Orientação redundante removida da listagem');
 const originalRequest=sandbox.PigeAPI.request;let routeCalls=[];
 sandbox.PigeAPI.request=async path=>{routeCalls.push(path);return {};};
 context.state.page='diary';await context.loadPage();context.state.page='help';await context.loadPage();context.state.page='contracts';await context.loadPage();
@@ -133,7 +147,7 @@ await diaryContext.load();
 assert.ok(diaryCalls.includes('/schools/school-test/academic-years'));
 assert.ok(!diaryCalls.includes('/schools/school-test/diary'));
 diaryContext.state.tab='setup';let diaryTree=renderDiary();
-assert.match(loginText(diaryTree),/Como começar no Diário/);
+assert.match(loginText(diaryTree),/Como usar o Diário/);
 assert.match(loginText(diaryTree),/2026/);
 sandbox.PigeAPI.request=originalRequest;
 console.log('Diary smoke: roteiro visível, ano letivo legível e endpoints da tela válidos OK.');
@@ -173,33 +187,77 @@ await contractContext.preview();await contractContext.issue();assert.equal(issue
 sandbox.PigeAPI.post=originalPost;sandbox.PigeAPI.request=originalRequest;sandbox.PigeAPI.download=originalDownload;
 console.log('Contracts smoke: JSON privado, vigência, campos pendentes e emissão conferidos OK.');
 
-// A senha A1 nunca permanece no estado após upload; a revisão usa o documento exato.
+// Configuração, pendências e conferência têm dados e ações próprios.
 const signingComponent=sandbox.PigeSigning.component;
-const signing=signingComponent.setup({schoolId:'school-test',permissions:['schools.manage','documents.read','documents.validate'],role:'admin',enrollmentId:'',issuedId:''});
-let receivedA1=false,receivedValidation=false,reviewStatus='pending_validation';
+const signingProps={schoolId:'school-test',permissions:['schools.manage','documents.read','documents.validate','documents.generate'],role:'admin',enrollmentId:'',issuedId:''};
+const signing=signingComponent.setup({...signingProps,mode:'certificate'});
+let receivedA1=false,receivedValidation=false,receivedPreferences=false,reviewStatus='pending_validation';
+const signingRequests=[];
 document.getElementById=()=>null;
 sandbox.PigeAPI.request=async(path,options={})=>{
+  signingRequests.push(path);
+  assert.ok(path.startsWith('/schools/school-test/'),'Todos os dados pertencem à escola ativa');
   if(path.endsWith('/signing-certificate/a1')){
     if(options.method==='PUT'){receivedA1=true;assert.equal(options.body.get('password'),'senha-de-teste');return {subject:'CN=Escola',expires_at:'2028-12-31T00:00:00Z',certificate_sha256:'a'.repeat(64)};}
     return{configured:receivedA1,certificate:receivedA1?{subject:'CN=Escola',expires_at:'2028-12-31T00:00:00Z',certificate_sha256:'a'.repeat(64)}:null};
   }
+  if(path.endsWith('/signing-certificate/alert-preferences')){
+    if(options.method==='PUT'){const prefs=JSON.parse(options.body);assert.equal(prefs.email_enabled,true);assert.equal(prefs.whatsapp_enabled,false);receivedPreferences=true;}
+    return{email_enabled:receivedPreferences,whatsapp_enabled:false,email:'direcao@example.com',phone_available:false};
+  }
+  if(path.includes('/issued-documents/signatures/unsigned'))return{items:[{document_id:'issued-2',student_name:'João',signature_status:'unsigned',file_id:'original-2',kind:'enrollment'}],total:1};
   if(path.includes('/issued-documents/signatures/pending'))return{items:[{document_id:'issued-1',student_name:'Maria',enrollment_id:'enrollment-1',signature_status:'pending_validation'}],total:1};
   if(path.endsWith('/issued-documents/issued-1/signatures'))return{document_id:'issued-1',status:reviewStatus,file_id:'signed-1',signature_valid:true,cryptographic_valid:true,trust_status:'trusted',signatures:[],revisions:[]};
   if(path.endsWith('/issued-documents/issued-1/validate-signature')){receivedValidation=true;reviewStatus='verified';assert.equal(options.body.get('signer_cpf'),'12345678909');return{signature_status:'verified'};}
+  if(path.endsWith('/enrollments/enrollment-1'))return{student_id:'student-1'};
+  if(path.endsWith('/students/student-1/documents'))return{issued:[{id:'issued-1',kind:'template',enrollment_id:'enrollment-1'},{id:'issued-other',kind:'template',enrollment_id:'enrollment-other'}]};
   throw new Error('Requisição inesperada: '+path);
 };
+const renderSigning=context=>signingComponent.render.call(context,context,[]);
 await signing.load();
-const renderSigning=()=>signingComponent.render.call(signing,signing,[]);
-assert.match(loginText(renderSigning()),/Certificado A1/);
+assert.match(loginText(renderSigning(signing)),/Certificado A1/);
+assert.doesNotMatch(loginText(renderSigning(signing)),/Assinaturas pendentes|Conferência de assinaturas|Assinar XML|Documentos fiscais/);
+assert.ok(signingRequests.every(path=>path.includes('/signing-certificate/')),'Configuração não carrega filas de documentos');
 const p12=new File(['conteúdo de teste'],'escola.p12',{type:'application/x-pkcs12'});
 signing.certificateChanged({target:{files:[p12]}});signing.state.certificatePassword='senha-de-teste';
 await signing.saveCertificate();assert.ok(receivedA1);assert.equal(signing.state.certificatePassword,'');
-await signing.openReview('issued-1');assert.match(loginText(renderSigning()),/Conferência documental/i);
-signing.reportChanged({target:{files:[new File(['%PDF-1.4'],'validar.pdf',{type:'application/pdf'})]}});
-signing.state.signerCpf='123.456.789-09';signing.state.validationReference='VALIDAR-123';signing.state.confirmedReview=true;
-await signing.validate();assert.ok(receivedValidation);assert.equal(signing.state.review.status,'verified');
+signing.state.alerts.email_enabled=true;await signing.saveAlertPreferences();assert.ok(receivedPreferences);
+let firstRequest=signingRequests.length;
+const signatureQueue=signingComponent.setup({...signingProps,mode:'pending-signatures'});
+await signatureQueue.load();
+assert.match(loginText(renderSigning(signatureQueue)),/Assinaturas pendentes/);
+assert.doesNotMatch(loginText(renderSigning(signatureQueue)),/Conferência de assinaturas|Avisos de vencimento|Assinar XML/);
+assert.ok(signingRequests.slice(firstRequest).every(path=>path.endsWith('/signing-certificate/a1')||path.includes('/signatures/unsigned')),'Pendências carregam somente assinatura da escola');
+firstRequest=signingRequests.length;
+const signatureReview=signingComponent.setup({...signingProps,mode:'signature-review'});
+await signatureReview.load();
+assert.match(loginText(renderSigning(signatureReview)),/Conferência de assinaturas/);
+assert.doesNotMatch(loginText(renderSigning(signatureReview)),/Assinaturas pendentes|Avisos de vencimento|Assinar XML/);
+assert.ok(signingRequests.slice(firstRequest).every(path=>path.includes('/signatures/pending')),'Conferência não carrega certificado ou fila de assinatura da escola');
+await signatureReview.openReview('issued-1');
+signatureReview.reportChanged({target:{files:[new File(['%PDF-1.4'],'validar.pdf',{type:'application/pdf'})]}});
+signatureReview.state.signerCpf='123.456.789-09';signatureReview.state.validationReference='VALIDAR-123';signatureReview.state.confirmedReview=true;
+await signatureReview.validate();assert.ok(receivedValidation);assert.equal(signatureReview.state.review.status,'verified');
+firstRequest=signingRequests.length;
+const enrollmentDocuments=signingComponent.setup({...signingProps,mode:'document',enrollmentId:'enrollment-1'});
+await enrollmentDocuments.load();
+assert.equal(enrollmentDocuments.state.enrollmentIssued.length,1,'Documentos de outra matrícula não aparecem no contexto selecionado');
+assert.equal(enrollmentDocuments.state.enrollmentIssued[0].id,'issued-1');
+assert.ok(signingRequests.slice(firstRequest).every(path=>!path.includes('/signatures/pending')&&!path.includes('/signatures/unsigned')),'A matrícula não carrega filas gerais');
+assert.ok(signingRequests.every(path=>!path.includes('/fiscal-signatures')),'Interface fiscal permanece fora destes fluxos');
+let finishOldSchool;
+const changingProps={...signingProps,schoolId:'school-old',mode:'pending-signatures'};
+const staleSigning=signingComponent.setup(changingProps);
+sandbox.PigeAPI.request=path=>path.includes('/signatures/unsigned')?new Promise(resolve=>{finishOldSchool=resolve;}):Promise.resolve({configured:false,certificate:null});
+const loadingOldSchool=staleSigning.load();
+changingProps.schoolId='school-new';
+finishOldSchool({items:[{document_id:'old-school-document',student_name:'Documento de outra entidade'}],total:1});
+await loadingOldSchool;
+assert.equal(staleSigning.state.unsigned.length,0,'Resposta tardia da escola anterior deve ser descartada');
+assert.equal(staleSigning.isCurrent(),false);
+assert.doesNotMatch(loginText(renderSigning(staleSigning)),/Documento de outra entidade/);
 sandbox.PigeAPI.request=originalRequest;
-console.log('Signing smoke: metadados A1, segredo efêmero e decisão auditável OK.');
+console.log('Signing smoke: telas separadas, A1 efêmero, revisão por matrícula e isolamento de respostas tardias OK.');
 
 // Campanha salva o modelo selecionado; a inscrição aprovada emite a revisão congelada.
 const expansion=sandbox.PigeExpansion.component.setup({schoolId:'school-test',page:'online',permissions:['admissions.manage','admissions.write','documents.read','documents.generate']});
@@ -212,6 +270,9 @@ sandbox.PigeAPI.request=async path=>{
   if(path.endsWith('/admission-readiness'))return{ready:true,campaigns:[],issues:[]};
   if(path.endsWith('/admission-campaigns'))return[];
   if(path.endsWith('/class-groups'))return[group];
+  if(path.endsWith('/academic-years'))return[{id:'year-2027',name:'2027',status:'active'}];
+  if(path.endsWith('/units'))return[];
+  if(path.endsWith('/academic-years'))return[{id:'year-2027',name:'2027'}];
   if(path.endsWith('/document-templates'))return{items:[templateChoice]};
   if(path.endsWith('/document-templates/fields'))return{fields:[{key:'financeiro.anuidade',label:'Anuidade',source:'manual'}]};
   if(path.includes('/admissions-summary'))return{counts:{}};
@@ -228,6 +289,8 @@ sandbox.PigeAPI.post=async(path,payload)=>{
   throw new Error('POST inesperado: '+path);
 };
 await expansion.load();expansion.newCampaign();
+await expansion.saveCampaign();assert.equal(campaignSaved,null,'Sem turma, o processo não deve ser enviado');assert.match(expansion.s.error,/Selecione pelo menos uma turma/);
+Object.assign(expansion.s.campaignForm,{title:'Matrículas 2027',slug:'matriculas-2027',opens_on:'2027-01-01',closes_on:'2027-03-31'});
 expansion.s.campaignForm.class_group_ids=['group-2027'];expansion.s.campaignForm.contract_template_id='template-contract';
 await expansion.saveCampaign();assert.equal(campaignSaved.contract_template_id,'template-contract');
 expansion.s.selected=admission;
@@ -307,20 +370,47 @@ assisted.s.rows=[{field:'name',targetField:'name',value:'Leitura atrasada',check
 assisted.s.confirmed=true;assisted.apply();assert.equal(target.name,'Nome preservado');assert.ok(assisted.s.error);
 console.log('Assist smoke: render, campos permitidos e proteção de edição concorrente OK.');
 
-// SDK opcional com falha não pode produzir uma exceção na operação escolar.
-const elements=[];
-document.createElement=()=>({dataset:{},remove(){const i=elements.indexOf(this);if(i>=0)elements.splice(i,1);}});
-document.head={appendChild:element=>elements.push(element)};
-let config={enabled:true,base_url:'https://hub.example.test',website_token:'test-public-token',position:'left',type:'standard',launcherTitle:'Atendimento'};
-sandbox.fetch=async()=>({ok:true,json:async()=>config});
-sandbox.hubSDK={run(){throw new Error('Falha sintética do SDK');}};
-await sandbox.PigeSupport.load();
-assert.equal(elements.length,1);elements[0].onload();
-assert.match(sandbox.PigeSupport.status.error,/não iniciou/);
-assert.equal(elements.length,0);
-let ran=0;sandbox.hubSDK={run(){ran++;}};
-await sandbox.PigeSupport.load();await sandbox.PigeSupport.load();elements[0].onload();
-assert.equal(ran,1);await sandbox.PigeSupport.load();assert.equal(elements.length,1);
-config={...config,enabled:false};await sandbox.PigeSupport.load();assert.equal(elements.length,0);
-assert.equal(context.state.modal.kind,'');
-console.log('Support smoke: falha do SDK isolada, carga idempotente e descarte do script OK.');
+// Atendimento pertence à instituição/área selecionada e tem contexto descartável.
+const supportFrames=[],supportScripts=[];
+let supportRun=()=>{throw new Error('Falha sintética do atendimento');};
+sandbox.setInterval=setInterval;sandbox.clearInterval=clearInterval;
+sandbox.MutationObserver=class{observe(){}disconnect(){}};
+document.createElement=()=>({dataset:{},style:{},contentWindow:{innerWidth:390,innerHeight:844,hubSDK:{run:()=>supportRun()}},contentDocument:{documentElement:{style:{}},body:{style:{}},createElement:()=>({}),head:{appendChild:element=>supportScripts.push(element)},querySelectorAll:()=>[]},remove(){const i=supportFrames.indexOf(this);if(i>=0)supportFrames.splice(i,1);}});
+document.body={appendChild:element=>supportFrames.push(element)};
+let config={enabled:true,base_url:'https://support.example.test',website_token:'test-public-token',position:'left',type:'standard',launcherTitle:'Atendimento'};
+const supportRequests=[];
+sandbox.fetch=async path=>{supportRequests.push(path);return{ok:true,json:async()=>path==='/api/v1/support-widget'?{...config,enabled:false}:config};};
+await sandbox.PigeSupport.load();assert.equal(supportFrames.length,0);assert.deepEqual(supportRequests,['/api/v1/support-widget']);
+await sandbox.PigeSupport.load('school-a','online_enrollment');
+assert.equal(supportFrames.length,1);supportScripts.at(-1).onload();
+assert.match(sandbox.PigeSupport.status.error,/não iniciou/);assert.equal(supportFrames.length,0);
+let ran=0;supportRun=()=>{ran++;};
+await sandbox.PigeSupport.load('school-a','online_enrollment');await sandbox.PigeSupport.load('school-a','online_enrollment');supportScripts.at(-1).onload();
+assert.equal(ran,1);assert.equal(supportFrames.length,1);
+const formerFrame=supportFrames[0];
+await sandbox.PigeSupport.load('school-b','online_enrollment');
+assert.equal(supportFrames.includes(formerFrame),false);assert.match(supportRequests.at(-1),/schools\/school-b\/support-widget\?area=online_enrollment/);
+config={...config,enabled:false};await sandbox.PigeSupport.load('school-b','internal');assert.equal(supportFrames.length,0);
+sandbox.PigeSupport.dispose();assert.equal(context.state.modal.kind,'');
+console.log('Support smoke: entidade e área explícitas, falha isolada, carga idempotente e descarte do contexto OK.');
+
+// Consultar a fila não exige permissões financeiras nem leitura de contratos.
+const admissionReader=sandbox.PigeExpansion.component.setup({schoolId:'school-test',page:'online',permissions:['admissions.read']});
+const beforeReader=sandbox.PigeAPI.request;
+const readerCalls=[];
+sandbox.PigeAPI.request=async path=>{
+  readerCalls.push(path);
+  if(path.endsWith('/admission-readiness'))return{ready:true,campaigns:[],issues:[]};
+  if(path.endsWith('/admission-campaigns'))return[];
+  if(path.endsWith('/admissions-summary'))return{counts:{}};
+  if(path.includes('/admissions?'))return{items:[],total:0};
+  if(path.endsWith('/admissions/readonly-one'))return{id:'readonly-one',status:'submitted'};
+  throw new Error('Consulta fora das permissões: '+path);
+};
+await admissionReader.load();await admissionReader.view('readonly-one');
+assert.equal(admissionReader.s.error,'');
+assert.equal(admissionReader.s.selected.id,'readonly-one');
+assert.ok(!readerCalls.some(path=>path.includes('bank-charges')||path.includes('document-templates')));
+assert.deepEqual(Array.from(admissionReader.admissionActions(),item=>item.value),['review','request_changes','waitlist','reject','withdraw']);
+sandbox.PigeAPI.request=beforeReader;
+console.log('Admissões: fila somente leitura não depende de contratos ou cobranças e ações acompanham o estado.');

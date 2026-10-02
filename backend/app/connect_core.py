@@ -36,9 +36,11 @@ def _cnpj_digits(value: str | None) -> str:
     return digits
 
 
-def build_instance_name(company, label: str = "", sequence: int = 0) -> str:
+def build_instance_name(company, label: str = "", sequence: int = 0, school_id: str = "") -> str:
     cnpj = _cnpj_digits(company.document)
     parts = ["PG360", _normalise_slug(company.name), cnpj]
+    if school_id:
+        parts.append(school_id.replace("-", "")[:12])
     if label.strip():
         parts.append(_normalise_slug(label)[:24])
     if sequence > 0:
@@ -219,6 +221,7 @@ def connect_instance_for_school(db, school_id: str, required: bool = True, unit_
         return None
     query = select(m.ConnectInstance).where(
         m.ConnectInstance.company_id == school.company_id,
+        m.ConnectInstance.school_id == school.id,
         m.ConnectInstance.enabled.is_(True),
         m.ConnectInstance.status != "deleted",
     )
@@ -229,24 +232,27 @@ def connect_instance_for_school(db, school_id: str, required: bool = True, unit_
             unit_binding = db.get(m.ConnectUnitBinding, unit_id)
             if unit_binding:
                 candidate = db.get(m.ConnectInstance, unit_binding.instance_id)
-                if candidate and candidate.company_id == school.company_id and candidate.enabled and candidate.status != "deleted":
+                if candidate and candidate.school_id == school.id and candidate.company_id == school.company_id and candidate.enabled and candidate.status != "deleted":
                     obj = candidate
     binding = db.get(m.ConnectSchoolBinding, school_id)
     if obj is None and binding:
         candidate = db.get(m.ConnectInstance, binding.instance_id)
-        if candidate and candidate.company_id == school.company_id and candidate.enabled and candidate.status != "deleted":
+        if candidate and candidate.school_id == school.id and candidate.company_id == school.company_id and candidate.enabled and candidate.status != "deleted":
             obj = candidate
-    # Compatibilidade com instalações anteriores: principal da empresa e depois a primeira ativa.
+    # Preferência sempre restrita à própria instituição, sem herdar outra escola.
     if obj is None:
         obj = db.scalar(query.where(m.ConnectInstance.primary.is_(True)).order_by(m.ConnectInstance.created_at))
     if obj is None:
         obj = db.scalar(query.order_by(m.ConnectInstance.created_at))
     if required and obj is None:
-        fail(409, "Crie e conecte uma instância de WhatsApp para esta empresa.")
+        fail(409, "Crie e conecte uma instância de WhatsApp para esta instituição.")
     return obj
 
 
 def enqueue_connect_message(db, school_id: str, instance_id: str, payload: dict, key: str):
+    instance = db.get(m.ConnectInstance, instance_id)
+    if not instance or instance.school_id != school_id or not instance.enabled or instance.status == "deleted":
+        fail(409, "A instância de WhatsApp não está disponível nesta instituição.")
     existing = db.scalar(select(m.ConnectMessageJob).where(m.ConnectMessageJob.dedupe_key == key))
     if existing:
         if (

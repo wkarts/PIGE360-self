@@ -76,8 +76,8 @@ KNOWN_LINK_TABLES = {"aluno_responsaveis"}
 
 
 def _admin(user: m.User) -> None:
-    if user.role != "admin":
-        fail(403, "Somente o administrador da instalação pode importar dados legados.")
+    from .admin_tools import require_portability
+    require_portability(user)
 
 
 def _safe_member(name: str) -> str | None:
@@ -274,6 +274,8 @@ class MediaArchive:
         return data
 
     def match(self, reference: str) -> tuple[zipfile.ZipInfo, str] | None:
+        if len(reference) > 4096 or reference.lstrip().lower().startswith("data:"):
+            return None
         text = reference.strip().replace("\\", "/")
         if not text or _blocked_path(text):
             return None
@@ -305,6 +307,11 @@ class SourcePackage:
         self.media = media
         self.db_hash = db_hash
         self.input_hashes = input_hashes
+        self.selection: dict[str, Any] | None = None
+        self.selected_keys: dict[str, set[str]] | None = None
+        self.previous_mappings: dict[tuple[str, str], tuple[str, str, str | None]] = {}
+        self.destination_unit: m.Unit | None = None
+        self.selected_media_paths: set[str] | None = None
         self.tables = sorted(row[0] for row in connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"))
         self.table_schema: dict[str, dict[str, Any]] = {}
@@ -332,13 +339,29 @@ class SourcePackage:
         if not check or check[0] != "ok":
             fail(422, "O banco legado não passou na verificação de integridade SQLite.")
 
-    def rows(self, table: str) -> Iterator[dict[str, Any]]:
+    def raw_rows(self, table: str) -> Iterator[dict[str, Any]]:
         if table not in self.table_counts:
             return iter(())
         quoted = table.replace('"', '""')
         cursor = self.connection.execute(f'SELECT * FROM "{quoted}"')
         names = [column[0] for column in cursor.description or ()]
-        return (dict(zip(names, row)) for row in cursor)
+        def records():
+            seen: set[str] = set()
+            for index, values in enumerate(cursor):
+                row = dict(zip(names, values))
+                key = _archive_key(row.get("id"), index)
+                if key in seen:
+                    fail(422, f"A tabela {table} contém identificadores repetidos. Corrija o backup antes de importar.")
+                seen.add(key)
+                row["_pige360_source_key"] = key
+                yield row
+        return records()
+
+    def rows(self, table: str) -> Iterator[dict[str, Any]]:
+        if self.selected_keys is not None and not self.selected_keys.get(table):
+            return iter(())
+        return (row for row in self.raw_rows(table)
+                if self.selected_keys is None or _row_key(row) in self.selected_keys.get(table, set()))
 
 
 @contextmanager
@@ -578,6 +601,8 @@ def _import_media(source: SourcePackage, db: Session, school_id: str, actor: m.U
     content_cache: dict[str, m.FileRecord] = {}
     for item in source.media.entries:
         info, path = item
+        if source.selected_media_paths is not None and path.casefold() not in source.selected_media_paths:
+            continue
         raw = source.media.read(item)
         if not raw:
             counts["media_invalid"] += 1
@@ -588,7 +613,8 @@ def _import_media(source: SourcePackage, db: Session, school_id: str, actor: m.U
             continue
         data, mime, suffix = safe
         checksum = hashlib.sha256(data).hexdigest()
-        file_record = content_cache.get(checksum)
+        file_record = content_cache.get(checksum) or db.scalar(select(m.FileRecord).where(
+            m.FileRecord.school_id == school_id, m.FileRecord.sha256 == checksum).limit(1))
         if file_record is None:
             file_record = write_file(db, school_id, actor.id, _asset_name(path, suffix), mime, data,
                                      file_kind="photo" if mime.startswith("image/") else "document")
@@ -612,9 +638,15 @@ def _archive_key(value: Any, fallback: int | None = None) -> str:
     return raw[:120] + "-" + hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
+def _row_key(row: dict[str, Any], fallback: int | None = None) -> str:
+    return row.get("_pige360_source_key") or _archive_key(row.get("id"), fallback)
+
+
 def _photo_for(source: SourcePackage, db: Session, school_id: str, actor: m.User, value: Any,
                imported_media: dict[str, m.FileRecord], basenames: dict[str, list[m.FileRecord]],
                photo_cache: dict[str, m.FileRecord], counts: Counter[str]) -> m.FileRecord | None:
+    if source.selection is not None and not source.selection["include_photos"]:
+        return None
     if isinstance(value, str) and value.strip().lower().startswith("data:image/"):
         result = _photo_data(value)
         if result is None:
@@ -623,7 +655,9 @@ def _photo_for(source: SourcePackage, db: Session, school_id: str, actor: m.User
         data, mime = result
         checksum = hashlib.sha256(data).hexdigest()
         if checksum not in photo_cache:
-            photo_cache[checksum] = write_file(db, school_id, actor.id, f"foto-legada-{checksum[:12]}.png", mime, data, file_kind="photo")
+            photo_cache[checksum] = db.scalar(select(m.FileRecord).where(
+                m.FileRecord.school_id == school_id, m.FileRecord.sha256 == checksum).limit(1)) or write_file(
+                    db, school_id, actor.id, f"foto-legada-{checksum[:12]}.png", mime, data, file_kind="photo")
         counts["photos_base64_converted"] += 1
         return photo_cache[checksum]
     file_record = _media_ref(source, value, imported_media, basenames)
@@ -638,7 +672,9 @@ def _photo_for(source: SourcePackage, db: Session, school_id: str, actor: m.User
         data, mime = result
         checksum = hashlib.sha256(data).hexdigest()
         if checksum not in photo_cache:
-            photo_cache[checksum] = write_file(db, school_id, actor.id, f"foto-legada-{checksum[:12]}.png", mime, data, file_kind="photo")
+            photo_cache[checksum] = db.scalar(select(m.FileRecord).where(
+                m.FileRecord.school_id == school_id, m.FileRecord.sha256 == checksum).limit(1)) or write_file(
+                    db, school_id, actor.id, f"foto-legada-{checksum[:12]}.png", mime, data, file_kind="photo")
         counts["photos_base64_converted"] += 1
         return photo_cache[checksum]
     elif isinstance(value, str) and value.strip():
@@ -747,13 +783,35 @@ def _import_person_tables(source: SourcePackage, db: Session, school_id: str, ac
     person_index = {person.cpf: person for person in db.scalars(select(m.Person).where(m.Person.school_id == school_id, m.Person.cpf.is_not(None))) if person.cpf}
     source_person: dict[tuple[str, str], m.Person] = {}
     source_student: dict[tuple[str, str], m.Student] = {}
+    for (table, key), mapped in source.previous_mappings.items():
+        model = {"alunos": m.Student, "responsaveis": m.Person, "professores": m.TeacherProfile,
+                 "colaboradores": m.EmployeeProfile}.get(table)
+        previous = _previous_entity(source, db, table, key, model, school_id) if model else None
+        if previous:
+            person = previous if model == m.Person else db.get(m.Person, previous.person_id)
+            if person:
+                source_person[(table, key)] = person
+            if model == m.Student:
+                source_student[(table, key)] = previous
     photo_cache: dict[str, m.FileRecord] = {}
     used_student_numbers = set(db.scalars(select(m.Student.number).where(m.Student.school_id == school_id)))
 
     for table, role in (("alunos", "student"), ("responsaveis", "guardian"),
                         ("professores", "teacher"), ("colaboradores", "employee")):
         for index, row in enumerate(source.rows(table)):
-            source_key = _archive_key(row.get("id"), index)
+            source_key = _row_key(row, index)
+            if (table, source_key) in source_person:
+                person = source_person[(table, source_key)]
+                photo_ref = next((value for field, value in row.items() if PHOTO_FIELD.search(field) and value not in (None, "")), None)
+                if not person.photo_file_id and photo_ref:
+                    photo = _photo_for(source, db, school_id, actor, photo_ref, imported_media, basenames, photo_cache, counts)
+                    if photo:
+                        person.photo_file_id = photo.id
+                        person.version += 1
+                previous = source.previous_mappings[(table, source_key)]
+                entity_map[(table, source_key)] = (previous[0], previous[1], person.photo_file_id)
+                counts["previous_records_reused"] += 1
+                continue
             person, photo, created = _person_for(db, school_id, row, person_index, source, actor,
                                                   imported_media, basenames, photo_cache, counts, role)
             source_person[(table, source_key)] = person
@@ -833,11 +891,11 @@ def _lookup_source(mapping: dict, table: str, identifier: Any) -> Any:
 def _import_guardian_links(source: SourcePackage, db: Session, school_id: str, source_person: dict,
                            source_student: dict, counts: Counter[str], entity_map: dict) -> None:
     guardian_relationships = {
-        _archive_key(row.get("id"), index): _text(row.get("parentesco") or row.get("relacao"), 60)
+        _row_key(row, index): _text(row.get("parentesco") or row.get("relacao"), 60)
         for index, row in enumerate(source.rows("responsaveis"))
     }
     for index, row in enumerate(source.rows("aluno_responsaveis")):
-        source_key = _archive_key(row.get("id"), index)
+        source_key = _row_key(row, index)
         student = _lookup_source(source_student, "alunos", row.get("aluno_id"))
         guardian = _lookup_source(source_person, "responsaveis", row.get("responsavel_id"))
         if not student or not guardian:
@@ -884,21 +942,30 @@ def _get_or_create_named(db: Session, model, school_id: str, name: str, values: 
 
 def _import_academic(source: SourcePackage, db: Session, school_id: str, counts: Counter[str], entity_map: dict) -> dict:
     result: dict[tuple[str, str], Any] = {}
+    for (table, key), mapped in source.previous_mappings.items():
+        model = {"unidades_escolares": m.Unit, "periodos_letivos": m.AcademicYear, "cursos": m.Grade,
+                 "disciplinas": dm.CurriculumComponent, "turmas": m.ClassGroup}.get(table)
+        previous = _previous_entity(source, db, table, key, model, school_id) if model else None
+        if previous:
+            result[(table, key)] = previous
     unit_rows = list(source.rows("unidades_escolares"))
     if unit_rows:
         for index, row in enumerate(unit_rows):
-            key = _archive_key(row.get("id"), index)
+            key = _row_key(row, index)
             obj = _get_or_create_named(db, m.Unit, school_id, row.get("nome"),
                                        {"active": _bool(row.get("ativo"), True)}, counts, "units")
             if obj:
                 result[("unidades_escolares", key)] = obj
                 entity_map[("unidades_escolares", key)] = ("Unit", obj.id, None)
-    default_unit = next(iter(result.values()), None)
+    default_unit = source.destination_unit
     if default_unit is None:
-        default_unit = db.scalar(select(m.Unit).where(m.Unit.school_id == school_id).order_by(m.Unit.created_at))
+        selected_units = {value.id: value for (table, key), value in result.items()
+                          if table == "unidades_escolares" and key in (source.selected_keys or {}).get(table, set())}
+        existing_units = db.scalars(select(m.Unit).where(m.Unit.school_id == school_id, m.Unit.active.is_(True))).all()
+        default_unit = next(iter(selected_units.values())) if len(selected_units) == 1 else existing_units[0] if not selected_units and len(existing_units) == 1 else None
 
     for index, row in enumerate(source.rows("periodos_letivos")):
-        key = _archive_key(row.get("id"), index)
+        key = _row_key(row, index)
         label = _text(row.get("descricao"), 40) or _text(row.get("ano"), 40)
         start = _parse_date(row.get("data_inicio"))
         end = _parse_date(row.get("data_fim"))
@@ -922,7 +989,7 @@ def _import_academic(source: SourcePackage, db: Session, school_id: str, counts:
         entity_map[("periodos_letivos", key)] = ("AcademicYear", obj.id, None)
 
     for index, row in enumerate(source.rows("cursos")):
-        key = _archive_key(row.get("id"), index)
+        key = _row_key(row, index)
         obj = _get_or_create_named(db, m.Grade, school_id, row.get("nome"),
                                    {"level": _text(row.get("modalidade"), 100) or "Educação básica",
                                     "active": _bool(row.get("ativo"), True)}, counts, "grades")
@@ -931,7 +998,7 @@ def _import_academic(source: SourcePackage, db: Session, school_id: str, counts:
             entity_map[("cursos", key)] = ("Grade", obj.id, None)
 
     for index, row in enumerate(source.rows("disciplinas")):
-        key = _archive_key(row.get("id"), index)
+        key = _row_key(row, index)
         name = _text(row.get("nome"), 120)
         existing = next((obj for obj in db.scalars(select(dm.CurriculumComponent).where(dm.CurriculumComponent.school_id == school_id))
                          if _normalize(obj.name) == _normalize(name)), None)
@@ -959,11 +1026,11 @@ def _import_academic(source: SourcePackage, db: Session, school_id: str, counts:
                 shifts[_normalize(name)] = obj
 
     for index, row in enumerate(source.rows("turmas")):
-        key = _archive_key(row.get("id"), index)
+        key = _row_key(row, index)
         course = _lookup_source(result, "cursos", row.get("curso_id"))
         year = _lookup_source(result, "periodos_letivos", row.get("periodo_letivo_id"))
         shift = shifts.get(_normalize(row.get("turno")))
-        unit = _lookup_source(result, "unidades_escolares", row.get("unidade_id")) if row.get("unidade_id") else default_unit
+        unit = source.destination_unit or (_lookup_source(result, "unidades_escolares", row.get("unidade_id")) if row.get("unidade_id") else default_unit)
         if not course or not year or not shift or not unit:
             counts["class_groups_unmapped"] += 1
             continue
@@ -994,7 +1061,12 @@ def _import_enrollments(source: SourcePackage, db: Session, school_id: str, acto
                         academic: dict, counts: Counter[str], entity_map: dict) -> None:
     used_numbers = set(db.scalars(select(m.Enrollment.number).where(m.Enrollment.school_id == school_id)))
     for index, row in enumerate(source.rows("matriculas")):
-        key = _archive_key(row.get("id"), index)
+        key = _row_key(row, index)
+        previous = _previous_entity(source, db, "matriculas", key, m.Enrollment, school_id)
+        if previous:
+            entity_map[("matriculas", key)] = ("Enrollment", previous.id, None)
+            counts["enrollments_matched"] += 1
+            continue
         student = _lookup_source(source_student, "alunos", row.get("aluno_id"))
         group = _lookup_source(academic, "turmas", row.get("turma_id"))
         enrolled_on = _parse_date(row.get("data_matricula")) or _parse_date(row.get("created_at"))
@@ -1032,7 +1104,17 @@ def _import_student_documents(source: SourcePackage, db: Session, school_id: str
                               imported_media: dict[str, m.FileRecord], basenames: dict[str, list[m.FileRecord]],
                               counts: Counter[str], entity_map: dict) -> None:
     for index, row in enumerate(source.rows("documentos_alunos")):
-        key = _archive_key(row.get("id"), index)
+        key = _row_key(row, index)
+        previous = _previous_entity(source, db, "documentos_alunos", key, m.StudentDocument, school_id)
+        if previous:
+            if not previous.file_id:
+                file_record = _media_ref(source, row.get("arquivo_ref"), imported_media, basenames)
+                if file_record:
+                    previous.file_id = file_record.id
+                    previous.version += 1
+            entity_map[("documentos_alunos", key)] = ("StudentDocument", previous.id, previous.file_id)
+            counts["student_documents_matched"] += 1
+            continue
         student = _lookup_source(source_student, "alunos", row.get("aluno_id"))
         if not student:
             counts["student_documents_unmapped"] += 1
@@ -1059,7 +1141,12 @@ def _import_inactive_users(source: SourcePackage, db: Session, school_id: str, a
     from .security import hash_password
     photo_cache: dict[str, m.FileRecord] = {}
     for index, row in enumerate(source.rows("usuarios")):
-        key = _archive_key(row.get("id"), index)
+        key = _row_key(row, index)
+        previous = _previous_entity(source, db, "usuarios", key, m.User, school_id)
+        if previous:
+            entity_map[("usuarios", key)] = ("User", previous.id, None)
+            counts["users_matched"] += 1
+            continue
         email = _text(row.get("email"), 254).casefold()
         source_photo = next((value for field, value in row.items() if PHOTO_FIELD.search(field) and value not in (None, "")), None)
         photo = _photo_for(source, db, school_id, actor, source_photo, imported_media,
@@ -1126,6 +1213,8 @@ def _sanitized_row(table: str, row: dict[str, Any], file_id: str | None) -> dict
         setting_key = _normalize(row.get("chave") or row.get("nome"))
         secret_setting = bool(SECRET_FIELD.search(setting_key))
     for key, value in row.items():
+        if key == "_pige360_source_key":
+            continue
         if PHOTO_FIELD.search(key):
             if _is_photo_data_candidate(value):
                 output[key] = "[IMAGE_CONVERTED]" if file_id else "[IMAGE_NOT_IMPORTED]"
@@ -1151,13 +1240,191 @@ def _sanitized_row(table: str, row: dict[str, Any], file_id: str | None) -> dict
     return output
 
 
+# A selection is part of the preview identity: changing school, rows or options
+# requires a new preview, even when the uploaded SQLite bytes are unchanged.
+def _configure_selection(source: SourcePackage, db: Session, school: m.School,
+                         raw_selection: str | None) -> None:
+    try:
+        value = json.loads(raw_selection) if raw_selection else {"tables": []}
+    except (TypeError, ValueError):
+        fail(422, "A seleção de importação está inválida. Gere uma nova prévia.")
+    if not isinstance(value, dict) or set(value) - {"tables", "record_ids", "include_photos", "include_media", "unit_id"}:
+        fail(422, "Opções de importação inválidas.")
+    tables = value.get("tables", [])
+    records = value.get("record_ids", {})
+    if not isinstance(tables, list) or any(not isinstance(table, str) or table not in source.tables for table in tables):
+        fail(422, "Selecione somente tabelas presentes no backup.")
+    if not isinstance(records, dict) or any(table not in tables or not isinstance(ids, list)
+                                           or any(not isinstance(key, str) or len(key) > 160 for key in ids)
+                                           for table, ids in records.items()):
+        fail(422, "A seleção de registros está inválida.")
+    for flag in ("include_photos", "include_media"):
+        if flag in value and not isinstance(value[flag], bool):
+            fail(422, "As opções de fotos e arquivos devem ser verdadeiras ou falsas.")
+    unit_id = value.get("unit_id") or None
+    if unit_id is not None:
+        if not isinstance(unit_id, str):
+            fail(422, "Unidade de destino inválida.")
+        source.destination_unit = db.scalar(select(m.Unit).where(m.Unit.id == unit_id,
+                                                                 m.Unit.school_id == school.id,
+                                                                 m.Unit.active.is_(True)))
+        if source.destination_unit is None:
+            fail(422, "Selecione uma unidade ativa pertencente à escola de destino.")
+        if "unidades_escolares" in tables:
+            fail(422, "Escolha a unidade de destino ou a importação de unidades; não as duas opções.")
+    source.selection = {"tables": sorted(set(tables)),
+                        "record_ids": {table: sorted(set(ids)) for table, ids in sorted(records.items())},
+                        "include_photos": value.get("include_photos", False),
+                        "include_media": value.get("include_media", False), "unit_id": unit_id}
+    source.selected_keys = {}
+    for table in tables:
+        available = {_row_key(row) for row in source.raw_rows(table)}
+        wanted = set(records.get(table, available))
+        if wanted - available:
+            fail(422, f"A seleção contém registros ausentes na tabela {table}.")
+        source.selected_keys[table] = wanted
+
+    # Selecting particular students never brings unrelated families or files.
+    # Explicit guardian IDs remain authoritative for independent guardian imports.
+    if "alunos" in records:
+        students = source.selected_keys.get("alunos", set())
+        related_guardians = set()
+        for row in source.raw_rows("aluno_responsaveis"):
+            if _archive_key(row.get("aluno_id")) in students:
+                related_guardians.add(_archive_key(row.get("responsavel_id")))
+        if "responsaveis" in source.selected_keys and "responsaveis" not in records:
+            source.selected_keys["responsaveis"] &= related_guardians
+        for table in ("aluno_responsaveis", "matriculas", "documentos_alunos"):
+            if table in source.selected_keys:
+                source.selected_keys[table] &= {_row_key(row) for row in source.raw_rows(table)
+                                               if _archive_key(row.get("aluno_id")) in students}
+
+    # Provenance is scoped to school and the exact SQLite database, so partial
+    # imports can share identities without matching unrelated legacy databases.
+    prior_runs = db.scalars(select(m.LegacyImportRun).where(m.LegacyImportRun.school_id == school.id)).all()
+    matching_runs = [run.id for run in prior_runs if run.summary.get("source_database_sha256") == source.db_hash]
+    if matching_runs:
+        for previous in db.scalars(select(m.LegacyImportRecord).where(
+                m.LegacyImportRecord.run_id.in_(matching_runs), m.LegacyImportRecord.mapped_entity_id.is_not(None))):
+            source.previous_mappings[(previous.source_table, previous.source_key)] = (
+                previous.mapped_entity_type, previous.mapped_entity_id, previous.file_id)
+    source.selected_media_paths = set()
+    for table in source.tables:
+        for row in source.rows(table):
+            for field, reference in row.items():
+                if (PHOTO_FIELD.search(field) and source.selection["include_photos"]
+                        or REFERENCE_FIELD.search(field) and not PHOTO_FIELD.search(field) and source.selection["include_media"]):
+                    item = source.media.match(reference) if isinstance(reference, str) else None
+                    if item:
+                        source.selected_media_paths.add(item[1].casefold())
+    normalized = json.dumps({"package": source.fingerprint, "school": school.id, "selection": source.selection},
+                            sort_keys=True, ensure_ascii=True, separators=(",", ":"))
+    source.package_fingerprint = source.fingerprint
+    source.fingerprint = hashlib.sha256(normalized.encode()).hexdigest()
+
+
+def _previous_entity(source: SourcePackage, db: Session, table: str, key: str, model, school_id: str):
+    mapped = source.previous_mappings.get((table, key))
+    if not mapped or mapped[0] != model.__name__:
+        return None
+    result = db.get(model, mapped[1])
+    if result is not None and getattr(result, "school_id", school_id) != school_id:
+        return None
+    return result
+
+
+def _selection_issues(source: SourcePackage, db: Session, school: m.School) -> list[str]:
+    issues: list[str] = []
+    selected = source.selected_keys or {}
+    def available(table: str, identifier: Any) -> bool:
+        key = _archive_key(identifier)
+        return key in selected.get(table, set()) or (table, key) in source.previous_mappings
+    if source.selected_keys is None:
+        return issues
+    for table, dependencies in {
+        "aluno_responsaveis": (("aluno_id", "alunos"), ("responsavel_id", "responsaveis")),
+        "matriculas": (("aluno_id", "alunos"), ("turma_id", "turmas")),
+        "documentos_alunos": (("aluno_id", "alunos"),),
+        "turmas": (("curso_id", "cursos"), ("periodo_letivo_id", "periodos_letivos")),
+    }.items():
+        missing = sum(1 for row in source.rows(table) if any(not available(parent, row.get(field))
+                                                         for field, parent in dependencies))
+        if missing:
+            issues.append(f"{table}: {missing} registro(s) sem os cadastros relacionados selecionados ou importados anteriormente deste backup.")
+    for table in ("alunos", "responsaveis", "professores", "colaboradores", "unidades_escolares", "cursos", "disciplinas"):
+        unnamed = sum(1 for row in source.rows(table) if not _text(row.get("nome")))
+        if unnamed:
+            issues.append(f"{table}: {unnamed} registro(s) sem nome. Corrija a origem ou retire esses registros da seleção.")
+    invalid_enrollments = sum(1 for row in source.rows("matriculas")
+                              if not (_parse_date(row.get("data_matricula")) or _parse_date(row.get("created_at"))))
+    if invalid_enrollments:
+        issues.append(f"Matrículas: {invalid_enrollments} registro(s) sem data válida de matrícula.")
+    invalid_classes = sum(1 for row in source.rows("turmas") if not _text(row.get("nome")) or not _text(row.get("turno")))
+    if invalid_classes:
+        issues.append(f"Turmas: {invalid_classes} registro(s) sem nome ou turno.")
+    invalid_years = 0
+    for row in source.rows("periodos_letivos"):
+        start, end = _parse_date(row.get("data_inicio")), _parse_date(row.get("data_fim"))
+        year_text = _text(row.get("ano"), 4)
+        fallback_year = year_text.isdigit() and 2000 <= int(year_text) <= 2200
+        if not (_text(row.get("descricao")) or _text(row.get("ano"))) or (
+                (not start or not end) and not fallback_year) or (start and end and end < start):
+            invalid_years += 1
+    if invalid_years:
+        issues.append(f"Anos letivos: {invalid_years} registro(s) sem descrição ou intervalo de datas válido.")
+    if selected.get("turmas") and not source.destination_unit:
+        groups = list(source.rows("turmas"))
+        missing_units = sum(1 for row in groups if row.get("unidade_id") and not available("unidades_escolares", row.get("unidade_id")))
+        if missing_units:
+            issues.append(f"Turmas: {missing_units} registro(s) com unidade não selecionada. Selecione a unidade de destino ou importe as unidades correspondentes.")
+        if any(not row.get("unidade_id") for row in groups):
+            chosen_units = {_normalize(row.get("nome")) for row in source.rows("unidades_escolares")}
+            units = db.scalars(select(m.Unit.id).where(m.Unit.school_id == school.id, m.Unit.active.is_(True))).all()
+            if (chosen_units and len(chosen_units) != 1) or (not chosen_units and len(units) != 1):
+                issues.append("Selecione uma única unidade de destino para as turmas sem unidade informada na origem.")
+    return issues
+
+
+def _record_options(source: SourcePackage, table: str, query: str = "", page: int = 1,
+                    page_size: int = 100) -> dict[str, Any]:
+    needle = _normalize(query)
+    matches = []
+    person_names = {_row_key(row): _text(row.get("nome"), 180) for row in source.raw_rows("alunos")} if table in {"aluno_responsaveis", "matriculas", "documentos_alunos"} else {}
+    guardian_names = {_row_key(row): _text(row.get("nome"), 180) for row in source.raw_rows("responsaveis")} if table == "aluno_responsaveis" else {}
+    for row in source.raw_rows(table):
+        key = _row_key(row)
+        name = _text(row.get("nome") or row.get("descricao") or row.get("numero_matricula") or row.get("tipo") or key, 180)
+        if table == "aluno_responsaveis":
+            name = " · ".join(filter(None, [person_names.get(_archive_key(row.get("aluno_id"))),
+                                             guardian_names.get(_archive_key(row.get("responsavel_id")))])) or name
+        elif table in {"matriculas", "documentos_alunos"}:
+            name = " · ".join(filter(None, [person_names.get(_archive_key(row.get("aluno_id"))), name]))
+        if needle and needle not in _normalize(name + " " + key):
+            continue
+        matches.append({"id": key, "name": name,
+                        "selected": key in (source.selected_keys or {}).get(table, set())})
+    start = (page - 1) * page_size
+    return {"items": matches[start:start + page_size], "total": len(matches), "page": page, "page_size": page_size}
+
+
 def _preview(source: SourcePackage) -> dict[str, Any]:
     total = sum(source.table_counts.values())
+    selected_total = sum(len(keys) for keys in (source.selected_keys or {}).values())
     inline_photos = 0
     valid_inline_photos = 0
     invalid_inline_photos = 0
     unresolved_paths = 0
-    for table in ("alunos", "professores", "colaboradores", "usuarios"):
+    selected_media_valid = 0
+    selected_media_invalid = 0
+    for item in source.media.entries:
+        if item[1].casefold() in (source.selected_media_paths or set()):
+            if _safe_media_data(source.media.read(item), item[1]) is not None:
+                selected_media_valid += 1
+            else:
+                selected_media_invalid += 1
+    for table in ("alunos", "responsaveis", "professores", "colaboradores", "usuarios"):
+        if source.selection is not None and not source.selection["include_photos"]:
+            continue
         for row in source.rows(table):
             refs = [value for field, value in row.items() if PHOTO_FIELD.search(field) and isinstance(value, str) and value.strip()]
             for ref in refs:
@@ -1179,21 +1446,26 @@ def _preview(source: SourcePackage) -> dict[str, Any]:
                         unresolved_paths += 1
     destination = {table: MAPPED_TABLES.get(table, "arquivo histórico de portabilidade")
                    for table in source.tables if source.table_counts[table]}
-    warnings = [
-        "Senhas, hashes de senha, tokens, sessões e permissões antigas não serão usados para autenticação. Usuários compatíveis serão criados inativos, como consulta, para redefinição posterior.",
-        "Logs e filas serão preservados no histórico, mas a fila de sincronização não será reexecutada.",
-        "Cadastros serão associados por CPF válido exato. Campos existentes não serão sobrescritos; vínculos sem chave explícita ficarão para revisão.",
-    ]
-    if source.table_counts.get("responsaveis", 0) and not source.table_counts.get("aluno_responsaveis", 0):
-        warnings.append("Há responsáveis sem linhas em aluno_responsaveis; eles serão cadastrados, mas nenhum vínculo com aluno será presumido.")
-    if source.table_counts.get("documentos_alunos", 0) + source.table_counts.get("documentos_colaboradores", 0) and not source.media.entries:
-        warnings.append("O banco referencia documentação, mas o ZIP de arquivos do container não foi enviado; metadados serão preservados e arquivos ausentes ficarão indicados.")
-    if not source.media.entries:
-        warnings.append("Este backup não contém arquivos de mídia separados. Para documentos ou fotos por caminho local, anexe o ZIP da pasta de mídia do container.")
+    selected = source.selected_keys or {}
+    warnings = ["Os dados serão gravados na escola de destino. A instituição cadastrada não será criada nem substituída."]
+    if selected.get("usuarios"):
+        warnings.append("Usuários selecionados serão criados inativos, com acesso de consulta. Senhas e permissões antigas não serão utilizadas.")
+    if any(selected.get(table) for table in ("sync_queue", "app_logs", "audit_logs", "user_sessions")):
+        warnings.append("Logs e filas selecionados serão arquivados sem reexecutar operações; credenciais serão removidas.")
+    if any(selected.get(table) for table in ("alunos", "responsaveis", "professores", "colaboradores")):
+        warnings.append("Pessoas com CPF válido já cadastrado serão associadas ao cadastro existente, preservando seus dados.")
+    if selected.get("responsaveis") and not selected.get("aluno_responsaveis"):
+        warnings.append("Responsáveis serão cadastrados sem criar vínculos com alunos, pois os vínculos não foram selecionados.")
+    if (selected.get("documentos_alunos") or selected.get("documentos_colaboradores")) and not source.media.entries:
+        warnings.append("Os documentos selecionados serão importados sem os arquivos; anexe o ZIP de mídias para incluí-los.")
+    if source.selection and (source.selection["include_photos"] or source.selection["include_media"]) and not source.media.entries and unresolved_paths:
+        warnings.append("Há arquivos referenciados por caminho local. Anexe o ZIP de mídias para incluí-los.")
     if source.media.ignored_magento:
         warnings.append(f"{source.media.ignored_magento} caminho(s) contendo Magento foram excluídos da análise e da importação.")
     if source.media.unsupported:
         warnings.append(f"{source.media.unsupported} arquivo(s) do ZIP não serão importados por formato não suportado, tamanho excessivo ou estrutura inválida.")
+    if selected_media_invalid:
+        warnings.append(f"{selected_media_invalid} arquivo(s) selecionado(s) são inválidos ou não suportados e não serão gravados.")
     if invalid_inline_photos:
         warnings.append(f"{invalid_inline_photos} foto(s) Base64 inválida(s) serão preservadas como referência sanitizada e não convertidas.")
     return {
@@ -1205,11 +1477,16 @@ def _preview(source: SourcePackage) -> dict[str, Any]:
         "database_size_bytes": source.db_size,
         "table_count": len(source.tables),
         "source_record_count": total,
-        "archive_record_count": total + len(source.media.entries),
+        "selected_record_count": selected_total,
+        "selection": source.selection,
+        "archive_record_count": selected_total + selected_media_valid,
         "tables": [{"name": table, "rows": source.table_counts[table], "destination": destination.get(table, "sem registros"),
-                    "columns": len(source.table_schema[table]["columns"])}
+                    "columns": len(source.table_schema[table]["columns"]),
+                    "selected_rows": len((source.selected_keys or {}).get(table, set()))}
                    for table in source.tables],
-        "media": {"container_files_candidate_count": len(source.media.entries),
+        "media": {"selected_container_files": selected_media_valid,
+                  "selected_container_invalid": selected_media_invalid,
+                  "container_files_candidate_count": len(source.media.entries),
                   "container_files_uncompressed_bytes": source.media.total_uncompressed,
                   "container_magento_paths_ignored": source.media.ignored_magento,
                   "container_unsafe_or_cache_paths_ignored": source.media.ignored_paths,
@@ -1217,36 +1494,69 @@ def _preview(source: SourcePackage) -> dict[str, Any]:
                   "inline_photos_found": inline_photos, "inline_photos_convertible": valid_inline_photos,
                   "inline_photos_invalid": invalid_inline_photos, "unresolved_media_references": unresolved_paths},
         "warnings": warnings,
+        "records": {table: _record_options(source, table) for table in source.tables if source.table_counts[table]},
     }
 
 
 @router.post("/preview")
 def preview(db: DB, user: Actor, school: Scope, request: Request,
-            backup: UploadFile = File(...), container_media: UploadFile | None = File(None)):
+            backup: UploadFile = File(...), container_media: UploadFile | None = File(None),
+            selection: str | None = Form(None)):
     _admin(user)
     with _source(backup, container_media) as source:
+        _configure_selection(source, db, school, selection)
         result = _preview(source)
+        result["destination"] = {"school_id": school.id, "school_name": school.name,
+                                 "unit_id": source.destination_unit.id if source.destination_unit else None,
+                                 "unit_name": source.destination_unit.name if source.destination_unit else None,
+                                 "creates_institution": False}
+        result["issues"] = _selection_issues(source, db, school)
+        result["can_apply"] = bool(result["selected_record_count"]) and not result["issues"]
         audit(db, request, user, "legacy_import.previewed", school, school.id,
               {"fingerprint": source.fingerprint[:16], "source_rows": result["source_record_count"],
                "tables": result["table_count"]})
         return result
 
 
+@router.post("/records")
+def select_records(db: DB, user: Actor, school: Scope,
+                   backup: UploadFile = File(...), container_media: UploadFile | None = File(None),
+                   selection: str | None = Form(None), table: str = Form(...),
+                   query: str = Form(""), page: int = Form(1), page_size: int = Form(100)):
+    _admin(user)
+    if page < 1 or not 1 <= page_size <= 200:
+        fail(422, "Paginação inválida.")
+    with _source(backup, container_media) as source:
+        _configure_selection(source, db, school, selection)
+        if table not in source.tables:
+            fail(422, "Tabela ausente no backup.")
+        return _record_options(source, table, query, page, page_size)
+
+
 @router.post("/apply")
 def apply_import(db: DB, user: Actor, school: Scope, request: Request,
                  fingerprint: str = Form(...), confirmation: str = Form(...),
-                 backup: UploadFile = File(...), container_media: UploadFile | None = File(None)):
+                 backup: UploadFile = File(...), container_media: UploadFile | None = File(None),
+                 selection: str | None = Form(None)):
     _admin(user)
+    if not selection:
+        fail(422, "Selecione os cadastros e registros que deseja importar e gere uma prévia.")
     with _source(backup, container_media) as source:
+        lock_school(db, school.id)
+        _configure_selection(source, db, school, selection)
         if not re.fullmatch(r"[0-9a-f]{64}", fingerprint) or not secrets.compare_digest(fingerprint, source.fingerprint):
-            fail(409, "Os arquivos mudaram desde a prévia. Gere uma nova prévia antes de importar.")
+            fail(409, "Os arquivos, a seleção ou o destino mudaram desde a prévia. Gere uma nova prévia antes de importar.")
         if confirmation.strip().upper() != "IMPORTAR":
             fail(422, "Digite IMPORTAR para confirmar a gravação dos dados.")
-        lock_school(db, school.id)
+        if not any(source.selected_keys.values()):
+            fail(422, "Selecione ao menos um registro para importar.")
+        issues = _selection_issues(source, db, school)
+        if issues:
+            fail(422, "Revise a seleção: " + " ".join(issues))
         existing = db.scalar(select(m.LegacyImportRun).where(m.LegacyImportRun.school_id == school.id,
                                                               m.LegacyImportRun.fingerprint == source.fingerprint))
         if existing:
-            fail(409, "Este pacote já foi importado nesta escola. Consulte o histórico para baixar o arquivo de portabilidade.")
+            fail(409, "Esta seleção já foi importada nesta escola. Consulte o histórico ou selecione outros registros.")
         preview_result = _preview(source)
         run = m.LegacyImportRun(school_id=school.id, fingerprint=source.fingerprint,
                                 source_system="school_desktop_suite", imported_by=user.id,
@@ -1265,7 +1575,7 @@ def apply_import(db: DB, user: Actor, school: Scope, request: Request,
         archive_batch: list[dict[str, Any]] = []
         for table in source.tables:
             for index, row in enumerate(source.rows(table)):
-                key = _archive_key(row.get("id"), index)
+                key = _row_key(row, index)
                 mapped = entity_map.get((table, key), ("", "", None))
                 related_file_ids = {mapped[2]} if mapped[2] else set()
                 for field, value in row.items():
@@ -1289,9 +1599,11 @@ def apply_import(db: DB, user: Actor, school: Scope, request: Request,
             "source_system": "School Desktop Suite", "source_record_count": preview_result["source_record_count"],
             "source_table_count": preview_result["table_count"], "archive_record_count": counts["source_records_archived"] + counts["media_imported"],
             "source_database": source.source_name, "source_database_sha256": source.db_hash,
-            "source_database_size_bytes": source.db_size, "source_package_fingerprint": source.fingerprint,
+            "source_database_size_bytes": source.db_size, "source_package_fingerprint": source.package_fingerprint,
+            "selection": source.selection, "selected_record_count": preview_result["selected_record_count"],
+            "destination": {"school_id": school.id, "school_name": school.name, "unit_id": source.selection["unit_id"]},
             "source_table_schema": source.table_schema,
-            "table_rows": {name: count for name, count in source.table_counts.items()},
+            "table_rows": {name: len(keys) for name, keys in source.selected_keys.items()},
             "counts": dict(counts), "media": preview_result["media"],
             "warnings": preview_result["warnings"],
             "security_policy": {"legacy_users": "inactive_viewer", "legacy_passwords_sessions_permissions": "not_imported",

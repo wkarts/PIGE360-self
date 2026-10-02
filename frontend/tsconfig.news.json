@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "none",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "strict": true,
+    "skipLibCheck": true,
+    "outFile": "dist/news.js",
+    "removeComments": false
+  },
+  "files": [
+    "src/vue-globals.d.ts",
+    "src/institution.ts",
+    "src/support-widget.ts",
+    "src/community.ts",
+    "src/dialogs.ts",
+    "src/news.ts"
+  ]
+}

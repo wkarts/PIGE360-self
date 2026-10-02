@@ -53,6 +53,15 @@ def get_campaign(db,slug=None,id=None,open_required=False):
     if open_required and (not row.active or not row.opens_on<=today()<=row.closes_on or not offered_groups(db,row)):fail(409,'Inscrições encerradas ou ainda não abertas.')
     return row
 
+def editable_campaign(db, admission):
+    """Correções solicitadas pela escola continuam disponíveis após o prazo."""
+    campaign = get_campaign(db, id=admission.campaign_id,
+                            open_required=admission.status != 'changes_requested')
+    if not campaign.active:
+        fail(409, 'Este processo está indisponível. Procure a Secretaria para continuar.')
+    return campaign
+
+
 def account_output(account):
     result=output(account,('password_hash','registration_consent','personal_details'))
     result.update({k:v for k,v in (account.personal_details or {}).items() if k in s.GuardianDetails.model_fields})
@@ -359,6 +368,21 @@ def mark_diary_communication_read(communication_id:str,request:Request,db:DB,acc
         })
     return {'ok':True,'id':item.id,'read_at':item.read_at.isoformat()}
 
+@router.get('/learning')
+def learning(db:DB,account:Parent):
+    from .learning_portal import learning_data, own_portal_students
+    return learning_data(db,own_portal_students(db,account))
+
+
+@router.get('/learning/{student_id}/report.pdf')
+def learning_report(student_id:str,request:Request,db:DB,account:Parent,enrollment_id:str=Query(default='',max_length=36)):
+    from .learning_portal import own_portal_students, report_response
+    students=own_portal_students(db,account)
+    response=report_response(db,students,student_id,enrollment_id,account.name)
+    parent_audit(db,request,account,'learning.report.downloaded',next(item for item in students if item.id==student_id))
+    return response
+
+
 @router.post('/logout')
 def logout(account:Parent,request:Request,response:Response,db:DB):
     db.get(m.PortalSession,request.state.portal_session_id).revoked=True
@@ -465,7 +489,8 @@ def create_admission(data:s.AdmissionInput,request:Request,db:DB,account:Parent)
     previous=db.scalar(select(m.Admission).where(m.Admission.account_id==account.id,m.Admission.client_key==data.client_key))
     if previous:
         expected={**data.student.model_dump(mode='json'),'previous_school':data.previous_school}
-        if previous.campaign_id!=campaign.id or previous.class_group_id!=data.class_group_id or previous.student_data!=expected:
+        if (previous.campaign_id!=campaign.id or previous.class_group_id!=data.class_group_id
+                or previous.student_data!=expected or previous.relationship!=data.relationship or previous.notes!=data.notes):
             fail(409,'Chave de operação já usada com outros dados. Reabra a inscrição existente.')
         return admission_output(db,previous)
     valid_group(db,campaign,data.class_group_id)
@@ -484,7 +509,7 @@ def edit_admission(id:str,data:s.AdmissionEdit,request:Request,db:DB,account:Par
     lock_school(db,account.school_id)
     obj=own_admission(db,account,id);check_version(obj,data.version)
     if obj.status not in EDITABLE:fail(409,'Inscrição não está aberta para edição. Solicite correção à Secretaria.')
-    campaign=get_campaign(db,id=obj.campaign_id,open_required=True);valid_group(db,campaign,data.class_group_id)
+    campaign=editable_campaign(db,obj);valid_group(db,campaign,data.class_group_id)
     obj.class_group_id=data.class_group_id;obj.student_data={**data.student.model_dump(mode='json'),'previous_school':data.previous_school};obj.relationship=data.relationship;obj.notes=data.notes;obj.version+=1
     parent_audit(db,request,account,'admission.updated',obj)
     return admission_output(db,obj)
@@ -493,7 +518,7 @@ def edit_admission(id:str,data:s.AdmissionEdit,request:Request,db:DB,account:Par
 def submit(id:str,data:s.SubmitAdmission,request:Request,db:DB,account:Parent):
     lock_school(db,account.school_id);obj=own_admission(db,account,id);check_version(obj,data.version)
     if obj.status not in EDITABLE:fail(409,'Inscrição já enviada ou encerrada.')
-    campaign=get_campaign(db,id=obj.campaign_id,open_required=True);valid_group(db,campaign,obj.class_group_id)
+    campaign=editable_campaign(db,obj);valid_group(db,campaign,obj.class_group_id)
     if data.terms_version!=campaign.terms_version:fail(409,'O aviso de privacidade foi atualizado. Leia e aceite a versão atual.')
     if campaign.require_verified_contact and not(account.email_verified or account.phone_verified):fail(409,'Valide um contato antes de enviar a inscrição.')
     if campaign.require_documents:
@@ -535,7 +560,7 @@ def upload(id:str,request:Request,db:DB,account:Parent,document_type_id:str=Form
     if len(content)>maximum:fail(413,'Arquivo maior que o limite configurado.')
     name=Path((file.filename or 'arquivo').replace('\\','/')).name[:240]
     mime=validate_upload(content,name)
-    count=db.scalar(select(func.count()).select_from(m.AdmissionAttachment).where(m.AdmissionAttachment.admission_id==obj.id,m.AdmissionAttachment.active.is_(True)))
+    count=db.scalar(select(func.count()).select_from(m.AdmissionAttachment).where(m.AdmissionAttachment.admission_id==obj.id,m.AdmissionAttachment.active.is_(True),m.AdmissionAttachment.document_type_id!=document_type_id))
     used=db.scalar(select(func.coalesce(func.sum(m.AdmissionAttachment.size),0)).join(m.Admission,m.Admission.id==m.AdmissionAttachment.admission_id).where(m.Admission.account_id==account.id))
     if count>=settings().portal_max_files or used+len(content)>settings().portal_max_storage_mb*1024*1024:fail(413,'Limite de armazenamento do portal atingido. Procure a Secretaria.')
     # Um anexo atual por tipo; as versões anteriores permanecem preservadas.

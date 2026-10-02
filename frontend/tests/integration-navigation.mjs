@@ -17,7 +17,7 @@ async function boot(hash,role,permissions,configured=true){
   const document={createElement:()=>({}),querySelector:()=>null,querySelectorAll:()=>[],title:''};
   const sandbox={crypto,console,document,navigator:{onLine:true},location,
     history:{replaceState(_data,_title,url){location.hash=url;}},
-    localStorage:{getItem:()=>null,setItem:()=>{}},URLSearchParams,URL,Intl,Headers,FormData,Blob,File,Event,CustomEvent,setTimeout,clearTimeout};
+    localStorage:{getItem:()=>null,setItem:()=>{}},URLSearchParams,URL,Intl,Headers,FormData,Blob,File,Event,CustomEvent,AbortController,AbortSignal,setTimeout,clearTimeout};
   sandbox.window=sandbox;
   sandbox.addEventListener=(name,listener)=>{listeners[name]=listener;};
   sandbox.fetch=()=>{throw new Error('Este teste não acessa a rede.');};
@@ -29,10 +29,12 @@ async function boot(hash,role,permissions,configured=true){
   vm.runInContext(source('app.js'),sandbox);
   const context=options.setup();
   sandbox.PigeInstitution.load=async()=>{sandbox.PigeInstitution.state.configured=true;};
-  sandbox.PigeAPI.refresh=async()=>({user:{id:'test-user',name:'Usuário',role,permissions,school_ids:[school.id]}});
+  const currentUser={id:'test-user',name:'Usuário',role,permissions,school_ids:[school.id]};
+  sandbox.PigeAPI.refresh=async()=>({user:currentUser});
   sandbox.PigeAPI.request=async url=>{
     calls.push(url);
     if(url==='/schools')return[school];
+    if(url==='/auth/me')return currentUser;
     if(url==='/diagnostics/summary')return{configuration:{smtp_configured:configured}};
     if(url===`/schools/${school.id}/dashboard`)return{};
     if(url.startsWith(`/schools/${school.id}/`))return[];
@@ -43,7 +45,7 @@ async function boot(hash,role,permissions,configured=true){
   mounted();
   for(let retry=0;retry<16&&!context.state.ready;retry++)await flush();
   assert.equal(context.state.ready,true,'Shell inicializado');
-  for(let retry=0;retry<16&&(context.state.schoolId!==school.id||context.state.loading||(context.state.page==='email'&&context.state.emailStatus==='idle'));retry++)await flush();
+  for(let retry=0;retry<16&&(context.state.schoolId!==school.id||context.state.schoolLoading||context.state.loading||(context.state.page==='email'&&context.state.emailStatus==='idle'));retry++)await flush();
   assert.equal(context.state.schoolId,school.id,'Escola carregada antes de verificar a navegação');
   assert.equal(context.state.loading,false,'Página inicial pronta');
   const render=()=>options.render.call(context,context,[]);
@@ -63,12 +65,12 @@ assert.equal(admin.context.state.emailStatus,'configured');
 const adminTree=admin.render();
 for(const link of ['#/connect','#/email','#/integrations'])assert.ok(hrefs(adminTree).includes(link),link+' visível para administrador');
 for(const oldLabel of ['Financeiro / ASAAS','Connect API'])assert.ok(!content(adminTree).includes(oldLabel),'Menu antigo ausente: '+oldLabel);
-assert.match(content(adminTree),/SMTP configurado na instalação/);
+assert.match(content(adminTree),/Envio de e-mail configurado/);
 assert.ok(admin.calls.includes('/diagnostics/summary'));
 await admin.context.navigate('connect');assert.equal(admin.context.state.page,'connect');
 await admin.context.navigate('integrations');assert.equal(admin.context.state.page,'integrations');
 
-const secretary=await boot('#/connect','secretary',[]);
+const secretary=await boot('#/connect','secretary',['dashboard.read']);
 assert.equal(secretary.context.state.page,'dashboard','URL direta sem permissão volta ao painel');
 assert.equal(secretary.location.hash,'#/dashboard');
 const secretaryLinks=hrefs(secretary.render());
@@ -83,7 +85,12 @@ assert.ok(!hrefs(secretary.render()).includes('#/integrations'));
 await secretary.context.navigate('connect');assert.equal(secretary.context.state.page,'connect');
 await secretary.context.navigate('integrations');assert.equal(secretary.context.state.page,'connect','Bancária exige sua própria permissão');
 
+const withoutAccess=await boot('#/connect','secretary',[]);
+assert.equal(withoutAccess.context.state.page,'help','Sem permissão operacional, exibir orientação');
+assert.equal(withoutAccess.location.hash,'#/help');
+assert.ok(!withoutAccess.calls.some(url=>url.endsWith('/dashboard')),'Não consultar painel sem permissão');
+
 const missing=await boot('#/email','admin',[],false);
 assert.equal(missing.context.state.emailStatus,'missing');
-assert.match(content(missing.render()),/SMTP não configurado/);
+assert.match(content(missing.render()),/envio de e-mail ainda não está configurado/);
 console.log('Integrações: grupo e permissões por rota, deep links e estado SMTP OK.');

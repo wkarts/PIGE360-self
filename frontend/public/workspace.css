@@ -1,4 +1,4 @@
-/* Estrutura da aplicação escolar. Não altera a identidade nem os formulários. */
+/* Estrutura da aplicação escolar, com identidade e navegação independentes. */
 .workspace {
   --sidebar-width: 260px;
   display: grid;
@@ -40,24 +40,24 @@
   height: clamp(90px, 18dvh, 164px);
   object-fit: contain;
 }
-.sidebar-brand .institution-name { font-size: 19px; text-align: center; }
+.sidebar-brand .institution-name { font-size: 18px; text-align: center; line-height: 1.45; }
 .sidebar-close { display: none; }
 .sidebar-scroll {
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: 16px 12px 12px;
+  padding: 18px 12px 16px;
   scroll-padding-block: 12px;
 }
 .sidebar .sidebar-label {
   margin: 8px 12px 10px;
   padding: 0;
   font-size: 10px;
-  letter-spacing: 1.3px;
+  letter-spacing: 1px;
   font-weight: 700;
   color: var(--muted);
 }
-.sidebar nav { gap: 4px; margin-bottom: 22px; }
+.sidebar nav { gap: 4px; margin-bottom: 24px; }
 .sidebar nav a, .sidebar .nav-group-toggle {
   min-height: 44px;
   padding: 11px 12px;
@@ -65,21 +65,21 @@
   border-radius: 9px;
   font-size: 13px;
   line-height: 1.4;
-  font-weight: 550;
+  font-weight: 500;
   color: var(--ink);
   text-align: left;
   overflow-wrap: anywhere;
   transition: background-color .15s, color .15s;
 }
-.sidebar .nav-group-toggle { font-weight: 650; margin: 0; }
+.sidebar .nav-group-toggle { font-weight: 600; margin: 0; }
 .sidebar .nav-group { margin: 0; }
 .sidebar nav a:hover, .sidebar .nav-group-toggle:hover { background: var(--background); }
 .sidebar .nav-group.selected > .nav-group-toggle { color: var(--primary); background: transparent; }
 .sidebar nav a.active {
   background: var(--teal-soft);
   background: color-mix(in srgb, var(--primary) 9%, var(--surface, #fff));
-  color: var(--ink);
-  font-weight: 700;
+  color: var(--primary);
+  font-weight: 650;
 }
 .sidebar nav a.active::after { display: none; }
 .sidebar nav a.active::before {
@@ -95,7 +95,7 @@
   padding-left: 8px;
   border-left: 1px solid var(--border);
 }
-.sidebar .nav-group-items a { font-size: 12px; padding: 10px; gap: 10px; }
+.sidebar .nav-group-items a { font-size: 12px; padding: 11px 10px; gap: 10px; min-height: 44px; }
 .ui-icon, .nav-icon {
   display: inline-block;
   width: 20px;
@@ -115,7 +115,7 @@
 .nav-chevron.expanded { transform: rotate(90deg); }
 .sidebar .sidebar-footer { margin: 0; padding: 14px 22px; font-size: 12px; border-top: 1px solid var(--border); }
 .sidebar .sidebar-footer > span { color: var(--ink); font-weight: 600; }
-.sidebar .sidebar-footer small { margin: 3px 0 0; font-size: 10px; }
+.sidebar .sidebar-footer small { margin: 3px 0 0; font-size: 11px; color: var(--muted); }
 .workspace .main-column {
   display: flex;
   flex-direction: column;
@@ -131,17 +131,20 @@
   top: auto;
   flex: 0 0 auto;
   height: auto;
-  min-height: 80px;
-  padding: 14px 32px;
+  min-height: 76px;
+  padding: 12px 32px;
   background: var(--surface, #fff);
 }
 .topbar .icon-button, .topbar .user-avatar { width: 44px; height: 44px; flex-shrink: 0; }
 .topbar .icon-button { color: var(--muted); border-radius: 10px; }
 .topbar .icon-button:hover { color: var(--ink); background: var(--background); }
 .topbar .school-switch { flex: 1 1 auto; min-width: 0; }
-.topbar .school-switch select { width: 100%; max-width: 380px; min-width: 0; min-height: 28px; color: var(--ink); }
+.topbar .school-switch select { width: 100%; max-width: 380px; min-width: 0; min-height: 30px; color: var(--ink); font-size: 14px; }
+.topbar .school-switch > span { font-size: 10px; letter-spacing: .8px; }
 .topbar .topbar-actions { flex: 0 0 auto; }
-.topbar .user-caption strong { max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar .user-caption strong { max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.topbar .user-caption small { font-size: 11px; }
+.topbar .online-chip { font-size: 11px; padding: 5px 10px; }
 .workspace .main-content {
   flex: 1 1 auto;
   min-height: 0;
@@ -149,7 +152,7 @@
   width: 100%;
   max-width: none;
   margin: 0;
-  padding: 30px 32px 22px;
+  padding: 30px 32px 24px;
   overflow: auto;
   overscroll-behavior: contain;
   scroll-padding-block: 24px;
@@ -195,13 +198,14 @@
   .workspace .sidebar-shade { z-index: 49; }
   .sidebar-brand { padding: 16px 22px; }
   .sidebar-brand .brand-line { padding-inline: 22px; }
-  .sidebar-brand .sidebar-logo { height: clamp(64px, 14dvh, 110px); }
+  .sidebar-brand .sidebar-logo { height: clamp(64px, 14vh, 110px); height: clamp(64px, 14dvh, 110px); }
   .sidebar-close { display: grid; position: absolute; right: 8px; top: 8px; width: 44px; height: 44px; z-index: 1; }
   .sidebar .sidebar-footer { padding: 10px 22px max(10px, env(safe-area-inset-bottom)); }
-  .workspace .topbar { min-height: 72px; padding: 10px 12px; gap: 8px; }
-  .topbar .school-switch select { max-width: 100%; font-size: 13px; }
+  .workspace .topbar { min-height: 68px; padding: max(8px, env(safe-area-inset-top)) 12px 8px; gap: 8px; }
+  .topbar .school-switch select { max-width: 100%; min-height: 44px; font-size: 16px; }
+  .topbar .school-switch > span { display: none; }
   .topbar .topbar-actions { gap: 4px; }
-  .workspace .main-content { padding: 22px 18px max(18px, env(safe-area-inset-bottom)); }
+  .workspace .main-content { padding: 22px 18px max(24px, env(safe-area-inset-bottom)); }
 }
 @media (max-height: 560px) {
   .sidebar-brand { padding-block: 10px; }
@@ -217,3 +221,164 @@
 @media (prefers-reduced-motion: reduce) { .workspace *, .workspace .sidebar { transition: none; scroll-behavior: auto; } }
 
 .diagnostic-pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:65ch;max-height:24rem;overflow:auto;font-size:.8rem}.table-wrap td small{display:block}
+
+/* Navegação compacta em telas largas; conteúdo continua aproveitando toda a área. */
+@media (min-width: 1600px) {
+  .workspace .main-content { padding: 36px 44px 28px; }
+  .workspace .topbar { padding-inline: 44px; }
+}
+@media (max-width: 420px) {
+  .workspace .main-content { padding-inline: 14px; }
+  .topbar .school-switch select { max-width: 100%; }
+}
+
+/* Os componentes precisam poder encolher antes de reorganizar as colunas. */
+.workspace :is(.page-header, .panel-header, .section-actions, .x-heading) > div,
+.workspace :is(.field, .filter-bar, .filter-grid, .form-grid, .x-grid, .x-filter, .person-cell) {
+  min-width: 0;
+}
+.workspace :is(.page-header h1, .panel-header h2, .student-banner h2, .person-cell > div, .data-grid dd) {
+  overflow-wrap: anywhere;
+}
+.workspace .page-header > div:first-child { flex: 1 1 auto; }
+.workspace .page-header > .actions:empty { display: none; }
+.workspace .page-heading-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
+.workspace .page-heading-title h1 { min-width: 0; }
+.workspace .page-header .page-help { flex: 0 0 auto; min-height: 44px; padding: 10px 16px; font-size: 13px; }
+.workspace .registry-filter-toggle { display: none; }
+.workspace .profile-student-card { padding: 24px; }
+.workspace .profile-student-card > h2 { margin-block: 8px; }
+.workspace .profile-student-card > .table-scroll { margin-top: 16px; }
+.workspace .profile-student-card > :is(h2, p) { overflow-wrap: anywhere; }
+.workspace .dashboard > div > .panel.spaced > h3 { margin: 0; padding: 20px 24px 14px; }
+.workspace :is(.table-scroll, .table-wrap) { scroll-padding-inline: 16px; }
+.workspace :is(.table-scroll, .table-wrap):focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.modal .modal-header > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.modal-backdrop { top: var(--dialog-viewport-top, 0px); bottom: auto; height: 100vh; height: var(--dialog-viewport-height, 100dvh); }
+.modal-backdrop > .modal { max-height: calc(100vh - 32px); max-height: calc(var(--dialog-viewport-height, 100dvh) - 32px); }
+.modal .modal-header > .icon-button { flex-shrink: 0; width: 44px; height: 44px; }
+.modal .modal-workspace, .modal .modal-body { min-height: 0; }
+.modal .modal-body { scroll-padding-block: 20px; }
+.modal .x-form label:not(.x-check):not(.checkbox-field) { display: flex; flex-direction: column; gap: 8px; min-width: 0; color: var(--ink); font-size: 13px; font-weight: 600; }
+.modal .x-form :is(input:not([type=checkbox]):not([type=radio]):not([type=file]), select, textarea) {
+  width: 100%; min-width: 0; max-width: 100%; min-height: 44px;
+  padding: 11px 12px; border: 1px solid var(--field-border, #bdcbd6); border-radius: 9px;
+  background: var(--surface, #fff); color: var(--ink); font: inherit; font-size: 14px; font-weight: 400; line-height: 1.45;
+  box-shadow: 0 1px 2px #0c223006;
+}
+.modal .x-form textarea { resize: vertical; line-height: 1.65; }
+.modal .x-form :is(input, textarea)::placeholder { color: #70818e; opacity: 1; }
+.modal .x-form :is(input:not([type=checkbox]):not([type=radio]), select, textarea):focus {
+  border-color: var(--primary); outline: 2px solid var(--primary); outline: 2px solid color-mix(in srgb, var(--primary) 28%, transparent); outline-offset: 1px;
+}
+.modal .x-form :is(input, select, textarea):disabled { background: var(--surface-subtle); cursor: not-allowed; }
+.modal .x-form [aria-invalid="true"] { border-color: #bc3448; }
+
+@media (max-width: 800px) {
+  .workspace .sidebar { width: min(320px, calc(100vw - 44px)); }
+  .workspace .menu-button { border: 1px solid var(--border); }
+  .workspace .page-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px 12px; }
+  .workspace .page-header > div:first-child { width: 100%; }
+  .workspace .page-header .breadcrumb { display: none; }
+  .workspace .page-heading-title { align-items: flex-start; }
+  .workspace .page-heading-title h1 { padding-top: 4px; }
+  .workspace .page-header > .actions { display: contents; }
+  .workspace .page-header > .actions > .btn { grid-column: 1 / -1; }
+  .workspace .page-header > .actions > .page-help { grid-column: 2; grid-row: 1; align-self: start; }
+  .workspace .btn, .modal .btn { min-height: 44px; max-width: 100%; white-space: normal; line-height: 1.45; text-align: center; }
+  .workspace .link-button, .modal .link-button { min-height: 44px; padding: 8px 4px; line-height: 1.45; }
+  .workspace .icon-button { min-width: 44px; min-height: 44px; }
+  .workspace .alert > button { min-width: 44px; min-height: 44px; flex-shrink: 0; }
+  .workspace :is(input:not([type=checkbox]):not([type=radio]), select, textarea),
+  .modal :is(input:not([type=checkbox]):not([type=radio]), select, textarea) { min-height: 44px; font-size: 16px; max-width: 100%; }
+  .workspace input[type=file], .modal input[type=file] { font-size: 13px; }
+  .modal .x-form :is(input:not([type=checkbox]):not([type=radio]):not([type=file]), select, textarea) { font-size: 16px; }
+  .workspace .topbar .school-switch select { min-height: 44px; font-size: 16px; }
+  .workspace .tabs button, .modal .form-section-nav > button { min-height: 44px; }
+  .workspace .registry-filters { gap: 14px; }
+  .workspace .filter-bar .search-field { max-width: none; min-width: 0; flex: 1 1 160px; }
+  .workspace .filter-bar > :is(input, select) { max-width: none; min-width: 0; flex: 1 1 160px; }
+  .workspace .filter-bar > .btn { flex: 1 1 auto; }
+  .workspace .filter-bar:has(.search-field) > .btn { flex: 0 0 auto; }
+  .workspace .registry-filter-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; margin: -4px 0 16px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface, #fff); color: var(--ink); font-size: 13px; }
+  .workspace .registry-filter-toggle[aria-expanded="true"] { border-color: var(--primary); color: var(--primary); }
+  .workspace .registry-filters:not(.filters-open) { display: none; }
+  .workspace .profile-student-card { padding: 20px; }
+  .workspace .dashboard > div > .panel.spaced > h3 { padding: 18px 20px 12px; }
+  .workspace .filter-actions .actions { flex: 1 1 100%; }
+  .workspace .filter-actions .actions .btn { flex: 1; }
+  .workspace .panel-footer { gap: 16px; }
+  .workspace .data-grid { gap: 18px 24px; }
+  .workspace .student-banner .grow { min-width: 0; flex-basis: calc(100% - 90px); }
+  .workspace .list-row { gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+  .workspace .list-row > div { min-width: 0; overflow-wrap: anywhere; }
+  .workspace .timeline-item { padding: 18px; }
+  .workspace .timeline-item > div { min-width: 0; overflow-wrap: anywhere; }
+  .workspace .person-cell { gap: 10px; }
+  .workspace .person-cell > div { min-width: 0; }
+}
+
+/* Cadastros viram fichas legíveis. Matrizes e relatórios mantêm suas colunas. */
+@media (max-width: 600px) {
+  .workspace .record-list { border: 0; border-radius: 0; background: transparent; box-shadow: none; overflow: visible; }
+  .record-list > table { display: block; min-width: 0; width: 100%; }
+  .record-list > table > thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .record-list > table > tbody { display: grid; gap: 14px; }
+  .record-list > table > tbody > tr { display: block; min-width: 0; padding: 4px 16px; background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 12px; }
+  .record-list > table > tbody > tr > td { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; width: 100%; min-width: 0; padding: 11px 0; border-bottom: 1px solid var(--border); text-align: right; font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+  .record-list > table > tbody > tr > td::before { content: attr(data-label); flex: 0 0 36%; text-align: left; font-size: 12px; font-weight: 500; color: var(--muted); }
+  .record-list td > .record-value { flex: 1 1 auto; min-width: 0; }
+  .record-list > table > tbody > tr > td:first-child { display: block; padding-block: 14px; text-align: left; }
+  .record-list > table > tbody > tr > td:first-child::before,
+  .record-list > table > tbody > tr > td[data-label="Ações"]::before { display: none; }
+  .record-list > table > tbody > tr > td:first-child strong { font-size: 15px; line-height: 1.45; }
+  .record-list > table > tbody > tr > td:last-child { border-bottom: 0; }
+  .record-list td .badge { max-width: 100%; white-space: normal; text-align: left; }
+  .record-list td small { font-size: 12px; line-height: 1.55; }
+  .record-list td .truncate { max-width: none; white-space: normal; }
+  .record-list > table > tbody > tr > td[data-label="Ações"] { display: block; padding-block: 10px; text-align: left; }
+  .record-list td[data-label="Ações"] .record-value > .actions { width: 100%; gap: 8px; }
+  .record-list td[data-label="Ações"] .link-button { display: inline-flex; align-items: center; justify-content: center; flex: 1 1 auto; min-height: 44px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-subtle, #f7f9fb); font-size: 13px; text-align: center; }
+  .record-list td[data-label="Ações"] .record-value > .link-button { width: 100%; }
+  .record-list > .pagination { gap: 12px; margin-top: 14px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface, #fff); }
+  .record-list > .pagination > div { width: 100%; margin: 0; }
+  .record-list > .pagination .btn { flex: 1; }
+  .record-list > .empty-state { border: 1px solid var(--border); border-radius: 12px; background: var(--surface, #fff); }
+
+  .modal-backdrop { padding: 0; }
+  .modal-backdrop > .modal { width: 100%; max-width: none; height: 100vh; height: var(--dialog-viewport-height, 100dvh); max-height: 100vh; max-height: var(--dialog-viewport-height, 100dvh); border: 0; border-radius: 0; }
+  .modal .modal-header { padding: max(12px, env(safe-area-inset-top)) 16px 12px; gap: 12px; }
+  .modal .modal-header h2 { font-size: 19px; line-height: 1.35; }
+  .modal .modal-header .eyebrow { display: none; }
+  .modal .modal-form { flex: 1 1 auto; }
+  .modal .modal-workspace, .modal .modal-workspace.sectioned { flex: 1 1 auto; height: auto; max-height: none; }
+  .modal .modal-workspace > .modal-body, .modal > .modal-body { flex: 1 1 auto; padding: 20px 16px; }
+  .modal .form-section-nav { padding: 8px; }
+  .modal .form-section-nav > button { padding: 9px 12px; }
+  .modal .modal-footer { min-height: 0; gap: 8px; padding: 12px 16px max(12px, env(safe-area-inset-bottom)); }
+  .modal .modal-footer > span { font-size: 11px; }
+  .modal .modal-footer > span small { display: none; }
+  .modal .modal-footer .btn { flex: 1; }
+  .modal .modal-body .actions > .btn { flex: 1 1 auto; font-size: 13px; }
+  .modal .discard-banner { gap: 8px; padding: 12px 16px; }
+  .modal .discard-banner span { flex-basis: 100%; min-width: 0; }
+}
+
+/* Janela reduzida pelo teclado virtual: preservar a área de edição rolável. */
+@media (max-height: 500px) and (max-width: 900px) {
+  .modal-backdrop { padding: 0; }
+  .modal-backdrop > .modal { width: 100%; max-width: none; height: var(--dialog-viewport-height, 100dvh); max-height: var(--dialog-viewport-height, 100dvh); border-radius: 0; }
+  .modal .modal-header { padding-block: 8px; }
+  .modal .modal-header .eyebrow, .modal .modal-footer > span { display: none; }
+  .modal .modal-form { flex: 1 1 auto; }
+  .modal .modal-workspace, .modal .modal-workspace.sectioned { height: auto; max-height: none; flex: 1 1 auto; }
+  .modal .modal-footer { padding-block: 8px; min-height: 0; }
+}
+html[data-dialog-short-viewport] .modal-backdrop { padding: 0; }
+html[data-dialog-short-viewport] .modal-backdrop > .modal { width: 100%; max-width: none; height: var(--dialog-viewport-height, 100dvh); max-height: var(--dialog-viewport-height, 100dvh); border-radius: 0; }
+html[data-dialog-short-viewport] .modal .modal-header { padding-block: 8px; }
+html[data-dialog-short-viewport] .modal .modal-header .eyebrow,
+html[data-dialog-short-viewport] .modal .modal-footer > span { display: none; }
+html[data-dialog-short-viewport] .modal .modal-form { flex: 1 1 auto; }
+html[data-dialog-short-viewport] .modal .modal-workspace { height: auto; max-height: none; flex: 1 1 auto; }
+html[data-dialog-short-viewport] .modal .modal-footer { padding-block: 8px; min-height: 0; }

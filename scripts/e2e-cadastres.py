@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Cadastros PF/PJ, vínculos, seções e diálogos. Dados sintéticos; sem provedores externos."""
-import json, os, shutil, socket, subprocess, sys, tempfile, time
+import base64, json, os, shutil, socket, subprocess, sys, tempfile, time
 from pathlib import Path
 import httpx
 from playwright.sync_api import sync_playwright, expect
@@ -16,7 +16,8 @@ BRIDGE=os.getenv('PIGE_UI_BRIDGE')=='1'
 env={**os.environ,'PYTHONPATH':str(ROOT/'backend'),'DATABASE_URL':'sqlite:///'+str(TEMP/'e2e.db'),
      'ALLOW_SQLITE':'true','APP_ENV':'test','APP_URL':URL,'ALLOWED_HOSTS':'127.0.0.1,localhost',
      'APP_SECRET_KEY':'test-only-cadastres-secret-01234567890123456789','SETUP_TOKEN':'test-only-setup-01234567890123456789',
-     'STORAGE_PATH':str(TEMP/'files'),'FRONTEND_PATH':str(ROOT/'frontend/dist'),'COOKIE_SECURE':'false'}
+     'STORAGE_PATH':str(TEMP/'files'),'FRONTEND_PATH':str(ROOT/'frontend/dist'),'COOKIE_SECURE':'false',
+     'INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(b'0'*32).decode()}
 subprocess.run([sys.executable,'-m','alembic','upgrade','head'],cwd=ROOT/'backend',env=env,check=True)
 log=(OUT/'server.log').open('w')
 proc=subprocess.Popen([sys.executable,'-m','uvicorn','app.main:app','--host','127.0.0.1','--port',str(port)],cwd=ROOT/'backend',env=env,stdout=log,stderr=log)
@@ -57,7 +58,12 @@ try:
             menu=page.get_by_role('button',name='Cadastros',exact=True)
             if label in ['Cadastro único','Alunos','Professores','Funcionários','Pais e responsáveis','Fornecedores','Prestadores de serviços','Clientes','Sócios'] and menu.get_attribute('aria-expanded')=='false':menu.click()
             integrations=page.get_by_role('button',name='Integrações',exact=True)
-            if label in ['WhatsApp','E-mail / SMTP','Bancária'] and integrations.get_attribute('aria-expanded')=='false':integrations.click()
+            if label in ['WhatsApp','E-mail institucional','Bancária'] and integrations.get_attribute('aria-expanded')=='false':integrations.click()
+            admin=page.get_by_role('button',name='Administração do sistema',exact=True)
+            if label in ['Diagnóstico','Auditoria','Portabilidade de dados'] and admin.get_attribute('aria-expanded')=='false':admin.click()
+            if label=='Instituição':
+                settings=page.get_by_role('button',name='Configurações',exact=True)
+                if settings.get_attribute('aria-expanded')=='false':settings.click()
             page.locator('aside').get_by_role('link',name=label,exact=False).click()
             expect(page.locator('h1')).to_have_text(heading or label)
         def dialog():return page.get_by_role('dialog')
@@ -78,7 +84,7 @@ try:
         menu.click();expect(page.get_by_role('link',name='Fornecedores',exact=True)).not_to_be_visible()
         menu.click();record('Nove cadastros agrupados em menu expansível acessível')
         nav('Fornecedores');page.get_by_role('button',name='+ Cadastrar fornecedor',exact=True).click()
-        expect(dialog()).to_have_class('modal modal-wide')
+        expect(dialog()).to_have_class('modal modal-person modal-wide')
         field('Natureza da pessoa').select_option('organization')
         field('Razão social').fill('Papelaria Exemplo Ltda')
         field('CNPJ').fill('12.ABC.345/01DE-35')
@@ -167,7 +173,7 @@ try:
         field('Data de nascimento').fill('2020-05-15')
         field('CPF').fill('111.111.111-11')
         dialog().get_by_role('button',name='Salvar',exact=True).click()
-        expect(dialog().get_by_role('alert')).to_contain_text('cpf')
+        expect(dialog().get_by_role('alert')).to_contain_text('CPF inválido')
         assert dialog().locator('#modal-field-cpf').evaluate('el=>el===document.activeElement')
         dialog().locator('#modal-field-cpf').fill('529.982.247-25');save()
         record('Erro 422 destaca o campo do CPF e permite corrigir o mesmo cadastro sem recomeçar')
@@ -189,8 +195,20 @@ try:
         expect(page.get_by_role('heading',name='Siga a ordem da rotina escolar',exact=True)).to_be_visible()
         expect(page.get_by_text('Cadastre cada pessoa uma vez',exact=True)).to_be_visible()
         record('Guia de uso alcançável do cabeçalho e orienta cadastro, matrícula e Diário')
-        nav('Cobranças');page.get_by_role('button',name='+ Nova cobrança',exact=True).click()
+        nav('Cobranças')
+        expect(page.get_by_role('button',name='+ Nova cobrança',exact=True)).to_be_enabled()
+        page.get_by_role('button',name='+ Nova cobrança',exact=True).click()
+        expect(dialog().get_by_label('Tipo de cobrança')).to_have_value('manual')
+        expect(dialog().get_by_label('Tipo de cobrança').locator('option')).to_have_count(1)
+        page.keyboard.press('Escape');expect(dialog()).to_have_count(0)
+        response=client.post(base+'/integrations/asaas',headers=headers,json={
+            'enabled':True,'environment':'sandbox','api_key':'test-only-cadastres-synthetic-api-key'})
+        assert response.status_code==200,response.text
+        # Configuration is local and real; no worker or provider is called in this modal test.
+        page.reload();expect(page.get_by_role('heading',name='Cobranças',exact=True)).to_be_visible()
+        page.get_by_role('button',name='+ Nova cobrança',exact=True).click()
         expect(dialog().get_by_role('heading',name='Nova cobrança',exact=True)).to_be_visible()
+        dialog().get_by_label('Tipo de cobrança').select_option('provider')
         dialog().get_by_label('Valor de cada parcela (R$)').fill('450.00')
         dialog().get_by_label('Quantidade mensal (1 = avulsa)').fill('3')
         expect(dialog().locator('.charge-summary')).to_contain_text('1.350,00')
@@ -205,7 +223,7 @@ try:
         expect(dialog()).to_have_count(0)
         record('Lançamento em modal responsivo com resumo nominal e confirmação de descarte; sem alterar emissão')
         page.set_viewport_size({'width':1440,'height':960})
-        for label in ['Visão geral','Cadastro único','Alunos','Professores','Funcionários','Pais e responsáveis','Fornecedores','Prestadores de serviços','Clientes','Sócios','Matrículas','Estrutura acadêmica','Diário Escolar','Documentação','Protocolos','Relatórios','Inscrições online','Cobranças','WhatsApp','E-mail / SMTP','Bancária','Instituição','Usuários e acessos','Diagnóstico e logs','Auditoria']:
+        for label in ['Visão geral','Cadastro único','Alunos','Professores','Funcionários','Pais e responsáveis','Fornecedores','Prestadores de serviços','Clientes','Sócios','Matrículas','Estrutura acadêmica','Diário Escolar','Pendências documentais','Protocolos','Relatórios','Inscrições online','Cobranças','WhatsApp','E-mail institucional','Bancária','Instituição','Usuários e acessos','Diagnóstico','Auditoria']:
             nav(label,heading='Pendências documentais' if label=='Documentação' else label)
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
         assert not route_failures,route_failures

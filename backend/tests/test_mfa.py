@@ -64,6 +64,11 @@ def test_enrollment_password_confirmation_encryption_and_secret_not_exposed(secu
 def test_no_session_before_mfa_and_recovery_single_use(secured):
     c,email,ident,h=secured
     secret,session,_=setup_factor(secured)
+    # Repetir exatamente o código consumido na ativação. Recalculá-lo pelo
+    # relógio ao final pode gerar um código novo ao cruzar a janela de 30s.
+    with SessionLocal() as db:
+        enrollment_counter=db.get(m.MFACredential,'user:'+ident).last_counter
+    enrollment_code=otp(secret,enrollment_counter)
     c.cookies.clear()
     challenge=c.post('/api/v1/auth/login',json={'email':email,'password':PASSWORD})
     assert 'access_token' not in challenge.json() and 'pige_refresh' not in challenge.cookies
@@ -74,7 +79,7 @@ def test_no_session_before_mfa_and_recovery_single_use(secured):
     token=c.post('/api/v1/auth/login',json={'email':email,'password':PASSWORD}).json()['mfa_token']
     again=c.post('/api/v1/auth/mfa/verify',headers=CSRF,json={'token':token,'code':session['recovery_codes'][0]})
     assert again.status_code==401
-    replay=c.post('/api/v1/auth/mfa/verify',headers=CSRF,json={'token':token,'code':otp(secret,int(time.time())//30)})
+    replay=c.post('/api/v1/auth/mfa/verify',headers=CSRF,json={'token':token,'code':enrollment_code})
     assert replay.status_code==401
 
 

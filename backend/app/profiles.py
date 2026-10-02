@@ -3,7 +3,8 @@ from sqlalchemy import or_, select
 from . import models as m, schemas as s
 from .common import audit, output
 from .registry import validate
-from .security import Actor, DB, ROLE_LABELS, Scope, check_version, fail, require, scoped
+from .security import Actor, DB, ROLE_LABELS, Scope, check_version, fail, require, scoped, lock_school
+from .lifecycle_models import require_available
 
 router = APIRouter(prefix='/api/v1', tags=['Perfis e espaços de trabalho'])
 
@@ -12,15 +13,23 @@ def allowed_school(db, user, school_id):
     school = db.get(m.School, school_id)
     if not school or not school.active:
         fail(404, 'Escola não encontrada.')
-    if user.role != 'admin' and not db.get(m.SchoolAccess, (user.id, school_id)):
-        fail(403, 'Acesso não autorizado a esta escola.')
+    from .access_security import bind_access
+    bind_access(db, user, school_id)
     return school
 
 
 def school_ids(db, user):
-    if user.role == 'admin':
-        return [school.id for school in db.scalars(select(m.School).where(m.School.active.is_(True))).all()]
-    return list(db.scalars(select(m.SchoolAccess.school_id).where(m.SchoolAccess.user_id == user.id)))
+    ids = list(db.scalars(select(m.SchoolAccess.school_id).join(m.School, m.School.id == m.SchoolAccess.school_id).where(
+        m.SchoolAccess.user_id == user.id, m.SchoolAccess.active.is_(True),
+        m.SchoolAccess.archived_at.is_(None), m.School.active.is_(True))))
+    active_id = getattr(user, '_active_school_id', None)
+    if active_id:
+        return [active_id] if active_id in ids else []
+    if len(ids) > 1:
+        fail(422, 'Selecione a instituição para consultar seu espaço de trabalho.')
+    if ids:
+        allowed_school(db, user, ids[0])
+    return ids
 
 
 def linked_person(db, user, school_id):
@@ -172,6 +181,7 @@ def guardian_context(db, user):
 
 @router.get('/profile/context')
 def profile_context(db: DB, user: Actor):
+    active_ids = school_ids(db, user)
     require(user, 'profile.self')
     role = user.role
     data = {
@@ -187,8 +197,9 @@ def profile_context(db: DB, user: Actor):
     elif role == 'guardian':
         data['students'] = guardian_context(db, user)
     else:
-        data['person'] = output(db.get(m.Person, user.person_id)) if user.person_id else None
-    for school_id in school_ids(db, user):
+        person = linked_person(db, user, active_ids[0]) if active_ids else None
+        data['person'] = output(person) if person else None
+    for school_id in active_ids:
         school = allowed_school(db, user, school_id)
         data['schools'].append({'id': school.id, 'name': school.name})
     return data
@@ -200,7 +211,7 @@ def assignment_output(db, assignment):
     teacher = db.get(m.User, assignment.teacher_user_id) if assignment.teacher_user_id else None
     person = db.get(m.Person, assignment.teacher_person_id) if assignment.teacher_person_id else None
     if not person and teacher and teacher.person_id:
-        person = db.get(m.Person, teacher.person_id)
+        person = db.scalar(select(m.Person).where(m.Person.id == teacher.person_id, m.Person.school_id == assignment.school_id))
     return {
         **output(assignment),
         'teacher_person_id': assignment.teacher_person_id,
@@ -220,15 +231,28 @@ def list_teacher_assignments(db: DB, user: Actor, school: Scope):
     return [assignment_output(db, row) for row in rows]
 
 
+def validate_assignment_available(db, school_id, group, person):
+    require_available(db, group)
+    require_available(db, scoped(db, m.AcademicYear, group.academic_year_id, school_id))
+    if person:
+        require_available(db, person)
+        profile = db.scalar(select(m.TeacherProfile).where(
+            m.TeacherProfile.person_id == person.id, m.TeacherProfile.school_id == school_id))
+        if profile:
+            require_available(db, profile)
+
+
 @router.post('/schools/{school_id}/teacher-assignments', status_code=201)
 def create_teacher_assignment(data: s.TeacherAssignmentInput, db: DB, user: Actor, school: Scope, request: Request):
     require(user, 'staff.assignments.write')
+    lock_school(db, school.id)
     teacher = db.get(m.User, data.teacher_user_id) if data.teacher_user_id else None
     person = scoped(db, m.Person, data.teacher_person_id, school.id) if data.teacher_person_id else None
     if teacher:
         if not teacher.active or teacher.role != 'teacher':
             fail(422, 'O usuário informado não é um Professor ativo.')
-        if teacher.role != 'admin' and not db.get(m.SchoolAccess, (teacher.id, school.id)):
+        access = db.get(m.SchoolAccess, (teacher.id, school.id))
+        if not access or not access.active or access.archived_at:
             fail(422, 'O Professor não possui acesso à escola informada.')
         if person and teacher.person_id and teacher.person_id != person.id:
             fail(422, 'O usuário e a pessoa docente informados não correspondem.')
@@ -239,7 +263,10 @@ def create_teacher_assignment(data: s.TeacherAssignmentInput, db: DB, user: Acto
         fail(422, 'A pessoa informada não possui cadastro de Professor nesta escola.')
     if not teacher and not person:
         fail(422, 'Informe um usuário de acesso ou uma pessoa docente.')
+    if teacher and teacher.person_id and not person:
+        person = scoped(db, m.Person, teacher.person_id, school.id)
     group = scoped(db, m.ClassGroup, data.class_group_id, school.id)
+    validate_assignment_available(db, school.id, group, person or (db.get(m.Person, teacher.person_id) if teacher and teacher.person_id else None))
     obj = m.TeacherAssignment(
         school_id=school.id,
         teacher_user_id=teacher.id if teacher else None,
@@ -258,6 +285,7 @@ def create_teacher_assignment(data: s.TeacherAssignmentInput, db: DB, user: Acto
 @router.patch('/schools/{school_id}/teacher-assignments/{assignment_id}')
 def update_teacher_assignment(assignment_id: str, data: s.Edit, db: DB, user: Actor, school: Scope, request: Request):
     require(user, 'staff.assignments.write')
+    lock_school(db, school.id)
     obj = scoped(db, m.TeacherAssignment, assignment_id, school.id)
     check_version(obj, data.version)
     values = validate(s.TeacherAssignmentInput, data.data)
@@ -265,7 +293,8 @@ def update_teacher_assignment(assignment_id: str, data: s.Edit, db: DB, user: Ac
     person = scoped(db, m.Person, values.teacher_person_id, school.id) if values.teacher_person_id else None
     if teacher and (not teacher.active or teacher.role != 'teacher'):
         fail(422, 'O usuário informado não é um Professor ativo.')
-    if teacher and teacher.role != 'admin' and not db.get(m.SchoolAccess, (teacher.id, school.id)):
+    access = db.get(m.SchoolAccess, (teacher.id, school.id)) if teacher else None
+    if teacher and (not access or not access.active or access.archived_at):
         fail(422, 'O Professor não possui acesso à escola informada.')
     if person and teacher and teacher.person_id and teacher.person_id != person.id:
         fail(422, 'O usuário e a pessoa docente informados não correspondem.')
@@ -276,7 +305,11 @@ def update_teacher_assignment(assignment_id: str, data: s.Edit, db: DB, user: Ac
         fail(422, 'A pessoa informada não possui cadastro de Professor nesta escola.')
     if not teacher and not person:
         fail(422, 'Informe um usuário de acesso ou uma pessoa docente.')
+    if teacher and teacher.person_id and not person:
+        person = scoped(db, m.Person, teacher.person_id, school.id)
     group = scoped(db, m.ClassGroup, values.class_group_id, school.id)
+    if values.active:
+        validate_assignment_available(db, school.id, group, person or (db.get(m.Person, teacher.person_id) if teacher and teacher.person_id else None))
     obj.teacher_user_id = teacher.id if teacher else None
     obj.teacher_person_id = person.id if person else (teacher.person_id if teacher and teacher.person_id else None)
     obj.class_group_id = group.id
@@ -287,3 +320,8 @@ def update_teacher_assignment(assignment_id: str, data: s.Edit, db: DB, user: Ac
     audit(db, request, user, 'teacher_assignment.updated', obj, school.id)
     db.flush()
     return assignment_output(db, obj)
+
+
+# Rotas próprias de boletim compartilham as mesmas dependências de autenticação.
+from .learning_portal import router as learning_router
+router.include_router(learning_router)

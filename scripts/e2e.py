@@ -7,11 +7,12 @@ import httpx
 from playwright.sync_api import sync_playwright, expect
 
 ROOT=Path(__file__).resolve().parents[1]
-OUT=ROOT/'evidence/0.3.0';OUT.mkdir(parents=True,exist_ok=True)
+OUT=Path(os.getenv('PIGE_E2E_OUT', str(ROOT/'evidence/0.3.0')));OUT.mkdir(parents=True,exist_ok=True)
 TEMP=Path(tempfile.mkdtemp(prefix='pige360-e2e-'))
 with socket.socket() as s:s.bind(('127.0.0.1',0));PORT=s.getsockname()[1]
 URL=f'http://127.0.0.1:{PORT}'
-env={**os.environ,'PYTHONPATH':str(ROOT/'backend'),'DATABASE_URL':'sqlite:///'+str(TEMP/'e2e.db'),'ALLOW_SQLITE':'true','APP_ENV':'test','APP_URL':URL,'ALLOWED_HOSTS':'127.0.0.1,localhost','APP_SECRET_KEY':'e2e-test-only-secret-key-01234567890123456789','SETUP_TOKEN':'e2e-test-only-setup-token-0123456789','STORAGE_PATH':str(TEMP/'files'),'FRONTEND_PATH':str(ROOT/'frontend/dist'),'COOKIE_SECURE':'false'}
+shutil.copytree(ROOT/'frontend/dist', TEMP/'frontend')
+env={**os.environ,'PYTHONPATH':str(ROOT/'backend'),'DATABASE_URL':'sqlite:///'+str(TEMP/'e2e.db'),'ALLOW_SQLITE':'true','APP_ENV':'test','APP_URL':URL,'ALLOWED_HOSTS':'127.0.0.1,localhost','APP_SECRET_KEY':'e2e-test-only-secret-key-01234567890123456789','SETUP_TOKEN':'e2e-test-only-setup-token-0123456789','STORAGE_PATH':str(TEMP/'files'),'FRONTEND_PATH':str(TEMP/'frontend'),'COOKIE_SECURE':'false'}
 subprocess.run([sys.executable,'-m','alembic','upgrade','head'],cwd=ROOT/'backend',env=env,check=True,stdout=subprocess.DEVNULL)
 log=(OUT/'e2e-server.log').open('w')
 process=subprocess.Popen([sys.executable,'-m','uvicorn','app.main:app','--host','127.0.0.1','--port',str(PORT)],cwd=ROOT/'backend',env=env,stdout=log,stderr=log)
@@ -47,7 +48,12 @@ try:
         expect(page.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible();checks.append('Instalação inicial e login pela interface')
         def nav(name):
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
-            page.locator('aside').get_by_role('link',name=name).click()
+            sidebar=page.locator('aside')
+            group='Configurações' if name in {'Instituição','Certificados A1'} else 'Documentação' if name in {'Pendências documentais','Assinaturas pendentes','Conferência de assinaturas'} else None
+            if group:
+                toggle=sidebar.get_by_role('button',name=group,exact=True)
+                if toggle.get_attribute('aria-expanded')=='false':toggle.click()
+            sidebar.get_by_role('link',name=name,exact=True).click()
         def dialog():return page.get_by_role('dialog')
         def form_field(name, **kwargs):
             locator=dialog().get_by_label(name, **kwargs)
@@ -78,9 +84,14 @@ try:
         checks.append('Cadastro Único: abertura, criação, múltiplos tipos, edição e consulta persistida'+(' (navegação local no harness)' if BRIDGE else ' após recarregar o navegador'))
         page.screenshot(path=str(OUT/'00-cadastro-unico.png'),full_page=True)
         nav('Instituição')
-        expect(page.get_by_role('heading',name='Minha escola e suas unidades')).to_be_visible()
+        expect(page.locator('.institution-summary').get_by_role('heading',name='Escola Exemplo — Dados de Teste',exact=True)).to_be_visible()
+        institution_tabs=page.get_by_role('navigation',name='Configurações da instituição')
+        expect(institution_tabs.get_by_role('button',name='Dados da escola',exact=True)).to_have_attribute('aria-pressed','true')
+        expect(page.get_by_role('button',name='Gerenciar unidades',exact=True)).to_be_visible()
         expect(page.get_by_role('button',name='+ Empresa',exact=True)).to_have_count(0)
         expect(page.get_by_role('button',name='+ Escola',exact=True)).to_have_count(0)
+        institution_tabs.get_by_role('button',name='Identidade visual',exact=True).click()
+        expect(institution_tabs.get_by_role('button',name='Identidade visual',exact=True)).to_have_attribute('aria-pressed','true')
         page.get_by_role('button',name='Personalizar identidade visual').click()
         form_field('Nome de apresentação da escola').fill('Colégio Exemplo — Identidade Local')
         form_field('Nome curto no aplicativo').fill('Exemplo Local')
@@ -89,6 +100,7 @@ try:
         save()
         expect(page.get_by_role('heading',name='Colégio Exemplo — Identidade Local',exact=True)).to_be_visible()
         expect(page.locator('aside .institution-name')).to_have_text('Exemplo Local')
+        institution_tabs.get_by_role('button',name='Dados da escola',exact=True).click()
         page.get_by_role('button',name='Dados da mantenedora').click()
         form_field('CPF / CNPJ').fill('11222333000181');save()
         page.get_by_role('button',name='Dados da mantenedora').click()
@@ -167,12 +179,14 @@ try:
             with page.expect_download() as downloaded:dialog().get_by_role('button',name='Gerar e baixar PDF',exact=True).click()
             downloaded.value.save_as(str(OUT/'comprovante-exemplo.pdf'))
         expect(dialog()).to_have_count(0);checks.append('PDF emitido pela UI e bytes conferidos no harness' if BRIDGE else 'PDF emitido e baixado pelo navegador')
-        nav('Relatórios');page.get_by_label('Turma do relatório').select_option(index=1)
+        nav('Relatórios');page.get_by_label('Relatório',exact=True).select_option('students');page.get_by_label('Período',exact=True).select_option('month')
+        page.get_by_text('Mais filtros',exact=True).click();page.get_by_label('Turma',exact=False).select_option(index=1)
+        page.get_by_role('button',name='Gerar relatório',exact=True).click()
         expect(page.get_by_text('Lucas Almeida — Teste',exact=True)).to_be_visible()
         if BRIDGE:
-            page.get_by_role('button',name='Gerar PDF da turma').click();page.wait_for_function("window.__downloads.includes('alunos-da-turma.pdf')");shutil.copyfile(OUT/'alunos-da-turma.pdf',OUT/'turma-exemplo.pdf')
+            page.get_by_role('button',name='Baixar PDF',exact=True).click();page.wait_for_function("window.__downloads.some(name=>name.startsWith('relatorio-students-')&&name.endsWith('.pdf'))");shutil.copyfile(next(OUT.glob('relatorio-students-*.pdf')),OUT/'turma-exemplo.pdf')
         else:
-            with page.expect_download() as down:page.get_by_role('button',name='Gerar PDF da turma').click()
+            with page.expect_download() as down:page.get_by_role('button',name='Baixar PDF',exact=True).click()
             down.value.save_as(str(OUT/'turma-exemplo.pdf'))
         checks.append('Relatório por turma com PDF')
         nav('Visão geral');page.screenshot(path=str(OUT/'02-dashboard.png'),full_page=True)
@@ -223,7 +237,7 @@ try:
         checks.append('Protocolos acessíveis dentro da ficha do aluno')
         nav('Estrutura acadêmica');page.get_by_role('button',name='Tipos de documento',exact=True).click();page.get_by_role('button',name='+ Cadastrar',exact=True).click()
         form_field('Nome do documento').fill('Comprovante de residência');form_field('Obrigatório para matrícula').check();save()
-        nav('Documentação');page.get_by_label('Pesquisar na lista').fill('Lucas');page.get_by_role('button',name='Aplicar filtros').click()
+        nav('Pendências documentais');page.get_by_label('Pesquisar na lista').fill('Lucas');page.get_by_role('button',name='Aplicar filtros').click()
         expect(page.get_by_text('1 pendência documental',exact=True)).to_be_visible()
         if BRIDGE:
             page.get_by_role('button',name='Exportar CSV',exact=True).click();page.wait_for_function("window.__downloads.includes('pendencias-documentais.csv')")

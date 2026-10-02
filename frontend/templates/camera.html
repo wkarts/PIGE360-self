@@ -1,0 +1,20 @@
+<teleport to="body">
+  <div class="camera-overlay">
+    <section :id="id" class="camera-dialog" role="dialog" aria-modal="true" :aria-labelledby="id+'-title'" :aria-busy="s.busy">
+      <header class="camera-header"><div><p class="camera-eyebrow">{{s.preview?'CONFERIR FOTO':'CÂMERA'}}</p><h2 :id="id+'-title'" tabindex="-1" data-dialog-title>{{title()}}</h2></div><button type="button" class="camera-close" aria-label="Fechar câmera" data-dialog-close @click="close">×</button></header>
+      <div class="camera-stage" :class="{'camera-stage-portrait':props.mode==='portrait','camera-stage-review':s.preview}">
+        <img v-if="s.preview" :src="s.preview" :alt="props.mode==='portrait'?'Confira a foto da pessoa':'Confira se o documento está inteiro e legível'">
+        <video v-else :id="id+'-video'" autoplay muted playsinline aria-label="Imagem ao vivo da câmera"></video>
+        <div v-if="s.ready&&!s.preview" class="camera-guide" :style="{width:s.guideWidth+'px',height:s.guideHeight+'px'}" :class="{'camera-guide-person':props.mode==='portrait'}" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <p v-if="s.busy&&!s.ready&&!s.preview" class="camera-stage-status" role="status">Preparando a câmera…</p>
+        <div v-if="s.error" class="camera-error" role="alert"><strong>Câmera indisponível</strong><p>{{s.error}}</p><button type="button" class="btn btn-secondary" @click="start" :disabled="s.busy">Tentar novamente</button></div>
+        <span v-if="s.width&&s.height" class="camera-resolution">{{s.width}} × {{s.height}}</span>
+      </div>
+      <div class="camera-instructions"><p v-if="s.preview">{{props.mode==='portrait'?'Confira o rosto, a iluminação e a nitidez.':'Confira a nitidez e se todas as bordas do documento aparecem.'}}</p><p v-else>{{props.mode==='portrait'?'Centralize o rosto e mantenha a câmera na altura dos olhos.':'Aproxime a câmera sem cortar o documento. Evite reflexos e sombras.'}}</p><small v-if="s.notice" role="status">{{s.notice}}</small></div>
+      <footer class="camera-controls" :class="{'camera-controls-live':!s.preview}">
+        <template v-if="s.preview"><button type="button" class="btn btn-secondary" @click="start" :disabled="s.busy">Refazer foto</button><button type="button" class="btn btn-secondary" @click="rotate" :disabled="s.busy">Girar 90°</button><button :id="id+'-confirm'" type="button" class="btn btn-primary" @click="confirm" :disabled="s.busy">Usar foto</button></template>
+        <template v-else><div class="camera-options"><button type="button" class="btn btn-secondary" @click="flip" :disabled="s.busy||!s.ready" aria-label="Alternar câmera"><span aria-hidden="true">↻</span> Alternar</button><button v-if="s.hasTorch" type="button" class="btn btn-secondary" @click="torch" :disabled="s.busy" :aria-pressed="s.torch">{{s.torch?'Apagar luz':'Acender luz'}}</button><label v-if="s.devices.length>1" class="camera-device">Câmera<select v-model="s.deviceId" @change="changeCamera" :disabled="s.busy"><option v-for="device in s.devices" :key="device.id" :value="device.id">{{device.label}}</option></select></label></div><button type="button" class="camera-shutter" @click="capture" :disabled="s.busy||!s.ready" aria-label="Fotografar"><span></span></button><label class="btn btn-secondary camera-file">Escolher foto<input type="file" accept="image/jpeg,image/png,image/webp" @change="choose" :disabled="s.busy"></label><label v-if="s.zoomMax>s.zoomMin" class="camera-zoom">Aproximação<input v-model.number="s.zoom" type="range" :min="s.zoomMin" :max="s.zoomMax" :step="s.zoomStep" @change="zoom" :disabled="s.busy"></label></template>
+      </footer>
+    </section>
+  </div>
+</teleport>

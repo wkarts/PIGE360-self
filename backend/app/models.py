@@ -56,6 +56,20 @@ class CompanySupportSettings(Record, Base):
     )
 
 
+class SchoolSupportSettings(Record, Base):
+    """Atendimento e áreas de exibição exclusivos de cada instituição."""
+    __tablename__ = 'school_support_settings'
+    school_id: Mapped[str] = mapped_column(ForeignKey('schools.id'), unique=True, index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    enabled_areas: Mapped[list] = mapped_column(JSON, default=lambda: ['online_enrollment'])
+    base_url: Mapped[str] = mapped_column(String(500), default='')
+    position: Mapped[str] = mapped_column(String(16), default='left')
+    widget_type: Mapped[str] = mapped_column(String(40), default='expanded_bubble')
+    launcher_title: Mapped[str] = mapped_column(String(80), default='Suporte')
+    encrypted_token: Mapped[str] = mapped_column(Text, default='')
+    __table_args__ = (CheckConstraint("position IN ('left','right')", name='school_support_position'),)
+
+
 class School(Record, Base):
     __tablename__ = 'schools'
     company_id: Mapped[str] = mapped_column(ForeignKey('companies.id'))
@@ -96,6 +110,10 @@ class SchoolAccess(Base):
     __tablename__ = 'school_access'
     user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), primary_key=True)
     school_id: Mapped[str] = mapped_column(ForeignKey('schools.id'), primary_key=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    access_profile_id: Mapped[str | None] = mapped_column(ForeignKey('school_access_profiles.id'), index=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 class AuthSession(Record, Base):
     __tablename__ = 'auth_sessions'
@@ -504,6 +522,7 @@ class LegacyImportRecord(Record, Base):
     )
 
 from .assisted_models import OcrJob, LookupCache, LookupProvider, AssistedQuota, IntakeSettings  # noqa: F401
+from .access_models import SchoolAccessProfile  # noqa: F401,E402
 
 # Registro aditivo do Diário Escolar Digital.
 from .diary_models import AcademicPeriod, CurriculumComponent, CurriculumPlan, SchoolDiary, DiaryLesson, DiaryAttendance, DiaryClosure, DiaryRevision, AssessmentInstrument, AssessmentResult, DescriptiveOpinion, PedagogicalRecord, DiaryOccurrence, DiaryFamilyCommunication, PeriodAssessmentRule, PeriodResult  # noqa: F401,E402

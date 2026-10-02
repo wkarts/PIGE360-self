@@ -6,23 +6,37 @@ from fastapi.exceptions import RequestValidationError
 from . import models as m, schemas as s
 from .common import audit, output
 from .security import Actor, DB, Scope, check_version, fail, lock_school, require, scoped
+from .lifecycle_models import ArchiveFilter, archive_output, filter_archived, require_available
 
 router = APIRouter(prefix='/api/v1', tags=['Institucional e estrutura acadêmica'])
 
 @router.get('/schools')
 def schools(db: DB, user: Actor):
     stmt = select(m.School).where(m.School.active.is_(True))
-    if user.role != 'admin':
-        stmt = stmt.join(m.SchoolAccess, m.SchoolAccess.school_id == m.School.id).where(m.SchoolAccess.user_id == user.id)
+    stmt = stmt.join(m.SchoolAccess, m.SchoolAccess.school_id == m.School.id).where(
+        m.SchoolAccess.user_id == user.id, m.SchoolAccess.active.is_(True), m.SchoolAccess.archived_at.is_(None))
     return [output(x) for x in db.scalars(stmt.order_by(m.School.name))]
 
 @router.get('/companies')
 def companies(db: DB, user: Actor):
+    if user.role != 'admin' and not getattr(user, '_active_school_id', None):
+        fail(422, 'Selecione a instituição antes de consultar a mantenedora.')
     require(user, 'schools.manage')
-    return [output(x) for x in db.scalars(select(m.Company).order_by(m.Company.name))]
+    stmt = select(m.Company)
+    school_id = getattr(user, '_active_school_id', None)
+    if school_id:
+        stmt = stmt.join(m.School, m.School.company_id == m.Company.id).where(m.School.id == school_id)
+    else:
+        stmt = stmt.where(m.Company.id.in_(select(m.School.company_id).join(
+            m.SchoolAccess, m.SchoolAccess.school_id == m.School.id).where(
+            m.SchoolAccess.user_id == user.id, m.SchoolAccess.active.is_(True),
+            m.SchoolAccess.archived_at.is_(None), m.School.active.is_(True))))
+    return [output(x) for x in db.scalars(stmt.order_by(m.Company.name))]
 
 @router.post('/companies', status_code=201)
 def add_company(data: s.CompanyInput, db: DB, user: Actor, request: Request):
+    if user.role != 'admin':
+        fail(403, 'Somente o administrador pode cadastrar mantenedoras.')
     require(user, 'schools.manage')
     obj = m.Company(**data.model_dump()); db.add(obj); db.flush()
     audit(db, request, user, 'company.created', obj)
@@ -30,10 +44,13 @@ def add_company(data: s.CompanyInput, db: DB, user: Actor, request: Request):
 
 @router.post('/schools', status_code=201)
 def add_school(data: s.SchoolInput, db: DB, user: Actor, request: Request):
+    if user.role != 'admin':
+        fail(403, 'Somente o administrador pode cadastrar instituições.')
     require(user, 'schools.manage')
     if not db.get(m.Company, data.company_id):
         fail(422, 'Empresa inválida.')
     obj = m.School(**data.model_dump()); db.add(obj); db.flush()
+    db.add(m.SchoolAccess(user_id=user.id, school_id=obj.id))
     audit(db, request, user, 'school.created', obj, obj.id)
     return output(obj)
 
@@ -60,16 +77,27 @@ def occupancy(db, class_id):
     return db.scalar(select(func.count()).select_from(m.Enrollment).where(m.Enrollment.class_group_id == class_id, m.Enrollment.status.in_(['active','suspended']))) or 0
 
 def catalog_output(db, obj):
-    data = output(obj)
+    data = {**output(obj), **archive_output(db, obj)}
     if isinstance(obj, m.ClassGroup):
         data['occupied'] = occupancy(db, obj.id)
         data['available'] = max(0, obj.capacity - data['occupied'])
+        # Listas de seleção ocultam arquivados; o texto histórico da turma não.
+        names = db.info.setdefault('catalog_display_names', {})
+        for key, field, model in [('unit_name', 'unit_id', m.Unit), ('year_name', 'academic_year_id', m.AcademicYear),
+                                  ('grade_name', 'grade_id', m.Grade), ('shift_name', 'shift_id', m.Shift)]:
+            record_id = getattr(obj, field)
+            cache_key = (model.__tablename__, record_id)
+            if cache_key not in names:
+                target = db.get(model, record_id)
+                names[cache_key] = target.name if target else '—'
+            data[key] = names[cache_key]
     return data
 
 def validate_refs(db, model, data, school_id, existing=None):
     if model is m.ClassGroup:
         for field, ref in [('unit_id', m.Unit), ('academic_year_id', m.AcademicYear), ('grade_id', m.Grade), ('shift_id', m.Shift)]:
             target = scoped(db, ref, data[field], school_id)
+            require_available(db, target)
             if hasattr(target, 'active') and not target.active:
                 fail(422, 'Não é permitido utilizar cadastro acadêmico inativo.')
         year = scoped(db, m.AcademicYear, data['academic_year_id'], school_id)
@@ -82,7 +110,7 @@ def validate_refs(db, model, data, school_id, existing=None):
             if data['capacity'] < occupancy(db, existing.id):
                 fail(409, 'A capacidade não pode ficar abaixo das vagas ocupadas.')
     if model is m.DocumentType and data.get('grade_id'):
-        scoped(db, m.Grade, data['grade_id'], school_id)
+        require_available(db, scoped(db, m.Grade, data['grade_id'], school_id))
 
 CATALOGS = {
     'units': (m.Unit, s.UnitInput),
@@ -95,8 +123,10 @@ CATALOGS = {
 
 def register_catalog(resource, model, schema):
     permission = 'documents.write' if model is m.DocumentType else 'academic.write'
-    def listing(db: DB, user: Actor, school: Scope):
-        return [catalog_output(db, x) for x in db.scalars(select(model).where(model.school_id == school.id).order_by(model.name))]
+    def listing(db: DB, user: Actor, school: Scope, archived: ArchiveFilter = 'active'):
+        require(user, 'documents.read' if model is m.DocumentType else 'academic.read')
+        stmt = filter_archived(select(model).where(model.school_id == school.id), model, archived)
+        return [catalog_output(db, x) for x in db.scalars(stmt.order_by(model.name))]
     def create(data, db: DB, user: Actor, school: Scope, request: Request):
         require(user, permission); lock_school(db, school.id)
         values = data.model_dump(); validate_refs(db, model, values, school.id)
@@ -107,6 +137,7 @@ def register_catalog(resource, model, schema):
     def update(record_id: str, data: s.Edit, db: DB, user: Actor, school: Scope, request: Request):
         require(user, permission); lock_school(db, school.id)
         obj = scoped(db, model, record_id, school.id); check_version(obj, data.version)
+        require_available(db, obj)
         values = validate(schema, data.data).model_dump(); validate_refs(db, model, values, school.id, obj)
         before = output(obj)
         for key, value in values.items():
@@ -121,3 +152,6 @@ def register_catalog(resource, model, schema):
 
 for key, (model, schema) in CATALOGS.items():
     register_catalog(key, model, schema)
+
+from .record_lifecycle import router as lifecycle_router  # noqa: E402
+router.include_router(lifecycle_router)

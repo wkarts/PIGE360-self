@@ -41,7 +41,15 @@ def collect_pendencies(db, school_id, filters=None, student_limit=5000):
     for key in ('academic_year_id', 'class_group_id'):
         if filters.get(key): enrollment_conditions.append(getattr(m.Enrollment, key) == filters[key])
     stmt = select(m.Student, m.Person).join(m.Person, m.Person.id == m.Student.person_id).where(
-        m.Student.school_id == school_id, m.Student.status == 'active')
+        m.Student.school_id == school_id, m.Person.school_id == school_id, m.Student.status == 'active')
+    if filters.get('_enrolled_from'):
+        enrollment_conditions.append(m.Enrollment.enrolled_on >= filters['_enrolled_from'])
+    if filters.get('_enrolled_to'):
+        enrollment_conditions.append(m.Enrollment.enrolled_on <= filters['_enrolled_to'])
+    if filters.get('_group_ids') is not None:
+        enrollment_conditions.append(m.Enrollment.class_group_id.in_(filters['_group_ids']))
+    if filters.get('_student_ids') is not None:
+        stmt = stmt.where(m.Student.id.in_(filters['_student_ids']))
     if filters.get('academic_year_id') or filters.get('class_group_id'):
         stmt = stmt.where(m.Student.id.in_(select(m.Enrollment.student_id).where(*enrollment_conditions)))
     if filters.get('q'):
@@ -108,6 +116,7 @@ def dashboard(db: DB, user: Actor, school: Scope):
 @router.get('/document-pendencies')
 def document_pendencies(db: DB, user: Actor, school: Scope, filters: PendencyFilters,
                        page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100)):
+    require(user, 'documents.read')
     data = collect_pendencies(db, school.id, filters)
     return {**data, 'items':data['items'][(page-1)*page_size:page*page_size], 'page':page, 'page_size':page_size}
 
@@ -128,6 +137,7 @@ def protocol_event(db, obj, user, action, message, before=None):
 def protocols(db: DB, user: Actor, school: Scope, q: str = Query('', max_length=160), status: str = '',
               student_id: str = '', overdue: bool = False,
               page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100)):
+    require(user, 'protocols.read')
     stmt = select(m.Protocol).where(m.Protocol.school_id == school.id)
     if status:
         if status not in PROTOCOL_STATES: fail(422, 'Situação de protocolo inválida.')
@@ -157,6 +167,7 @@ def create_protocol(data: s.ProtocolInput, db: DB, user: Actor, school: Scope, r
 
 @router.get('/protocols/{protocol_id}')
 def protocol_detail(protocol_id: str, db: DB, user: Actor, school: Scope):
+    require(user, 'protocols.read')
     obj = scoped(db, m.Protocol, protocol_id, school.id)
     history = db.execute(select(m.ProtocolEvent, m.User.name).join(m.User, m.User.id == m.ProtocolEvent.actor_id).where(
         m.ProtocolEvent.school_id == school.id, m.ProtocolEvent.protocol_id == obj.id).order_by(m.ProtocolEvent.created_at, m.ProtocolEvent.id)).all()
@@ -208,18 +219,14 @@ def protocol_pdf(protocol_id: str, db: DB, user: Actor, school: Scope, request: 
     return Response(content, media_type='application/pdf', headers={'Content-Disposition':'attachment; filename="protocolo.pdf"', 'Cache-Control':'no-store'})
 
 
-@router.get('/audit')
-def audit_list(db: DB, user: Actor, school: Scope, page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100)):
-    require(user, 'audit.read')
-    stmt = select(m.AuditEvent).where(m.AuditEvent.school_id == school.id)
-    total = db.scalar(select(func.count()).select_from(stmt.subquery()))
-    return {'items':[output(x) for x in db.scalars(stmt.order_by(m.AuditEvent.created_at.desc()).offset((page-1)*page_size).limit(page_size))], 'total':total, 'page':page, 'page_size':page_size}
+from .audit_console import router as audit_router
+router.include_router(audit_router)
 
 @router.get('/reports/class/{class_id}')
 def class_report(class_id: str, db: DB, user: Actor, school: Scope):
     require(user, 'reports.read'); group = scoped(db, m.ClassGroup, class_id, school.id)
     rows = db.execute(select(m.Enrollment, m.Student, m.Person).join(m.Student, m.Student.id == m.Enrollment.student_id).join(m.Person, m.Person.id == m.Student.person_id).where(m.Enrollment.class_group_id == group.id, m.Enrollment.school_id == school.id, m.Enrollment.status.in_(['active','suspended'])).order_by(m.Person.name)).all()
-    return {'class_group':output(group), 'items':[{'number':e.number, 'student_number':s.number, 'name':p.name, 'birth_date':p.birth_date.isoformat(), 'status':e.status} for e,s,p in rows]}
+    return {'class_group':output(group), 'items':[{'number':e.number, 'student_number':s.number, 'name':p.name, 'birth_date':p.birth_date.isoformat() if p.birth_date else '', 'status':e.status} for e,s,p in rows]}
 
 def csv_safe(value):
     text = str(value if value is not None else '')
@@ -231,14 +238,23 @@ def export_students(db: DB, user: Actor, school: Scope, request: Request):
     stream = io.StringIO(); writer = csv.writer(stream, delimiter=';', quoting=csv.QUOTE_ALL)
     writer.writerow(['Código','Nome','Nascimento','Contato','Situação'])
     for student, person in db.execute(select(m.Student,m.Person).join(m.Person,m.Person.id == m.Student.person_id).where(m.Student.school_id == school.id).order_by(m.Person.name)):
-        writer.writerow([csv_safe(x) for x in [student.number,person.name,person.birth_date.isoformat(),person.phone,student.status]])
+        writer.writerow([csv_safe(x) for x in [student.number,person.name,person.birth_date.isoformat() if person.birth_date else '',person.phone,{'active':'Ativo','archived':'Arquivado'}.get(student.status,student.status)]])
     audit(db, request, user, 'report.students_exported', school, school.id)
     return Response('\ufeff' + stream.getvalue(), media_type='text/csv; charset=utf-8', headers={'Content-Disposition':'attachment; filename="alunos.csv"', 'Cache-Control':'no-store'})
 
 @router.get('/reports/class/{class_id}/pdf')
 def class_pdf(class_id: str, db: DB, user: Actor, school: Scope, request: Request):
     data = class_report(class_id, db, user, school)
-    payload = render_pdf(school.name, 'Relação de alunos - ' + data['class_group']['name'], [(str(i+1).zfill(2), r['name'] + ' | ' + r['number']) for i,r in enumerate(data['items'])], note=f'Total de alunos: {len(data["items"])}. Matrículas ativas e suspensas.', db=db)
+    from .school_reports import render_table
+    from .management_reports import col, metric, label
+    group = data['class_group']
+    year = scoped(db, m.AcademicYear, group['academic_year_id'], school.id)
+    rows = [{**row, 'status':label(row['status'])} for row in data['items']]
+    payload = render_table(school.name, 'Relação de alunos por turma',
+        [col('student_number','Código'), col('name','Aluno',width=2.5), col('birth_date','Nascimento','date'), col('number','Matrícula'), col('status','Situação')],
+        rows, summary=[metric('total','Alunos na turma',len(rows))],
+        filters=[{'label':'Turma','value':group['name']},{'label':'Ano letivo','value':year.name}],
+        notes=['Matrículas ativas e suspensas na data da emissão.'], issuer=user.name, db=db)
     audit(db, request, user, 'report.class_exported', school, school.id, {'class_group_id':class_id})
     return Response(payload, media_type='application/pdf', headers={'Content-Disposition':'attachment; filename="alunos-da-turma.pdf"', 'Cache-Control':'no-store'})
 
@@ -269,7 +285,24 @@ def pending_pdf(db: DB, user: Actor, school: Scope, request: Request, filters: P
     data = exportable_pendencies(db, school.id, filters)
     if data['total_documents'] > 1000:
         fail(422, 'Este relatório contém mais de 1.000 pendências. Refine o filtro ou exporte em CSV.')
-    rows = [(row['student_name']+' | '+row['student_number'], row['class_name']+' / '+row['year_name']+' — '+ '; '.join(d['name']+' ('+STATE_LABELS[d['status']]+')' for d in row['documents'])) for row in data['items']]
-    content = render_pdf(school.name, 'Pendências documentais', rows, note=f"{data['total']} aluno(s) com pendências; {data['total_documents']} documento(s). Respeita os filtros selecionados na emissão.", issuer=user.name, db=db)
+    from .school_reports import render_table
+    from .management_reports import col, metric
+    rows = [{'number':row['student_number'], 'name':row['student_name'], 'class_name':row['class_name'],
+             'year':row['year_name'], 'document':document['name'], 'status':STATE_LABELS[document['status']]}
+            for row in data['items'] for document in row['documents']]
+    selected_filters = []
+    for key, model, caption in [('academic_year_id', m.AcademicYear, 'Ano letivo'), ('class_group_id', m.ClassGroup, 'Turma'), ('document_type_id', m.DocumentType, 'Documento')]:
+        if filters.get(key): selected_filters.append({'label':caption, 'value':scoped(db, model, filters[key], school.id).name})
+    if filters.get('q'): selected_filters.append({'label':'Busca', 'value':filters['q']})
+    if filters.get('document_status'): selected_filters.append({'label':'Situação', 'value':STATE_LABELS[filters['document_status']]})
+    content = render_table(school.name, 'Pendências documentais',
+        [col('number','Código'), col('name','Aluno',width=2), col('class_name','Turma',width=1.2), col('year','Ano letivo'), col('document','Documento',width=1.5), col('status','Situação',width=1.3)],
+        rows, summary=[metric('students','Alunos com pendências',data['total']), metric('documents','Documentos pendentes',data['total_documents']), metric('scanned','Alunos verificados',data['scanned_students'])],
+        filters=selected_filters, notes=['Conferência dos documentos obrigatórios na data de emissão. Documentos recebidos ainda aguardam análise da Secretaria.'], issuer=user.name, db=db)
     audit(db, request, user, 'report.document_pendencies_exported', school, school.id, {'format':'pdf','count':data['total_documents']})
     return Response(content, media_type='application/pdf', headers={'Content-Disposition':'attachment; filename="pendencias-documentais.pdf"', 'Cache-Control':'no-store'})
+
+
+# Rotas aditivas: preserva todos os relatórios e links emitidos anteriormente.
+from .management_reports import router as management_router
+router.include_router(management_router)

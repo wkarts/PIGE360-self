@@ -7,6 +7,7 @@ from .security import Actor, DB, Scope, check_version, fail, lock_school, requir
 from .registry import validate
 from .config import settings
 from .documents import validate_upload, write_file
+from .lifecycle_models import ArchiveFilter, archive_output, filter_archived, require_available
 
 router = APIRouter(prefix='/api/v1/schools/{school_id}', tags=['Pessoas, alunos e responsáveis'])
 
@@ -105,6 +106,7 @@ def person_output(db, obj):
     # de acesso pertencem a outro domínio e nunca entram nesta classificação.
     return {
         **output(obj),
+        **archive_output(db, obj),
         # Alias legado: representa somente tipos funcionais da Pessoa.
         'role_keys': sorted(type_codes),
         'roles': [person_type_label(key) for key in sorted(type_codes)],
@@ -123,20 +125,21 @@ def person_output(db, obj):
 
 
 def student_output(db, obj):
-    return {**output(obj), 'person': person_output(db, db.get(m.Person, obj.person_id))}
+    return {**output(obj), **archive_output(db, obj), 'person': person_output(db, db.get(m.Person, obj.person_id))}
 
 
 def teacher_output(db, obj):
-    return {**output(obj), 'person': person_output(db, db.get(m.Person, obj.person_id))}
+    return {**output(obj), **archive_output(db, obj), 'person': person_output(db, db.get(m.Person, obj.person_id))}
 
 
 def employee_output(db, obj):
-    return {**output(obj), 'person': person_output(db, db.get(m.Person, obj.person_id))}
+    return {**output(obj), **archive_output(db, obj), 'person': person_output(db, db.get(m.Person, obj.person_id))}
 
 
 def _person_for_profile(db, school, person_id, person_data, type_code):
     if person_id:
         person = scoped(db, m.Person, person_id, school.id)
+        require_available(db, person)
     else:
         values = person_data.model_dump(exclude={'person_types'})
         values['is_guardian'] = bool(values.get('is_guardian'))
@@ -151,10 +154,11 @@ def _person_for_profile(db, school, person_id, person_data, type_code):
     return person
 
 
-def _profile_list(db, school, model, output_fn, q, page, page_size, search_fields):
+def _profile_list(db, school, model, output_fn, q, page, page_size, search_fields, archived='active'):
     stmt = select(model).join(m.Person, model.person_id == m.Person.id).where(
         model.school_id == school.id,
     )
+    stmt = filter_archived(stmt, model, archived)
     if q:
         like = '%' + q.replace('%', r'\%').replace('_', r'\_') + '%'
         stmt = stmt.where(or_(*[
@@ -171,8 +175,9 @@ def _profile_list(db, school, model, output_fn, q, page, page_size, search_field
 
 
 @router.get('/persons')
-def list_persons(db: DB, user: Actor, school: Scope, q: str = Query(default='', max_length=160), guardians_only: bool = False, type_code: str = Query(default='', max_length=40, pattern=r'^([a-z][a-z0-9_]{1,39})?$'), entity_kind: str = Query(default='', pattern=r'^(individual|organization)?$'), active: bool | None = None, page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100)):
-    stmt = select(m.Person).where(m.Person.school_id == school.id)
+def list_persons(db: DB, user: Actor, school: Scope, q: str = Query(default='', max_length=160), guardians_only: bool = False, type_code: str = Query(default='', max_length=40, pattern=r'^([a-z][a-z0-9_]{1,39})?$'), entity_kind: str = Query(default='', pattern=r'^(individual|organization)?$'), active: bool | None = None, page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100), archived: ArchiveFilter = 'active'):
+    require(user, 'people.read')
+    stmt = filter_archived(select(m.Person).where(m.Person.school_id == school.id), m.Person, archived)
     if type_code:
         matching = select(m.PersonTypeLink.person_id).where(
             m.PersonTypeLink.school_id == school.id, m.PersonTypeLink.active.is_(True),
@@ -230,6 +235,7 @@ def update_person(person_id: str, data: s.Edit, db: DB, user: Actor, school: Sco
     lock_school(db, school.id)
     obj = scoped(db, m.Person, person_id, school.id)
     check_version(obj, data.version)
+    require_available(db, obj)
     before = person_output(db, obj)
     current = {key: getattr(obj, key) for key in s.PersonInput.model_fields if hasattr(obj, key)}
     values = validate(s.PersonInput, {**current, **data.data}).model_dump()
@@ -275,7 +281,9 @@ def update_person(person_id: str, data: s.Edit, db: DB, user: Actor, school: Sco
 @router.post('/persons/{person_id}/photo')
 def upload_photo(person_id: str, db: DB, user: Actor, school: Scope, request: Request, file: UploadFile = File(...)):
     require(user, 'people.write')
+    lock_school(db, school.id)
     person = scoped(db, m.Person, person_id, school.id)
+    require_available(db, person)
     maximum = settings().max_photo_mb * 1024 * 1024
     data = file.file.read(maximum + 1)
     if len(data) > maximum:
@@ -295,7 +303,9 @@ def upload_photo(person_id: str, db: DB, user: Actor, school: Scope, request: Re
 @router.delete('/persons/{person_id}/photo')
 def remove_photo(person_id: str, db: DB, user: Actor, school: Scope, request: Request):
     require(user, 'people.write')
+    lock_school(db, school.id)
     person = scoped(db, m.Person, person_id, school.id)
+    require_available(db, person)
     previous = person.photo_file_id
     if not previous:
         return person_output(db, person)
@@ -314,12 +324,14 @@ def list_teachers(
     q: str = Query(default='', max_length=160),
     page: int = Query(1, ge=1),
     page_size: int = Query(30, ge=1, le=100),
+    archived: ArchiveFilter = 'active',
 ):
+    require(user, 'people.read')
     return _profile_list(
         db, school, m.TeacherProfile, teacher_output, q, page, page_size,
         [m.Person.name, m.Person.social_name, m.Person.cpf, m.Person.phone,
          m.Person.email, m.TeacherProfile.registration_number,
-         m.TeacherProfile.professional_registration],
+         m.TeacherProfile.professional_registration], archived,
     )
 
 
@@ -344,6 +356,7 @@ def update_teacher(teacher_id: str, data: s.Edit, db: DB, user: Actor, school: S
     lock_school(db, school.id)
     obj = scoped(db, m.TeacherProfile, teacher_id, school.id)
     check_version(obj, data.version)
+    require_available(db, obj)
     values = validate(s.TeacherData, data.data).model_dump()
     before = teacher_output(db, obj)
     for key, value in values.items():
@@ -362,12 +375,14 @@ def list_employees(
     q: str = Query(default='', max_length=160),
     page: int = Query(1, ge=1),
     page_size: int = Query(30, ge=1, le=100),
+    archived: ArchiveFilter = 'active',
 ):
+    require(user, 'people.read')
     return _profile_list(
         db, school, m.EmployeeProfile, employee_output, q, page, page_size,
         [m.Person.name, m.Person.social_name, m.Person.cpf, m.Person.phone,
          m.Person.email, m.EmployeeProfile.employee_number,
-         m.EmployeeProfile.department, m.EmployeeProfile.job_title],
+         m.EmployeeProfile.department, m.EmployeeProfile.job_title], archived,
     )
 
 
@@ -392,6 +407,7 @@ def update_employee(employee_id: str, data: s.Edit, db: DB, user: Actor, school:
     lock_school(db, school.id)
     obj = scoped(db, m.EmployeeProfile, employee_id, school.id)
     check_version(obj, data.version)
+    require_available(db, obj)
     values = validate(s.EmployeeData, data.data).model_dump()
     before = employee_output(db, obj)
     for key, value in values.items():
@@ -403,8 +419,11 @@ def update_employee(employee_id: str, data: s.Edit, db: DB, user: Actor, school:
 
 
 @router.get('/students')
-def list_students(db: DB, user: Actor, school: Scope, q: str = Query(default='', max_length=160), page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100), status: str = ''):
+def list_students(db: DB, user: Actor, school: Scope, q: str = Query(default='', max_length=160), page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100), status: str = '', archived: ArchiveFilter = 'active'):
+    require(user, 'students.read')
     stmt = select(m.Student).join(m.Person, m.Student.person_id == m.Person.id).where(m.Student.school_id == school.id)
+    # O filtro legado status=archived continua encontrando alunos antigos.
+    stmt = filter_archived(stmt, m.Student, 'archived' if status == 'archived' and archived == 'active' else archived)
     if q:
         like = '%' + q.replace('%', r'\%').replace('_', r'\_') + '%'
         guardian_matches = select(m.GuardianLink.student_id).join(m.Person, m.Person.id == m.GuardianLink.person_id).where(m.GuardianLink.school_id == school.id, m.GuardianLink.active.is_(True), or_(m.Person.name.ilike(like, escape='\\'), m.Person.cpf.ilike(like, escape='\\'), m.Person.phone.ilike(like, escape='\\')))
@@ -421,6 +440,7 @@ def create_student(data: s.StudentInput, db: DB, user: Actor, school: Scope, req
     require(user, 'people.write'); lock_school(db, school.id)
     if data.person_id:
         person = scoped(db, m.Person, data.person_id, school.id)
+        require_available(db, person)
     else:
         person_values = data.person.model_dump(exclude={'person_types'})
         person_values['is_guardian'] = bool(person_values.get('is_guardian'))
@@ -445,6 +465,7 @@ def update_student(student_id: str, data: s.Edit, db: DB, user: Actor, school: S
     lock_school(db, school.id)
     obj = scoped(db, m.Student, student_id, school.id)
     check_version(obj, data.version)
+    require_available(db, obj)
     values = validate(s.StudentData, data.data).model_dump()
     before = output(obj)
     for key, value in values.items():
@@ -457,6 +478,7 @@ def update_student(student_id: str, data: s.Edit, db: DB, user: Actor, school: S
 
 @router.get('/students/{student_id}')
 def student(student_id: str, db: DB, user: Actor, school: Scope):
+    require(user, 'students.read')
     obj = scoped(db, m.Student, student_id, school.id)
     guardians = []
     for link in db.scalars(select(m.GuardianLink).where(m.GuardianLink.student_id == obj.id, m.GuardianLink.school_id == school.id).order_by(m.GuardianLink.created_at)):
@@ -469,6 +491,8 @@ def add_guardian(student_id: str, data: s.GuardianInput, db: DB, user: Actor, sc
     require(user, 'people.write'); lock_school(db, school.id)
     obj = scoped(db, m.Student, student_id, school.id)
     person = scoped(db, m.Person, data.person_id, school.id)
+    require_available(db, obj)
+    require_available(db, person)
     if person.entity_kind != 'individual':
         fail(422, 'Responsáveis por alunos devem ser pessoas físicas.')
     if obj.person_id == person.id:
@@ -488,6 +512,9 @@ def edit_guardian(student_id: str, link_id: str, data: s.Edit, db: DB, user: Act
     values = validate(s.GuardianInput, data.data).model_dump()
     if values['person_id'] != obj.person_id:
         fail(422, 'Para trocar a pessoa, cadastre outro vínculo.')
+    if values['active']:
+        require_available(db, scoped(db, m.Student, student_id, school.id))
+        require_available(db, scoped(db, m.Person, obj.person_id, school.id))
     for key, value in values.items():
         setattr(obj, key, value)
     obj.version += 1; audit(db, request, user, 'guardian.updated', obj, school.id)
@@ -495,19 +522,17 @@ def edit_guardian(student_id: str, link_id: str, data: s.Edit, db: DB, user: Act
 
 @router.post('/students/{student_id}/archive')
 def archive_student(student_id: str, data: s.Edit, db: DB, user: Actor, school: Scope, request: Request):
-    require(user, 'people.write'); lock_school(db, school.id)
-    obj = scoped(db, m.Student, student_id, school.id); check_version(obj, data.version)
-    if db.scalar(select(m.Enrollment.id).where(m.Enrollment.student_id == obj.id, m.Enrollment.status.in_(['draft','active','suspended'])).limit(1)):
-        fail(409, 'Conclua ou cancele as matrículas em aberto antes de arquivar.')
+    from .record_lifecycle import LifecycleAction, manage_record
     reason = str(data.data.get('reason', '')).strip()
     if len(reason) < 3 or len(reason) > 1000:
         fail(422, 'Informe uma justificativa de 3 a 1000 caracteres.')
-    obj.status = 'archived'; obj.version += 1
-    audit(db, request, user, 'student.archived', obj, school.id, {'reason': reason})
+    manage_record('students', student_id, LifecycleAction(action='archive', version=data.version, reason=reason), db, user, school, request)
+    obj = scoped(db, m.Student, student_id, school.id)
     return student_output(db, obj)
 
 @router.get('/students/{student_id}/history')
 def student_history(student_id: str, db: DB, user: Actor, school: Scope):
+    require(user, 'students.read')
     obj = scoped(db, m.Student, student_id, school.id)
     stmt = select(m.EnrollmentEvent).join(m.Enrollment, m.Enrollment.id == m.EnrollmentEvent.enrollment_id).where(m.Enrollment.student_id == obj.id, m.EnrollmentEvent.school_id == school.id).order_by(m.EnrollmentEvent.created_at.desc())
     return [output(x) for x in db.scalars(stmt)]

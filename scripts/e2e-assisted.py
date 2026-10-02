@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 from playwright.sync_api import sync_playwright, expect
 
 ROOT=Path(__file__).resolve().parents[1]
-OUT=ROOT/'evidence/0.3.0/assisted';OUT.mkdir(parents=True,exist_ok=True)
+OUT=Path(os.getenv('PIGE_E2E_OUT', str(ROOT/'evidence/0.3.0/assisted')));OUT.mkdir(parents=True,exist_ok=True)
 TEMP=Path(tempfile.mkdtemp(prefix='school-assisted-'))
 with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
 URL=f'http://127.0.0.1:{port}';PASSWORD='Synthetic-Assisted-2026!';BRIDGE=os.getenv('PIGE_UI_BRIDGE')=='1'
@@ -52,11 +52,14 @@ with SessionLocal.begin() as db:
             install(page,ROOT,URL,OUT)
         else:page.goto(URL)
         page.get_by_label('E-mail',exact=True).fill('assist@example.com');page.get_by_label('Senha',exact=True).fill(PASSWORD);page.get_by_role('button',name='Entrar na aplicação').click()
-        expect(page.locator('.workspace')).to_be_visible()
+        expect(page.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible()
         def nav(name):
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
             b=page.get_by_role('button',name='Cadastros',exact=True)
             if name in ['Cadastro único','Alunos'] and b.get_attribute('aria-expanded')=='false':b.click()
+            if name=='Instituição':
+                settings=page.locator('aside').get_by_role('button',name='Configurações',exact=True)
+                if settings.get_attribute('aria-expanded')=='false':settings.click()
             page.locator('aside').get_by_role('link',name=name,exact=True).click()
         def dialog():return page.get_by_role('dialog')
         def apply(panel):
@@ -74,7 +77,12 @@ with SessionLocal.begin() as db:
         dialog().locator('#modal-field-name').fill('Nome Mantido Manualmente');assist=dialog().locator('.assist').first
         assist.get_by_role('button',name='Ler documento',exact=True).click()
         assist.locator('input[type=file]').set_input_files({'name':'documento.png','mimeType':'image/png','buffer':raw})
-        expect(assist.locator('.assist-review')).to_be_visible(timeout=90000)
+        try:
+            expect(assist.locator('.assist-review')).to_be_visible(timeout=90000)
+        except AssertionError:
+            page.screenshot(path=str(OUT/'failure-ocr.png'),full_page=True)
+            print('OCR state:',assist.inner_text(), 'JavaScript:',errors,flush=True)
+            raise
         expect(assist.get_by_label('Nome / razão social',exact=False)).not_to_be_checked()
         page.screenshot(path=str(OUT/'02a-ocr-leitura.png'))
         apply(assist);assert dialog().locator('#modal-field-name').input_value()=='Nome Mantido Manualmente'
@@ -95,9 +103,10 @@ with SessionLocal.begin() as db:
         nav('Cadastro único');page.get_by_role('button',name='+ Nova pessoa',exact=True).click();assist=dialog().locator('.assist').first
         assist.get_by_role('button',name='Ler documento',exact=True).click()
         if not BRIDGE:
-            assist.get_by_role('button',name='Abrir câmera com guia',exact=True).click();expect(assist.locator('video')).to_be_visible()
-            page.evaluate("window.testTrack=document.querySelector('.assist video').srcObject.getTracks()[0]")
-            assist.get_by_role('button',name='Cancelar câmera',exact=True).click();assert page.evaluate("window.testTrack.readyState==='ended'")
+            assist.get_by_role('button',name='Abrir câmera com guia',exact=True).click();expect(page.locator('.camera-dialog video')).to_be_visible()
+            page.wait_for_function("() => document.querySelector('.camera-dialog video')?.srcObject?.getVideoTracks().some(t=>t.readyState==='live')")
+            page.evaluate("window.testTrack=document.querySelector('.camera-dialog video').srcObject.getTracks()[0]")
+            page.get_by_role('button',name='Fechar câmera',exact=True).click();assert page.evaluate("window.testTrack.readyState==='ended'")
             record('Captura com câmera sintética nativa respeita a política e encerra a trilha ao cancelar')
         assist.get_by_role('button',name='Fechar / descartar leitura',exact=True).click();dialog().get_by_role('button',name='Cancelar',exact=True).click();expect(dialog()).to_have_count(0)
         # Portal: o mesmo documento já anexado é lido para a conta certa, sem novo upload.
@@ -119,18 +128,20 @@ with SessionLocal.begin() as db:
             install(page,ROOT,URL,OUT,entry='portal',campaign=campaign['slug'])
         else:page.goto(URL+'/online.html?campaign='+campaign['slug'])
         page.get_by_label('E-mail',exact=True).fill('portal-ocr@example.com');page.get_by_label('Senha',exact=True).fill(PASSWORD);page.get_by_role('button',name='Entrar no portal',exact=True).click()
-        page.get_by_role('button').filter(has_text='Aluna Exemplo').click();page.get_by_role('button',name='Ler para responsável',exact=True).click()
+        page.get_by_role('button').filter(has_text='Aluna Exemplo').click();page.get_by_role('button',name='Preencher meus dados',exact=True).click()
         profile=page.locator('#portal-profile');assist=profile.locator('.assist');expect(assist.locator('.assist-review')).to_be_visible(timeout=90000)
         expect(assist.locator('.assist-heading')).to_contain_text('responsável desta conta')
         apply(assist);profile.get_by_role('button',name='Salvar meus dados',exact=True).click()
-        expect(page.locator('.portal-working')).to_have_count(0)
+        expect(page.get_by_text('Seus dados de contato foram atualizados.',exact=True)).to_be_visible()
         data=parent_http.get('/api/v1/portal/me').json();assert data['birth_date']=='2000-05-15' and data['cpf']=='52998224725'
         child=parent_http.get('/api/v1/portal/admissions/'+admission['id']).json()['student_data'];assert child['birth_date']=='2017-04-10' and child['name']=='Aluna Exemplo'
         page.screenshot(path=str(OUT/'04-portal-documento-responsavel.png'))
         record('Portal reaproveita anexo privado e preenche a identidade do responsável sem modificar o aluno')
-        page.get_by_role('button',name='Editar dados',exact=True).click();assist=page.locator('section').filter(has=page.get_by_role('heading',name='Dados do aluno',exact=True)).last.locator('.assist')
+        page.get_by_role('button',name='Minhas matrículas',exact=False).click();page.get_by_role('button',name='Editar dados',exact=True).click()
+        page.get_by_text('Preencher com ajuda de um documento',exact=True).click();assist=page.locator('.portal-wizard .assist')
         assist.get_by_role('button',name='Consultar CEP',exact=True).click();assist.get_by_label('CEP',exact=True).fill('40020000');assist.get_by_role('button',name='Consultar',exact=True).click();expect(assist.locator('.assist-review')).to_be_visible();apply(assist)
-        page.get_by_role('button',name='Salvar dados do aluno',exact=True).click();expect(page.get_by_role('heading',name='Documentação',exact=True)).to_be_visible()
+        page.get_by_role('button',name='Continuar',exact=True).click();page.get_by_role('button',name='Continuar',exact=True).click()
+        page.get_by_role('button',name='Salvar e continuar',exact=True).click();expect(page.get_by_role('heading',name='Documentos do aluno',exact=True)).to_be_visible()
         child=parent_http.get('/api/v1/portal/admissions/'+admission['id']).json()['student_data'];assert child['city']=='Salvador' and child['birth_date']=='2017-04-10'
         record('Consulta de CEP também funciona no rascunho da matrícula do portal')
         parent_http.close()

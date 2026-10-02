@@ -4,6 +4,15 @@ from app.config import settings
 from app.models import Base
 from app.institution import InstitutionAsset, InstitutionIdentity  # noqa: F401 — metadados dos ativos públicos
 from app.contract_signatures import SchoolSigningCertificate, IssuedDocumentSignature  # noqa: F401
+from app.school_community import SchoolCommunityPost  # noqa: F401
+from app.personal_signing import GovBRSignatureSession  # noqa: F401
+
+from app.mailcow import MailcowConfig, SchoolMailbox  # noqa: F401
+
+from app.email_client import EmailConnection, EmailServerSettings, EmailSubmission  # noqa: F401
+from app.fiscal_signing import SignedFiscalDocument  # noqa: F401
+from app.certificate_alerts import CertificateAlertPreference  # noqa: F401
+from app.lifecycle_models import RecordArchive  # noqa: F401
 
 config = context.config
 url = settings().database_url

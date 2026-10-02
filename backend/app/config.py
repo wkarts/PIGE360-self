@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
     app_name: str = 'PIGE360 Self'
-    app_version: str = '0.4.0'
+    app_version: str = '0.10.0'
     app_env: str = 'production'
     app_url: str = 'http://localhost:58080'
     app_secret_key: str
@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     max_upload_mb: int = 10
     max_photo_mb: int = 5
     legacy_import_max_mb: int = 128
+    portability_enabled: bool = False
     allow_sqlite: bool = False
     integration_encryption_key: str = ''
     signature_trust_roots_dir: Path | None = Path('/data/trust-roots')

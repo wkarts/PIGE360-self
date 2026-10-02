@@ -22,11 +22,21 @@
     "src/workspace.ts",
     "src/mfa.ts",
     "src/dossiers.ts",
+    "src/camera.ts",
     "src/assist.ts",
     "src/diagnostics.ts",
     "src/diary.ts",
     "src/contracts.ts",
     "src/signing.ts",
+    "src/reports.ts",
+    "src/legacy-import.ts",
+    "src/learning.ts",
+    "src/community.ts",
+    "src/mailcow.ts",
+    "src/audit.ts",
+    "src/email.ts",
+    "src/lifecycle.ts",
+    "src/users.ts",
     "src/app.ts"
   ]
 }

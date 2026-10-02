@@ -151,3 +151,13 @@ mantidos e foi incluído e2e-access.py. O teste HTTPS cross-site exercita login 
 O resultado conclusivo é o CI da revisão publicada; inspeção local via harness
 não comprova cookies, TLS, CSP ou iframe nativos. Provedores externos e a VPS real
 não são homologados por dados sintéticos do CI.
+
+## Entidade ativa e perfis configuráveis
+
+**Usuários e acessos** tem abas **Usuários** e **Perfis de acesso**. Perfis personalizados pertencem à instituição, partem de um papel base e restringem suas capacidades. É possível criar, editar, desativar e excluir perfis sem vínculos. As permissões são verificadas também na API, incluindo OCR e consultas cadastrais.
+
+Cada acesso pode ser inativado, reativado, arquivado, restaurado ou excluído. Remover o vínculo de uma instituição preserva a conta, histórico e vínculos das demais. A exclusão da conta só é oferecida quando não há dependências. Alterações sensíveis exigem justificativa; exclusões definitivas exigem confirmação. O próprio administrador e o último administrador da escola são protegidos contra bloqueio acidental.
+
+A escola ativa é enviada no contexto das requisições. A API rejeita divergência entre cabeçalho, caminho e parâmetros; ao trocar de escola, a interface limpa os dados anteriores e descarta respostas e downloads atrasados. O administrador também precisa de vínculo ativo. A migration converte os acessos administrativos implícitos existentes em vínculos explícitos, sem conceder automaticamente acesso a escolas futuras.
+
+O atendimento é configurado em **Configurações → Instituição → Atendimento**, por escola e área. Apenas matrícula online é selecionada por padrão. Login e aplicação interna começam desabilitados. Login público sem escola escolhida só usa a configuração quando há uma única escola ativa e o administrador habilitou essa área.

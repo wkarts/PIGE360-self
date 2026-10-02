@@ -5,6 +5,7 @@ from . import models as m, schemas as s
 from .common import audit, number, output
 from .security import Actor, DB, Scope, check_version, fail, lock_school, require, scoped
 from .registry import occupancy
+from .lifecycle_models import require_available
 
 router = APIRouter(prefix='/api/v1/schools/{school_id}', tags=['Matrículas e movimentações'])
 
@@ -31,9 +32,11 @@ def enrollment_output(db, obj):
             'actions': sorted(ALLOWED[obj.status])}
 
 def check_group(db, group, school_id):
+    require_available(db, group)
     if not group.active:
         fail(409, 'A turma está inativa.')
     year = scoped(db, m.AcademicYear, group.academic_year_id, school_id)
+    require_available(db, year)
     if year.status != 'active':
         fail(409, 'O período letivo está fechado para movimentações.')
     return year
@@ -46,12 +49,15 @@ def event(db, request, user, obj, action, reason, before):
 def create_record(data, school, db, user, request, previous=None):
     lock_school(db, school.id)
     student = scoped(db, m.Student, data.student_id, school.id)
+    require_available(db, student)
+    require_available(db, scoped(db, m.Person, student.person_id, school.id))
     if student.status != 'active':
         fail(409, 'O cadastro do aluno está arquivado.')
     group = scoped(db, m.ClassGroup, data.class_group_id, school.id)
     year = check_group(db, group, school.id)
     if data.financial_person_id:
         person = scoped(db, m.Person, data.financial_person_id, school.id)
+        require_available(db, person)
         if person.id != student.person_id and not db.scalar(select(m.GuardianLink.id).where(m.GuardianLink.student_id == student.id, m.GuardianLink.person_id == person.id, m.GuardianLink.financial.is_(True), m.GuardianLink.active.is_(True))):
             fail(422, 'Responsável financeiro sem vínculo financeiro ativo com o aluno.')
     obj = m.Enrollment(school_id=school.id, academic_year_id=year.id, number=number(db, school.id, 'enrollment', 'MAT-'),
@@ -62,6 +68,7 @@ def create_record(data, school, db, user, request, previous=None):
 
 @router.get('/enrollments')
 def list_enrollments(db: DB, user: Actor, school: Scope, status: str = '', class_group_id: str = '', student_id: str = '', academic_year_id: str = '', q: str = Query('', max_length=160), page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100)):
+    require(user, 'enrollments.read')
     stmt = select(m.Enrollment).where(m.Enrollment.school_id == school.id)
     if status and status not in ALLOWED:
         fail(422, 'Situação de matrícula inválida.')
@@ -87,6 +94,7 @@ def create_enrollment(data: s.EnrollmentInput, db: DB, user: Actor, school: Scop
 
 @router.get('/enrollments/{enrollment_id}')
 def enrollment_detail(enrollment_id: str, db: DB, user: Actor, school: Scope):
+    require(user, 'enrollments.read')
     from .documents import checklist
     obj = scoped(db, m.Enrollment, enrollment_id, school.id)
     group = db.get(m.ClassGroup, obj.class_group_id)

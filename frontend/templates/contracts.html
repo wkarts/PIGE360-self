@@ -3,7 +3,7 @@
   <div v-if="state.notice" class="alert success" role="status">{{state.notice}}</div>
   <div class="panel x-card contract-intro">
     <div class="x-heading"><div><p class="eyebrow">DOCUMENTOS DA ESCOLA</p><h2>Modelos e contratos</h2><p>Cadastre contratos, autorizações, declarações e outros documentos. Vincule cada modelo ao ano letivo e à validade, preencha os dados da matrícula e emita o PDF preservado na ficha do aluno.</p></div><button class="btn btn-secondary" type="button" :disabled="state.loading || state.busy" @click="load">Atualizar</button></div>
-    <div class="tabs" role="tablist" aria-label="Etapas dos documentos"><button type="button" role="tab" :aria-selected="state.tab==='templates'" :class="{active:state.tab==='templates'}" @click="state.tab='templates'">Modelos</button><button type="button" role="tab" :aria-selected="state.tab==='issue'" :class="{active:state.tab==='issue'}" @click="state.tab='issue'">Preencher e emitir</button><button v-if="can('documents.read')" type="button" role="tab" :aria-selected="state.tab==='signatures'" :class="{active:state.tab==='signatures'}" @click="state.tab='signatures'">Assinaturas e revisão</button></div>
+    <div class="tabs" role="tablist" aria-label="Etapas dos documentos"><button type="button" role="tab" :aria-selected="state.tab==='templates'" :class="{active:state.tab==='templates'}" @click="state.tab='templates'">Modelos</button><button type="button" role="tab" :aria-selected="state.tab==='issue'" :class="{active:state.tab==='issue'}" @click="state.tab='issue'">Preencher e emitir</button><button v-if="can('documents.read') && hasDocumentContext()" type="button" role="tab" :aria-selected="state.tab==='signatures'" :class="{active:state.tab==='signatures'}" @click="state.tab='signatures'">Documentos da matrícula</button></div>
     <p class="small muted">A escola pode manter vários modelos e atualizar suas versões. O documento já emitido conserva o conteúdo e a versão utilizados no momento da emissão.</p>
   </div>
   <p v-if="state.loading" class="loading-strip" role="status">Carregando modelos…</p>
@@ -88,5 +88,5 @@
       <div v-if="state.issued" class="alert success"><span>Documento emitido e preservado na ficha do aluno.</span><button class="link-button" type="button" @click="downloadIssued">Baixar novamente</button></div>
     </section>
   </template>
-  <signing-panel v-else-if="state.tab==='signatures'" :school-id="schoolId" :permissions="permissions" :role="role" :enrollment-id="enrollmentId" :issued-id="issuedId"></signing-panel>
+  <signing-panel v-else-if="state.tab==='signatures'" :key="schoolId+':'+(enrollmentId || (state.enrollment && state.enrollment.id) || '')+':'+(issuedId || '')" mode="document" :school-id="schoolId" :permissions="permissions" :role="role" :enrollment-id="enrollmentId || (state.enrollment && state.enrollment.id) || ''" :issued-id="issuedId"></signing-panel>
 </section>
