@@ -1,4 +1,4 @@
-/* Login e primeiro acesso. A marca nunca reserva uma linha vazia no celular. */
+/* Login e primeiro acesso com a identidade da escola acima do conteúdo. */
 .auth-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -9,15 +9,28 @@
 .auth-intro {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 64px;
+  justify-content: flex-start;
+  gap: clamp(40px, 7vh, 72px);
   min-width: 0;
   padding: clamp(32px, 6vw, 88px);
   background: var(--surface-subtle, #f3f7f7);
   background: linear-gradient(145deg, color-mix(in srgb, var(--primary) 10%, #fff), #f8fafb);
   border-right: 1px solid var(--border);
 }
-.auth-intro .official-brand > img { width: auto; max-width: min(100%, 280px); max-height: 120px; }
+.auth-intro .official-brand {
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.auth-intro .official-brand > img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(100%, 390px);
+  max-height: clamp(220px, 34vh, 340px);
+  max-height: clamp(220px, 34dvh, 340px);
+}
 .auth-copy { max-width: 480px; }
 .auth-copy h1 { font-size: clamp(30px, 3.5vw, 48px); line-height: 1.18; letter-spacing: -1px; }
 .auth-copy .eyebrow { margin-bottom: 18px; }
@@ -59,12 +72,12 @@
   .auth-intro {
     flex: 0 0 auto;
     display: block;
-    padding: max(24px, env(safe-area-inset-top)) 24px 0;
+    padding: max(24px, env(safe-area-inset-top)) 24px 16px;
     border: 0;
     background: transparent;
   }
   .auth-intro .official-brand { width: 100%; max-width: 420px; margin-inline: auto; }
-  .auth-intro .official-brand > img { width: auto; max-width: min(100%, 200px); max-height: 64px; }
+  .auth-intro .official-brand > img { width: auto; max-width: min(100%, 260px); max-height: 168px; }
   .auth-intro .institution-name { font-size: 18px; }
   .auth-copy { display: none; }
   .auth-panel { flex: 0 0 auto; justify-content: flex-start; padding: 24px 24px max(28px, env(safe-area-inset-bottom)); }
@@ -74,11 +87,14 @@
   .auth-enrollment { margin-top: 24px; padding-top: 20px; }
 }
 @media (max-width: 360px), (max-height: 600px) and (max-width: 800px) {
-  .auth-intro { padding: max(16px, env(safe-area-inset-top)) 20px 0; }
-  .auth-intro .official-brand > img { max-height: 48px; }
+  .auth-intro { padding: max(16px, env(safe-area-inset-top)) 20px 8px; }
+  .auth-intro .official-brand > img { max-height: 104px; }
   .auth-panel { padding: 18px 20px max(20px, env(safe-area-inset-bottom)); }
   .auth-form { gap: 14px; }
   .auth-form h2 { font-size: 24px; }
   .auth-heading .eyebrow { margin-bottom: 8px; }
   .auth-heading > .muted { margin-top: 8px; }
+}
+@media (max-height: 420px) and (max-width: 800px) {
+  .auth-intro .official-brand > img { max-height: 64px; }
 }

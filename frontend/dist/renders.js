@@ -790,98 +790,99 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                     "aria-label": "Fechar aviso"
                   }, "×", 8, ["onClick"])]))
                 : _createCommentVNode("", true),
-              _createElementVNode("div", { class: "page-header" }, [_createElementVNode("div", { class: "page-heading" }, [_createElementVNode("p", { class: "breadcrumb" }, _toDisplayString(registryPages.includes(state.page)?'Cadastros':integrationPages.includes(state.page)?'Integrações':administrationPages.includes(state.page)?'Administração':'Secretaria') + " / " + _toDisplayString(pageLabels[state.page]), 1), _createElementVNode("div", { class: "page-heading-title" }, [_createElementVNode("h1", null, _toDisplayString(state.selectedStudent ? state.selectedStudent.person.name : pageLabels[state.page]), 1), (state.page!=='help')
-                ? (_openBlock(), _createElementBlock("button", {
-                    key: 0,
-                    class: "link-button page-help",
-                    onClick: $event => (navigate('help'))
-                  }, "Guia de uso", 8, ["onClick"]))
-                : _createCommentVNode("", true)]), (state.selectedStudent)
+              _createElementVNode("div", { class: "page-header" }, [_createElementVNode("div", { class: "page-heading" }, [_createElementVNode("p", { class: "breadcrumb" }, _toDisplayString(registryPages.includes(state.page)?'Cadastros':integrationPages.includes(state.page)?'Integrações':administrationPages.includes(state.page)?'Administração':'Secretaria') + " / " + _toDisplayString(pageLabels[state.page]), 1), _createElementVNode("div", { class: "page-heading-title" }, [_createElementVNode("h1", null, _toDisplayString(state.selectedStudent ? state.selectedStudent.person.name : pageLabels[state.page]), 1)]), (state.selectedStudent)
                 ? (_openBlock(), _createElementBlock("p", {
                     key: 0,
                     class: "page-subtitle"
                   }, "Ficha do aluno · " + _toDisplayString(state.selectedStudent.number), 1))
                 : _createCommentVNode("", true)]), _createElementVNode("div", { class: "actions" }, [
-                (registryPages.includes(state.page) && state.page!=='people' && !state.selectedStudent && can('people.write'))
+                (state.page!=='help')
                   ? (_openBlock(), _createElementBlock("button", {
                       key: 0,
+                      class: "btn btn-secondary page-help",
+                      onClick: $event => (navigate('help'))
+                    }, "Guia de uso", 8, ["onClick"]))
+                  : _createCommentVNode("", true),
+                (registryPages.includes(state.page) && state.page!=='people' && !state.selectedStudent && can('people.write'))
+                  ? (_openBlock(), _createElementBlock("button", {
+                      key: 1,
                       class: "btn btn-secondary",
                       onClick: reusePerson
                     }, "Vincular pessoa existente", 8, ["onClick"]))
                   : _createCommentVNode("", true),
                 (isBusiness() && can('people.write'))
                   ? (_openBlock(), _createElementBlock("button", {
-                      key: 1,
+                      key: 2,
                       class: "btn btn-primary",
                       onClick: $event => (newBusiness())
                     }, "+ Cadastrar " + _toDisplayString(businessTypes[state.page].singular), 9, ["onClick"]))
                   : _createCommentVNode("", true),
                 (state.selectedStudent)
                   ? (_openBlock(), _createElementBlock("button", {
-                      key: 2,
+                      key: 3,
                       class: "btn btn-secondary",
                       onClick: $event => (navigate('students'))
                     }, "← Todos os alunos", 8, ["onClick"]))
                   : _createCommentVNode("", true),
                 (state.page==='people' && can('people.write'))
                   ? (_openBlock(), _createElementBlock("button", {
-                      key: 3,
+                      key: 4,
                       class: "btn btn-primary",
                       onClick: newPerson
                     }, "+ Nova pessoa", 8, ["onClick"]))
                   : _createCommentVNode("", true),
                 (state.page==='students' && !state.selectedStudent && can('people.write'))
                   ? (_openBlock(), _createElementBlock("button", {
-                      key: 4,
+                      key: 5,
                       class: "btn btn-primary",
                       onClick: $event => (newStudent())
                     }, "+ Novo aluno", 8, ["onClick"]))
                   : _createCommentVNode("", true),
                 (state.page==='teachers' && can('people.write'))
                   ? (_openBlock(), _createElementBlock("button", {
-                      key: 5,
+                      key: 6,
                       class: "btn btn-primary",
                       onClick: $event => (newTeacher())
                     }, "+ Novo professor", 8, ["onClick"]))
                   : _createCommentVNode("", true),
                 (state.page==='employees' && can('people.write'))
                   ? (_openBlock(), _createElementBlock("button", {
-                      key: 6,
+                      key: 7,
                       class: "btn btn-primary",
                       onClick: $event => (newEmployee())
                     }, "+ Novo funcionário", 8, ["onClick"]))
                   : _createCommentVNode("", true),
                 (state.page==='guardians' && can('people.write'))
                   ? (_openBlock(), _createElementBlock("button", {
-                      key: 7,
+                      key: 8,
                       class: "btn btn-primary",
                       onClick: newGuardian
                     }, "+ Novo responsável", 8, ["onClick"]))
                   : _createCommentVNode("", true),
                 (state.page==='enrollments' && can('enrollments.write'))
                   ? (_openBlock(), _createElementBlock("button", {
-                      key: 8,
+                      key: 9,
                       class: "btn btn-primary",
                       onClick: newEnrollment
                     }, "+ Nova matrícula", 8, ["onClick"]))
                   : _createCommentVNode("", true),
                 (state.page==='academic' && can('academic.write'))
                   ? (_openBlock(), _createElementBlock("button", {
-                      key: 9,
+                      key: 10,
                       class: "btn btn-primary",
                       onClick: $event => (newCatalog())
                     }, "+ Cadastrar", 8, ["onClick"]))
                   : _createCommentVNode("", true),
                 (state.page==='protocols' && can('protocols.write'))
                   ? (_openBlock(), _createElementBlock("button", {
-                      key: 10,
+                      key: 11,
                       class: "btn btn-primary",
                       onClick: $event => (newProtocol())
                     }, "+ Abrir protocolo", 8, ["onClick"]))
                   : _createCommentVNode("", true),
                 (state.page==='users' && can('users.manage'))
                   ? (_openBlock(), _createElementBlock("button", {
-                      key: 11,
+                      key: 12,
                       class: "btn btn-primary",
                       onClick: $event => (newUser())
                     }, "+ Criar usuário", 8, ["onClick"]))

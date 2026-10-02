@@ -1,6 +1,6 @@
 /* Estrutura da aplicação escolar, com identidade e navegação independentes. */
 .workspace {
-  --sidebar-width: 248px;
+  --sidebar-width: 260px;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   height: 100vh;
@@ -22,7 +22,7 @@
 }
 .sidebar-brand {
   position: relative;
-  padding: 22px 24px;
+  padding: 24px 22px 20px;
   border-bottom: 1px solid var(--border);
 }
 .sidebar .sidebar-brand .brand-line {
@@ -36,7 +36,8 @@
 .sidebar-brand .sidebar-logo {
   width: 100%;
   max-width: 184px;
-  height: 82px;
+  height: clamp(90px, 18vh, 164px);
+  height: clamp(90px, 18dvh, 164px);
   object-fit: contain;
 }
 .sidebar-brand .institution-name { font-size: 18px; text-align: center; line-height: 1.45; }
@@ -175,7 +176,7 @@
 .skip-content { position: fixed; top: -100px; left: 12px; z-index: 120; padding: 12px 18px; border: 2px solid var(--primary); background: var(--surface, #fff); border-radius: 8px; }
 .skip-content:focus { top: 12px; }
 @media (max-width: 1150px) and (min-width: 801px) {
-  .workspace { --sidebar-width: 228px; }
+  .workspace { --sidebar-width: 240px; }
   .workspace .main-content { padding: 24px; }
   .workspace .topbar { padding-inline: 24px; }
 }
@@ -197,7 +198,7 @@
   .workspace .sidebar-shade { z-index: 49; }
   .sidebar-brand { padding: 16px 22px; }
   .sidebar-brand .brand-line { padding-inline: 22px; }
-  .sidebar-brand .sidebar-logo { height: 68px; }
+  .sidebar-brand .sidebar-logo { height: clamp(64px, 14vh, 110px); height: clamp(64px, 14dvh, 110px); }
   .sidebar-close { display: grid; position: absolute; right: 8px; top: 8px; width: 44px; height: 44px; z-index: 1; }
   .sidebar .sidebar-footer { padding: 10px 22px max(10px, env(safe-area-inset-bottom)); }
   .workspace .topbar { min-height: 68px; padding: max(8px, env(safe-area-inset-top)) 12px 8px; gap: 8px; }
@@ -240,10 +241,10 @@
   overflow-wrap: anywhere;
 }
 .workspace .page-header > div:first-child { flex: 1 1 auto; }
+.workspace .page-header > .actions:empty { display: none; }
 .workspace .page-heading-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
 .workspace .page-heading-title h1 { min-width: 0; }
-.workspace .page-heading-title .page-help { flex: 0 0 auto; min-height: 44px; padding: 8px 0 8px 8px; font-size: 12px; color: var(--muted); }
-.workspace .page-heading-title .page-help:hover { color: var(--primary); }
+.workspace .page-header .page-help { flex: 0 0 auto; min-height: 44px; padding: 10px 16px; font-size: 13px; }
 .workspace .registry-filter-toggle { display: none; }
 .workspace .profile-student-card { padding: 24px; }
 .workspace .profile-student-card > h2 { margin-block: 8px; }
@@ -276,14 +277,14 @@
 @media (max-width: 800px) {
   .workspace .sidebar { width: min(320px, calc(100vw - 44px)); }
   .workspace .menu-button { border: 1px solid var(--border); }
-  .workspace .page-header { gap: 16px; }
+  .workspace .page-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px 12px; }
   .workspace .page-header > div:first-child { width: 100%; }
   .workspace .page-header .breadcrumb { display: none; }
   .workspace .page-heading-title { align-items: flex-start; }
   .workspace .page-heading-title h1 { padding-top: 4px; }
-  .workspace .page-header > .actions { width: 100%; align-items: stretch; gap: 8px; }
-  .workspace .page-header > .actions > .btn { flex: 1 1 auto; }
-  .workspace .page-header > .actions > .btn-primary { flex-basis: 100%; }
+  .workspace .page-header > .actions { display: contents; }
+  .workspace .page-header > .actions > .btn { grid-column: 1 / -1; }
+  .workspace .page-header > .actions > .page-help { grid-column: 2; grid-row: 1; align-self: start; }
   .workspace .btn, .modal .btn { min-height: 44px; max-width: 100%; white-space: normal; line-height: 1.45; text-align: center; }
   .workspace .link-button, .modal .link-button { min-height: 44px; padding: 8px 4px; line-height: 1.45; }
   .workspace .icon-button { min-width: 44px; min-height: 44px; }
