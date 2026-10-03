@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # The public MinIO registries no longer serve this image. Build the patched
 # upstream release from its source tag, and keep the runtime self-contained.
-ARG UPSTREAM_IMAGE
+ARG UPSTREAM_IMAGE=docker.io/library/golang:1.24-bookworm
 FROM ${UPSTREAM_IMAGE} AS builder
 ARG MINIO_RELEASE=RELEASE.2025-10-15T17-29-55Z
 ARG MINIO_COMMIT=9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a
