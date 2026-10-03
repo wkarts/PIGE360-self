@@ -13,6 +13,18 @@ permissions:
   contents: read
   packages: read
 jobs:
+  deployer_binary:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Compilar e testar o deployer visual congelado
+        run: bash scripts/ci/build-deployer.sh
   minio_source:
     runs-on: ubuntu-latest
     timeout-minutes: 40
