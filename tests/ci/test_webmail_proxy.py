@@ -44,6 +44,10 @@ class WebmailProxyTest(unittest.TestCase):
                 actual = proxy.rewrite_cookie_path(original, self.prefix)
                 self.assertIn('; Path=' + expected + ';', actual)
 
+    def test_internal_cookie_domain_is_not_forwarded_to_browser(self):
+        actual = proxy.rewrite_cookie_path('SOGoSession=test; Domain=sogo; Path=/SOGo/; HttpOnly', self.prefix)
+        self.assertEqual(actual, 'SOGoSession=test; Path=' + self.prefix + '/SOGo/; HttpOnly')
+
 
 if __name__ == '__main__':
     unittest.main()

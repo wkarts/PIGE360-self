@@ -34,4 +34,7 @@ def rewrite_cookie_path(cookie: str, prefix: str) -> str:
             return match.group(1) + 'Path=' + prefix + path
         return match.group(0)
 
+    # An upstream Domain=sogo cookie cannot be stored by the public site.
+    # Keep it host-only after passing through our same-origin proxy.
+    cookie = re.sub(r'(?i);\s*domain=[^;]*', '', cookie)
     return re.sub(r'(?i)(^|;\s*)path=([^;]*)', replace, cookie, count=1)
