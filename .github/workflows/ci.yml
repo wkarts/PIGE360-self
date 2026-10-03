@@ -129,6 +129,11 @@ jobs:
             --build-arg NODE_BASE_IMAGE="$NODE_BASE_IMAGE" \
             --build-arg PYTHON_BASE_IMAGE="$PYTHON_BASE_IMAGE" \
             --build-arg POSTGRES_IMAGE="$POSTGRES_IMAGE" -t pige360-self:ci .
+          # O Dockerfile deve falhar se o Apache upstream voltar a remover os
+          # cabeçalhos de login confiáveis ou reescrever a URL pública.
+          docker build --build-arg SOURCE_REVISION="$GITHUB_SHA" --build-arg APP_VERSION="$(cat VERSION)" \
+            -t pige360-sogo:ci services/sogo
+          docker run --rm --entrypoint python3 pige360-sogo:ci -c 'from pathlib import Path; c=Path("/etc/apache2/conf-available/SOGo.conf").read_text(); assert "RequestHeader unset \"x-webobjects-remote-user\"" not in c; assert "RequestHeader set \"x-webobjects-server-url\"" not in c'
           bash scripts/ci/smoke.sh pige360-self:ci local
           python - <<'PY'
           import json
