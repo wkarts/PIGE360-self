@@ -156,7 +156,11 @@ jobs:
           docker build --build-arg SOURCE_REVISION="$GITHUB_SHA" --build-arg APP_VERSION="$(cat VERSION)" \
             -t pige360-sogo:ci services/sogo
           docker run --rm --entrypoint python3 pige360-sogo:ci -c 'from pathlib import Path; c=Path("/etc/apache2/conf-available/SOGo.conf").read_text(); assert "RequestHeader unset \"x-webobjects-remote-user\"" not in c; assert "RequestHeader set \"x-webobjects-server-url\"" not in c'
-          bash scripts/ci/smoke.sh pige360-self:ci local
+          # O pacote GHCR do Memcached nasce após o merge em develop. O smoke
+          # da PR usa uma imagem local descartável com a mesma base upstream.
+          docker build --build-arg UPSTREAM_IMAGE=docker.io/library/memcached:1.6-alpine \
+            -f containers/service.Dockerfile -t pige360-memcached:ci .
+          SOGO_CACHE_IMAGE=pige360-memcached:ci bash scripts/ci/smoke.sh pige360-self:ci local
           python - <<'PY'
           import json
           from pathlib import Path
