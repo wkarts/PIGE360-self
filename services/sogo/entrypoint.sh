@@ -1,6 +1,11 @@
 #!/bin/sh
 set -eu
 : "${SOGO_DATABASE_URL:?SOGO_DATABASE_URL is required}"
+case "${SOGO_SMTP_SERVER:-}" in
+    ""|*://*) ;;
+    "${SMTP_HOST:-}") SOGO_SMTP_SERVER= ;;
+    *) echo 'SOGO_SMTP_SERVER deve ser uma URL smtp:// ou smtps:// (ou vazio para usar SMTP_HOST)' >&2; exit 1 ;;
+esac
 if [ -z "${SOGO_SMTP_SERVER:-}" ] && [ -n "${SMTP_HOST:-}" ]; then
     case "${SMTP_SECURITY:-starttls}" in
         starttls) SOGO_SMTP_SERVER="smtp://${SMTP_HOST}:${SMTP_PORT:-587}/?tls=YES" ;;

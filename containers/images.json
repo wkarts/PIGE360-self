@@ -77,6 +77,35 @@
       ],
       "security_revision": 1,
       "enabled": true
+    },
+    {
+      "id": "memcached",
+      "package": "pige360-self-memcached",
+      "upstream": "docker.io/library/memcached:1.6-alpine",
+      "dockerfile": "containers/service.Dockerfile",
+      "inputs": [],
+      "aliases": [
+        "1.6-alpine",
+        "1.6",
+        "latest"
+      ],
+      "security_revision": 1,
+      "enabled": true
+    },
+    {
+      "id": "minio",
+      "package": "pige360-self-minio",
+      "upstream": "docker.io/library/golang:1.24-bookworm",
+      "dockerfile": "containers/minio.Dockerfile",
+      "inputs": [
+        "containers/minio-healthcheck.go"
+      ],
+      "aliases": [
+        "RELEASE.2025-10-15T17-29-55Z",
+        "latest"
+      ],
+      "security_revision": 1,
+      "enabled": true
     }
   ]
 }

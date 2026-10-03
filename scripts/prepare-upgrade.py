@@ -49,6 +49,8 @@ def main():
             key,value=line.split('=',1)
             if key in official and value.startswith(official[key]+':'):
                 line=f'{key}={official[key]}:{tag}'
+            if key=='MINIO_IMAGE' and value=='quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z':
+                line='MINIO_IMAGE=ghcr.io/wkarts/pige360-self-minio:RELEASE.2025-10-15T17-29-55Z'
         match=re.fullmatch(r'APP_IMAGE=pige360-self:(\d+)\.(\d+)\.(\d+)',line)
         if match and tuple(map(int,match.groups()))<version_tuple:line=f'APP_IMAGE=pige360-self:{version}'
         updated.append(line)
@@ -76,6 +78,8 @@ def main():
         Path(tmp).unlink(missing_ok=True)
     print('Configuração preservada e opções acrescentadas. Backup protegido:',backup.name)
     print('Revise SMTP_* e CONNECT_ALLOWED_HOSTS. Guarde INTEGRATION_ENCRYPTION_KEY junto ao backup.')
+    if args.track_channel:
+        print('Imagem MinIO legada do Quay substituída somente quando era o padrão conhecido. Confira a visibilidade do novo pacote GHCR.')
     print(f'Se APP_IMAGE usa registry próprio, publique/selecione a imagem {version} pelo seu processo existente.')
     compose=target.parent/'compose.yaml'
     print(f'Execute: docker compose --env-file {args.env_file} -f {compose} up -d --wait; docker compose --env-file {args.env_file} -f {compose} logs --tail=100 app worker')

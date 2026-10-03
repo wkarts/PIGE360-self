@@ -118,7 +118,7 @@ class ReuseTests(unittest.TestCase):
 class CatalogAndRetentionTests(unittest.TestCase):
     def test_required_mirrors(self):
         catalog=json.loads((ROOT/'containers/images.json').read_text())
-        self.assertEqual({s['id'] for s in catalog['images']},{'python','node','postgres','redis','rabbitmq'})
+        self.assertEqual({s['id'] for s in catalog['images']},{'python','node','postgres','redis','rabbitmq','memcached','minio'})
         self.assertTrue(all(s['package'].startswith('pige360-self-') for s in catalog['images']))
     def test_node_tracks_lock_and_python_tracks_requirements(self):
         items={s['id']:s for s in json.loads((ROOT/'containers/images.json').read_text())['images']}

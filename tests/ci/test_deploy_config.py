@@ -104,6 +104,7 @@ class DeployConfigTest(unittest.TestCase):
         path = self.root / 'deploy/docker/.env.develop'
         path.write_text('APP_IMAGE=ghcr.io/wkarts/pige360-self:legacy\n'
                         'MAIL_AGENT_IMAGE=ghcr.io/wkarts/pige360-self-mail-agent:old\n'
+                        'MINIO_IMAGE=quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z\n'
                         'SOGO_IMAGE=registry.example.org/custom-sogo:kept\n'
                         'POSTGRES_PASSWORD=KEEP\nAPP_SECRET_KEY=KEEP\n'
                         'INTEGRATION_ENCRYPTION_KEY=\n')
@@ -111,6 +112,8 @@ class DeployConfigTest(unittest.TestCase):
         content = path.read_text()
         self.assertIn('APP_IMAGE=ghcr.io/wkarts/pige360-self:develop\n', content)
         self.assertIn('MAIL_AGENT_IMAGE=ghcr.io/wkarts/pige360-self-mail-agent:develop\n', content)
+        self.assertIn('MINIO_IMAGE=ghcr.io/wkarts/pige360-self-minio:RELEASE.2025-10-15T17-29-55Z\n', content)
+        self.assertIn('SOGO_CACHE_IMAGE=ghcr.io/wkarts/pige360-self-memcached:1.6-alpine\n', content)
         self.assertIn('SOGO_IMAGE=registry.example.org/custom-sogo:kept\n', content)
         self.assertIn('POSTGRES_PASSWORD=KEEP\n', content)
 

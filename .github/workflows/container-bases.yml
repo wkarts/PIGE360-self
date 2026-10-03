@@ -13,6 +13,8 @@ on:
       python_ref: {value: '${{ jobs.publish.outputs.python_ref }}'}
       node_ref: {value: '${{ jobs.publish.outputs.node_ref }}'}
       postgres_ref: {value: '${{ jobs.publish.outputs.postgres_ref }}'}
+      minio_ref: {value: '${{ jobs.publish.outputs.minio_ref }}'}
+      memcached_ref: {value: '${{ jobs.publish.outputs.memcached_ref }}'}
   workflow_dispatch:
     inputs:
       refresh_upstream:
@@ -36,6 +38,8 @@ jobs:
       python_ref: ${{ steps.bases.outputs.python_ref }}
       node_ref: ${{ steps.bases.outputs.node_ref }}
       postgres_ref: ${{ steps.bases.outputs.postgres_ref }}
+      minio_ref: ${{ steps.bases.outputs.minio_ref }}
+      memcached_ref: ${{ steps.bases.outputs.memcached_ref }}
     steps:
       - uses: actions/checkout@v6
         with:
