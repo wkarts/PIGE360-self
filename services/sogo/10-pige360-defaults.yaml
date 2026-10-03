@@ -6,8 +6,11 @@ SOGoLanguage: BrazilianPortuguese
 SOGoProfileURL: "${SOGO_DATABASE_URL}/sogo_user_profile"
 OCSFolderInfoURL: "${SOGO_DATABASE_URL}/sogo_folder_info"
 OCSSessionsFolderURL: "${SOGO_DATABASE_URL}/sogo_sessions_folder"
-SOGoIMAPServer: "imaps://127.0.0.1:993"
-SOGoSieveServer: "sieve://127.0.0.1:4190"
+SOGoIMAPServer: "${SOGO_IMAP_SERVER}"
+SOGoSieveServer: "${SOGO_SIEVE_SERVER}"
+SOGoSieveScriptsEnabled: false
+SOGoVacationEnabled: false
+SOGoForwardEnabled: false
 SOGoSMTPServer: "${SOGO_SMTP_SERVER}"
 SOGoMailingMechanism: smtp
 SOGoSMTPAuthenticationType: PLAIN

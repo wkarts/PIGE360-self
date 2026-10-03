@@ -487,10 +487,30 @@ td .link-button { text-align: left; }
 .webmail-brand .eyebrow { margin:0 0 4px; color:var(--webmail-secondary,var(--muted)); }
 .webmail-brand h2 { margin:0; }
 .webmail-frame { display:block; width:100%; height:min(76vh,920px); min-height:560px; border:1px solid var(--line,#dce2e8); border-radius:14px; background:#fff; }
+.main-column.webmail-layout { margin-left:0; width:100%; height:100dvh; min-height:100dvh; }
+.webmail-layout .main-content { display:flex; flex-direction:column; max-width:none; width:100%; height:100%; min-height:0; padding:12px; }
+.webmail-layout .webmail-view { display:flex; flex:1; flex-direction:column; min-height:0; gap:10px; }
+.webmail-layout .webmail-header { flex-shrink:0; padding:10px 14px; border-top-width:2px; border-radius:10px; box-shadow:none; }
+.webmail-layout .webmail-brand h1 { margin:0; font-size:clamp(15px,2vw,21px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.webmail-layout .webmail-brand img { width:36px; height:36px; }
+.webmail-layout .webmail-header .actions { display:flex; align-items:center; width:auto; gap:10px; }
+.webmail-layout .webmail-header label, .webmail-default label { display:flex; align-items:center; gap:8px; white-space:nowrap; font-size:12px; }
+.webmail-layout .webmail-header select, .webmail-default select { min-height:39px; font:inherit; border:1px solid var(--border); border-radius:8px; padding:6px 8px; background:var(--surface,#fff); color:var(--ink); }
+.webmail-layout .webmail-frame { flex:1; height:auto; min-height:0; border-radius:8px; }
+.webmail-layout .webmail-fallback { flex:1; overflow:auto; min-height:0; }
 @media(max-width:760px) {
   .webmail-header { align-items:flex-start; flex-direction:column; padding:16px; }
   .webmail-header .actions { display:grid; width:100%; grid-template-columns:1fr; }
   .webmail-frame { height:calc(100dvh - 260px); min-height:440px; border-radius:10px; }
+}
+@media(max-width:760px) {
+  .webmail-layout .main-content { padding:6px; }
+  .webmail-layout .webmail-header { flex-direction:row; flex-wrap:wrap; padding:8px; gap:8px; }
+  .webmail-layout .webmail-brand { width:100%; }
+  .webmail-layout .webmail-brand img { width:28px; height:28px; }
+  .webmail-layout .webmail-header .actions { width:100%; display:flex; flex-direction:row; justify-content:space-between; }
+  .webmail-layout .webmail-header select { max-width:52vw; }
+  .webmail-layout .webmail-frame { height:auto; min-height:0; }
 }
 .mailcow-page > .x-heading, .mailcow-page > .x-card, .mailcow-page > .alert { margin: 0; }
 .mailcow-page > .x-heading > div:first-child > p:not(.eyebrow) { color: var(--muted); font-size: 13px; }

@@ -15,9 +15,24 @@ if [ -z "${SOGO_SMTP_SERVER:-}" ] && [ -n "${SMTP_HOST:-}" ]; then
     esac
 fi
 export SOGO_SMTP_SERVER
+if [ -z "${SOGO_IMAP_SERVER:-}" ]; then
+    SOGO_IMAP_SERVER="imaps://${SMTP_HOST:-127.0.0.1}:993"
+fi
+case "$SOGO_IMAP_SERVER" in
+    imaps://*|imap://*) ;;
+    *) echo 'SOGO_IMAP_SERVER deve ser uma URL imaps:// ou imap://' >&2; exit 1 ;;
+esac
+case "${SOGO_SIEVE_SERVER:-}" in
+    ""|sieve://*) ;;
+    *) echo 'SOGO_SIEVE_SERVER deve ser uma URL sieve:// ou estar vazio' >&2; exit 1 ;;
+esac
+export SOGO_IMAP_SERVER SOGO_SIEVE_SERVER
 umask 077
 mkdir -p /etc/sogo/sogo.conf.d
 envsubst < /opt/pige360/10-pige360-defaults.yaml.template > /etc/sogo/sogo.conf.d/10-pige360-defaults.yaml
+if [ -z "${SOGO_SIEVE_SERVER:-}" ]; then
+    sed -i '/^SOGoSieveServer:/d; /^    SieveHostFieldName:/d' /etc/sogo/sogo.conf.d/10-pige360-defaults.yaml
+fi
 chown sogo:sogo /etc/sogo/sogo.conf.d/10-pige360-defaults.yaml
 chmod 0640 /etc/sogo/sogo.conf.d/10-pige360-defaults.yaml
 exec /opt/entrypoint.sh "$@"

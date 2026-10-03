@@ -232,6 +232,8 @@ services:
       # The Go helper in the SOGo image rejects lib/pq's "prefer" fallback.
       PGSSLMODE: disable
       SOGO_SMTP_SERVER: ${SOGO_SMTP_SERVER:-}
+      SOGO_IMAP_SERVER: ${SOGO_IMAP_SERVER:-}
+      SOGO_SIEVE_SERVER: ${SOGO_SIEVE_SERVER:-}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURITY: ${SMTP_SECURITY:-starttls}

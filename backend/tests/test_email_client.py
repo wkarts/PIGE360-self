@@ -656,6 +656,26 @@ def test_changed_server_configuration_requires_revalidation(mailbox_api):
     assert account['connection_parameters']['smtp_port']==587 and account['connection_parameters']['smtp_security']=='STARTTLS'
 
 
+def test_webmail_default_and_personal_override_preserve_mailbox_connection(mailbox_api):
+    a=mailbox_api
+    path=a['base']+'/webmail-preference'
+    initial=a['client'].get(path,headers=a['headers'])
+    assert initial.status_code==200 and initial.json()=={
+        'default':'sogo','override':'inherit','effective':'sogo'}
+    denied=a['client'].put(a['base']+'/webmail-default',headers=a['headers'],json={'mode':'alternative'})
+    assert denied.status_code==403
+    updated=a['client'].put(a['base']+'/webmail-default',headers=a['admin'],json={'mode':'alternative'})
+    assert updated.status_code==200,updated.text
+    assert a['client'].get(path,headers=a['headers']).json()['effective']=='alternative'
+    selected=a['client'].put(path,headers=a['headers'],json={'mode':'sogo'})
+    assert selected.status_code==200 and selected.json()['effective']=='sogo'
+    assert a['client'].get(path,headers=a['admin']).json()['override']=='inherit'
+    reset=a['client'].put(path,headers=a['headers'],json={'mode':'inherit'})
+    assert reset.status_code==200 and reset.json()=={
+        'default':'alternative','override':'inherit','effective':'alternative'}
+    assert a['client'].get(a['base']+'/account',headers=a['headers']).json()['connected']
+
+
 def test_sogo_ticket_is_one_use_cookie_bound_to_school_and_user(mailbox_api, monkeypatch):
     from types import SimpleNamespace
     a=mailbox_api
@@ -708,6 +728,8 @@ def test_sogo_proxy_injects_credentials_server_side_and_rewrites_same_origin_pat
     assert base64.b64decode(sent[0][2]['authorization'].split()[1]).decode().endswith(':'+a['state']['password'])
     assert f"/webmail/{a['school']['id']}/SOGo/Mail" in result.text
     assert f"/webmail/{a['school']['id']}/SOGo.woa/WebServerResources/css/styles.css?lm=1" in result.text
+    assert 'href="/api/v1/institution/theme.css"' in result.text
+    assert 'var(--institution-font' in result.text
     css=a['client'].get(f"/webmail/{a['school']['id']}/SOGo.woa/WebServerResources/css/styles.css?lm=1", cookies={name:value})
     script=a['client'].get(f"/webmail/{a['school']['id']}/SOGo.woa/WebServerResources/js/Mailer.js?lm=1", cookies={name:value})
     assert css.status_code==200 and css.headers['content-type'].startswith('text/css')
