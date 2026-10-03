@@ -164,6 +164,8 @@ def main():
 
 if __name__ == '__main__':
     if '--self-test' in sys.argv:
+        import tkinter
+        assert tkinter.Tcl().eval('info patchlevel')
         assert ssh_command('admin@host.example', '/srv/pige360-self')[0] == 'ssh'
         raise SystemExit(0)
     main()
