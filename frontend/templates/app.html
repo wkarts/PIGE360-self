@@ -38,7 +38,7 @@
   <div v-else class="workspace">
     <a href="#main-content" class="skip-content" data-focus-content>Ir para o conteúdo</a>
     <div v-if="state.menuOpen" class="sidebar-shade" @click="state.menuOpen=false"></div>
-    <aside id="school-navigation" class="sidebar" :class="{visible:state.menuOpen}" aria-label="Navegação da escola">
+    <aside v-if="state.page!=='webmail'" id="school-navigation" class="sidebar" :class="{visible:state.menuOpen}" aria-label="Navegação da escola">
       <div class="sidebar-brand">
         <button type="button" class="icon-button sidebar-close" aria-label="Fechar menu" @click="state.menuOpen=false"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#close"></use></svg></button>
       <a href="#/dashboard" class="brand-line" @click.prevent="navigate('dashboard')"><img v-if="identity.logo_url" class="sidebar-logo" :src="identity.logo_url" :alt="identity.display_name"><strong v-else class="institution-name">{{ identity.short_name }}</strong></a>
@@ -111,8 +111,8 @@
       </div>
       <div class="sidebar-footer"><small>{{ identity.short_name }}<span v-if="state.user.role==='admin'"> · {{ identity.app_version || '—' }}</span></small></div>
     </aside>
-    <div class="main-column">
-      <header class="topbar">
+    <div class="main-column" :class="{'webmail-layout':state.page==='webmail'}">
+      <header v-if="state.page!=='webmail'" class="topbar">
         <button type="button" class="icon-button menu-button" @click="state.menuOpen=!state.menuOpen" aria-label="Abrir menu" :aria-expanded="state.menuOpen" aria-controls="school-navigation"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#menu"></use></svg></button>
         <div class="school-switch"><span class="small muted">INSTITUIÇÃO ATIVA</span><select aria-label="Selecionar escola" v-model="state.schoolId" @change="changeSchool" :disabled="state.busy || state.schoolLoading || !!state.modal.kind || contractDirty()"><option v-for="s in state.schools" :key="s.id" :value="s.id">{{ s.name }}</option></select></div>
         <div class="topbar-actions"><details v-if="state.certificateAlerts.length" class="notice-menu"><summary :aria-label="state.certificateAlerts.length+' aviso de certificado'"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#bell"></use></svg><span class="notice-count">{{ state.certificateAlerts.length }}</span></summary><div class="notice-popover"><p class="eyebrow">AVISOS DA ESCOLA</p><button v-for="notice in state.certificateAlerts" :key="notice.id" type="button" @click="navigate('certificate')"><strong>{{ notice.title }}</strong><span>{{ notice.message }}</span></button></div></details><span class="online-chip" :class="{offline:!state.online}"><i class="dot"></i>{{ state.online?'Online':'Sem conexão' }}</span><button v-if="state.canInstall" class="btn btn-secondary small-button" @click="install">Instalar aplicativo</button><div class="user-caption"><strong>{{ state.user.name }}</strong><small>{{ label(state.user.role) }}</small></div><button class="avatar user-avatar" @click="editMyProfile" title="Meu perfil" aria-label="Meu perfil"><img v-if="state.userPhotoUrl" :src="state.userPhotoUrl" alt="Minha foto"><span v-else>{{ initials(state.user.name) }}</span></button><button type="button" class="icon-button" @click="logout" title="Sair" aria-label="Sair"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#logout"></use></svg></button></div>
@@ -124,7 +124,7 @@
         <div v-if="state.success" class="alert success" role="status"><span>{{ state.success }}</span><button @click="state.success=''" aria-label="Fechar aviso">×</button></div>
         <div v-if="state.schoolLoading" class="loading-strip" role="status">Carregando a instituição selecionada…</div>
         <template v-if="!state.schoolLoading &amp;&amp; state.schoolId">
-        <div class="page-header">
+        <div v-if="state.page!=='webmail'" class="page-header">
           <div class="page-heading"><p class="breadcrumb">{{ registryPages.includes(state.page)?'Cadastros':integrationPages.includes(state.page)?'Integrações':administrationPages.includes(state.page)?'Administração do sistema':state.page==='settings'?'Instituição':configurationPages.includes(state.page)?'Configurações':documentPages.includes(state.page)?'Documentos':'Secretaria' }} / {{ pageLabels[state.page] }}</p><div class="page-heading-title"><h1>{{ state.selectedStudent ? state.selectedStudent.person.name : pageLabels[state.page] }}</h1></div><p v-if="state.selectedStudent" class="page-subtitle">Ficha do aluno · {{ state.selectedStudent.number }}</p></div>
           <div class="actions">
             <button v-if="state.page!=='help'" class="btn btn-secondary page-help" @click="navigate('help')">Guia de uso</button>
@@ -145,12 +145,12 @@
         <div v-if="state.loading" class="loading-strip" role="status">Carregando registros…</div>
         <legacy-import-panel v-if="state.page==='legacy-import' && adminTool('legacy-import')" :key="state.schoolId" :school-id="state.schoolId" :school-name="school()?.name || ''" :units="state.catalogs.units || []"></legacy-import-panel>
         <diagnostics-panel :key="state.schoolId" v-if="state.page==='diagnostics' && adminTool('diagnostics')"></diagnostics-panel>
-        <section v-if="state.page==='webmail' && !state.sogoFallback" class="webmail-view" :key="state.schoolId+':sogo'" :style="{'--webmail-primary':identity.primary_color,'--webmail-secondary':identity.secondary_color}">
-          <header class="webmail-header"><div class="actions"><button type="button" class="btn btn-secondary" @click="openSogoWebmail" :disabled="state.sogoStarting">{{state.sogoStarting?'Conectando…':'Reconectar webmail'}}</button><button type="button" class="btn btn-secondary" @click="state.sogoFallback=true">Usar caixa alternativa</button></div></header>
+        <section v-if="state.page==='webmail'" class="webmail-view" :key="state.schoolId+':webmail'" :style="{'--webmail-primary':identity.primary_color,'--webmail-secondary':identity.secondary_color}">
+          <header class="webmail-header"><div class="webmail-brand"><button type="button" class="btn btn-secondary" @click="navigate('dashboard')" aria-label="Voltar à escola">← Escola</button><img v-if="identity.logo_url" :src="identity.logo_url" :alt="identity.display_name"><h1>{{identity.display_name}} · E-mail</h1></div><div class="actions"><label>Webmail <select :value="state.webmailOverride" @change="saveWebmailPreference($event.target.value)"><option value="inherit">Padrão da escola</option><option value="sogo">SOGo</option><option value="alternative">Caixa alternativa</option></select></label><button v-if="!state.sogoFallback" type="button" class="btn btn-secondary" @click="openSogoWebmail" :disabled="state.sogoStarting">{{state.sogoStarting?'Conectando…':'Reconectar'}}</button></div></header>
           <div v-if="state.sogoError" class="alert warning" role="status">{{state.sogoError}}</div>
-          <iframe id="pige-sogo-frame" name="pige-sogo-frame" class="webmail-frame" title="Caixa de e-mail" referrerpolicy="same-origin" allow="clipboard-read; clipboard-write; downloads" @load="state.sogoStarting=false"></iframe>
+          <iframe v-if="!state.sogoFallback" id="pige-sogo-frame" name="pige-sogo-frame" class="webmail-frame" title="Caixa de e-mail" referrerpolicy="same-origin" allow="clipboard-read; clipboard-write; downloads" @load="state.sogoStarting=false"></iframe>
+          <institutional-email v-else class="webmail-fallback" :key="state.schoolId+':email-fallback'" :school-id="state.schoolId" :admin="state.user.role==='admin'"></institutional-email>
         </section>
-        <div v-if="state.page==='webmail' && state.sogoFallback" class="webmail-fallback"><button type="button" class="btn btn-secondary" @click="state.sogoFallback=false">Voltar ao webmail integrado</button><institutional-email :key="state.schoolId+':email-fallback'" :school-id="state.schoolId" :admin="state.user.role==='admin'"></institutional-email></div>
         <audit-panel v-if="state.page==='audit' && adminTool('audit')" :key="state.schoolId+':audit'" :school-id="state.schoolId"></audit-panel>
         <mailcow-panel v-if="state.page==='email' && state.user?.role==='admin'" :key="state.schoolId" :school-id="state.schoolId"></mailcow-panel>
         <section v-if="state.page==='email' && state.user?.role==='admin'" class="panel x-card" aria-labelledby="smtp-title">
@@ -161,6 +161,7 @@
           <p v-else class="muted" role="status">Consultando configuração de envio…</p>
           <details><summary>Configuração técnica</summary><p class="muted">Configure SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM e SMTP_SECURITY no .env da instalação. Reinicie os serviços para aplicar as alterações.</p></details>
         </section>
+        <section v-if="state.page==='email' && state.user?.role==='admin'" class="panel x-card webmail-default" aria-labelledby="webmail-default-title"><h2 id="webmail-default-title">Webmail padrão da instituição</h2><p>Aplica-se a todos os usuários que não escolheram uma opção pessoal.</p><div class="actions"><label>Cliente de e-mail <select v-model="state.webmailDefault"><option value="sogo">SOGo integrado</option><option value="alternative">Caixa alternativa PIGE360</option></select></label><button type="button" class="btn btn-primary" @click="saveWebmailDefault">Salvar padrão</button></div></section>
         <expansion-panel v-if="['online','banking','integrations','connect'].includes(state.page)" :key="state.schoolId+':'+state.page" :school-id="state.schoolId" :page="state.page" :permissions="state.user.permissions"></expansion-panel>
         <diary-panel v-if="state.page==='diary'" :key="state.schoolId+':diary'" :school-id="state.schoolId" :permissions="state.user.permissions"></diary-panel>
         <contracts-panel v-if="state.page==='contracts' && can('documents.read')" :key="state.schoolId+':contracts:'+state.contractEnrollmentId+':'+state.contractReviewIssuedId" :school-id="state.schoolId" :permissions="state.user.permissions" :role="state.user.role" :enrollment-id="state.contractEnrollmentId" :issued-id="state.contractReviewIssuedId"></contracts-panel>
@@ -348,7 +349,7 @@
           </div>
           <article v-if="state.institutionTab==='support'" class="panel institution-card"><div class="institution-card-title"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#connect"></use></svg><h3>Atendimento pelo site</h3><span class="badge" :class="state.supportHub.enabled?'active':'archived'">{{ state.supportHub.enabled?'Ativo':'Desativado' }}</span></div><p v-if="supportStatus.error" class="alert warning" role="status">{{ supportStatus.error }}</p><p>{{ state.supportHub.enabled?'O atendimento aparece nas áreas selecionadas desta escola.':'Ative o atendimento para disponibilizar um canal de ajuda aos usuários.' }}</p><dl v-if="state.supportHub.enabled" class="institution-data"><div><dt>Áreas habilitadas</dt><dd>{{ supportAreaLabels() }}</dd></div><div><dt>Nome do botão</dt><dd>{{ state.supportHub.launcher_title }}</dd></div><div><dt>Posição</dt><dd>{{ state.supportHub.position==='right'?'À direita':'À esquerda' }}</dd></div></dl><div class="institution-card-actions"><button class="btn btn-secondary" @click="editSupportHub">Configurar atendimento</button></div></article>
         </section>
-        <lifecycle-panel v-if="state.lifecycleTarget" :key="state.schoolId+state.lifecycleTarget.resource+state.lifecycleTarget.id" :school-id="state.schoolId" :target="state.lifecycleTarget" @close="state.lifecycleTarget=null" @completed="lifecycleCompleted"></lifecycle-panel><footer class="content-footer"><span>{{ identity.display_name }}</span><a :href="'/news.html?school='+state.schoolId" target="_blank" rel="noopener">Portal da escola</a><span>Acesso controlado · Histórico preservado</span></footer>
+        <lifecycle-panel v-if="state.lifecycleTarget" :key="state.schoolId+state.lifecycleTarget.resource+state.lifecycleTarget.id" :school-id="state.schoolId" :target="state.lifecycleTarget" @close="state.lifecycleTarget=null" @completed="lifecycleCompleted"></lifecycle-panel><footer v-if="state.page!=='webmail'" class="content-footer"><span>{{ identity.display_name }}</span><a :href="'/news.html?school='+state.schoolId" target="_blank" rel="noopener">Portal da escola</a><span>Acesso controlado · Histórico preservado</span></footer>
         </template>
       </main>
     </div>

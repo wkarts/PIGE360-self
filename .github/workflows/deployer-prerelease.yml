@@ -1,4 +1,4 @@
-name: Develop - binário do deployer visual
+name: Develop - deployer visual Windows
 on:
   push:
     branches: [develop]
@@ -9,9 +9,9 @@ concurrency:
   group: pige360-deployer-prerelease
   cancel-in-progress: false
 jobs:
-  linux_amd64:
+  windows_amd64:
     if: github.ref == 'refs/heads/develop'
-    runs-on: ubuntu-22.04
+    runs-on: windows-2022
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
@@ -20,29 +20,43 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
-      - name: Compilar executável Linux com runtime Python incluído
-        run: bash scripts/ci/build-deployer.sh
-      - name: Publicar binário no pré-release develop do commit
+      - name: Testar interface de conexão Windows
+        run: python -m unittest discover -s tests/ci -p test_deployer_windows.py -v
+      - name: Compilar executável Windows com interface gráfica
+        run: |
+          python -m pip install pyinstaller==6.22.3
+          python -m PyInstaller --onefile --windowed --clean --noconfirm --name pige360-deployer-windows-amd64 scripts/deployer_windows.py
+          $binary = Start-Process -FilePath '.\dist\pige360-deployer-windows-amd64.exe' -ArgumentList '--self-test' -Wait -PassThru
+          if ($binary.ExitCode -ne 0) { throw "Falhou verificação do executável: $($binary.ExitCode)" }
+          Copy-Item '.\dist\pige360-deployer-windows-amd64.exe' '.\pige360-deployer-windows-amd64.exe'
+      - name: Atualizar a pré-release contínua develop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -Eeuo pipefail
-          version="$(cat VERSION)"
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          tag="${version}-develop.${GITHUB_RUN_NUMBER}"
-          sha256sum pige360-deployer-linux-amd64 > pige360-deployer-linux-amd64.sha256
-          if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --target "$GITHUB_SHA" --prerelease \
-              --title "PIGE360 Self ${version} develop · deployer GUI" \
-              --notes "Deployer visual para host Docker Linux amd64. Extraia o checkout do commit ${GITHUB_SHA} e execute ./pige360-deployer-linux-amd64 --root /caminho/do/pige360-self. A interface abre somente em 127.0.0.1:58100. Este pré-release não altera aliases de produção."
-          fi
-          gh release upload "$tag" pige360-deployer-linux-amd64 pige360-deployer-linux-amd64.sha256 --clobber
+          $version = (Get-Content VERSION -Raw).Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'VERSION inválida' }
+          $tag = 'deployer-develop'
+          $binary = 'pige360-deployer-windows-amd64.exe'
+          $hash = (Get-FileHash $binary -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash *$binary" | Set-Content -Path "$binary.sha256" -Encoding ascii
+          $title = "PIGE360 Self $version develop - Deployer Windows"
+          $notes = "Deployer visual Windows x64 compilado do commit $env:GITHUB_SHA do canal develop. Verifique o SHA-256 anexo. Conecte-se por SSH ao host Linux com Docker Compose e checkout deste commit. O painel opera pelo túnel 127.0.0.1. Esta release é atualizada continuamente e não altera aliases de produção."
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --target $env:GITHUB_SHA --prerelease --title $title --notes $notes
+            if ($LASTEXITCODE -ne 0) { throw 'Falhou a criação do pré-release' }
+          } else {
+            gh release edit $tag --prerelease --title $title --notes $notes
+            if ($LASTEXITCODE -ne 0) { throw 'Falhou a atualização do pré-release' }
+          }
+          gh release upload $tag $binary "$binary.sha256" --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Falhou o upload do executável' }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pige360-deployer-linux-amd64-${{ github.sha }}
+          name: pige360-deployer-windows-amd64-${{ github.sha }}
           path: |
-            pige360-deployer-linux-amd64
-            pige360-deployer-linux-amd64.sha256
+            pige360-deployer-windows-amd64.exe
+            pige360-deployer-windows-amd64.exe.sha256
           if-no-files-found: ignore
           retention-days: 30

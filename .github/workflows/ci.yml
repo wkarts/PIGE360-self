@@ -14,7 +14,7 @@ permissions:
   packages: read
 jobs:
   deployer_binary:
-    runs-on: ubuntu-22.04
+    runs-on: windows-2022
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
@@ -23,8 +23,13 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
-      - name: Compilar e testar o deployer visual congelado
-        run: bash scripts/ci/build-deployer.sh
+      - name: Validar e compilar deployer visual Windows
+        run: |
+          python -m unittest discover -s tests/ci -p test_deployer_windows.py -v
+          python -m pip install pyinstaller==6.22.3
+          python -m PyInstaller --onefile --windowed --clean --noconfirm --name pige360-deployer-windows-amd64 scripts/deployer_windows.py
+          $binary = Start-Process -FilePath '.\dist\pige360-deployer-windows-amd64.exe' -ArgumentList '--self-test' -Wait -PassThru
+          if ($binary.ExitCode -ne 0) { throw "Falhou verificação do executável: $($binary.ExitCode)" }
   minio_source:
     runs-on: ubuntu-latest
     timeout-minutes: 40

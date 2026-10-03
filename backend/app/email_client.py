@@ -68,6 +68,7 @@ class EmailServerSettings(Record, m.Scoped, Base):
     imap_host: Mapped[str] = mapped_column(String(253), default='')
     smtp_host: Mapped[str] = mapped_column(String(253), default='')
     smtp_port: Mapped[int] = mapped_column(Integer, default=465)
+    webmail_default: Mapped[str] = mapped_column(String(16), default='sogo', server_default='sogo')
     __table_args__ = (UniqueConstraint('school_id'),)
 
 
@@ -107,6 +108,14 @@ class WebmailSession(Record, m.Scoped, Base):
     __table_args__ = (UniqueConstraint('token_hash'),)
 
 
+class WebmailPreference(Record, m.Scoped, Base):
+    """User selection independent of the mailbox connection and its password."""
+    __tablename__ = 'email_webmail_preferences'
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    mode: Mapped[str] = mapped_column(String(16))
+    __table_args__ = (UniqueConstraint('school_id', 'user_id'),)
+
+
 class ConnectionInput(Input):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=False)
     password: str = Field(min_length=1, max_length=512)
@@ -144,6 +153,14 @@ class SettingsInput(Input):
         if any(char in value for char in '/:@?#'):
             raise ValueError('Informe somente o hostname do servidor de e-mail.')
         return urlsplit(_base_url('https://' + value)).hostname
+
+
+class WebmailModeInput(Input):
+    mode: Literal['inherit', 'sogo', 'alternative']
+
+
+class WebmailDefaultInput(Input):
+    mode: Literal['sogo', 'alternative']
 
 
 class MessageRef(Input):
@@ -861,6 +878,54 @@ def _webmail_identity(db):
     return public_identity(db)
 
 
+def _webmail_preference(db, school_id, user_id):
+    server = _server(db, school_id)
+    default = server.webmail_default if server and server.webmail_default in ('sogo', 'alternative') else 'sogo'
+    preference = db.scalar(select(WebmailPreference).where(WebmailPreference.school_id == school_id,
+                           WebmailPreference.user_id == user_id))
+    override = preference.mode if preference and preference.mode in ('sogo', 'alternative') else 'inherit'
+    return {'default': default, 'override': override, 'effective': default if override == 'inherit' else override}
+
+
+@router.get('/webmail-preference')
+def webmail_preference(db: DB, user: Actor, school: EmailScope):
+    return _webmail_preference(db, school.id, user.id)
+
+
+@router.put('/webmail-preference')
+def save_webmail_preference(data: WebmailModeInput, db: DB, user: Actor, school: EmailScope, request: Request):
+    preference = db.scalar(select(WebmailPreference).where(WebmailPreference.school_id == school.id,
+                           WebmailPreference.user_id == user.id))
+    if data.mode == 'inherit':
+        if preference:
+            db.delete(preference)
+    elif preference:
+        preference.mode = data.mode
+        preference.version = (preference.version or 0) + 1
+    else:
+        preference = WebmailPreference(school_id=school.id, user_id=user.id, mode=data.mode)
+        db.add(preference)
+    db.flush()
+    audit(db, request, user, 'email.webmail_preference_updated', preference or school, school.id)
+    return _webmail_preference(db, school.id, user.id)
+
+
+@router.put('/webmail-default')
+def save_webmail_default(data: WebmailDefaultInput, db: DB, user: Actor, school: EmailScope, request: Request):
+    if user.role != 'admin':
+        fail(403, 'Somente o administrador pode alterar o webmail padrão.')
+    lock_school(db, school.id)
+    server = _server(db, school.id)
+    if not server:
+        server = EmailServerSettings(school_id=school.id)
+        db.add(server)
+    server.webmail_default = data.mode
+    server.version = (server.version or 0) + 1
+    db.flush()
+    audit(db, request, user, 'email.webmail_default_updated', server, school.id)
+    return _webmail_preference(db, school.id, user.id)
+
+
 @router.post('/webmail-ticket')
 def create_webmail_ticket(db: DB, user: Actor, school: EmailScope, request: Request):
     """Gera um ticket curto para abrir o webmail sem expor a senha da caixa."""
@@ -1015,11 +1080,14 @@ async def proxy_webmail(school_id: str, resource: str, request: Request):
         rendered = rendered.replace('"/SOGo', '"' + prefix + '/SOGo').replace("'/SOGo", "'" + prefix + '/SOGo')
         rendered = rendered.replace('"/principals', '"' + prefix + '/principals').replace("'/principals", "'" + prefix + '/principals')
         title = identity['display_name'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        family = 'system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' if identity['font_family'] == 'system' else identity['font_family']
-        theme = (f'<title>{title} · E-mail</title><style>:root{{--pige-mail-primary:{identity["primary_color"]};'
-                 f'--pige-mail-secondary:{identity["secondary_color"]};--pige-mail-font:{family}}}'
-                 f'body{{font-family:var(--pige-mail-font)}}a,.toolbarButton,.button{{color:var(--pige-mail-primary)}}'
-                 f'.toolbar,.menu{{border-color:var(--pige-mail-primary)}}</style>')
+        theme = (f'<title>{title} · E-mail</title>'
+                 '<link rel="stylesheet" href="/api/v1/institution/theme.css">'
+                 f'<style>:root{{--pige-mail-primary:{identity["primary_color"]};'
+                 f'--pige-mail-secondary:{identity["secondary_color"]}}}'
+                 'body,md-content,md-toolbar,button,input,select,textarea,.md-button,.md-headline,.md-title,.md-subhead'
+                 '{font-family:var(--institution-font,system-ui,sans-serif)!important}'
+                 'a,.toolbarButton,.button{color:var(--pige-mail-primary)}'
+                 '.toolbar,.menu{border-color:var(--pige-mail-primary)}</style>')
         rendered = rendered.replace('</head>', theme + '</head>', 1)
         content = rendered.encode('utf-8')
     response_headers = {}
