@@ -994,20 +994,20 @@ async def proxy_webmail(school_id: str, resource: str, request: Request):
         async with httpx.AsyncClient(timeout=httpx.Timeout(60), follow_redirects=False, trust_env=False) as client:
             upstream_request = client.build_request(request.method, target, headers=headers, content=body or None)
             upstream_response = await client.send(upstream_request, stream=True)
+            try:
+                chunks, size = [], 0
+                async for chunk in upstream_response.aiter_bytes():
+                    size += len(chunk)
+                    if size > MAX_WEBMAIL_RESPONSE:
+                        fail(502, 'A resposta do webmail excede o limite permitido.')
+                    chunks.append(chunk)
+                content = b''.join(chunks)
+            finally:
+                await upstream_response.aclose()
     except HTTPException:
         raise
     except (httpx.HTTPError, OSError, ValueError):
         fail(502, 'O webmail não respondeu. Tente novamente em instantes.')
-    try:
-        chunks, size = [], 0
-        async for chunk in upstream_response.aiter_bytes():
-            size += len(chunk)
-            if size > MAX_WEBMAIL_RESPONSE:
-                fail(502, 'A resposta do webmail excede o limite permitido.')
-            chunks.append(chunk)
-        content = b''.join(chunks)
-    finally:
-        await upstream_response.aclose()
     content_type = upstream_response.headers.get('content-type', '')
     prefix = f'/webmail/{quote(school_id, safe="")}'
     if 'text/html' in content_type:
