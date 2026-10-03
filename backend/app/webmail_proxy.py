@@ -6,7 +6,7 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 def _webmail_path(path: str, prefix: str) -> str:
     if path in (prefix + '/SOGo', '/SOGo'):
         return prefix + '/SOGo/'
-    for root in ('/SOGo/', '/principals/'):
+    for root in ('/SOGo/', '/principals/', '/SOGo.woa/WebServerResources/'):
         if path.startswith(prefix + root):
             return path
         if path.startswith(root):
@@ -30,7 +30,7 @@ def rewrite_cookie_path(cookie: str, prefix: str) -> str:
             return match.group(1) + 'Path=' + prefix + '/'
         if path.startswith(prefix + '/'):
             return match.group(0)
-        if path in ('/SOGo', '/principals') or path.startswith(('/SOGo/', '/principals/')):
+        if path in ('/SOGo', '/principals') or path.startswith(('/SOGo/', '/principals/', '/SOGo.woa/WebServerResources/')):
             return match.group(1) + 'Path=' + prefix + path
         return match.group(0)
 

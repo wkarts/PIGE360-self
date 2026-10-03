@@ -34,6 +34,8 @@ Para produção, use `--channel stable`, `deploy/docker/.env.production` e a URL
 
 No host Docker, execute `python3 scripts/deployer.py` e abra o endereço e senha temporária mostrados no terminal. A interface escuta apenas em `127.0.0.1:58100`; para administrar remotamente, use um túnel SSH `ssh -L 58100:127.0.0.1:58100 usuario@servidor`. Ela permite criar uma stack isolada em `deploy/instances/NOME/`, revisar o `.env` gerado fora do Git, e depois atualizar/implantar essa stack. Também lista instalações existentes sob `deploy/docker`, `deploy/dockge`, `deploy/portainer` e `deploy/cloudpanel` sem mover seus volumes. Não exibe nem exporta segredos e não expõe o socket Docker ao aplicativo.
 
+O canal `develop` também publica no GitHub Releases um pré-release por commit com `pige360-deployer-linux-amd64` e seu SHA-256. Baixe o binário, confira o hash e execute `./pige360-deployer-linux-amd64 --root /caminho/do/pige360-self` apontando para o checkout correspondente. O executável inclui o runtime Python para o painel e os auxiliares de configuração; os arquivos `deploy/` e `scripts/` do checkout continuam necessários para criar e atualizar stacks. A interface permanece restrita ao host e exige Docker Compose para aplicar alterações.
+
 O botão **Atualizar** preserva segredos e dados, acrescenta opções novas com backup protegido, valida a configuração, baixa as imagens do canal e executa `up -d --wait`. Imagens oficiais GHCR com tag antiga passam a acompanhar `:develop` no ambiente de desenvolvimento e `:latest` na produção, publicada pelo fluxo `main`/release. Imagens personalizadas e digests fixados permanecem como estão. Faça backup consistente de banco, documentos e bucket antes de atualizar uma instalação com dados.
 
 ## Docker CLI

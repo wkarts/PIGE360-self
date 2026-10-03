@@ -1,0 +1,62 @@
+name: Develop - binário do deployer visual
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: pige360-deployer-prerelease
+  cancel-in-progress: false
+jobs:
+  linux_amd64:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Compilar executável Linux com runtime Python incluído
+        run: |
+          set -Eeuo pipefail
+          python -m pip install 'pyinstaller==6.22.3'
+          python -m PyInstaller --onefile --clean --noconfirm \
+            --name pige360-deployer-linux-amd64 scripts/deployer.py
+          test -x dist/pige360-deployer-linux-amd64
+          dist/pige360-deployer-linux-amd64 --help
+          dist/pige360-deployer-linux-amd64 --internal-script configure.py "$PWD" --help
+          dist/pige360-deployer-linux-amd64 --internal-script prepare-upgrade.py "$PWD" --help
+          install -m 0755 dist/pige360-deployer-linux-amd64 ./pige360-deployer-linux-amd64
+          timeout 15 ./pige360-deployer-linux-amd64 --root "$PWD" --port 58109 > /tmp/pige360-deployer-smoke.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          curl -fsS --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:58109/ -o /tmp/pige360-deployer-smoke.html
+          grep -q 'PIGE360 · Stacks' /tmp/pige360-deployer-smoke.html
+      - name: Publicar binário no pré-release develop do commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          version="$(cat VERSION)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          tag="${version}-develop.${GITHUB_RUN_NUMBER}"
+          sha256sum pige360-deployer-linux-amd64 > pige360-deployer-linux-amd64.sha256
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" --prerelease \
+              --title "PIGE360 Self ${version} develop · deployer GUI" \
+              --notes "Deployer visual para host Docker Linux amd64. Extraia o checkout do commit ${GITHUB_SHA} e execute ./pige360-deployer-linux-amd64 --root /caminho/do/pige360-self. A interface abre somente em 127.0.0.1:58100. Este pré-release não altera aliases de produção."
+          fi
+          gh release upload "$tag" pige360-deployer-linux-amd64 pige360-deployer-linux-amd64.sha256 --clobber
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pige360-deployer-linux-amd64-${{ github.sha }}
+          path: |
+            pige360-deployer-linux-amd64
+            pige360-deployer-linux-amd64.sha256
+          if-no-files-found: ignore
+          retention-days: 30
