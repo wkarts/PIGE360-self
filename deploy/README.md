@@ -13,7 +13,7 @@ Cada adaptador possui o mesmo contrato, com `compose.yaml`, `.env.develop.exampl
 | Portainer Stack | `deploy/portainer` | `deploy/portainer` | 58081 / 58080 |
 | CloudPanel | `deploy/cloudpanel` | `deploy/cloudpanel` | 58081 / 58080 |
 
-Os bancos e arquivos usam bind mounts relativos ao diretório da própria stack: `data-postgres/` e `data-documents/`. Assim, cada adaptador e ambiente mantém seus dados no diretório que foi instalado. Não existem volumes nomeados ocultos para o operador.
+Os bancos e arquivos usam bind mounts relativos ao diretório da própria stack: `data-postgres/` e `data-documents/`. Duas configurações `.env` no **mesmo** diretório compartilham esses dados mesmo com projetos Compose diferentes. Para ambientes novos, crie um diretório por stack com o deployer visual; o configurador original continua disponível para uma instalação já existente. Não mova os diretórios de dados de uma instalação ativa sem um procedimento de migração.
 
 O serviço interno `storage-init` prepara `data-documents/` e continua monitorando o volume com UID 10001 e sem capabilities. O app e os workers executam sem root; PostgreSQL mantém o próprio ajuste de permissões do diretório de dados.
 
@@ -29,6 +29,12 @@ python3 scripts/configure.py \
 ```
 
 Para produção, use `--channel stable`, `deploy/docker/.env.production` e a URL pública real. Para outro adaptador, use seu próprio diretório em `--env-file`; o configurador seleciona o modelo correspondente. Depois revise `APP_IMAGE`, `ALLOWED_HOSTS`, `SMTP_*`, `TRUSTED_PROXY_IPS` e as credenciais do bucket privado, quando usado. `LEGACY_IMPORT_MAX_MB` aceita 32–512 MB e controla os arquivos da importação. `SIGNATURE_TRUST_ROOTS_DIR` aponta, por padrão, para `/data/trust-roots`, no mesmo volume persistente dos documentos. Coloque ali apenas certificados de ACs raiz conferidos.
+
+## Deployer visual local
+
+No host Docker, execute `python3 scripts/deployer.py` e abra o endereço e senha temporária mostrados no terminal. A interface escuta apenas em `127.0.0.1:58100`; para administrar remotamente, use um túnel SSH `ssh -L 58100:127.0.0.1:58100 usuario@servidor`. Ela permite criar uma stack isolada em `deploy/instances/NOME/`, revisar o `.env` gerado fora do Git, e depois atualizar/implantar essa stack. Também lista instalações existentes sob `deploy/docker`, `deploy/dockge`, `deploy/portainer` e `deploy/cloudpanel` sem mover seus volumes. Não exibe nem exporta segredos e não expõe o socket Docker ao aplicativo.
+
+O botão **Atualizar** preserva segredos e dados, acrescenta opções novas com backup protegido, valida a configuração, baixa as imagens do canal e executa `up -d --wait`. Imagens oficiais GHCR com tag antiga passam a acompanhar `:develop` no ambiente de desenvolvimento e `:latest` na produção, publicada pelo fluxo `main`/release. Imagens personalizadas e digests fixados permanecem como estão. Faça backup consistente de banco, documentos e bucket antes de atualizar uma instalação com dados.
 
 ## Docker CLI
 
@@ -62,7 +68,13 @@ No develop, use `127.0.0.1:58081`. Preserve o header `Host`, configure `APP_URL`
 
 ## Armazenamento de fotos e documentos
 
-O padrão local grava os dados privados em `data-documents/`. Para S3 ou MinIO, defina `STORAGE_BACKEND=s3`, `STORAGE_BUCKET`, `STORAGE_ENDPOINT_URL`, `STORAGE_REGION`, `STORAGE_ACCESS_KEY` e `STORAGE_SECRET_KEY`. O bucket deve ser privado; a API só entrega arquivos após autenticação e confere o SHA-256.
+Novas instalações `develop`/`stable` criadas pelo configurador usam MinIO privado com `COMPOSE_PROFILES=s3,infra`, `STORAGE_BACKEND=s3` e endpoint interno `http://minio:9000`. A API cria o bucket privado quando necessário; o volume `data-minio/` pertence ao diretório da stack. `data-documents/` continua montado para logs, certificados e leitura de arquivos antigos. Os registros de arquivos guardam seu backend original, portanto não apague esse volume ao ativar S3.
+
+Instalações existentes com `STORAGE_BACKEND=local` permanecem locais. O script de atualização **não** muda esse valor nem habilita perfis novos. Para um S3 externo, configure as credenciais e endpoint próprios, sem ativar o perfil MinIO. Não publique as portas 9000/9001 do bucket.
+
+O perfil `infra` executa Redis e RabbitMQ privados com credenciais próprias. O Redis sinaliza novos jobs de OCR; o RabbitMQ sinaliza jobs de integração. PostgreSQL permanece a fila persistente e os workers continuam consultando o banco se houver indisponibilidade dos sinais. SOGo usa seu próprio serviço `sogo-cache` com protocolo Memcached; Redis não substitui esse cache.
+
+O `MINIO_IMAGE` padrão aponta para a última imagem comunitária distribuída no Quay. O upstream não publicou uma imagem para a correção de segurança seguinte e arquivou o repositório; antes de usar dados reais, avalie uma imagem corrigida sob seu controle ou um S3 compatível mantido. Mantenha MinIO sem porta pública e inclua `data-minio/` no backup. O script `backup.sh` anterior cobre PostgreSQL e `data-documents/`, mas não copia objetos do bucket.
 
 ## Atualização, backup e rollback
 

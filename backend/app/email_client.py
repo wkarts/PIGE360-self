@@ -926,7 +926,7 @@ def redeem_webmail_ticket(school_id: str, ticket: str = Form(...)):
 WEBMAIL_METHODS = {'GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PROPFIND', 'REPORT', 'MKCOL', 'MOVE', 'COPY'}
 WEBMAIL_HOP_HEADERS = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te',
                        'trailers', 'transfer-encoding', 'upgrade', 'host', 'content-length',
-                       'authorization', 'cookie', 'x-webobjects-remote-user', 'x-webobjects-auth-type'}
+                       'authorization', 'cookie'}
 
 
 @webmail_router.api_route('/webmail/{school_id}/{resource:path}', methods=sorted(WEBMAIL_METHODS), include_in_schema=False)
@@ -971,7 +971,8 @@ async def proxy_webmail(school_id: str, resource: str, request: Request):
         target = upstream.rstrip('/') + '/' + decoded_resource
         if request.url.query:
             target += '?' + request.url.query
-        headers = {key: value for key, value in request.headers.items() if key.lower() not in WEBMAIL_HOP_HEADERS}
+        headers = {key: value for key, value in request.headers.items()
+                   if key.lower() not in WEBMAIL_HOP_HEADERS and not key.lower().startswith('x-webobjects-')}
         cookie_pairs = []
         for item in request.headers.get('cookie', '').split(';'):
             key, sep, value = item.strip().partition('=')
@@ -982,7 +983,10 @@ async def proxy_webmail(school_id: str, resource: str, request: Request):
         basic = base64.b64encode(f'{address}:{password}'.encode()).decode()
         proxy_base = str(request.base_url).rstrip('/') + '/webmail/' + quote(school_id, safe='')
         headers.update({'x-webobjects-remote-user': principal, 'x-webobjects-auth-type': 'Basic',
-                        'authorization': 'Basic ' + basic, 'x-webobjects-server-url': proxy_base})
+                        'authorization': 'Basic ' + basic, 'x-webobjects-server-url': proxy_base,
+                        'x-webobjects-server-name': request.url.hostname or '',
+                        'x-webobjects-server-port': str(request.url.port or (443 if request.url.scheme == 'https' else 80)),
+                        'x-webobjects-server-protocol': 'HTTP/1.1'})
         body = await request.body()
         if len(body) > 20 * 1024 * 1024:
             fail(413, 'O conteúdo enviado ao webmail excede 20 MB.')

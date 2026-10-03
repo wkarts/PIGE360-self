@@ -5,6 +5,7 @@ import base64
 import os
 from pathlib import Path
 import secrets
+import re
 from urllib.parse import urlsplit
 
 def main():
@@ -25,16 +26,23 @@ def main():
     if any(c in args.url for c in ['\n','\r','$','#','"',"'"]):parser.error('URL inválida para .env.')
     root=Path(__file__).resolve().parents[1]
     env_path=Path(args.env_file)
-    if env_path.is_absolute() or '..' in env_path.parts or len(env_path.parts)!=3 or env_path.parts[0]!='deploy' or env_path.parts[1] not in ('docker','dockge','portainer','cloudpanel') or not env_path.name.startswith('.env') or env_path.name.endswith('.example'):
-        parser.error('--env-file deve apontar para um arquivo real dentro de deploy/ (por exemplo deploy/docker/.env.develop)')
+    adapters=('docker','dockge','portainer','cloudpanel')
+    instance=(len(env_path.parts)==4 and env_path.parts[:2]==('deploy','instances')
+              and re.fullmatch(r'[a-z][a-z0-9-]{2,39}',env_path.parts[2]))
+    adapter_env=(len(env_path.parts)==3 and env_path.parts[0]=='deploy' and env_path.parts[1] in adapters)
+    if (env_path.is_absolute() or '..' in env_path.parts or not (adapter_env or instance)
+            or not env_path.name.startswith('.env') or env_path.name.endswith('.example')):
+        parser.error('--env-file deve apontar para deploy/ADAPTADOR/.env ou deploy/instances/NOME/.env.')
     destination=root/env_path
-    adapter=env_path.parts[1]
+    adapter='docker' if instance else env_path.parts[1]
     template=root/'deploy'/adapter/('.env.develop.example' if args.channel=='develop' else '.env.production.example') if args.channel!='local' else root/'deploy/docker/.env.example'
     if not template.is_file():
         parser.error(f'Modelo de ambiente não encontrado: {template.relative_to(root)}')
     text=template.read_text()
     version=(root/'VERSION').read_text().strip()
-    project=f'pige360-self-{adapter}-'+('develop' if args.channel=='develop' else 'production' if args.channel=='stable' else 'local')
+    project=('pige360-'+env_path.parts[2] if instance else 'pige360-self-'+adapter+'-'+('develop' if args.channel=='develop' else 'production' if args.channel=='stable' else 'local'))
+    redis_password=secrets.token_urlsafe(36)
+    rabbitmq_password=secrets.token_urlsafe(36)
     values={'APP_URL':args.url.rstrip('/'),'APP_PORT':str(args.port),'APP_BIND':args.bind,
             'COOKIE_SECURE':'true' if url.scheme=='https' else 'false',
             'ALLOWED_HOSTS':','.join(dict.fromkeys(['localhost','127.0.0.1',url.hostname])),
@@ -42,6 +50,10 @@ def main():
             'INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(),
             'MAIL_AGENT_SHARED_KEY':secrets.token_urlsafe(48),'SOGO_DB_PASSWORD':secrets.token_urlsafe(36),
             'POSTGRES_PASSWORD':secrets.token_urlsafe(36),
+            'STORAGE_ACCESS_KEY':'pige360minio','STORAGE_SECRET_KEY':secrets.token_urlsafe(48),
+            'REDIS_PASSWORD':redis_password,'REDIS_URL':f'redis://:{redis_password}@redis:6379/0',
+            'RABBITMQ_PASSWORD':rabbitmq_password,'RABBITMQ_URL':f'amqp://pige360:{rabbitmq_password}@rabbitmq:5672/%2F',
+            'COMPOSE_PROFILES':'s3,infra' if args.channel!='local' else '',
             'APP_IMAGE':{'local':f'pige360-self:{version}','stable':'ghcr.io/wkarts/pige360-self:latest','develop':'ghcr.io/wkarts/pige360-self:develop'}[args.channel],
             'APP_ENV':'development' if args.channel=='develop' else 'production',
             'APP_PULL_POLICY':'never' if args.channel=='local' else 'always',
