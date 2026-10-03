@@ -112,6 +112,8 @@ def stop(*_):
 
 
 def main():
+    from .queue_notifications import install, wait_for_ocr
+    install()
     if '--health' in sys.argv:raise SystemExit(0 if healthy() else 1)
     signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
     # Falha explícita se a imagem não contém o motor; não anuncia worker saudável.
@@ -127,7 +129,7 @@ def main():
             if ticks%30==0:
                 with SessionLocal() as db:cleanup(db)
             worked=process_one();ticks+=1;heartbeat()
-            if not worked:time.sleep(2)
+            if not worked:wait_for_ocr(2)
     except Exception as exc:
         emit('worker.loop_failed', service='worker-ocr', level='ERROR', error_type=type(exc).__name__)
         raise

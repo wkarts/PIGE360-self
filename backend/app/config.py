@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     mail_agent_url: str = ''
     mail_agent_shared_key: str = ''
     sogo_db_password: str = ''
+    redis_url: str = ''
+    rabbitmq_url: str = ''
     worker_poll_seconds: int = 5
     bank_reconcile_interval_seconds: int = 900
     ocr_max_upload_mb: int = 8

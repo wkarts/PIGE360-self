@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import secrets
 from contextlib import asynccontextmanager
@@ -12,17 +13,29 @@ from sqlalchemy.exc import IntegrityError
 from .config import settings
 from .db import engine
 from .storage import ensure_storage
+from .queue_notifications import install as install_queue_notifications
 from starlette.concurrency import run_in_threadpool
 from . import embedding, embedding_settings, mfa, dossiers, ocr, lookups, diagnostics, telemetry, diary
 from . import auth, people, registry, enrollments, documents, contract_templates, reports, portal, admissions, integrations, connect, banking, profiles, support, institution, business_people, account, legacy_import
 from . import contract_signatures, personal_signing, mailcow, school_community, email_client, fiscal_signing, certificate_alerts
 
 cfg = settings()
+install_queue_notifications()
 logger = logging.getLogger('pige360')
 
 @asynccontextmanager
 async def lifespan(app):
-    ensure_storage()
+    # A local MinIO container can still be starting after PostgreSQL becomes
+    # healthy. Bound the wait; a missing bucket or invalid credentials still
+    # fail startup instead of silently falling back to local storage.
+    for attempt in range(12):
+        try:
+            await run_in_threadpool(ensure_storage)
+            break
+        except Exception:
+            if cfg.storage_backend != 's3' or attempt == 11:
+                raise
+            await asyncio.sleep(2)
     telemetry.emit('service.started')
     telemetry.heartbeat('app', force=True)
     yield

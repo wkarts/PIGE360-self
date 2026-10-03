@@ -146,8 +146,7 @@
         <legacy-import-panel v-if="state.page==='legacy-import' && adminTool('legacy-import')" :key="state.schoolId" :school-id="state.schoolId" :school-name="school()?.name || ''" :units="state.catalogs.units || []"></legacy-import-panel>
         <diagnostics-panel :key="state.schoolId" v-if="state.page==='diagnostics' && adminTool('diagnostics')"></diagnostics-panel>
         <section v-if="state.page==='webmail' && !state.sogoFallback" class="webmail-view" :key="state.schoolId+':sogo'" :style="{'--webmail-primary':identity.primary_color,'--webmail-secondary':identity.secondary_color}">
-          <header class="webmail-header"><div class="webmail-brand"><img v-if="identity.logo_url" :src="identity.logo_url" :alt="identity.display_name"><div><p class="eyebrow">{{identity.display_name}}</p><h2>E-mail</h2></div></div><div class="actions"><button type="button" class="btn btn-primary" @click="openSogoWebmail" :disabled="state.sogoStarting">{{state.sogoStarting?'Conectando…':'Abrir caixa de e-mail'}}</button><button type="button" class="btn btn-secondary" @click="state.sogoFallback=true">Abrir caixa alternativa</button></div></header>
-          <p class="muted">Sua caixa de entrada abre nesta tela, com a identidade visual da instituição.</p>
+          <header class="webmail-header"><div class="actions"><button type="button" class="btn btn-secondary" @click="openSogoWebmail" :disabled="state.sogoStarting">{{state.sogoStarting?'Conectando…':'Reconectar webmail'}}</button><button type="button" class="btn btn-secondary" @click="state.sogoFallback=true">Usar caixa alternativa</button></div></header>
           <div v-if="state.sogoError" class="alert warning" role="status">{{state.sogoError}}</div>
           <iframe id="pige-sogo-frame" name="pige-sogo-frame" class="webmail-frame" title="Caixa de e-mail" referrerpolicy="same-origin" allow="clipboard-read; clipboard-write; downloads" @load="state.sogoStarting=false"></iframe>
         </section>

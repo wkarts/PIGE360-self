@@ -18,6 +18,69 @@ services:
       driver: json-file
       options: {max-size: "10m", max-file: "3"}
 
+  # Opt-in for existing local-storage installations; new S3 stacks enable the
+  # s3 profile. No host ports: only PIGE360 may reach the private bucket.
+  minio:
+    profiles: ["s3"]
+    image: ${MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z}
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:-pige360minio}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:-}
+    volumes:
+      - ./data-minio:/data
+    expose: ["9000"]
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  redis:
+    profiles: ["infra"]
+    image: ${REDIS_IMAGE:-ghcr.io/wkarts/pige360-self-redis:8-alpine}
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    command: ["sh", "-ec", "test -n \"$$REDIS_PASSWORD\"; exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    volumes:
+      - ./data-redis:/data
+    expose: ["6379"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -qx PONG"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  rabbitmq:
+    profiles: ["infra"]
+    hostname: rabbitmq
+    image: ${RABBITMQ_IMAGE:-ghcr.io/wkarts/pige360-self-rabbitmq:4-management-alpine}
+    environment:
+      RABBITMQ_DEFAULT_USER: pige360
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-}
+    volumes:
+      - ./data-rabbitmq:/var/lib/rabbitmq
+    expose: ["5672", "15672"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 20s
+      timeout: 10s
+      start_period: 30s
+      retries: 6
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
   # Mantém o nome legado, mas prepara e monitora o volume continuamente.
   storage-init:
     image: ${APP_IMAGE:-ghcr.io/wkarts/pige360-self:latest}
@@ -111,6 +174,8 @@ services:
       MAIL_AGENT_SHARED_KEY: ${MAIL_AGENT_SHARED_KEY:?Defina MAIL_AGENT_SHARED_KEY no arquivo de ambiente}
       SOGO_UPSTREAM_URL: ${SOGO_UPSTREAM_URL:-http://sogo}
       SOGO_DB_PASSWORD: ${SOGO_DB_PASSWORD:?Defina SOGO_DB_PASSWORD no arquivo de ambiente}
+      REDIS_URL: ${REDIS_URL:-}
+      RABBITMQ_URL: ${RABBITMQ_URL:-}
     ports:
       - "${APP_BIND:-127.0.0.1}:${APP_PORT:-58080}:8000"
     volumes:
@@ -158,13 +223,19 @@ services:
     pull_policy: ${APP_PULL_POLICY:-always}
     environment:
       SOGO_DATABASE_URL: postgresql://pige360_sogo:${SOGO_DB_PASSWORD:?Defina SOGO_DB_PASSWORD no arquivo de ambiente}@db:5432/${POSTGRES_DB:-pige360}
+      # The Go helper in the SOGo image rejects lib/pq's "prefer" fallback.
+      PGSSLMODE: disable
       SOGO_SMTP_SERVER: ${SOGO_SMTP_SERVER:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
       TZ: ${TZ:-America/Bahia}
     expose: ["80"]
     depends_on:
       app: {condition: service_healthy}
+      sogo-cache: {condition: service_started}
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.error, urllib.request; url='http://127.0.0.1/SOGo/'; opener=urllib.request.build_opener(urllib.request.HTTPRedirectHandler()); exec(\"try:\\n r=opener.open(url, timeout=5); status=r.status\\nexcept urllib.error.HTTPError as e: status=e.code\\nassert status < 500, status\")"]
+      test: ["CMD", "python3", "/opt/pige360/healthcheck.py"]
       interval: 20s
       timeout: 8s
       start_period: 60s
@@ -177,6 +248,17 @@ services:
       driver: json-file
       options: {max-size: "10m", max-file: "3"}
 
+  sogo-cache:
+    image: memcached:1.6-alpine
+    command: ["memcached", "-m", "64", "-u", "memcache"]
+    expose: ["11211"]
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
   worker:
     image: ${APP_IMAGE:-ghcr.io/wkarts/pige360-self:latest}
     pull_policy: ${APP_PULL_POLICY:-always}
@@ -185,6 +267,7 @@ services:
     environment:
       <<: *application_environment
       SOGO_DB_PASSWORD: ""
+      REDIS_URL: ""
     volumes:
       - ./data-documents:/data
     depends_on:
@@ -214,6 +297,7 @@ services:
       MAIL_AGENT_SHARED_KEY: ""
       SOGO_UPSTREAM_URL: ""
       SOGO_DB_PASSWORD: ""
+      RABBITMQ_URL: ""
     volumes:
       - ./data-documents:/data
     depends_on:

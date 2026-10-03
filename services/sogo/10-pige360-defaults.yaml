@@ -1,6 +1,7 @@
 SOGoPageTitle: "E-mail"
 SOGoLoginModule: Mail
 SOGoTimeZone: America/Bahia
+SOGoMemcachedHost: "sogo-cache"
 SOGoLanguage: BrazilianPortuguese
 SOGoProfileURL: "${SOGO_DATABASE_URL}/sogo_user_profile"
 OCSFolderInfoURL: "${SOGO_DATABASE_URL}/sogo_folder_info"
