@@ -981,11 +981,12 @@ async def proxy_webmail(school_id: str, resource: str, request: Request):
         if cookie_pairs:
             headers['cookie'] = '; '.join(cookie_pairs)
         basic = base64.b64encode(f'{address}:{password}'.encode()).decode()
-        proxy_base = str(request.base_url).rstrip('/') + '/webmail/' + quote(school_id, safe='')
+        public_url = urlsplit(cfg.app_url)
+        proxy_base = cfg.app_url.rstrip('/') + '/webmail/' + quote(school_id, safe='')
         headers.update({'x-webobjects-remote-user': principal, 'x-webobjects-auth-type': 'Basic',
                         'authorization': 'Basic ' + basic, 'x-webobjects-server-url': proxy_base,
-                        'x-webobjects-server-name': request.url.hostname or '',
-                        'x-webobjects-server-port': str(request.url.port or (443 if request.url.scheme == 'https' else 80)),
+                        'x-webobjects-server-name': public_url.hostname or '',
+                        'x-webobjects-server-port': str(public_url.port or (443 if public_url.scheme == 'https' else 80)),
                         'x-webobjects-server-protocol': 'HTTP/1.1'})
         body = await request.body()
         if len(body) > 20 * 1024 * 1024:
@@ -1027,27 +1028,24 @@ async def proxy_webmail(school_id: str, resource: str, request: Request):
             response_headers[name] = upstream_response.headers[name]
     location = upstream_response.headers.get('location')
     if location:
-        target_origin = f'{parsed.scheme}://{parsed.netloc}'
-        if location.startswith(target_origin):
-            location_path = location[len(target_origin):]
-            if location_path.startswith('/SOGo'):
-                response_headers['location'] = prefix + location_path
-            elif location_path.startswith('/'):
-                response_headers['location'] = prefix + location_path
-            else:
-                response_headers['location'] = prefix + '/SOGo/'
-        elif location.startswith('/SOGo') or location.startswith('/principals'):
-            response_headers['location'] = prefix + location
-        elif location.startswith('/'):
-            response_headers['location'] = prefix + location
-        else:
-            response_headers['location'] = prefix + '/SOGo/'
+        from .webmail_proxy import rewrite_location
+        try:
+            response_headers['location'] = rewrite_location(location, target, upstream, cfg.app_url, prefix)
+        except ValueError:
+            fail(502, 'O webmail retornou um redirecionamento inválido.')
+        if response_headers['location'] == request.url.path and upstream_response.status_code in (301, 302, 303, 307, 308):
+            fail(502, 'O webmail retornou um redirecionamento circular.')
     response_headers['Cache-Control'] = 'no-store'
     response_headers['X-Frame-Options'] = 'SAMEORIGIN'
-    response_headers['Content-Security-Policy'] = "default-src 'self' data: blob:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
+    response_headers['Content-Security-Policy'] = ("default-src 'self' data: blob:; img-src 'self' data: blob:; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' data: https://fonts.gstatic.com; "
+        "script-src 'self' 'unsafe-inline'; frame-ancestors 'self'; object-src 'none'; base-uri 'self'")
     response = Response(content=content, status_code=upstream_response.status_code, headers=response_headers)
     for cookie in upstream_response.headers.get_list('set-cookie'):
-        response.headers.append('set-cookie', re.sub(r'(?i)path=/', f'Path={prefix}/', cookie))
+        from .webmail_proxy import rewrite_cookie_path
+        response.headers.append('set-cookie', rewrite_cookie_path(cookie, prefix))
     return response
 
 

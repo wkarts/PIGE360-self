@@ -659,7 +659,7 @@ def test_changed_server_configuration_requires_revalidation(mailbox_api):
 def test_sogo_ticket_is_one_use_cookie_bound_to_school_and_user(mailbox_api, monkeypatch):
     from types import SimpleNamespace
     a=mailbox_api
-    monkeypatch.setattr(e,'settings',lambda:SimpleNamespace(sogo_upstream_url='http://sogo:20000',cookie_secure=False))
+    monkeypatch.setattr(e,'settings',lambda:SimpleNamespace(sogo_upstream_url='http://sogo:20000',app_url='https://pige360.example.org',cookie_secure=False))
     response=a['client'].post(a['base']+'/webmail-ticket',headers={**a['headers'],'X-CSRF-Protection':'1'},json={})
     assert response.status_code==200,response.text
     ticket=response.json()['ticket']
@@ -679,7 +679,7 @@ def test_sogo_proxy_injects_credentials_server_side_and_rewrites_same_origin_pat
     from types import SimpleNamespace
     import httpx
     a=mailbox_api
-    monkeypatch.setattr(e,'settings',lambda:SimpleNamespace(sogo_upstream_url='http://sogo:20000',cookie_secure=False))
+    monkeypatch.setattr(e,'settings',lambda:SimpleNamespace(sogo_upstream_url='http://sogo:20000',app_url='https://pige360.example.org',cookie_secure=False))
     sent=[]
     class FakeAsyncClient:
         def __init__(self,**kwargs): pass
@@ -700,6 +700,7 @@ def test_sogo_proxy_injects_credentials_server_side_and_rewrites_same_origin_pat
     assert result.status_code==200
     assert sent[0][1]=='http://sogo:20000/SOGo/'
     assert sent[0][2]['x-webobjects-remote-user']==a['user']['id']+'@'+a['school']['id']
+    assert sent[0][2]['x-webobjects-server-url']=='https://pige360.example.org/webmail/'+a['school']['id']
     assert base64.b64decode(sent[0][2]['authorization'].split()[1]).decode().endswith(':'+a['state']['password'])
     assert f"/webmail/{a['school']['id']}/SOGo/Mail" in result.text
     assert 'SAMEORIGIN' in result.headers['x-frame-options'] and 'frame-ancestors \'self\'' in result.headers['content-security-policy']
@@ -717,7 +718,7 @@ def test_sogo_proxy_rejects_path_traversal_and_non_webmail_resources():
 def test_sogo_proxy_rejects_cookie_replayed_for_another_school(mailbox_api, monkeypatch):
     from types import SimpleNamespace
     a=mailbox_api
-    monkeypatch.setattr(e,'settings',lambda:SimpleNamespace(sogo_upstream_url='http://sogo:20000',cookie_secure=False))
+    monkeypatch.setattr(e,'settings',lambda:SimpleNamespace(sogo_upstream_url='http://sogo:20000',app_url='https://pige360.example.org',cookie_secure=False))
     response=a['client'].post(a['base']+'/webmail-ticket',headers={**a['headers'],'X-CSRF-Protection':'1'},json={})
     launch=a['client'].post(f"/webmail/{a['school']['id']}/launch",data={'ticket':response.json()['ticket']},follow_redirects=False)
     cookie=launch.headers['set-cookie'].split(';',1)[0]

@@ -13,6 +13,28 @@ permissions:
   contents: read
   packages: read
 jobs:
+  minio_source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Compilar MinIO corrigido do código-fonte e verificar saúde
+        run: |
+          set -Eeuo pipefail
+          docker buildx build --platform linux/amd64 --load \
+            --build-arg UPSTREAM_IMAGE=docker.io/library/golang:1.24-bookworm \
+            -f containers/minio.Dockerfile -t pige360-minio:ci .
+          docker run --rm --entrypoint /usr/local/bin/minio pige360-minio:ci --version
+          docker run -d --name pige360-minio-ci \
+            -e MINIO_ROOT_USER=ci-minio -e MINIO_ROOT_PASSWORD=ci-only-minio-password-123456 \
+            -p 127.0.0.1:19000:9000 pige360-minio:ci server /data
+          trap 'status=$?; if (( status )); then docker logs pige360-minio-ci || true; fi; docker rm -f pige360-minio-ci >/dev/null 2>&1 || true' EXIT
+          curl -fsS --retry 20 --retry-all-errors --retry-delay 2 \
+            http://127.0.0.1:19000/minio/health/live
+          docker exec pige360-minio-ci /usr/local/bin/minio-healthcheck
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -134,7 +156,11 @@ jobs:
           docker build --build-arg SOURCE_REVISION="$GITHUB_SHA" --build-arg APP_VERSION="$(cat VERSION)" \
             -t pige360-sogo:ci services/sogo
           docker run --rm --entrypoint python3 pige360-sogo:ci -c 'from pathlib import Path; c=Path("/etc/apache2/conf-available/SOGo.conf").read_text(); assert "RequestHeader unset \"x-webobjects-remote-user\"" not in c; assert "RequestHeader set \"x-webobjects-server-url\"" not in c'
-          bash scripts/ci/smoke.sh pige360-self:ci local
+          # O pacote GHCR do Memcached nasce após o merge em develop. O smoke
+          # da PR usa uma imagem local descartável com a mesma base upstream.
+          docker build --build-arg UPSTREAM_IMAGE=docker.io/library/memcached:1.6-alpine \
+            -f containers/service.Dockerfile -t pige360-memcached:ci .
+          SOGO_CACHE_IMAGE=pige360-memcached:ci bash scripts/ci/smoke.sh pige360-self:ci local
           python - <<'PY'
           import json
           from pathlib import Path

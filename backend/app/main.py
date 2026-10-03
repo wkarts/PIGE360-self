@@ -88,8 +88,8 @@ async def security_headers(request: Request, call_next):
     hub_script_sources = ' '.join(hub_origins)
     # O SDK opcional do HUB injeta estilos Inter. Permissão restrita aos dois
     # hosts de fontes somente quando há um HUB ativo; a identidade da escola é local.
-    hub_style_sources = 'https://fonts.googleapis.com' if hub_origins else ''
-    hub_font_sources = 'https://fonts.gstatic.com' if hub_origins else ''
+    hub_style_sources = 'https://fonts.googleapis.com' if hub_origins or cfg.sogo_upstream_url else ''
+    hub_font_sources = 'https://fonts.gstatic.com' if hub_origins or cfg.sogo_upstream_url else ''
     hub_connect_sources = ' '.join(hub_origins + hub_sockets)
     # Downloads de conteúdo externo podem declarar uma política mais restrita.
     response.headers.setdefault('Content-Security-Policy', (
