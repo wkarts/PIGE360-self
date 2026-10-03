@@ -5,21 +5,44 @@ Run on the Docker host and reach 127.0.0.1 through an SSH tunnel. The tool
 does not mount docker.sock into the application or expose stack credentials.
 """
 import argparse
+import base64  # Helper scripts are loaded at runtime by the frozen executable.
+from datetime import datetime, timezone
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from html import escape
 from pathlib import Path
 import re
+import runpy
 import secrets
 import shutil
 import subprocess
 import sys
+import os
+import tempfile
 from urllib.parse import parse_qs, urlsplit
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(sys.executable).resolve().parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parents[1]
 INSTANCE_DIR = ROOT / 'deploy' / 'instances'
 ADAPTERS = ('docker', 'dockge', 'portainer', 'cloudpanel')
 SLUG = re.compile(r'[a-z][a-z0-9-]{2,39}\Z')
+
+
+def helper_command(root, script, *args):
+    if script not in ('configure.py', 'prepare-upgrade.py'):
+        raise ValueError('Operação desconhecida.')
+    if getattr(sys, 'frozen', False):
+        return [sys.executable, '--internal-script', script, str(root), *args]
+    return [sys.executable, str(root / 'scripts' / script), *args]
+
+
+def run_internal_script(script, root, args):
+    if script not in ('configure.py', 'prepare-upgrade.py'):
+        raise ValueError('Operação desconhecida.')
+    path = root / 'scripts' / script
+    if not path.is_file():
+        raise ValueError('Arquivos da instalação não encontrados no diretório selecionado.')
+    sys.argv = [str(path), *args]
+    runpy.run_path(str(path), run_name='__main__')
 
 
 def stacks(root=ROOT):
@@ -69,7 +92,7 @@ def create(root, name, channel, url, port):
         compose = compose.replace('context: ../../services/', 'context: ../../../services/')
         (destination / 'compose.yaml').write_text(compose)
         env_path = Path('deploy') / 'instances' / name / ('.env.develop' if channel == 'develop' else '.env.production')
-        subprocess.run([sys.executable, str(root / 'scripts' / 'configure.py'),
+        subprocess.run([*helper_command(root, 'configure.py'),
                         '--channel', channel, '--env-file', env_path.as_posix(),
                         '--url', url, '--port', port], cwd=root, check=True,
                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=15)
@@ -89,7 +112,7 @@ def deploy(root, env_path):
     env = root / env_path
     compose = env.parent / 'compose.yaml'
     commands = (
-        [sys.executable, str(root / 'scripts' / 'prepare-upgrade.py'), '--env-file', env_path, '--track-channel'],
+        helper_command(root, 'prepare-upgrade.py', '--env-file', env_path, '--track-channel'),
         ['docker', 'compose', '--env-file', str(env), '-f', str(compose), 'config', '--quiet'],
         ['docker', 'compose', '--env-file', str(env), '-f', str(compose), 'pull'],
         ['docker', 'compose', '--env-file', str(env), '-f', str(compose), 'up', '-d', '--wait'],
@@ -198,9 +221,16 @@ def serve(port):
 
 
 if __name__ == '__main__':
+    if len(sys.argv) >= 4 and sys.argv[1] == '--internal-script':
+        run_internal_script(sys.argv[2], Path(sys.argv[3]).resolve(), sys.argv[4:])
+        raise SystemExit(0)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=58100)
+    parser.add_argument('--root', type=Path, default=ROOT, help='Checkout PIGE360 com deploy/ e scripts/.')
     arguments = parser.parse_args()
     if not 1024 <= arguments.port <= 65535:
         parser.error('A porta deve estar entre 1024 e 65535.')
+    ROOT = arguments.root.resolve()
+    if not (ROOT / 'deploy' / 'docker' / 'compose.yaml').is_file() or not (ROOT / 'scripts' / 'configure.py').is_file():
+        parser.error('--root deve apontar para um checkout PIGE360 com deploy/ e scripts/.')
     serve(arguments.port)

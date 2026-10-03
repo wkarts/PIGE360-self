@@ -689,7 +689,11 @@ def test_sogo_proxy_injects_credentials_server_side_and_rewrites_same_origin_pat
             return httpx.Request(method,url,headers=headers,content=content)
         async def send(self,request,stream=False):
             sent.append((request.method,str(request.url),dict(request.headers),request.content))
-            return httpx.Response(200,content=b'<html><head></head><body><a href="/SOGo/Mail">Inbox</a></body></html>',headers={'content-type':'text/html; charset=utf-8','set-cookie':'SOGo=sample; Path=/; HttpOnly'})
+            if '/SOGo.woa/WebServerResources/css/' in str(request.url):
+                return httpx.Response(200, content=b'body{color:#123}', headers={'content-type':'text/css'})
+            if '/SOGo.woa/WebServerResources/js/' in str(request.url):
+                return httpx.Response(200, content=b'window.mailReady=true;', headers={'content-type':'application/javascript'})
+            return httpx.Response(200,content=b'<html><head><link rel="stylesheet" href="/SOGo.woa/WebServerResources/css/styles.css?lm=1"><script src="/SOGo.woa/WebServerResources/js/Mailer.js?lm=1"></script></head><body><a href="/SOGo/Mail">Inbox</a></body></html>',headers={'content-type':'text/html; charset=utf-8','set-cookie':'SOGo=sample; Path=/; HttpOnly'})
     monkeypatch.setattr(e.httpx,'AsyncClient',FakeAsyncClient)
     response=a['client'].post(a['base']+'/webmail-ticket',headers={**a['headers'],'X-CSRF-Protection':'1'},json={})
     launch=a['client'].post(f"/webmail/{a['school']['id']}/launch",data={'ticket':response.json()['ticket']},follow_redirects=False)
@@ -703,16 +707,28 @@ def test_sogo_proxy_injects_credentials_server_side_and_rewrites_same_origin_pat
     assert sent[0][2]['x-webobjects-server-url']=='https://pige360.example.org/webmail/'+a['school']['id']
     assert base64.b64decode(sent[0][2]['authorization'].split()[1]).decode().endswith(':'+a['state']['password'])
     assert f"/webmail/{a['school']['id']}/SOGo/Mail" in result.text
+    assert f"/webmail/{a['school']['id']}/SOGo.woa/WebServerResources/css/styles.css?lm=1" in result.text
+    css=a['client'].get(f"/webmail/{a['school']['id']}/SOGo.woa/WebServerResources/css/styles.css?lm=1", cookies={name:value})
+    script=a['client'].get(f"/webmail/{a['school']['id']}/SOGo.woa/WebServerResources/js/Mailer.js?lm=1", cookies={name:value})
+    assert css.status_code==200 and css.headers['content-type'].startswith('text/css')
+    assert script.status_code==200 and script.headers['content-type'].startswith('application/javascript')
+    assert sent[1][1]=='http://sogo:20000/SOGo.woa/WebServerResources/css/styles.css?lm=1'
     assert 'SAMEORIGIN' in result.headers['x-frame-options'] and 'frame-ancestors \'self\'' in result.headers['content-security-policy']
     assert 'Path=/webmail/'+a['school']['id']+'/' in result.headers['set-cookie']
 
 
 def test_sogo_proxy_rejects_path_traversal_and_non_webmail_resources():
     from fastapi import HTTPException
-    for resource in ('../admin', 'SOGo/../../admin', 'SOGo/%252e%252e/admin', 'SOGo/%5cadmin', 'private/file'):
+    for resource in ('../admin', 'SOGo/../../admin', 'SOGo/%252e%252e/admin', 'SOGo/%5cadmin', 'private/file',
+                     'SOGo.woa/private', 'SOGo.woa/WebServerResources/../../private'):
         with pytest.raises(HTTPException) as error:
             e._validated_webmail_resource(resource)
         assert error.value.status_code == 404
+
+
+def test_sogo_static_resources_accept_exact_public_directory():
+    assert e._validated_webmail_resource('SOGo.woa/WebServerResources/css/styles.css') == 'SOGo.woa/WebServerResources/css/styles.css'
+    assert e._validated_webmail_resource('SOGo.woa/WebServerResources/js/vendor/angular.min.js') == 'SOGo.woa/WebServerResources/js/vendor/angular.min.js'
 
 
 def test_sogo_proxy_rejects_cookie_replayed_for_another_school(mailbox_api, monkeypatch):

@@ -24,6 +24,8 @@ class WebmailProxyTest(unittest.TestCase):
                          self.prefix + '/SOGo/so/user/Mail?folder=INBOX')
         self.assertEqual(self.location('/SOGo'), self.prefix + '/SOGo/')
         self.assertEqual(self.location('so/user/Mail'), self.prefix + '/SOGo/so/user/Mail')
+        self.assertEqual(self.location('/SOGo.woa/WebServerResources/css/styles.css?lm=1'),
+                         self.prefix + '/SOGo.woa/WebServerResources/css/styles.css?lm=1')
 
     def test_public_redirect_is_not_prefixed_twice(self):
         self.assertEqual(self.location(self.public + self.prefix + '/SOGo/'), self.prefix + '/SOGo/')
@@ -38,7 +40,8 @@ class WebmailProxyTest(unittest.TestCase):
     def test_session_cookie_paths_follow_proxy(self):
         for path, expected in (('/', self.prefix + '/'), ('/SOGo', self.prefix + '/SOGo'),
                                ('/SOGo/', self.prefix + '/SOGo/'),
-                               (self.prefix + '/SOGo/', self.prefix + '/SOGo/')):
+                               (self.prefix + '/SOGo/', self.prefix + '/SOGo/'),
+                               ('/SOGo.woa/WebServerResources/', self.prefix + '/SOGo.woa/WebServerResources/')):
             with self.subTest(path=path):
                 original = 'SOGoSession=test; HttpOnly; Path=' + path + '; SameSite=Lax'
                 actual = proxy.rewrite_cookie_path(original, self.prefix)

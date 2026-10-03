@@ -892,7 +892,7 @@ def _webmail_cookie_hash(request: Request, school_id: str) -> str:
 def _validated_webmail_resource(resource: str) -> str:
     decoded = unquote(unquote(resource))
     segments = decoded.split('/')
-    if (not decoded.startswith(('SOGo/', 'principals/')) or
+    if (not decoded.startswith(('SOGo/', 'principals/', 'SOGo.woa/WebServerResources/')) or
             any(part in {'.', '..'} for part in segments) or
             any(ord(char) < 32 or ord(char) == 127 or char == '\\' for char in decoded) or
             len(decoded) > 4096):

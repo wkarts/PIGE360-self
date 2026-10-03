@@ -1,6 +1,6 @@
 """Catch a dead SOGo user helper even when its Apache login page still returns 200."""
 from pathlib import Path
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 
 def helper_running(proc: Path = Path('/proc')) -> bool:
@@ -20,6 +20,15 @@ def main() -> None:
     with urlopen('http://127.0.0.1/SOGo/', timeout=5) as response:
         if response.status != 200:
             raise SystemExit('SOGo HTTP status is not 200')
+    # A página de login pode estar saudável enquanto Apache não serve CSS/JS.
+    for resource, allowed_types in (
+        ('css/styles.css', {'text/css'}),
+        ('js/vendor/angular.min.js', {'application/javascript', 'text/javascript', 'application/x-javascript'}),
+    ):
+        request = Request('http://127.0.0.1/SOGo.woa/WebServerResources/' + resource, method='HEAD')
+        with urlopen(request, timeout=5) as response:
+            if response.status != 200 or response.headers.get_content_type() not in allowed_types:
+                raise SystemExit('SOGo static resource is not served with its expected MIME type: ' + resource)
 
 
 if __name__ == '__main__':
