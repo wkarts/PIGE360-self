@@ -109,7 +109,10 @@ def wait_for_integration(seconds):
         time.sleep(seconds)
     finally:
         if connection and connection.is_open:
-            connection.close()
+            try:
+                connection.close()
+            except Exception:
+                LOG.warning('wake signal connection close failed')
 
 
 def wait_for_ocr(seconds=2):

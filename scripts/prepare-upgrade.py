@@ -13,6 +13,8 @@ import argparse
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--env-file',default='deploy/docker/.env.production')
+    parser.add_argument('--track-channel',action='store_true',
+                        help='Apontar imagens oficiais GHCR para develop ou main/latest.')
     args=parser.parse_args()
     root=Path(__file__).resolve().parents[1]
     env_path=Path(args.env_file)
@@ -32,6 +34,10 @@ def main():
     except Exception:raise SystemExit('INTEGRATION_ENCRYPTION_KEY existente inválida. Não foi substituída; confira seu backup.')
     existing={line.split('=',1)[0] for line in lines if '=' in line and not line.lstrip().startswith('#')}
     channel='develop' if env_path.name.endswith('.develop') else 'production'
+    tag='develop' if channel=='develop' else 'latest'
+    official={'APP_IMAGE':'ghcr.io/wkarts/pige360-self',
+              'MAIL_AGENT_IMAGE':'ghcr.io/wkarts/pige360-self-mail-agent',
+              'SOGO_IMAGE':'ghcr.io/wkarts/pige360-self-sogo'}
     example=(root/'deploy'/('docker' if instance else env_path.parts[1])/f'.env.{channel}.example').read_text().splitlines()
     version=(root/'VERSION').read_text().strip()
     version_tuple=tuple(map(int,version.split('.')))
@@ -39,6 +45,10 @@ def main():
     updated=[]
     for line in lines:
         if line.startswith('INTEGRATION_ENCRYPTION_KEY='):line='INTEGRATION_ENCRYPTION_KEY='+new_key
+        if args.track_channel and '=' in line:
+            key,value=line.split('=',1)
+            if key in official and value.startswith(official[key]+':'):
+                line=f'{key}={official[key]}:{tag}'
         match=re.fullmatch(r'APP_IMAGE=pige360-self:(\d+)\.(\d+)\.(\d+)',line)
         if match and tuple(map(int,match.groups()))<version_tuple:line=f'APP_IMAGE=pige360-self:{version}'
         updated.append(line)

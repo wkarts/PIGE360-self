@@ -127,10 +127,15 @@ class CatalogAndRetentionTests(unittest.TestCase):
     def test_all_runtime_composes_use_ghcr_postgres(self):
         for name in ('deploy/docker/compose.yaml','deploy/dockge/compose.yaml','deploy/portainer/compose.yaml','deploy/cloudpanel/compose.yaml'):
             self.assertIn('ghcr.io/wkarts/pige360-self-postgres',(ROOT/name).read_text())
-    def test_external_services_not_added_without_consumers(self):
+    def test_private_brokers_have_consumers_and_no_host_bindings(self):
+        queue=(ROOT/'backend/app/queue_notifications.py').read_text()
+        self.assertIn("client.brpop('pige360:ocr-wake'",queue)
+        self.assertIn("queue='pige360-integration-wake'",queue)
         for name in ('docker','dockge','portainer','cloudpanel'):
             text=(ROOT/'deploy'/name/'compose.yaml').read_text()
-            self.assertNotIn('\n  redis:',text);self.assertNotIn('\n  rabbitmq:',text)
+            self.assertIn('\n  redis:\n    profiles: ["infra"]',text)
+            self.assertIn('\n  rabbitmq:\n    profiles: ["infra"]',text)
+            self.assertEqual(text.count('\n    ports:'),1)
     def test_bases_not_visited_by_cleanup_even_for_orphans(self):
         calls=[]
         def api(path,method='GET'):

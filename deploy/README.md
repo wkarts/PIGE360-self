@@ -34,7 +34,7 @@ Para produção, use `--channel stable`, `deploy/docker/.env.production` e a URL
 
 No host Docker, execute `python3 scripts/deployer.py` e abra o endereço e senha temporária mostrados no terminal. A interface escuta apenas em `127.0.0.1:58100`; para administrar remotamente, use um túnel SSH `ssh -L 58100:127.0.0.1:58100 usuario@servidor`. Ela permite criar uma stack isolada em `deploy/instances/NOME/`, revisar o `.env` gerado fora do Git, e depois atualizar/implantar essa stack. Também lista instalações existentes sob `deploy/docker`, `deploy/dockge`, `deploy/portainer` e `deploy/cloudpanel` sem mover seus volumes. Não exibe nem exporta segredos e não expõe o socket Docker ao aplicativo.
 
-O botão **Atualizar** preserva `.env` e dados, acrescenta opções novas com backup protegido, valida a configuração, baixa as imagens do canal e executa `up -d --wait`. `develop` acompanha a imagem GHCR `:develop`; a produção usa `:latest` publicada pelo fluxo `main`/release. Faça backup consistente de banco, documentos e bucket antes de atualizar uma instalação com dados.
+O botão **Atualizar** preserva segredos e dados, acrescenta opções novas com backup protegido, valida a configuração, baixa as imagens do canal e executa `up -d --wait`. Imagens oficiais GHCR com tag antiga passam a acompanhar `:develop` no ambiente de desenvolvimento e `:latest` na produção, publicada pelo fluxo `main`/release. Imagens personalizadas e digests fixados permanecem como estão. Faça backup consistente de banco, documentos e bucket antes de atualizar uma instalação com dados.
 
 ## Docker CLI
 

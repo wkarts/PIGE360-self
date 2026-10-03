@@ -100,6 +100,20 @@ class DeployConfigTest(unittest.TestCase):
         self.assertEqual((self.root / path).read_text(), env)
         self.assertIn(path, module.stacks(self.root))
 
+    def test_upgrade_tracks_only_official_channel_images(self):
+        path = self.root / 'deploy/docker/.env.develop'
+        path.write_text('APP_IMAGE=ghcr.io/wkarts/pige360-self:legacy\n'
+                        'MAIL_AGENT_IMAGE=ghcr.io/wkarts/pige360-self-mail-agent:old\n'
+                        'SOGO_IMAGE=registry.example.org/custom-sogo:kept\n'
+                        'POSTGRES_PASSWORD=KEEP\nAPP_SECRET_KEY=KEEP\n'
+                        'INTEGRATION_ENCRYPTION_KEY=\n')
+        self.run_script('prepare-upgrade.py', '--env-file', 'deploy/docker/.env.develop', '--track-channel')
+        content = path.read_text()
+        self.assertIn('APP_IMAGE=ghcr.io/wkarts/pige360-self:develop\n', content)
+        self.assertIn('MAIL_AGENT_IMAGE=ghcr.io/wkarts/pige360-self-mail-agent:develop\n', content)
+        self.assertIn('SOGO_IMAGE=registry.example.org/custom-sogo:kept\n', content)
+        self.assertIn('POSTGRES_PASSWORD=KEEP\n', content)
+
     def test_sogo_apache_template_keeps_trusted_proxy_headers(self):
         spec = importlib.util.spec_from_file_location('configure_apache', ROOT / 'services/sogo/configure_apache.py')
         module = importlib.util.module_from_spec(spec)

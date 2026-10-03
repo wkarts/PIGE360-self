@@ -89,7 +89,7 @@ def deploy(root, env_path):
     env = root / env_path
     compose = env.parent / 'compose.yaml'
     commands = (
-        [sys.executable, str(root / 'scripts' / 'prepare-upgrade.py'), '--env-file', env_path],
+        [sys.executable, str(root / 'scripts' / 'prepare-upgrade.py'), '--env-file', env_path, '--track-channel'],
         ['docker', 'compose', '--env-file', str(env), '-f', str(compose), 'config', '--quiet'],
         ['docker', 'compose', '--env-file', str(env), '-f', str(compose), 'pull'],
         ['docker', 'compose', '--env-file', str(env), '-f', str(compose), 'up', '-d', '--wait'],
