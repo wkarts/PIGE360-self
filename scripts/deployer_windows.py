@@ -30,10 +30,7 @@ def ssh_command(server: str, checkout: str, port: int = 58100) -> list[str]:
     if not 1024 <= port <= 65535:
         raise ValueError('A porta local deve estar entre 1024 e 65535.')
     quoted = shlex.quote(str(path))
-    remote = (f'cd {quoted} && '
-              f'if test -x ./pige360-deployer-linux-amd64; then '
-              f'exec ./pige360-deployer-linux-amd64 --root . --port 58100; '
-              f'else exec python3 scripts/deployer.py --root . --port 58100; fi')
+    remote = f'cd {quoted} && exec python3 scripts/deployer.py --root . --port 58100'
     return ['ssh', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
             '-o', 'ExitOnForwardFailure=yes', '-o', 'ServerAliveInterval=20',
             '-L', f'127.0.0.1:{port}:127.0.0.1:58100', '-T', server, remote]
