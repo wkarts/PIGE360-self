@@ -112,7 +112,7 @@ with SessionLocal.begin() as db:
             page.get_by_label('Nome da instância existente', exact=True).fill('NOVA-SINTETICA-A')
             page.get_by_role('button', name='Vincular a esta instituição', exact=True).click()
             expect(page.locator('.x-charge code').filter(has_text='NOVA-SINTETICA-A')).to_have_count(1)
-            expect(page.get_by_role('heading', name='Instâncias desta instituição no serviço')).to_be_visible()
+            expect(page.get_by_role('heading', name='Instâncias disponíveis no provedor')).to_be_visible()
             expect(page.locator('main').get_by_text('SINTETICA-B', exact=True)).to_have_count(0)
             record('Adoção por nome e inventário preservam o recorte da instituição')
             page.screenshot(path=str(OUT/'whatsapp-instituicao-desktop.png'), full_page=True)
