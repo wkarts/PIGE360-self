@@ -717,6 +717,60 @@ def test_sogo_proxy_injects_credentials_server_side_and_rewrites_same_origin_pat
     assert 'Path=/webmail/'+a['school']['id']+'/' in result.headers['set-cookie']
 
 
+@pytest.mark.parametrize('read_fails', [False, True])
+def test_sogo_mail_view_keeps_upstream_open_while_reading(mailbox_api, monkeypatch, read_fails):
+    from types import SimpleNamespace
+    import httpx
+    a = mailbox_api
+    monkeypatch.setattr(e, 'settings', lambda: SimpleNamespace(
+        sogo_upstream_url='http://sogo:20000', app_url='https://pige360.example.org', cookie_secure=False))
+
+    class LiveStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            assert upstream.open, 'The upstream connection closed before the SOGo response was read'
+            if read_fails:
+                raise httpx.ReadError('simulated upstream disconnect')
+            yield b'<html><head></head><body>SOGo Mail</body></html>'
+
+    class LiveClient:
+        open = False
+
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            self.open = True
+            return self
+
+        async def __aexit__(self, *args):
+            self.open = False
+
+        def build_request(self, method, url, headers, content=None):
+            return httpx.Request(method, url, headers=headers, content=content)
+
+        async def send(self, request, stream=False):
+            assert stream and request.url.path.endswith('/Mail/view')
+            return httpx.Response(200, headers={'content-type': 'text/html'},
+                                  stream=LiveStream(), request=request)
+
+    upstream = LiveClient()
+    monkeypatch.setattr(e.httpx, 'AsyncClient', lambda **kwargs: upstream)
+    ticket = a['client'].post(a['base']+'/webmail-ticket',
+                              headers={**a['headers'], 'X-CSRF-Protection': '1'}, json={}).json()['ticket']
+    launch = a['client'].post(f"/webmail/{a['school']['id']}/launch", data={'ticket': ticket},
+                              follow_redirects=False)
+    cookie = launch.headers['set-cookie'].split(';', 1)[0]
+    principal = a['user']['id'] + '@' + a['school']['id']
+    result = a['client'].get(f"/webmail/{a['school']['id']}/SOGo/so/{principal}/Mail/view",
+                             headers={'cookie': cookie})
+    assert result.status_code == (502 if read_fails else 200), result.text
+    if read_fails:
+        assert 'simulated upstream disconnect' not in result.text
+    else:
+        assert 'SOGo Mail' in result.text
+    assert not upstream.open
+
+
 def test_sogo_proxy_rejects_path_traversal_and_non_webmail_resources():
     from fastapi import HTTPException
     for resource in ('../admin', 'SOGo/../../admin', 'SOGo/%252e%252e/admin', 'SOGo/%5cadmin', 'private/file',
