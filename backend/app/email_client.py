@@ -1103,7 +1103,7 @@ async def proxy_webmail(school_id: str, resource: str, request: Request):
         if response_headers['location'] == request.url.path and upstream_response.status_code in (301, 302, 303, 307, 308):
             fail(502, 'O webmail retornou um redirecionamento circular.')
     from .webmail_proxy import cache_control
-    response_headers['Cache-Control'] = cache_control(decoded_resource, request.url.query,
+    response_headers['cache-control'] = cache_control(decoded_resource, request.url.query,
                                                        upstream_response.status_code, request.method)
     response_headers['X-Frame-Options'] = 'SAMEORIGIN'
     response_headers['Content-Security-Policy'] = ("default-src 'self' data: blob:; img-src 'self' data: blob:; "
