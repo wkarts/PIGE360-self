@@ -1045,11 +1045,10 @@ async def proxy_webmail(school_id: str, resource: str, request: Request):
                 cookie_pairs.append(f'{key}={value}')
         if cookie_pairs:
             headers['cookie'] = '; '.join(cookie_pairs)
-        basic = base64.b64encode(f'{address}:{password}'.encode()).decode()
+        from .webmail_proxy import auth_headers
         public_url = urlsplit(cfg.app_url)
         proxy_base = cfg.app_url.rstrip('/') + '/webmail/' + quote(school_id, safe='')
-        headers.update({'x-webobjects-remote-user': principal, 'x-webobjects-auth-type': 'Basic',
-                        'authorization': 'Basic ' + basic, 'x-webobjects-server-url': proxy_base,
+        headers.update({**auth_headers(principal, password), 'x-webobjects-server-url': proxy_base,
                         'x-webobjects-server-name': public_url.hostname or '',
                         'x-webobjects-server-port': str(public_url.port or (443 if public_url.scheme == 'https' else 80)),
                         'x-webobjects-server-protocol': 'HTTP/1.1'})
@@ -1103,7 +1102,9 @@ async def proxy_webmail(school_id: str, resource: str, request: Request):
             fail(502, 'O webmail retornou um redirecionamento inválido.')
         if response_headers['location'] == request.url.path and upstream_response.status_code in (301, 302, 303, 307, 308):
             fail(502, 'O webmail retornou um redirecionamento circular.')
-    response_headers['Cache-Control'] = 'no-store'
+    from .webmail_proxy import cache_control
+    response_headers['Cache-Control'] = cache_control(decoded_resource, request.url.query,
+                                                       upstream_response.status_code, request.method)
     response_headers['X-Frame-Options'] = 'SAMEORIGIN'
     response_headers['Content-Security-Policy'] = ("default-src 'self' data: blob:; img-src 'self' data: blob:; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "

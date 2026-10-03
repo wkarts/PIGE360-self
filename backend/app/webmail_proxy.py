@@ -1,6 +1,25 @@
 """Keep SOGo redirects and cookies under the authorized school path."""
+import base64
 import re
 from urllib.parse import urljoin, urlsplit, urlunsplit
+
+
+def auth_headers(principal: str, password: str) -> dict[str, str]:
+    """SOGo extracts the IMAP password only when Basic's user matches remote-user.
+
+    The SQL user source maps this principal to the mailbox address for IMAP/SMTP.
+    """
+    basic = base64.b64encode(f'{principal}:{password}'.encode('utf-8')).decode('ascii')
+    return {'x-webobjects-remote-user': principal, 'x-webobjects-auth-type': 'Basic',
+            'authorization': 'Basic ' + basic}
+
+
+def cache_control(resource: str, query: str, status: int, method: str) -> str:
+    """Only versioned SOGo distribution assets can be reused by one browser."""
+    static = resource.startswith(('SOGo.woa/WebServerResources/', 'SOGo/WebServerResources/'))
+    if static and 'lm=' in query and status == 200 and method in {'GET', 'HEAD'}:
+        return 'private, max-age=86400'
+    return 'no-store'
 
 
 def _webmail_path(path: str, prefix: str) -> str:
