@@ -1,4 +1,5 @@
 """Regression checks for SOGo behind the per-school webmail proxy."""
+import base64
 import importlib.util
 from pathlib import Path
 import unittest
@@ -15,6 +16,24 @@ class WebmailProxyTest(unittest.TestCase):
     target = 'http://sogo/SOGo/'
     upstream = 'http://sogo'
     public = 'https://pige360.example.org'
+
+    def test_sogo_basic_username_matches_trusted_principal(self):
+        principal = 'user-123@school-456'
+        headers = proxy.auth_headers(principal, 'mailbox-secret')
+        encoded = headers['authorization'].removeprefix('Basic ')
+        self.assertEqual(headers['x-webobjects-remote-user'], principal)
+        self.assertEqual(headers['x-webobjects-auth-type'], 'Basic')
+        self.assertEqual(base64.b64decode(encoded).decode(), principal + ':mailbox-secret')
+
+    def test_only_versioned_static_assets_are_cached_privately(self):
+        css = 'SOGo.woa/WebServerResources/css/styles.css'
+        self.assertEqual(proxy.cache_control(css, 'lm=123', 200, 'GET'), 'private, max-age=86400')
+        for resource, query, status, method in ((css, '', 200, 'GET'),
+                                                 (css, 'lm=123', 404, 'GET'),
+                                                 ('SOGo/so/u/Mail/view', 'lm=123', 200, 'GET'),
+                                                 (css, 'lm=123', 200, 'POST')):
+            with self.subTest(resource=resource, status=status, method=method):
+                self.assertEqual(proxy.cache_control(resource, query, status, method), 'no-store')
 
     def location(self, value):
         return proxy.rewrite_location(value, self.target, self.upstream, self.public, self.prefix)
