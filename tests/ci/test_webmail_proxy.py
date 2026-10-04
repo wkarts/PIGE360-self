@@ -71,5 +71,34 @@ class WebmailProxyTest(unittest.TestCase):
         self.assertEqual(actual, 'SOGoSession=test; Path=' + self.prefix + '/SOGo/; HttpOnly')
 
 
+    def test_root_relative_urls_in_mail_payloads_stay_in_the_school_proxy(self):
+        payload = ('{"body":"<img src=\\\"/SOGo/so/u/Mail/0/folderINBOX/1/signature.png\\\">",'
+                   '"attachment":"/SOGo/so/u/Mail/0/folderINBOX/1/file.pdf",'
+                   '"css":"url(/SOGo.woa/WebServerResources/fonts/mail.woff2)"}')
+        rewritten = proxy.rewrite_resource_urls(payload, self.prefix)
+        self.assertIn(self.prefix + '/SOGo/so/u/Mail/0/folderINBOX/1/signature.png', rewritten)
+        self.assertIn(self.prefix + '/SOGo/so/u/Mail/0/folderINBOX/1/file.pdf', rewritten)
+        self.assertIn(self.prefix + '/SOGo.woa/WebServerResources/fonts/mail.woff2', rewritten)
+        self.assertEqual(proxy.rewrite_resource_urls('/webmail/escola-123/SOGo/a', self.prefix),
+                         '/webmail/escola-123/SOGo/a')
+
+    def test_only_known_sogo_origins_are_rewritten_in_mail_payloads(self):
+        payload = ('{"same":"https://pige360.example.org/SOGo/so/u/Mail/1.png",'
+                   '"upstream":"http://sogo/SOGo/so/u/Mail/2.png",'
+                   '"external":"https://external.example/SOGo/so/u/Mail/3.png"}')
+        rewritten = proxy.rewrite_resource_urls(payload, self.prefix,
+                                                ('https://pige360.example.org', 'http://sogo'))
+        self.assertIn(self.prefix + '/SOGo/so/u/Mail/1.png', rewritten)
+        self.assertIn(self.prefix + '/SOGo/so/u/Mail/2.png', rewritten)
+        self.assertIn('https://external.example/SOGo/so/u/Mail/3.png', rewritten)
+
+    def test_textual_sogo_payload_types_and_brand_colors_are_strict(self):
+        self.assertTrue(proxy.is_rewritable_content_type('application/json; charset=utf-8'))
+        self.assertTrue(proxy.is_rewritable_content_type('text/html'))
+        self.assertFalse(proxy.is_rewritable_content_type('image/png'))
+        self.assertEqual(proxy.safe_theme_color('#abcdef', '#000'), '#abcdef')
+        self.assertEqual(proxy.safe_theme_color('red; background:url(evil)', '#000'), '#000')
+
+
 if __name__ == '__main__':
     unittest.main()

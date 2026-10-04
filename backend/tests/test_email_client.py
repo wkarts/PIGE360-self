@@ -744,6 +744,66 @@ def test_sogo_proxy_injects_credentials_server_side_and_rewrites_same_origin_pat
     assert 'Path=/webmail/'+a['school']['id']+'/' in result.headers['set-cookie']
 
 
+
+def test_sogo_proxy_rewrites_inline_signature_and_preserves_attachment_download(mailbox_api, monkeypatch):
+    from types import SimpleNamespace
+    import httpx
+    import json
+    a = mailbox_api
+    monkeypatch.setattr(e, 'settings', lambda: SimpleNamespace(
+        sogo_upstream_url='http://sogo:20000', app_url='https://pige360.example.org', cookie_secure=False))
+    principal = a['user']['id'] + '@' + a['school']['id']
+    inline_path = f'/SOGo/so/{principal}/Mail/0/folderINBOX/1/2/2/VlQAio2eFNiPvN1m.png'
+    attachment_path = f'/SOGo/so/{principal}/Mail/0/folderINBOX/1/2/2/documento.pdf'
+    sent = []
+
+    class FakeAsyncClient:
+        def build_request(self, method, url, headers, content=None):
+            return httpx.Request(method, url, headers=headers, content=content)
+
+        async def send(self, request, stream=False):
+            sent.append(request)
+            if request.url.path.endswith('/Mail/view'):
+                payload = json.dumps({'body': f'<img src="{inline_path}">', 'attachment_url': attachment_path})
+                return httpx.Response(200, content=payload, headers={'content-type': 'application/json'}, request=request)
+            if request.url.path.endswith('.png'):
+                return httpx.Response(200, content=b'PNG-SIGNATURE',
+                                      headers={'content-type': 'image/png'}, request=request)
+            if request.url.path.endswith('.pdf'):
+                return httpx.Response(206, content=b'PDF-PART', headers={
+                    'content-type': 'application/pdf',
+                    'content-disposition': 'attachment; filename="documento.pdf"',
+                    'content-range': 'bytes 0-7/20', 'accept-ranges': 'bytes'}, request=request)
+            return httpx.Response(404, content=b'not found', request=request)
+
+    monkeypatch.setattr(a['client'].app.state, 'webmail_http', FakeAsyncClient(), raising=False)
+    ticket = a['client'].post(a['base'] + '/webmail-ticket',
+                              headers={**a['headers'], 'X-CSRF-Protection': '1'}, json={}).json()['ticket']
+    launch = a['client'].post(f"/webmail/{a['school']['id']}/launch", data={'ticket': ticket}, follow_redirects=False)
+    cookie = launch.headers['set-cookie'].split(';', 1)[0]
+    cookie_name, cookie_value = cookie.split('=', 1)
+    cookies = {cookie_name: cookie_value}
+
+    view = a['client'].get(f"/webmail/{a['school']['id']}/SOGo/so/{principal}/Mail/view",
+                           cookies=cookies)
+    assert view.status_code == 200
+    body = json.loads(view.text)
+    assert f"/webmail/{a['school']['id']}{inline_path}" in body['body']
+    assert f"/webmail/{a['school']['id']}{attachment_path}" == body['attachment_url']
+
+    signature_path = body['body'].split('src="', 1)[1].split('"', 1)[0]
+    signature = a['client'].get(signature_path, cookies=cookies)
+    assert signature.status_code == 200 and signature.content == b'PNG-SIGNATURE'
+    download = a['client'].get(body['attachment_url'], headers={'Range': 'bytes=0-7'}, cookies=cookies)
+    assert download.status_code == 206 and download.content == b'PDF-PART'
+    assert download.headers['content-type'] == 'application/pdf'
+    assert download.headers['content-disposition'] == 'attachment; filename="documento.pdf"'
+    assert download.headers['content-range'] == 'bytes 0-7/20'
+    assert download.headers['accept-ranges'] == 'bytes'
+    assert sent[-1].url.path.endswith('/documento.pdf')
+    assert sent[-1].headers['range'] == 'bytes=0-7'
+
+
 @pytest.mark.parametrize('read_fails', [False, True])
 def test_sogo_mail_view_keeps_upstream_open_while_reading(mailbox_api, monkeypatch, read_fails):
     from types import SimpleNamespace

@@ -52,6 +52,9 @@ namespace PigeUI {
   let legacyBackupFile: File|null = null;
   let legacyMediaFile: File|null = null;
   let identityFiles: {logo?:File;font?:File} = {};
+  type MailWebmailChoice={default:'sogo'|'alternative';override:'inherit'|'sogo'|'alternative';effective:'sogo'|'alternative'};
+  let webmailPreferenceCache:{key:string;loadedAt:number;choice:MailWebmailChoice}|null=null;
+  let sogoFrameAttempt=0;
   let sequence = 0;
   let loadedSchoolId='';
   let schoolSequence=0;
@@ -78,13 +81,13 @@ namespace PigeUI {
   function can(permission: string): boolean { return Boolean(state.user?.permissions.includes(permission)); }
   function pageAllowed(page:string):boolean {
     if(page==='webmail')return Boolean(state.user);
+    if(page==='email')return Boolean(state.user && (state.user.role==='admin'||state.emailAvailable));
     if(isProfileRole())return page==='dashboard'||page==='help'||page==='community'||(page==='diary'&&can('diary.read'));
     if(administrationPages.includes(page))return adminTool(page);
     if(page==='dashboard')return can('dashboard.read');
     if(page==='diary')return can('diary.read');
     if(page==='online')return can('admissions.read');
     if(page==='banking')return can('banking.read');
-    if(page==='email')return state.user?.role==='admin';
     if(page==='contracts'||page==='pending-signatures')return can('documents.read');
     if(page==='signature-review')return can('documents.validate');
     if(page==='certificate'||page==='settings')return can('schools.manage');
@@ -318,11 +321,13 @@ namespace PigeUI {
       }else if(state.page==='email'){
         state.total=0;state.emailStatus='idle';
         await loadWebmailPreference();
-        try{
-          const summary=await PigeAPI.request<{configuration?:{smtp_configured?:boolean}}>('/diagnostics/summary');
-          if(current===sequence)state.emailStatus=summary.configuration?.smtp_configured?'configured':'missing';
-        }catch{
-          if(current===sequence)state.emailStatus='unavailable';
+        if(state.user?.role==='admin'){
+          try{
+            const summary=await PigeAPI.request<{configuration?:{smtp_configured?:boolean}}>('/diagnostics/summary');
+            if(current===sequence)state.emailStatus=summary.configuration?.smtp_configured?'configured':'missing';
+          }catch{
+            if(current===sequence)state.emailStatus='unavailable';
+          }
         }
       }else if(state.page==='webmail'){
         state.sogoError='';state.sogoFallback=false;state.sogoStarting=false;
@@ -357,13 +362,20 @@ namespace PigeUI {
       }
     }finally{if(current===sequence)state.loading=false;}
   }
+  function applyWebmailPreference(choice:MailWebmailChoice):void{
+    state.webmailDefault=choice.default;state.webmailOverride=choice.override;
+    state.sogoFallback=choice.effective==='alternative';
+  }
   async function loadWebmailPreference():Promise<void>{
-    const sid=state.schoolId;
+    const sid=state.schoolId,key=sid+':'+(state.user?.id||'');
+    if(webmailPreferenceCache?.key===key&&Date.now()-webmailPreferenceCache.loadedAt<60000){
+      applyWebmailPreference(webmailPreferenceCache.choice);return;
+    }
     try{
-      const choice=await PigeAPI.request<{default:'sogo'|'alternative';override:'inherit'|'sogo'|'alternative';effective:'sogo'|'alternative'}>(base()+'/email/webmail-preference');
-      if(sid!==state.schoolId)return;
-      state.webmailDefault=choice.default;state.webmailOverride=choice.override;
-      state.sogoFallback=choice.effective==='alternative';
+      const choice=await PigeAPI.request<MailWebmailChoice>(base()+'/email/webmail-preference');
+      if(sid!==state.schoolId||key!==sid+':'+(state.user?.id||''))return;
+      applyWebmailPreference(choice);
+      webmailPreferenceCache={key,loadedAt:Date.now(),choice};
     }catch(error){
       if(sid===state.schoolId)state.sogoError=(error as Error).message||'Não foi possível carregar a preferência do webmail.';
     }
@@ -371,25 +383,35 @@ namespace PigeUI {
   async function saveWebmailPreference(mode:string):Promise<void>{
     if(!['inherit','sogo','alternative'].includes(mode))return;
     await safe(async()=>{
-      const sid=state.schoolId;
-      const choice=await PigeAPI.request<{override:'inherit'|'sogo'|'alternative';effective:'sogo'|'alternative'}>(base()+'/email/webmail-preference',
+      const sid=state.schoolId,key=sid+':'+(state.user?.id||'');
+      const choice=await PigeAPI.request<MailWebmailChoice>(base()+'/email/webmail-preference',
         {method:'PUT',body:JSON.stringify({mode})});
       if(sid!==state.schoolId)return;
-      state.webmailOverride=choice.override;state.sogoFallback=choice.effective==='alternative';
+      applyWebmailPreference(choice);
+      webmailPreferenceCache={key,loadedAt:Date.now(),choice};
       state.sogoError='';
-      if(!state.sogoFallback){await Vue.nextTick();await openSogoWebmail();}
+      state.success='Sua preferência de webmail foi atualizada.';
+      if(state.page==='webmail'&&!state.sogoFallback){await Vue.nextTick();await openSogoWebmail();}
     });
   }
   async function saveWebmailDefault():Promise<void>{
     await safe(async()=>{
-      const sid=state.schoolId;
+      const sid=state.schoolId,key=sid+':'+(state.user?.id||'');
       await PigeAPI.request(base()+'/email/webmail-default',
         {method:'PUT',body:JSON.stringify({mode:state.webmailDefault})});
-      if(sid===state.schoolId)state.success='Webmail padrão da instituição atualizado.';
+      if(sid!==state.schoolId)return;
+      if(webmailPreferenceCache?.key===key){
+        const choice={...webmailPreferenceCache.choice,default:state.webmailDefault};
+        choice.effective=choice.override==='inherit'?choice.default:choice.override;
+        webmailPreferenceCache={key,loadedAt:Date.now(),choice};
+        state.sogoFallback=choice.effective==='alternative';
+      }
+      state.success='Webmail padrão da instituição atualizado.';
     });
   }
   async function openSogoWebmail():Promise<void>{
     if(state.sogoStarting)return;
+    const attempt=++sogoFrameAttempt;
     state.sogoStarting=true;state.sogoError='';
     try{
       const result=await PigeAPI.post<{ticket:string;action:string}>('/schools/'+state.schoolId+'/email/webmail-ticket',{});
@@ -397,9 +419,38 @@ namespace PigeUI {
       const frame=document.getElementById(target) as HTMLIFrameElement|null;
       if(!frame)throw new Error('A tela do webmail ainda não está pronta. Tente novamente.');
       const form=document.createElement('form');form.method='post';form.action=result.action;form.target=target;form.hidden=true;form.acceptCharset='UTF-8';
-      const input=document.createElement('input');input.type='hidden';input.name='ticket';input.value=result.ticket;form.append(input);document.body.append(form);form.submit();window.setTimeout(()=>form.remove(),3000);
-    }catch(error){state.sogoError=(error as Error).message||'Não foi possível abrir o webmail integrado.';}
-    finally{state.sogoStarting=false;}
+      const input=document.createElement('input');input.type='hidden';input.name='ticket';input.value=result.ticket;form.append(input);document.body.append(form);form.submit();
+      window.setTimeout(()=>form.remove(),3000);
+      window.setTimeout(()=>{
+        if(attempt===sogoFrameAttempt&&state.sogoStarting){
+          state.sogoStarting=false;
+          state.sogoError='O webmail demorou para responder. Verifique a conexão e tente novamente.';
+        }
+      },30000);
+    }catch(error){
+      if(attempt===sogoFrameAttempt){
+        state.sogoStarting=false;
+        state.sogoError=(error as Error).message||'Não foi possível abrir o webmail integrado.';
+      }
+    }
+  }
+  function webmailFrameLoaded():void{
+    const frame=document.getElementById('pige-sogo-frame') as HTMLIFrameElement|null;
+    try{
+      const doc=frame?.contentDocument;
+      if(doc?.URL==='about:blank')return;
+      state.sogoStarting=false;
+      if(!doc||state.sogoFallback)return;
+      const contentType=(doc.contentType||'').toLowerCase();
+      const message=(doc.body?.innerText||'').trim();
+      if(contentType.includes('json')){
+        let detail=message;
+        try{const payload=JSON.parse(message) as {detail?:unknown;message?:unknown};detail=String(payload.detail||payload.message||message);}catch{/* keep response text */}
+        state.sogoError=detail||'O webmail retornou uma resposta inválida.';
+      }else if(message&&!/\bSOGo\b/i.test(doc.title||'')&&doc.querySelector('pre')){
+        state.sogoError='O serviço de webmail retornou um erro: '+message.slice(0,300);
+      }
+    }catch{/* Browser security may block access after an upstream redirect. */state.sogoStarting=false;}
   }
   async function setCatalog(kind:string):Promise<void>{state.catalog=kind;state.q='';state.academicFilter={year:'',unit:'',grade:'',shift:''};await safe(loadPage);}
   async function search():Promise<void>{state.pageNumber=1;await safe(loadPage);}
@@ -945,5 +996,5 @@ namespace PigeUI {
     }
     window.addEventListener('beforeunload',event=>{if(state.modal.kind&&modalDirty()){event.preventDefault();event.returnValue='';}});
   }
-  Vue.createApp({components:{'camera-capture':PigeCamera.component,'users-panel':PigeUsers.component,'institutional-email':PigeEmail.component,'audit-panel':PigeAudit.component,'lifecycle-panel':PigeLifecycle.component,'mailcow-panel':PigeMailcow.component,'school-community':PigeCommunity.component,'learning-panel':PigeLearning.component,'reports-panel':PigeReports.component,'legacy-import-panel':PigeLegacyImport.component,'diagnostics-panel':PigeDiagnostics.component,'expansion-panel':PigeExpansion.component,'diary-panel':PigeDiary.component,'contracts-panel':PigeContracts.component,'signing-panel':PigeSigning.component,'assist-panel':PigeAssist.component},render:PigeRenders.app,setup(){Vue.onMounted(()=>{PigeMFA.init(PigeAPI.request,afterMFA,logout);PigeDialogs.install();setupPWA();void initialize();});return{openCamera,photoCaptured,documentPages,configurationPages,supportAreas,supportAreaLabels,refreshAccess,isEnrollmentForm,enrollmentStudent,enrollmentClass,administrationPages,institutionTabs,catalogDescriptions,adminTool,manageRecord,lifecycleCompleted,request:PigeAPI.request,download:PigeAPI.download,state,base,familyAssistFields,assistRequest,assistFields,assistEligible,assistCompany,setupCompany,setupCompanyFields,companyExtra,setupLookup,readStudentDocument,readResponsibleDocument,editIntake,mfa:PigeMFA,dossier:PigeDossier,selectedPersonTypes,availablePersonTypes,togglePersonType,lockedPersonType,familyRelevant,manageMFA,editMFAPolicy,editEmbedding,probeEmbedding,editMyProfile,myPhotoChange,profilePassword,registryPages,integrationPages,businessTypes,isBusiness,newBusiness,reusePerson,personDocument,modalSections,modalTab,visibleSection,modalFieldLabel,modalFieldRelevant,advancedPersonField,isPersonModal,personTypeOptions,personTypeLabel,modalDirty,contractDirty,identity:PigeInstitution.state,supportStatus:PigeSupport.status,editIdentity,identityFileChange,manageUnits,editMaintainer,text,can,isProfileRole,school,label,date,cpf,initials,photoSrc,getName,options,pageLabels,catalogLabels,configure,login,logout,navigate,changeSchool,setCatalog,search,page,loadPage,openSogoWebmail,saveWebmailPreference,saveWebmailDefault,legacyImportFileChange,previewLegacyImport,applyLegacyImport,populatedImportTables,downloadLegacyArchive,viewStudent,newPerson,newStudent,editStudent,newGuardian,newTeacher,editTeacher,newEmployee,editEmployee,editPerson,newCatalog,newEnrollment,viewEnrollment,contractsForEnrollment,startMovement,reenroll,newLink,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,editSupportHub,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,protocolReceipt,exportPendencies,install,updateApp};}}).mount('#app');
+  Vue.createApp({components:{'camera-capture':PigeCamera.component,'users-panel':PigeUsers.component,'institutional-email':PigeEmail.component,'audit-panel':PigeAudit.component,'lifecycle-panel':PigeLifecycle.component,'mailcow-panel':PigeMailcow.component,'school-community':PigeCommunity.component,'learning-panel':PigeLearning.component,'reports-panel':PigeReports.component,'legacy-import-panel':PigeLegacyImport.component,'diagnostics-panel':PigeDiagnostics.component,'expansion-panel':PigeExpansion.component,'diary-panel':PigeDiary.component,'contracts-panel':PigeContracts.component,'signing-panel':PigeSigning.component,'assist-panel':PigeAssist.component},render:PigeRenders.app,setup(){Vue.onMounted(()=>{PigeMFA.init(PigeAPI.request,afterMFA,logout);PigeDialogs.install();setupPWA();void initialize();});return{openCamera,photoCaptured,documentPages,configurationPages,supportAreas,supportAreaLabels,refreshAccess,isEnrollmentForm,enrollmentStudent,enrollmentClass,administrationPages,institutionTabs,catalogDescriptions,adminTool,manageRecord,lifecycleCompleted,request:PigeAPI.request,download:PigeAPI.download,state,base,familyAssistFields,assistRequest,assistFields,assistEligible,assistCompany,setupCompany,setupCompanyFields,companyExtra,setupLookup,readStudentDocument,readResponsibleDocument,editIntake,mfa:PigeMFA,dossier:PigeDossier,selectedPersonTypes,availablePersonTypes,togglePersonType,lockedPersonType,familyRelevant,manageMFA,editMFAPolicy,editEmbedding,probeEmbedding,editMyProfile,myPhotoChange,profilePassword,registryPages,integrationPages,businessTypes,isBusiness,newBusiness,reusePerson,personDocument,modalSections,modalTab,visibleSection,modalFieldLabel,modalFieldRelevant,advancedPersonField,isPersonModal,personTypeOptions,personTypeLabel,modalDirty,contractDirty,identity:PigeInstitution.state,supportStatus:PigeSupport.status,editIdentity,identityFileChange,manageUnits,editMaintainer,text,can,isProfileRole,school,label,date,cpf,initials,photoSrc,getName,options,pageLabels,catalogLabels,configure,login,logout,navigate,changeSchool,setCatalog,search,page,loadPage,openSogoWebmail,webmailFrameLoaded,saveWebmailPreference,saveWebmailDefault,legacyImportFileChange,previewLegacyImport,applyLegacyImport,populatedImportTables,downloadLegacyArchive,viewStudent,newPerson,newStudent,editStudent,newGuardian,newTeacher,editTeacher,newEmployee,editEmployee,editPerson,newCatalog,newEnrollment,viewEnrollment,contractsForEnrollment,startMovement,reenroll,newLink,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,editSupportHub,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,protocolReceipt,exportPendencies,install,updateApp};}}).mount('#app');
 }

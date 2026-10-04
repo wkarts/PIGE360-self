@@ -4,6 +4,54 @@ import re
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 
+_WEBMAIL_ROOT_REFERENCE = re.compile(
+    r'(?<![A-Za-z0-9_.-])/(?:'
+    r'SOGo(?=/|$|[?#"\'\\\s)>])|'
+    r'principals(?=/|$|[?#"\'\\\s)>])|'
+    r'SOGo\.woa/WebServerResources/)'
+)
+_CSS_COLOR = re.compile(r'\A#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\Z')
+
+
+def rewrite_resource_urls(content: str, prefix: str, trusted_origins=()) -> str:
+    """Keep SOGo root-relative URLs inside this school's authenticated proxy.
+
+    Mail bodies are often returned inside JSON, not in the initial HTML page.
+    Rewriting textual SOGo responses also covers images in signatures, CSS
+    url() values, and download links embedded in those response payloads.
+    """
+    safe_prefix = prefix.rstrip('/')
+    rewritten = _WEBMAIL_ROOT_REFERENCE.sub(lambda match: safe_prefix + match.group(0), content)
+    for origin in trusted_origins:
+        parsed = urlsplit(origin)
+        if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
+            continue
+        authority = f'{parsed.scheme}://{parsed.netloc}'
+        absolute_reference = re.compile(
+            re.escape(authority) + r'(?P<path>/(?:'
+            r'SOGo(?=/|$|[?#"\'\\\s)>])|'
+            r'principals(?=/|$|[?#"\'\\\s)>])|'
+            r'SOGo\.woa/WebServerResources/))', re.IGNORECASE
+        )
+        rewritten = absolute_reference.sub(lambda match: safe_prefix + match.group('path'), rewritten)
+    return rewritten
+
+
+def is_rewritable_content_type(content_type: str) -> bool:
+    media_type = content_type.partition(';')[0].strip().lower()
+    return media_type in {
+        'text/html', 'application/xhtml+xml', 'text/css', 'text/javascript',
+        'application/javascript', 'application/x-javascript', 'application/ecmascript',
+        'application/json', 'application/ld+json', 'application/xml', 'text/xml',
+    }
+
+
+def safe_theme_color(value: object, fallback: str) -> str:
+    """Allow only literal hex colors before placing identity data in CSS."""
+    return value if isinstance(value, str) and _CSS_COLOR.fullmatch(value) else fallback
+
+
+
 def auth_headers(principal: str, password: str) -> dict[str, str]:
     """SOGo extracts the IMAP password only when Basic's user matches remote-user.
 
