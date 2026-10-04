@@ -39,18 +39,19 @@ async def lifespan(app):
             await asyncio.sleep(2)
     # Keep connections to the internal SOGo service pooled across the many
     # parallel CSS/JS requests made when the webmail opens.
-    app.state.webmail_http = httpx.AsyncClient(
+    webmail_http = httpx.AsyncClient(
         timeout=httpx.Timeout(60, connect=8, pool=10),
         limits=httpx.Limits(max_connections=100, max_keepalive_connections=20, keepalive_expiry=30),
         follow_redirects=False,
         trust_env=False,
     )
+    app.state.webmail_http = webmail_http
     try:
         telemetry.emit('service.started')
         telemetry.heartbeat('app', force=True)
         yield
     finally:
-        await app.state.webmail_http.aclose()
+        await webmail_http.aclose()
         engine.dispose()
 
 app = FastAPI(title='PIGE360 Self — Gestão Educacional', version=cfg.app_version, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url='/api/v1/openapi.json')
