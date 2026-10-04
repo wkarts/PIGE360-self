@@ -380,6 +380,10 @@ try:
                                ("diary", "Diário Escolar"), ("reports", "Relatórios"), ("banking", "Cobranças"),
                                ("online", "Inscrições online"), ("community", "Notícias e eventos")]:
             page.get_by_role("button", name="Abrir menu", exact=True).click()
+            if route == "banking":
+                page.get_by_role("button", name="Financeiro", exact=True).click()
+            if route == "community":
+                page.get_by_role("button", name="Publicidade", exact=True).click()
             page.locator(f'aside nav a[href="#/{route}"]').click()
             expect(page.get_by_role("heading", name=heading, exact=True).first).to_be_visible()
             expect(page.locator(".app-root")).to_have_attribute("aria-busy", "false")

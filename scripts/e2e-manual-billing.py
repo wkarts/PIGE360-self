@@ -74,6 +74,7 @@ try:
             page.get_by_role('button',name='Entrar na aplicação').click()
             expect(page.locator('h1')).to_have_text('Visão geral')
             page.get_by_role('button',name='Abrir menu').click()
+            page.get_by_role('button',name='Financeiro',exact=True).click()
             page.locator('aside').get_by_role('link',name='Cobranças',exact=True).click()
             page.get_by_role('button',name='+ Nova cobrança',exact=True).click()
             dialog=page.get_by_role('dialog')

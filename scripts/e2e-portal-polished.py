@@ -140,6 +140,8 @@ try:
         admin.get_by_role('button',name='Salvar conta',exact=True).click()
         expect(admin.get_by_text('Configuração salva.',exact=False)).to_be_visible()
         record('Conta bancária de homologação configurada pela interface com credencial protegida')
+        finance=admin.get_by_role('button',name='Financeiro',exact=True)
+        if finance.get_attribute('aria-expanded')=='false':finance.click()
         admin.locator('aside').get_by_role('link',name='Cobranças',exact=False).click()
         admin.get_by_role('button',name='+ Nova cobrança',exact=True).click()
         admin.get_by_label('Tipo de cobrança').select_option('provider')

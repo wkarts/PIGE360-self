@@ -58,12 +58,16 @@ try:
             menu=page.get_by_role('button',name='Cadastros',exact=True)
             if label in ['Cadastro único','Alunos','Professores','Funcionários','Pais e responsáveis','Fornecedores','Prestadores de serviços','Clientes','Sócios'] and menu.get_attribute('aria-expanded')=='false':menu.click()
             integrations=page.get_by_role('button',name='Integrações',exact=True)
-            if label in ['WhatsApp','E-mail institucional','Bancária'] and integrations.get_attribute('aria-expanded')=='false':integrations.click()
+            if label in ['WhatsApp','E-mail','Bancária'] and integrations.get_attribute('aria-expanded')=='false':integrations.click()
             admin=page.get_by_role('button',name='Administração do sistema',exact=True)
             if label in ['Diagnóstico','Auditoria','Portabilidade de dados'] and admin.get_attribute('aria-expanded')=='false':admin.click()
-            if label=='Instituição':
-                settings=page.get_by_role('button',name='Configurações',exact=True)
-                if settings.get_attribute('aria-expanded')=='false':settings.click()
+            if label in ['Cobranças','Notícias e eventos']:
+                group='Financeiro' if label=='Cobranças' else 'Publicidade'
+                toggle=page.get_by_role('button',name=group,exact=True)
+                if toggle.get_attribute('aria-expanded')=='false':toggle.click()
+            if label in ['Pendências documentais','Modelos e contratos','Assinaturas pendentes','Conferência de assinaturas']:
+                toggle=page.get_by_role('button',name='Documentos',exact=True)
+                if toggle.get_attribute('aria-expanded')=='false':toggle.click()
             page.locator('aside').get_by_role('link',name=label,exact=False).click()
             expect(page.locator('h1')).to_have_text(heading or label)
         def dialog():return page.get_by_role('dialog')
@@ -223,8 +227,8 @@ try:
         expect(dialog()).to_have_count(0)
         record('Lançamento em modal responsivo com resumo nominal e confirmação de descarte; sem alterar emissão')
         page.set_viewport_size({'width':1440,'height':960})
-        for label in ['Visão geral','Cadastro único','Alunos','Professores','Funcionários','Pais e responsáveis','Fornecedores','Prestadores de serviços','Clientes','Sócios','Matrículas','Estrutura acadêmica','Diário Escolar','Pendências documentais','Protocolos','Relatórios','Inscrições online','Cobranças','WhatsApp','E-mail institucional','Bancária','Instituição','Usuários e acessos','Diagnóstico','Auditoria']:
-            nav(label,heading='Pendências documentais' if label=='Documentação' else label)
+        for label in ['Visão geral','Cadastro único','Alunos','Professores','Funcionários','Pais e responsáveis','Fornecedores','Prestadores de serviços','Clientes','Sócios','Matrículas','Estrutura acadêmica','Diário Escolar','Pendências documentais','Modelos e contratos','Protocolos','Relatórios','Inscrições online','Cobranças','WhatsApp','E-mail','Bancária','Notícias e eventos','Instituição','Usuários e acessos','Diagnóstico','Auditoria']:
+            nav(label)
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
         assert not route_failures,route_failures
         record('Navegação de todas as rotas administrativas sem respostas API 404')

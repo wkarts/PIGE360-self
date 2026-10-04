@@ -83,7 +83,10 @@ class CleanupTests(unittest.TestCase):
     def test_env_only_migration_code_untouched(self):
         self.assertTrue((ROOT/'backend/migrations').is_dir())
         for name in ('docker','dockge','portainer','cloudpanel'):
-            self.assertNotIn('build:',(ROOT/'deploy'/name/'compose.yaml').read_text())
+            text=(ROOT/'deploy'/name/'compose.yaml').read_text()
+            self.assertEqual(text.count('build:'),2)
+            self.assertIn('context: ../../services/mail-agent',text)
+            self.assertIn('context: ../../services/sogo',text)
     def test_npm_lock_matches_package(self):
         package=json.loads((ROOT/'frontend/package.json').read_text());lock=json.loads((ROOT/'frontend/package-lock.json').read_text())
         self.assertEqual(package['devDependencies'],lock['packages']['']['devDependencies'])

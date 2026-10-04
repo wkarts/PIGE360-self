@@ -17,6 +17,8 @@ cryptography==46.0.4
 lxml==6.1.0
 pyHanko==0.33.0
 boto3==1.37.38
+redis==7.4.1
+pika==1.4.4
 fonttools==4.63.0
 brotli==1.2.0
 

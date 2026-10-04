@@ -142,7 +142,9 @@ def test_whatsapp_instances_and_provider_inventory_do_not_cross_schools(client, 
     monkeypatch.setattr(connect, 'ConnectApiClient', Provider)
     own = api.get('/connect')['items']
     assert len(own) == 1 and own[0]['school_id'] == api.school['id']
-    assert [row['name'] for row in api.get('/connect/remote-instances')['items']] == [own[0]['name']]
+    inventory = api.get('/connect/remote-instances')['items']
+    assert [row['name'] for row in inventory] == [own[0]['name'], 'unknown-provider-instance']
+    assert inventory[0]['registered'] and not inventory[1]['registered']
     for foreign in (other, external):
         obj = foreign.get('/connect')['items'][0]
         assert client.post(api.base + '/connect/instances/' + obj['id'] + '/prefer', headers=admin).status_code == 404
@@ -188,13 +190,29 @@ def test_unassigned_legacy_whatsapp_is_not_inherited(client, admin, api, monkeyp
         assert db.get(m.ConnectSchoolBinding, other.school['id']).instance_id == instance_id
         assert db.get(m.ConnectInstance, instance_id).enabled
     class Provider:
-        def fetch_instance(self, instance_name):
-            return {'name': instance_name, 'state': 'open'}
+        def fetch_instances(self):
+            return [{'name': name, 'state': 'open'}]
     monkeypatch.setattr(connect, 'ConnectApiClient', Provider)
     adopted = other.post('/connect/instances/adopt', {'instance_name': name, 'primary': True})
     assert adopted['instance']['school_id'] == other.school['id']
     assert not other.get('/connect')['legacy_binding_requires_review']
     assert api.get('/connect')['items'] == []
+
+
+def test_external_provider_instance_can_be_adopted(client, admin, api, monkeypatch):
+    from app import connect
+    name = 'external-' + uuid.uuid4().hex
+
+    class Provider:
+        def fetch_instances(self):
+            return [{'instanceName': name, 'connectionStatus': 'open', 'number': '5575999990000'}]
+
+    monkeypatch.setattr(connect, 'ConnectApiClient', Provider)
+    available = api.get('/connect/remote-instances')['items']
+    assert len(available) == 1 and available[0]['name'] == name and not available[0]['registered']
+    adopted = api.post('/connect/instances/adopt', {'instance_name': name, 'primary': True})['instance']
+    assert adopted['source'] == 'adopted' and adopted['school_id'] == api.school['id']
+    assert api.get('/connect/remote-instances')['items'][0]['registered']
 
 
 def test_whatsapp_migration_preserves_ambiguous_legacy_links():

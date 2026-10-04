@@ -46,10 +46,34 @@ try:
         page.screenshot(path=str(OUT/'01-login.png'),full_page=True)
         page.get_by_label('Senha',exact=True).fill('Test-Only-Secretaria-2026!');page.get_by_role('button',name='Entrar na aplicação').click()
         expect(page.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible();checks.append('Instalação inicial e login pela interface')
+        # Layout real da rota de e-mail, com sessão SOGo sintética e sem caixa externa.
+        page.route('**/email/webmail-preference',lambda route:route.fulfill(status=200,content_type='application/json',body=json.dumps({'default':'sogo','override':'inherit','effective':'sogo'})))
+        page.route('**/email/webmail-ticket',lambda route:route.fulfill(status=200,content_type='application/json',body=json.dumps({'ticket':'e2e-only','action':URL+'/webmail-fixture'})))
+        page.route('**/webmail-fixture',lambda route:route.fulfill(status=200,content_type='text/html',body='<html><body>Webmail de teste</body></html>'))
+        page.evaluate("window.location.hash='#/webmail'")
+        expect(page.locator('.webmail-view')).to_be_visible()
+        expect(page.locator('#school-navigation')).to_be_visible()
+        expect(page.locator('.topbar')).to_be_visible()
+        expect(page.frame_locator('#pige-sogo-frame').get_by_text('Webmail de teste')).to_be_visible()
+        sidebar_box=page.locator('#school-navigation').bounding_box()
+        mail_box=page.locator('.webmail-view').bounding_box()
+        frame_box=page.locator('#pige-sogo-frame').bounding_box()
+        assert sidebar_box and mail_box and frame_box
+        assert mail_box['width']>=900 and frame_box['width']>=mail_box['width']-4,(sidebar_box,mail_box,frame_box)
+        assert mail_box['x']>=sidebar_box['width'],(sidebar_box,mail_box)
+        page.set_viewport_size({'width':390,'height':844})
+        expect(page.get_by_role('button',name='Abrir menu')).to_be_visible()
+        assert page.locator('#pige-sogo-frame').bounding_box()['width']>=350
+        page.get_by_role('button',name='Abrir menu').click()
+        expect(page.locator('#school-navigation')).to_have_class(re.compile(r'visible'))
+        page.locator('#school-navigation').get_by_role('link',name='Visão geral').click()
+        expect(page.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible()
+        page.set_viewport_size({'width':1440,'height':1000})
+        checks.append('Webmail preserva navegação, largura do SOGo e menu mobile')
         def nav(name):
             expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
             sidebar=page.locator('aside')
-            group='Configurações' if name in {'Instituição','Certificados A1'} else 'Documentação' if name in {'Pendências documentais','Assinaturas pendentes','Conferência de assinaturas'} else None
+            group='Configurações' if name=='Certificados A1' else 'Documentos' if name in {'Pendências documentais','Modelos e contratos','Assinaturas pendentes','Conferência de assinaturas'} else None
             if group:
                 toggle=sidebar.get_by_role('button',name=group,exact=True)
                 if toggle.get_attribute('aria-expanded')=='false':toggle.click()
@@ -138,7 +162,7 @@ try:
         expect(person_option).to_have_count(1)
         dialog().locator('select').first.select_option(label='Mariana Almeida — Teste · Não informado')
         form_field('Responsável financeiro',exact=True).check();save();checks.append('Responsável e aluno cadastrados, vínculo legal/financeiro persistido')
-        page.get_by_role('button',name='Documentos',exact=True).click();page.get_by_role('button',name='+ Receber documento').click()
+        page.get_by_label('Conteúdo da escola').get_by_role('button',name='Documentos',exact=True).click();page.get_by_role('button',name='+ Receber documento').click()
         form_field('Tipo de documento').select_option(index=1)
         # Upload de imagem sintética conhecida, não de documento de pessoa real.
         dialog().locator('input[type=file]').set_input_files(str(ROOT/'frontend/public/icons/icon-192.png'));save()

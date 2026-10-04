@@ -59,11 +59,15 @@ function nodes(vnode){
 const hrefs=tree=>nodes(tree).filter(node=>node.type==='a').map(node=>node.props?.href);
 const content=tree=>nodes(tree).map(node=>typeof node.children==='string'?node.children:'').join(' ');
 
-const admin=await boot('#/email','admin',['connect.manage','integrations.manage']);
+const admin=await boot('#/email','admin',['connect.manage','integrations.manage','banking.read','documents.read','schools.manage','users.manage']);
 assert.equal(admin.context.state.page,'email');
 assert.equal(admin.context.state.emailStatus,'configured');
 const adminTree=admin.render();
-for(const link of ['#/connect','#/email','#/integrations'])assert.ok(hrefs(adminTree).includes(link),link+' visível para administrador');
+for(const link of ['#/connect','#/email','#/integrations','#/banking','#/community','#/settings','#/users','#/contracts'])assert.ok(hrefs(adminTree).includes(link),link+' visível para administrador');
+for(const group of ['Financeiro','Publicidade','Documentos','Instituição'])assert.ok(content(adminTree).includes(group),'Grupo/área visível: '+group);
+assert.ok(!Array.from(admin.context.configurationPages).includes('settings'),'Instituição fora de Configurações');
+assert.ok(Array.from(admin.context.documentPages).includes('contracts'),'Modelos e contratos agrupados em Documentos');
+assert.equal(admin.context.pageLabels.webmail,'E-mail');
 for(const oldLabel of ['Financeiro / ASAAS','Connect API'])assert.ok(!content(adminTree).includes(oldLabel),'Menu antigo ausente: '+oldLabel);
 assert.match(content(adminTree),/Envio de e-mail configurado/);
 assert.ok(admin.calls.includes('/diagnostics/summary'));

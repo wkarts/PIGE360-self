@@ -9,6 +9,8 @@ import ts from 'typescript';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const template=fs.readFileSync(path.join(root,'templates/email.html'),'utf8');
 assert.ok(!/v-html|<iframe|<object/i.test(template),'A leitura não injeta HTML recebido');
+assert.match(template,/<section class="email-client" aria-label="E-mail"/,'A tela usa o nome simples E-mail');
+assert.match(template,/Conectar outra caixa/,'A caixa conectada oferece correção ou troca de sessão');
 const folders=['inbox','sent','drafts','spam','trash','archive'].map(role=>({id:role,name:role,role,total:2,unread:1}));
 const message={uid:3,uidvalidity:7,subject:'Reunião da escola',from:'Secretaria <secretaria@example.com>',to:'Docente <docente@example.com>',cc:'Coordenação <coordenacao@example.com>',date:'2026-10-02T12:00:00Z',seen:false,flagged:false,size:500,text:'Texto seguro <img src=x onerror=alert(1)>',message_id:'<sample@example.com>',attachments:[]};
 const calls=[];let connected=false,eligible=true,sendResponse='timeout',pageResponse=null;
@@ -36,6 +38,9 @@ await ui.reconcile();assert.equal(ui.s.account.available,true);assert.equal(ui.s
 assert.deepEqual(calls.find(call=>call.url.endsWith('/reconcile')).body,{},'Own account reconciliation cannot select a different user or pass a password');
 assert.equal(events.at(-1).type,'pige:email-account-changed');assert.equal(events.at(-1).detail.schoolId,'school-one');
 ui.s.password='Synthetic-mail-password';await ui.connect();assert.equal(ui.s.password,'');assert.equal(ui.s.account.connected,true);assert.equal(ui.s.folder,'inbox');assert.equal(ui.s.items.length,1);
+ui.s.connectionAddress='secretaria@escola.example.test';ui.s.password='Synthetic-mail-password';ui.s.showConnection=true;await ui.connect();
+assert.equal(calls.filter(call=>call.url.endsWith('/connection')&&call.method==='POST').at(-1).body.address,'secretaria@escola.example.test');
+assert.equal(ui.s.showConnection,false);assert.equal(ui.s.password,'');
 await ui.open(ui.s.items[0]);assert.equal(ui.s.selected.text,message.text);assert.equal(ui.s.selected.seen,true);assert.ok(calls.some(c=>c.url.endsWith('/flags')&&c.body.seen===true));
 ui.begin('all');assert.equal(ui.s.compose.to,'secretaria@example.com');assert.equal(ui.s.compose.cc,'coordenacao@example.com');assert.equal(ui.s.compose.in_reply_to,message.message_id);assert.ok(!ui.s.compose.cc.includes('docente@example.com'));
 ui.s.compose.text='Resposta à secretaria';await ui.saveDraft();assert.equal(ui.s.compose.draft.uid,10);assert.equal(ui.dirty(),false);assert.match(ui.s.composeNotice,/Rascunho salvo/);

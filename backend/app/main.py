@@ -1,7 +1,9 @@
+import asyncio
 import logging
 import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
+import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
@@ -12,24 +14,48 @@ from sqlalchemy.exc import IntegrityError
 from .config import settings
 from .db import engine
 from .storage import ensure_storage
+from .queue_notifications import install as install_queue_notifications
 from starlette.concurrency import run_in_threadpool
 from . import embedding, embedding_settings, mfa, dossiers, ocr, lookups, diagnostics, telemetry, diary
 from . import auth, people, registry, enrollments, documents, contract_templates, reports, portal, admissions, integrations, connect, banking, profiles, support, institution, business_people, account, legacy_import
 from . import contract_signatures, personal_signing, mailcow, school_community, email_client, fiscal_signing, certificate_alerts
 
 cfg = settings()
+install_queue_notifications()
 logger = logging.getLogger('pige360')
 
 @asynccontextmanager
 async def lifespan(app):
-    ensure_storage()
-    telemetry.emit('service.started')
-    telemetry.heartbeat('app', force=True)
-    yield
-    engine.dispose()
+    # A local MinIO container can still be starting after PostgreSQL becomes
+    # healthy. Bound the wait; a missing bucket or invalid credentials still
+    # fail startup instead of silently falling back to local storage.
+    for attempt in range(12):
+        try:
+            await run_in_threadpool(ensure_storage)
+            break
+        except Exception:
+            if cfg.storage_backend != 's3' or attempt == 11:
+                raise
+            await asyncio.sleep(2)
+    # Keep connections to the internal SOGo service pooled across the many
+    # parallel CSS/JS requests made when the webmail opens.
+    webmail_http = httpx.AsyncClient(
+        timeout=httpx.Timeout(60, connect=8, pool=10),
+        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20, keepalive_expiry=30),
+        follow_redirects=False,
+        trust_env=False,
+    )
+    app.state.webmail_http = webmail_http
+    try:
+        telemetry.emit('service.started')
+        telemetry.heartbeat('app', force=True)
+        yield
+    finally:
+        await webmail_http.aclose()
+        engine.dispose()
 
 app = FastAPI(title='PIGE360 Self — Gestão Educacional', version=cfg.app_version, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url='/api/v1/openapi.json')
-for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, contract_templates.router, contract_signatures.router, personal_signing.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router, mfa.router, dossiers.router, ocr.router, lookups.router, diagnostics.router, diary.router, legacy_import.router, mailcow.router, school_community.router, email_client.router, fiscal_signing.router, certificate_alerts.router]:
+for router in [auth.router, registry.router, people.router, enrollments.router, documents.router, contract_templates.router, contract_signatures.router, personal_signing.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router, mfa.router, dossiers.router, ocr.router, lookups.router, diagnostics.router, diary.router, legacy_import.router, mailcow.router, school_community.router, email_client.router, email_client.webmail_router, fiscal_signing.router, certificate_alerts.router]:
     app.include_router(router)
 
 @app.exception_handler(HTTPException)
@@ -59,24 +85,27 @@ async def security_headers(request: Request, call_next):
     origin = request.headers.get('origin')
     if request.method not in ('GET','HEAD','OPTIONS') and origin and origin.rstrip('/') != cfg.app_url.rstrip('/'):
         return JSONResponse({'detail':'Origem não autorizada.'}, status_code=403)
-    # Estas consultas abrem sessões independentes. Resolva a política antes
-    # de executar o endpoint para não disputar o pool com as conexões mantidas
-    # por requisições simultâneas (listas, fichas e fotos após a portabilidade).
-    parents = await run_in_threadpool(embedding.frame_sources)
-    hub_origins, hub_sockets = await run_in_threadpool(support.csp_sources)
+    # Webmail tem CSP próprio no proxy; consultar políticas de embed/HUB em
+    # cada ativo SOGo abria duas sessões de banco sem uso e atrasava o carregamento.
+    is_webmail = request.url.path.startswith('/webmail/')
+    if is_webmail:
+        parents, hub_origins, hub_sockets = [], [], []
+    else:
+        parents = await run_in_threadpool(embedding.frame_sources)
+        hub_origins, hub_sockets = await run_in_threadpool(support.csp_sources)
     response = await call_next(request)
     response.headers['X-Request-ID'] = request.state.request_id
     response.headers['X-App-Version'] = cfg.app_version
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'same-origin'
-    if not parents:
+    if not parents and not is_webmail:
         response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Permissions-Policy'] = 'camera=(self), microphone=(), geolocation=()'
     hub_script_sources = ' '.join(hub_origins)
     # O SDK opcional do HUB injeta estilos Inter. Permissão restrita aos dois
     # hosts de fontes somente quando há um HUB ativo; a identidade da escola é local.
-    hub_style_sources = 'https://fonts.googleapis.com' if hub_origins else ''
-    hub_font_sources = 'https://fonts.gstatic.com' if hub_origins else ''
+    hub_style_sources = 'https://fonts.googleapis.com' if hub_origins or cfg.sogo_upstream_url else ''
+    hub_font_sources = 'https://fonts.gstatic.com' if hub_origins or cfg.sogo_upstream_url else ''
     hub_connect_sources = ' '.join(hub_origins + hub_sockets)
     # Downloads de conteúdo externo podem declarar uma política mais restrita.
     response.headers.setdefault('Content-Security-Policy', (

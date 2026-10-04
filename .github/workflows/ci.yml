@@ -13,6 +13,45 @@ permissions:
   contents: read
   packages: read
 jobs:
+  deployer_binary:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Validar e compilar deployer visual Windows
+        run: |
+          python -m unittest discover -s tests/ci -p test_deployer_windows.py -v
+          python -m pip install pyinstaller==6.22.3
+          python -m PyInstaller --onefile --windowed --clean --noconfirm --name pige360-deployer-windows-amd64 scripts/deployer_windows.py
+          $binary = Start-Process -FilePath '.\dist\pige360-deployer-windows-amd64.exe' -ArgumentList '--self-test' -Wait -PassThru
+          if ($binary.ExitCode -ne 0) { throw "Falhou verificação do executável: $($binary.ExitCode)" }
+  minio_source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Compilar MinIO corrigido do código-fonte e verificar saúde
+        run: |
+          set -Eeuo pipefail
+          docker buildx build --platform linux/amd64 --load \
+            --build-arg UPSTREAM_IMAGE=docker.io/library/golang:1.24-bookworm \
+            -f containers/minio.Dockerfile -t pige360-minio:ci .
+          docker run --rm --entrypoint /usr/local/bin/minio pige360-minio:ci --version
+          docker run -d --name pige360-minio-ci \
+            -e MINIO_ROOT_USER=ci-minio -e MINIO_ROOT_PASSWORD=ci-only-minio-password-123456 \
+            -p 127.0.0.1:19000:9000 pige360-minio:ci server /data
+          trap 'status=$?; if (( status )); then docker logs pige360-minio-ci || true; fi; docker rm -f pige360-minio-ci >/dev/null 2>&1 || true' EXIT
+          curl -fsS --retry 20 --retry-all-errors --retry-delay 2 \
+            http://127.0.0.1:19000/minio/health/live
+          docker exec pige360-minio-ci /usr/local/bin/minio-healthcheck
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -116,6 +155,8 @@ jobs:
           export APP_SECRET_KEY=ci-only-long-random-looking-application-key-1234567890
           export SETUP_TOKEN=ci-only-setup-token-1234567890
           export POSTGRES_PASSWORD=ci-only-postgres-password-1234567890
+          export MAIL_AGENT_SHARED_KEY=ci-only-mail-agent-key-1234567890
+          export SOGO_DB_PASSWORD=ci-only-sogo-db-password-1234567890
           for adapter in docker dockge portainer cloudpanel; do
             for channel in develop production; do
               docker compose --env-file "deploy/$adapter/.env.$channel.example" \
@@ -127,7 +168,16 @@ jobs:
             --build-arg NODE_BASE_IMAGE="$NODE_BASE_IMAGE" \
             --build-arg PYTHON_BASE_IMAGE="$PYTHON_BASE_IMAGE" \
             --build-arg POSTGRES_IMAGE="$POSTGRES_IMAGE" -t pige360-self:ci .
-          bash scripts/ci/smoke.sh pige360-self:ci local
+          # O Dockerfile deve falhar se o Apache upstream voltar a remover os
+          # cabeçalhos de login confiáveis ou reescrever a URL pública.
+          docker build --build-arg SOURCE_REVISION="$GITHUB_SHA" --build-arg APP_VERSION="$(cat VERSION)" \
+            -t pige360-sogo:ci services/sogo
+          docker run --rm --entrypoint python3 pige360-sogo:ci -c 'from pathlib import Path; c=Path("/etc/apache2/conf-available/SOGo.conf").read_text(); assert "RequestHeader unset \"x-webobjects-remote-user\"" not in c; assert "RequestHeader set \"x-webobjects-server-url\"" not in c'
+          # O pacote GHCR do Memcached nasce após o merge em develop. O smoke
+          # da PR usa uma imagem local descartável com a mesma base upstream.
+          docker build --build-arg UPSTREAM_IMAGE=docker.io/library/memcached:1.6-alpine \
+            -f containers/service.Dockerfile -t pige360-memcached:ci .
+          SOGO_CACHE_IMAGE=pige360-memcached:ci bash scripts/ci/smoke.sh pige360-self:ci local
           python - <<'PY'
           import json
           from pathlib import Path

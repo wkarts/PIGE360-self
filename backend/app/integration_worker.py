@@ -320,6 +320,8 @@ def schedule_reconciliations():
         db.commit()
 
 def main():
+    from .queue_notifications import install, wait_for_integration
+    install()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--once', action='store_true')
     parser.add_argument('--limit', type=int, default=100)
@@ -348,6 +350,6 @@ def main():
             LOG.error('code=WORKER_DATABASE_OR_CONFIGURATION_ERROR'); worked = False
         done += int(worked)
         if args.once and (not worked or done >= args.limit): return
-        if not worked: time.sleep(settings().worker_poll_seconds)
+        if not worked: wait_for_integration(settings().worker_poll_seconds)
 
 if __name__ == '__main__': main()

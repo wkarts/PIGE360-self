@@ -480,6 +480,18 @@ td .link-button { text-align: left; }
 
 /* E-mail institucional acompanha o mesmo padrão dos módulos operacionais. */
 .mailcow-page { display: grid; gap: 20px; }
+.webmail-view { display:grid; gap:14px; min-width:0; }
+.webmail-header { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:18px 22px; background:var(--surface,#fff); border:1px solid var(--line,#dce2e8); border-top:4px solid var(--webmail-primary,var(--primary)); border-radius:16px; box-shadow:0 8px 28px rgba(20,31,48,.06); }
+.webmail-brand { display:flex; align-items:center; gap:14px; min-width:0; }
+.webmail-brand img { width:54px; height:54px; object-fit:contain; }
+.webmail-brand .eyebrow { margin:0 0 4px; color:var(--webmail-secondary,var(--muted)); }
+.webmail-brand h2 { margin:0; }
+.webmail-frame { display:block; width:100%; height:min(76vh,920px); min-height:560px; border:1px solid var(--line,#dce2e8); border-radius:14px; background:#fff; }
+@media(max-width:760px) {
+  .webmail-header { align-items:flex-start; flex-direction:column; padding:16px; }
+  .webmail-header .actions { display:grid; width:100%; grid-template-columns:1fr; }
+  .webmail-frame { height:calc(100dvh - 260px); min-height:440px; border-radius:10px; }
+}
 .mailcow-page > .x-heading, .mailcow-page > .x-card, .mailcow-page > .alert { margin: 0; }
 .mailcow-page > .x-heading > div:first-child > p:not(.eyebrow) { color: var(--muted); font-size: 13px; }
 .mailcow-page .x-card > h3 { margin: 0 0 20px; }

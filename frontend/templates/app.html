@@ -45,7 +45,7 @@
       </div>
       <div class="sidebar-scroll" tabindex="0" role="region" aria-label="Rolagem do menu">
       <div class="sidebar-label">OPERAÇÃO ESCOLAR</div>
-      <nav v-if="state.emailAvailable" aria-label="Comunicação pessoal"><a href="#/webmail" :class="{active:state.page==='webmail'}" :aria-current="state.page==='webmail'?'page':undefined" @click.prevent="navigate('webmail')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#email"></use></svg>Meu e-mail</a></nav>
+      <nav v-if="state.emailAvailable" aria-label="E-mail institucional"><a href="#/webmail" :class="{active:state.page==='webmail'}" :aria-current="state.page==='webmail'?'page':undefined" @click.prevent="navigate('webmail')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#email"></use></svg>E-mail</a><a v-if="state.user?.role!=='admin'" href="#/email" :class="{active:state.page==='email'}" :aria-current="state.page==='email'?'page':undefined" @click.prevent="navigate('email')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#integrations"></use></svg>Preferências de e-mail</a></nav>
       <nav v-if="!isProfileRole()" aria-label="Menu principal">
         <a v-if="can('dashboard.read') || isProfileRole()" href="#/dashboard" :class="{active:state.page==='dashboard'}" :aria-current="state.page==='dashboard'?'page':undefined" @click.prevent="navigate('dashboard')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#dashboard"></use></svg>Visão geral</a>
         <div v-if="can('people.read') || can('read')" class="nav-group" :class="{selected:registryPages.includes(state.page)}">
@@ -58,38 +58,47 @@
         <a v-if="can('academic.read')" href="#/academic" :class="{active:state.page==='academic'}" :aria-current="state.page==='academic'?'page':undefined" @click.prevent="navigate('academic')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#academic"></use></svg>Estrutura acadêmica</a>
         <a v-if="can('diary.read')" href="#/diary" :class="{active:state.page==='diary'}" :aria-current="state.page==='diary'?'page':undefined" @click.prevent="navigate('diary')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#academic"></use></svg>Diário Escolar</a>
         <div v-if="can('documents.read')" class="nav-group" :class="{selected:documentPages.includes(state.page)}">
-          <button type="button" class="nav-group-toggle" aria-label="Documentação" @click="state.documentsOpen=!state.documentsOpen" :aria-expanded="state.documentsOpen || documentPages.includes(state.page)" aria-controls="documents-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#documents"></use></svg><span>Documentação</span><svg class="nav-chevron ui-icon" :class="{expanded:state.documentsOpen || documentPages.includes(state.page)}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
+          <button type="button" class="nav-group-toggle" aria-label="Documentos" @click="state.documentsOpen=!state.documentsOpen" :aria-expanded="state.documentsOpen || documentPages.includes(state.page)" aria-controls="documents-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#documents"></use></svg><span>Documentos</span><svg class="nav-chevron ui-icon" :class="{expanded:state.documentsOpen || documentPages.includes(state.page)}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
           <div id="documents-menu" class="nav-group-items" v-show="state.documentsOpen || documentPages.includes(state.page)">
             <a href="#/documents" :class="{active:state.page==='documents'}" :aria-current="state.page==='documents'?'page':undefined" @click.prevent="navigate('documents')">Pendências documentais</a>
+            <a href="#/contracts" :class="{active:state.page==='contracts'}" :aria-current="state.page==='contracts'?'page':undefined" @click.prevent="navigate('contracts')">Modelos e contratos</a>
             <a href="#/pending-signatures" :class="{active:state.page==='pending-signatures'}" :aria-current="state.page==='pending-signatures'?'page':undefined" @click.prevent="navigate('pending-signatures')">Assinaturas pendentes</a>
             <a v-if="can('documents.validate')" href="#/signature-review" :class="{active:state.page==='signature-review'}" :aria-current="state.page==='signature-review'?'page':undefined" @click.prevent="navigate('signature-review')">Conferência de assinaturas</a>
           </div>
         </div>
-        <a v-if="can('documents.read')" href="#/contracts" :class="{active:state.page==='contracts'}" :aria-current="state.page==='contracts'?'page':undefined" @click.prevent="navigate('contracts')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#documents"></use></svg>Modelos e contratos</a>
         <a v-if="can('protocols.read')" href="#/protocols" :class="{active:state.page==='protocols'}" :aria-current="state.page==='protocols'?'page':undefined" @click.prevent="navigate('protocols')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#protocols"></use></svg>Protocolos</a>
         <a v-if="can('reports.read')" href="#/reports" :class="{active:state.page==='reports'}" :aria-current="state.page==='reports'?'page':undefined" @click.prevent="navigate('reports')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#reports"></use></svg>Relatórios</a>
       </nav>
-      <div class="sidebar-label">ADMINISTRAÇÃO</div>
+      <div class="sidebar-label">INSTITUIÇÃO</div>
+      <nav v-if="!isProfileRole()" aria-label="Gestão da instituição">
+        <a v-if="can('schools.manage')" href="#/settings" :class="{active:state.page==='settings'}" :aria-current="state.page==='settings'?'page':undefined" @click.prevent="navigate('settings')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#school"></use></svg>Instituição</a>
+        <a v-if="can('users.manage')" href="#/users" :class="{active:state.page==='users'}" :aria-current="state.page==='users'?'page':undefined" @click.prevent="navigate('users')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#access"></use></svg>Usuários e acessos</a>
+      </nav>
+      <div class="sidebar-label">GESTÃO E SERVIÇOS</div>
       <nav v-if="!isProfileRole()" aria-label="Administração">
         <a v-if="can('admissions.read')" href="#/online" :class="{active:state.page==='online'}" :aria-current="state.page==='online'?'page':undefined" @click.prevent="navigate('online')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#online"></use></svg>Inscrições online</a>
-        <a v-if="can('banking.read')" href="#/banking" :class="{active:state.page==='banking'}" :aria-current="state.page==='banking'?'page':undefined" @click.prevent="navigate('banking')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#billing"></use></svg>Cobranças</a>
+        <div v-if="can('banking.read')" class="nav-group" :class="{selected:state.page==='banking'}">
+          <button type="button" class="nav-group-toggle" aria-label="Financeiro" @click="state.financeOpen=!state.financeOpen" :aria-expanded="state.financeOpen || state.page==='banking'" aria-controls="finance-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#billing"></use></svg><span>Financeiro</span><svg class="nav-chevron ui-icon" :class="{expanded:state.financeOpen || state.page==='banking'}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
+          <div id="finance-menu" class="nav-group-items" v-show="state.financeOpen || state.page==='banking'"><a href="#/banking" :class="{active:state.page==='banking'}" :aria-current="state.page==='banking'?'page':undefined" @click.prevent="navigate('banking')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#billing"></use></svg>Cobranças</a></div>
+        </div>
         <div v-if="can('connect.manage') || can('integrations.manage') || state.user?.role==='admin'" class="nav-group" :class="{selected:integrationPages.includes(state.page)}">
           <button type="button" class="nav-group-toggle" aria-label="Integrações" @click="state.integrationsOpen=!state.integrationsOpen" :aria-expanded="state.integrationsOpen" aria-controls="integrations-menu"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#integrations"></use></svg><span>Integrações</span><svg class="nav-chevron ui-icon" :class="{expanded:state.integrationsOpen}" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#chevron"></use></svg></button>
           <div id="integrations-menu" class="nav-group-items" v-show="state.integrationsOpen">
             <a v-if="can('connect.manage')" href="#/connect" :class="{active:state.page==='connect'}" :aria-current="state.page==='connect'?'page':undefined" @click.prevent="navigate('connect')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#whatsapp"></use></svg>WhatsApp</a>
-            <a v-if="state.user?.role==='admin'" href="#/email" :class="{active:state.page==='email'}" :aria-current="state.page==='email'?'page':undefined" @click.prevent="navigate('email')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#email"></use></svg>E-mail institucional</a>
+            <a v-if="state.user?.role==='admin'" href="#/email" :class="{active:state.page==='email'}" :aria-current="state.page==='email'?'page':undefined" @click.prevent="navigate('email')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#integrations"></use></svg>Parâmetros de e-mail</a>
             <a v-if="can('integrations.manage')" href="#/integrations" :class="{active:state.page==='integrations'}" :aria-current="state.page==='integrations'?'page':undefined" @click.prevent="navigate('integrations')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#bank"></use></svg>Bancária</a>
           </div>
         </div>
-        <a href="#/community" :class="{active:state.page==='community'}" :aria-current="state.page==='community'?'page':undefined" @click.prevent="navigate('community')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#online"></use></svg>Notícias e eventos</a>
+        <div class="nav-group" :class="{selected:state.page==='community'}">
+          <button type="button" class="nav-group-toggle" aria-label="Publicidade" @click="state.publicityOpen=!state.publicityOpen" :aria-expanded="state.publicityOpen || state.page==='community'" aria-controls="publicity-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#online"></use></svg><span>Publicidade</span><svg class="nav-chevron ui-icon" :class="{expanded:state.publicityOpen || state.page==='community'}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
+          <div id="publicity-menu" class="nav-group-items" v-show="state.publicityOpen || state.page==='community'"><a href="#/community" :class="{active:state.page==='community'}" :aria-current="state.page==='community'?'page':undefined" @click.prevent="navigate('community')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#online"></use></svg>Notícias e eventos</a></div>
+        </div>
         <div v-if="can('schools.manage')" class="nav-group" :class="{selected:configurationPages.includes(state.page)}">
           <button type="button" class="nav-group-toggle" aria-label="Configurações" @click="state.configurationOpen=!state.configurationOpen" :aria-expanded="state.configurationOpen || configurationPages.includes(state.page)" aria-controls="configuration-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#school"></use></svg><span>Configurações</span><svg class="nav-chevron ui-icon" :class="{expanded:state.configurationOpen || configurationPages.includes(state.page)}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
           <div id="configuration-menu" class="nav-group-items" v-show="state.configurationOpen || configurationPages.includes(state.page)">
-            <a href="#/settings" :class="{active:state.page==='settings'}" :aria-current="state.page==='settings'?'page':undefined" @click.prevent="navigate('settings')">Instituição</a>
             <a href="#/certificate" :class="{active:state.page==='certificate'}" :aria-current="state.page==='certificate'?'page':undefined" @click.prevent="navigate('certificate')">Certificados A1</a>
           </div>
         </div>
-        <a v-if="can('users.manage')" href="#/users" :class="{active:state.page==='users'}" :aria-current="state.page==='users'?'page':undefined" @click.prevent="navigate('users')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#access"></use></svg>Usuários e acessos</a>
         <div v-if="state.user?.role==='admin'" class="nav-group admin-nav-group" :class="{selected:administrationPages.includes(state.page)}">
           <button type="button" class="nav-group-toggle" aria-label="Administração do sistema" @click="state.adminMenuOpen=!state.adminMenuOpen" :aria-expanded="state.adminMenuOpen || administrationPages.includes(state.page)" aria-controls="administration-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#admin"></use></svg><span>Administração do sistema</span><svg class="nav-chevron ui-icon" :class="{expanded:state.adminMenuOpen || administrationPages.includes(state.page)}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
           <div id="administration-menu" class="nav-group-items" v-show="state.adminMenuOpen || administrationPages.includes(state.page)">
@@ -102,21 +111,21 @@
       </div>
       <div class="sidebar-footer"><small>{{ identity.short_name }}<span v-if="state.user.role==='admin'"> · {{ identity.app_version || '—' }}</span></small></div>
     </aside>
-    <div class="main-column">
+    <div class="main-column" :class="{'webmail-layout':state.page==='webmail'}">
       <header class="topbar">
         <button type="button" class="icon-button menu-button" @click="state.menuOpen=!state.menuOpen" aria-label="Abrir menu" :aria-expanded="state.menuOpen" aria-controls="school-navigation"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#menu"></use></svg></button>
         <div class="school-switch"><span class="small muted">INSTITUIÇÃO ATIVA</span><select aria-label="Selecionar escola" v-model="state.schoolId" @change="changeSchool" :disabled="state.busy || state.schoolLoading || !!state.modal.kind || contractDirty()"><option v-for="s in state.schools" :key="s.id" :value="s.id">{{ s.name }}</option></select></div>
         <div class="topbar-actions"><details v-if="state.certificateAlerts.length" class="notice-menu"><summary :aria-label="state.certificateAlerts.length+' aviso de certificado'"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#bell"></use></svg><span class="notice-count">{{ state.certificateAlerts.length }}</span></summary><div class="notice-popover"><p class="eyebrow">AVISOS DA ESCOLA</p><button v-for="notice in state.certificateAlerts" :key="notice.id" type="button" @click="navigate('certificate')"><strong>{{ notice.title }}</strong><span>{{ notice.message }}</span></button></div></details><span class="online-chip" :class="{offline:!state.online}"><i class="dot"></i>{{ state.online?'Online':'Sem conexão' }}</span><button v-if="state.canInstall" class="btn btn-secondary small-button" @click="install">Instalar aplicativo</button><div class="user-caption"><strong>{{ state.user.name }}</strong><small>{{ label(state.user.role) }}</small></div><button class="avatar user-avatar" @click="editMyProfile" title="Meu perfil" aria-label="Meu perfil"><img v-if="state.userPhotoUrl" :src="state.userPhotoUrl" alt="Minha foto"><span v-else>{{ initials(state.user.name) }}</span></button><button type="button" class="icon-button" @click="logout" title="Sair" aria-label="Sair"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#logout"></use></svg></button></div>
       </header>
       <main id="main-content" class="main-content" tabindex="-1" aria-label="Conteúdo da escola">
-        <div v-if="!state.online" class="alert warning">Sem conexão. Reconecte-se para consultar e salvar alterações.</div>
-        <div v-if="state.updateAvailable" class="alert info">Uma nova versão está disponível. <button class="link-button" :disabled="!!state.modal.kind" @click="updateApp">Atualizar aplicação</button></div>
-        <div v-if="state.error" class="alert error" role="alert"><span>{{ state.error }}</span><button @click="state.error=''" aria-label="Fechar erro">×</button></div>
-        <div v-if="state.success" class="alert success" role="status"><span>{{ state.success }}</span><button @click="state.success=''" aria-label="Fechar aviso">×</button></div>
+        <div v-if="!state.online && state.page!=='webmail'" class="alert warning">Sem conexão. Reconecte-se para consultar e salvar alterações.</div>
+        <div v-if="state.updateAvailable && state.page!=='webmail'" class="alert info">Uma nova versão está disponível. <button class="link-button" :disabled="!!state.modal.kind" @click="updateApp">Atualizar aplicação</button></div>
+        <div v-if="state.error && state.page!=='webmail'" class="alert error" role="alert"><span>{{ state.error }}</span><button @click="state.error=''" aria-label="Fechar erro">×</button></div>
+        <div v-if="state.success && state.page!=='webmail'" class="alert success" role="status"><span>{{ state.success }}</span><button @click="state.success=''" aria-label="Fechar aviso">×</button></div>
         <div v-if="state.schoolLoading" class="loading-strip" role="status">Carregando a instituição selecionada…</div>
         <template v-if="!state.schoolLoading &amp;&amp; state.schoolId">
-        <div class="page-header">
-          <div class="page-heading"><p class="breadcrumb">{{ registryPages.includes(state.page)?'Cadastros':integrationPages.includes(state.page)?'Integrações':administrationPages.includes(state.page)?'Administração':configurationPages.includes(state.page)?'Configurações':documentPages.includes(state.page)?'Documentação':'Secretaria' }} / {{ pageLabels[state.page] }}</p><div class="page-heading-title"><h1>{{ state.selectedStudent ? state.selectedStudent.person.name : pageLabels[state.page] }}</h1></div><p v-if="state.selectedStudent" class="page-subtitle">Ficha do aluno · {{ state.selectedStudent.number }}</p></div>
+        <div v-if="state.page!=='webmail'" class="page-header">
+          <div class="page-heading"><p class="breadcrumb">{{ registryPages.includes(state.page)?'Cadastros':integrationPages.includes(state.page)?'Integrações':administrationPages.includes(state.page)?'Administração do sistema':state.page==='settings'?'Instituição':configurationPages.includes(state.page)?'Configurações':documentPages.includes(state.page)?'Documentos':'Secretaria' }} / {{ pageLabels[state.page] }}</p><div class="page-heading-title"><h1>{{ state.selectedStudent ? state.selectedStudent.person.name : pageLabels[state.page] }}</h1></div><p v-if="state.selectedStudent" class="page-subtitle">Ficha do aluno · {{ state.selectedStudent.number }}</p></div>
           <div class="actions">
             <button v-if="state.page!=='help'" class="btn btn-secondary page-help" @click="navigate('help')">Guia de uso</button>
             <button v-if="registryPages.includes(state.page) && state.page!=='people' && !state.selectedStudent && can('people.write')" class="btn btn-secondary" @click="reusePerson">Vincular pessoa existente</button>
@@ -133,11 +142,26 @@
           </div>
         </div>
 
-        <div v-if="state.loading" class="loading-strip" role="status">Carregando registros…</div>
+        <div v-if="state.loading && !['email','webmail'].includes(state.page)" class="loading-strip" role="status">Carregando registros…</div>
         <legacy-import-panel v-if="state.page==='legacy-import' && adminTool('legacy-import')" :key="state.schoolId" :school-id="state.schoolId" :school-name="school()?.name || ''" :units="state.catalogs.units || []"></legacy-import-panel>
         <diagnostics-panel :key="state.schoolId" v-if="state.page==='diagnostics' && adminTool('diagnostics')"></diagnostics-panel>
-        <institutional-email v-if="state.page==='webmail'" :key="state.schoolId+':email'" :school-id="state.schoolId" :admin="state.user.role==='admin'"></institutional-email>
+        <section v-if="state.page==='webmail'" class="webmail-view" :key="state.schoolId+':webmail'" :style="{'--webmail-primary':identity.primary_color,'--webmail-secondary':identity.secondary_color}" aria-label="Caixa de e-mail">
+          <div v-if="state.sogoStarting && !state.sogoFallback && !state.sogoError" class="webmail-loading" role="status"><span class="webmail-spinner" aria-hidden="true"></span><span>Abrindo sua caixa de e-mail…</span></div>
+          <div v-if="state.sogoError && !state.sogoFallback" class="webmail-error" role="alert"><div><strong>Não foi possível abrir o webmail</strong><p>{{state.sogoError}}</p><button type="button" class="btn btn-secondary" @click="openSogoWebmail" :disabled="state.sogoStarting">{{state.sogoStarting?'Conectando…':'Tentar novamente'}}</button></div></div>
+          <iframe v-if="!state.sogoFallback" v-show="!state.sogoError" id="pige-sogo-frame" name="pige-sogo-frame" class="webmail-frame" title="Caixa de e-mail" referrerpolicy="same-origin" allow="clipboard-read; clipboard-write; downloads" @load="webmailFrameLoaded"></iframe>
+          <institutional-email v-else class="webmail-fallback" :key="state.schoolId+':email-fallback'" :school-id="state.schoolId" :admin="state.user.role==='admin'"></institutional-email>
+        </section>
         <audit-panel v-if="state.page==='audit' && adminTool('audit')" :key="state.schoolId+':audit'" :school-id="state.schoolId"></audit-panel>
+        <section v-if="state.page==='email' && (state.user?.role==='admin' || state.emailAvailable)" class="panel x-card webmail-preferences" aria-labelledby="webmail-preferences-title">
+          <div class="x-heading"><div><p class="eyebrow">PREFERÊNCIAS · E-MAIL</p><h2 id="webmail-preferences-title">Seu acesso ao webmail</h2><p>Escolha a caixa que será aberta para sua conta. A opção padrão acompanha a preferência da instituição.</p></div></div>
+          <label class="webmail-preference-choice">Caixa de e-mail
+            <select :value="state.webmailOverride" @change="saveWebmailPreference($event.target.value)">
+              <option value="inherit">Usar o padrão da instituição ({{state.webmailDefault==='sogo'?'SOGo integrado':'caixa alternativa'}})</option>
+              <option value="sogo">SOGo integrado</option>
+              <option value="alternative">Caixa alternativa PIGE360</option>
+            </select>
+          </label>
+        </section>
         <mailcow-panel v-if="state.page==='email' && state.user?.role==='admin'" :key="state.schoolId" :school-id="state.schoolId"></mailcow-panel>
         <section v-if="state.page==='email' && state.user?.role==='admin'" class="panel x-card" aria-labelledby="smtp-title">
           <div class="x-heading"><div><p class="eyebrow">INTEGRAÇÕES · E-MAIL</p><h2 id="smtp-title">Envio de avisos</h2><p>Acompanhe a configuração de envio de mensagens da escola.</p></div></div>
@@ -147,6 +171,7 @@
           <p v-else class="muted" role="status">Consultando configuração de envio…</p>
           <details><summary>Configuração técnica</summary><p class="muted">Configure SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM e SMTP_SECURITY no .env da instalação. Reinicie os serviços para aplicar as alterações.</p></details>
         </section>
+        <section v-if="state.page==='email' && state.user?.role==='admin'" class="panel x-card webmail-default" aria-labelledby="webmail-default-title"><h2 id="webmail-default-title">Webmail padrão da instituição</h2><p>Aplica-se a todos os usuários que não escolheram uma opção pessoal.</p><div class="actions"><label>Cliente de e-mail <select v-model="state.webmailDefault"><option value="sogo">SOGo integrado</option><option value="alternative">Caixa alternativa PIGE360</option></select></label><button type="button" class="btn btn-primary" @click="saveWebmailDefault">Salvar padrão</button></div></section>
         <expansion-panel v-if="['online','banking','integrations','connect'].includes(state.page)" :key="state.schoolId+':'+state.page" :school-id="state.schoolId" :page="state.page" :permissions="state.user.permissions"></expansion-panel>
         <diary-panel v-if="state.page==='diary'" :key="state.schoolId+':diary'" :school-id="state.schoolId" :permissions="state.user.permissions"></diary-panel>
         <contracts-panel v-if="state.page==='contracts' && can('documents.read')" :key="state.schoolId+':contracts:'+state.contractEnrollmentId+':'+state.contractReviewIssuedId" :school-id="state.schoolId" :permissions="state.user.permissions" :role="state.user.role" :enrollment-id="state.contractEnrollmentId" :issued-id="state.contractReviewIssuedId"></contracts-panel>
@@ -334,7 +359,7 @@
           </div>
           <article v-if="state.institutionTab==='support'" class="panel institution-card"><div class="institution-card-title"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#connect"></use></svg><h3>Atendimento pelo site</h3><span class="badge" :class="state.supportHub.enabled?'active':'archived'">{{ state.supportHub.enabled?'Ativo':'Desativado' }}</span></div><p v-if="supportStatus.error" class="alert warning" role="status">{{ supportStatus.error }}</p><p>{{ state.supportHub.enabled?'O atendimento aparece nas áreas selecionadas desta escola.':'Ative o atendimento para disponibilizar um canal de ajuda aos usuários.' }}</p><dl v-if="state.supportHub.enabled" class="institution-data"><div><dt>Áreas habilitadas</dt><dd>{{ supportAreaLabels() }}</dd></div><div><dt>Nome do botão</dt><dd>{{ state.supportHub.launcher_title }}</dd></div><div><dt>Posição</dt><dd>{{ state.supportHub.position==='right'?'À direita':'À esquerda' }}</dd></div></dl><div class="institution-card-actions"><button class="btn btn-secondary" @click="editSupportHub">Configurar atendimento</button></div></article>
         </section>
-        <lifecycle-panel v-if="state.lifecycleTarget" :key="state.schoolId+state.lifecycleTarget.resource+state.lifecycleTarget.id" :school-id="state.schoolId" :target="state.lifecycleTarget" @close="state.lifecycleTarget=null" @completed="lifecycleCompleted"></lifecycle-panel><footer class="content-footer"><span>{{ identity.display_name }}</span><a :href="'/news.html?school='+state.schoolId" target="_blank" rel="noopener">Portal da escola</a><span>Acesso controlado · Histórico preservado</span></footer>
+        <lifecycle-panel v-if="state.lifecycleTarget" :key="state.schoolId+state.lifecycleTarget.resource+state.lifecycleTarget.id" :school-id="state.schoolId" :target="state.lifecycleTarget" @close="state.lifecycleTarget=null" @completed="lifecycleCompleted"></lifecycle-panel><footer v-if="state.page!=='webmail'" class="content-footer"><span>{{ identity.display_name }}</span><a :href="'/news.html?school='+state.schoolId" target="_blank" rel="noopener">Portal da escola</a><span>Acesso controlado · Histórico preservado</span></footer>
         </template>
       </main>
     </div>

@@ -17,6 +17,7 @@ from .connect_core import (
     connect_response,
     enqueue_connect_message,
 )
+from .connect_inventory import visible_remote_rows
 from .security import Actor, DB, Scope, check_version, fail, lock_school, require, scoped
 
 
@@ -257,26 +258,19 @@ def remote_connect_instances(db: DB, user: Actor, school: Scope):
     require(user, "connect.manage")
     company = _company(db, school)
     response = _remote_call(lambda: ConnectApiClient().fetch_instances())
-    local = {
-        item.name: item
-        for item in db.scalars(select(m.ConnectInstance).where(
-            m.ConnectInstance.company_id == company.id,
-            m.ConnectInstance.school_id == school.id,
-            m.ConnectInstance.status != "deleted",
-        ))
-    }
-    items = []
-    for row in _remote_rows(response):
-        current = local.get(row["name"])
-        if not current:
-            continue
-        items.append({
-            **row,
-            "registered": bool(current),
-            "local_id": current.id if current else "",
-            "source": current.source if current else "",
-        })
-    return {"items": items}
+    rows = _remote_rows(response)
+    names = {row['name'] for row in rows}
+    claimed = list(db.scalars(select(m.ConnectInstance).where(
+        m.ConnectInstance.name.in_(names), m.ConnectInstance.status != "deleted"))) if names else []
+    legacy_ids = [item.id for item in claimed if item.school_id is None]
+    blocked_legacy = set()
+    if legacy_ids:
+        blocked_legacy.update(db.scalars(select(m.ConnectSchoolBinding.instance_id).where(
+            m.ConnectSchoolBinding.instance_id.in_(legacy_ids), m.ConnectSchoolBinding.school_id != school.id)))
+        blocked_legacy.update(db.scalars(select(m.ConnectUnitBinding.instance_id).join(
+            m.Unit, m.Unit.id == m.ConnectUnitBinding.unit_id).where(
+            m.ConnectUnitBinding.instance_id.in_(legacy_ids), m.Unit.school_id != school.id)))
+    return {"items": visible_remote_rows(rows, claimed, company.id, school.id, blocked_legacy)}
 
 
 @router.post("/connect/instances/adopt", status_code=201)
@@ -306,7 +300,9 @@ def adopt_connect_instance(
         unit_schools = list(db.scalars(select(m.Unit.school_id).join(m.ConnectUnitBinding, m.ConnectUnitBinding.unit_id == m.Unit.id).where(m.ConnectUnitBinding.instance_id == legacy.id)))
         if any(sid != school.id for sid in school_bindings + unit_schools):
             fail(409, "A instância anterior possui vínculos com outras instituições. Revise esses vínculos antes de definir a instituição responsável.")
-    response = _remote_call(lambda: ConnectApiClient().fetch_instance(data.instance_name))
+    # O inventário completo é o mesmo contrato usado na tela. Alguns provedores
+    # rejeitam a variante com filtro por instanceName, impedindo a adoção.
+    response = _remote_call(lambda: ConnectApiClient().fetch_instances())
     rows = [row for row in _remote_rows(response) if row["name"] == data.instance_name]
     if not rows:
         fail(404, "Instância não encontrada no provedor de WhatsApp configurado.")

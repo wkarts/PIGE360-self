@@ -170,7 +170,7 @@ try:
         expect(workspace.get_by_role('heading', name='Conferência de assinaturas', exact=True)).to_have_count(0)
         expect(page.get_by_role('button', name='Documentos fiscais', exact=True)).to_have_count(0)
         expect(page.locator('aside a[href="#/signatures"]')).to_have_count(0)
-        navigate_area('pending-signatures', 'Documentação')
+        navigate_area('pending-signatures', 'Documentos')
         expect(workspace.get_by_role('heading', name='Assinaturas pendentes', exact=True)).to_be_visible()
         expect(workspace.get_by_text('Aluno da assinatura escolar', exact=True)).to_be_visible()
         expect(workspace.locator('#a1-certificate-file')).to_have_count(0)
@@ -185,7 +185,7 @@ try:
         signature = client.get(base + '/issued-documents/' + issued_id + '/signatures', headers=headers).json()
         assert signature['status'] == 'company_signed' and signature['cryptographic_valid'] is True
         record('Documento escolar sai da fila de assinaturas após A1; PDF original preservado e assinado disponível para download')
-        navigate_area('signature-review', 'Documentação')
+        navigate_area('signature-review', 'Documentos')
         expect(workspace.get_by_role('heading', name='Conferência de assinaturas', exact=True)).to_be_visible()
         expect(workspace.get_by_text('Nenhuma assinatura externa pendente de revisão nesta escola.', exact=True)).to_be_visible()
         expect(workspace.get_by_role('heading', name='Assinaturas pendentes', exact=True)).to_have_count(0)
@@ -198,7 +198,7 @@ try:
         expect(page.locator('.notice-menu')).to_be_visible()
         for width, height in [(390, 844), (320, 640), (1440, 960)]:
             page.set_viewport_size({'width': width, 'height': height})
-            for route, group, slug in [('pending-signatures', 'Documentação', 'pendencias'), ('signature-review', 'Documentação', 'conferencia'), ('certificate', 'Configurações', 'certificado')]:
+            for route, group, slug in [('pending-signatures', 'Documentos', 'pendencias'), ('signature-review', 'Documentos', 'conferencia'), ('certificate', 'Configurações', 'certificado')]:
                 navigate_area(route, group)
                 page.locator('#main-content').evaluate('el=>el.scrollTop=0')
                 layout(page)

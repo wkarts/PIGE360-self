@@ -1,0 +1,62 @@
+name: Develop - deployer visual Windows
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: pige360-deployer-prerelease
+  cancel-in-progress: false
+jobs:
+  windows_amd64:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Testar interface de conexão Windows
+        run: python -m unittest discover -s tests/ci -p test_deployer_windows.py -v
+      - name: Compilar executável Windows com interface gráfica
+        run: |
+          python -m pip install pyinstaller==6.22.3
+          python -m PyInstaller --onefile --windowed --clean --noconfirm --name pige360-deployer-windows-amd64 scripts/deployer_windows.py
+          $binary = Start-Process -FilePath '.\dist\pige360-deployer-windows-amd64.exe' -ArgumentList '--self-test' -Wait -PassThru
+          if ($binary.ExitCode -ne 0) { throw "Falhou verificação do executável: $($binary.ExitCode)" }
+          Copy-Item '.\dist\pige360-deployer-windows-amd64.exe' '.\pige360-deployer-windows-amd64.exe'
+      - name: Atualizar a pré-release contínua develop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'VERSION inválida' }
+          $tag = 'deployer-develop'
+          $binary = 'pige360-deployer-windows-amd64.exe'
+          $hash = (Get-FileHash $binary -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash *$binary" | Set-Content -Path "$binary.sha256" -Encoding ascii
+          $title = "PIGE360 Self $version develop - Deployer Windows"
+          $notes = "Deployer visual Windows x64 compilado do commit $env:GITHUB_SHA do canal develop. Verifique o SHA-256 anexo. Conecte-se por SSH ao host Linux com Docker Compose e checkout deste commit. O painel opera pelo túnel 127.0.0.1. Esta release é atualizada continuamente e não altera aliases de produção."
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --target $env:GITHUB_SHA --prerelease --title $title --notes $notes
+            if ($LASTEXITCODE -ne 0) { throw 'Falhou a criação do pré-release' }
+          } else {
+            gh release edit $tag --prerelease --title $title --notes $notes
+            if ($LASTEXITCODE -ne 0) { throw 'Falhou a atualização do pré-release' }
+          }
+          gh release upload $tag $binary "$binary.sha256" --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Falhou o upload do executável' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pige360-deployer-windows-amd64-${{ github.sha }}
+          path: |
+            pige360-deployer-windows-amd64.exe
+            pige360-deployer-windows-amd64.exe.sha256
+          if-no-files-found: ignore
+          retention-days: 30
