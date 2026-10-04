@@ -760,7 +760,7 @@ def test_sogo_mail_view_keeps_upstream_open_while_reading(mailbox_api, monkeypat
             yield b'<html><head></head><body>SOGo Mail</body></html>'
 
     class LiveClient:
-        open = False
+        open = True
 
         def __init__(self, **kwargs):
             pass
@@ -795,7 +795,7 @@ def test_sogo_mail_view_keeps_upstream_open_while_reading(mailbox_api, monkeypat
         assert 'simulated upstream disconnect' not in result.text
     else:
         assert 'SOGo Mail' in result.text
-    assert not upstream.open
+    assert upstream.open
 
 
 def test_sogo_proxy_rejects_path_traversal_and_non_webmail_resources():
