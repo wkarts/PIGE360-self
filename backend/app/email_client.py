@@ -1086,23 +1086,33 @@ async def proxy_webmail(school_id: str, resource: str, request: Request):
         fail(502, 'O webmail não respondeu. Tente novamente em instantes.')
     content_type = upstream_response.headers.get('content-type', '')
     prefix = f'/webmail/{quote(school_id, safe="")}'
-    if 'text/html' in content_type:
-        rendered = content.decode('utf-8', errors='replace')
-        rendered = rendered.replace('"/SOGo', '"' + prefix + '/SOGo').replace("'/SOGo", "'" + prefix + '/SOGo')
-        rendered = rendered.replace('"/principals', '"' + prefix + '/principals').replace("'/principals", "'" + prefix + '/principals')
-        title = identity['display_name'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        theme = (f'<title>{title} · E-mail</title>'
-                 '<link rel="stylesheet" href="/api/v1/institution/theme.css">'
-                 f'<style>:root{{--pige-mail-primary:{identity["primary_color"]};'
-                 f'--pige-mail-secondary:{identity["secondary_color"]}}}'
-                 'body,md-content,md-toolbar,button,input,select,textarea,.md-button,.md-headline,.md-title,.md-subhead'
-                 '{font-family:var(--institution-font,system-ui,sans-serif)!important}'
-                 'a,.toolbarButton,.button{color:var(--pige-mail-primary)}'
-                 '.toolbar,.menu{border-color:var(--pige-mail-primary)}</style>')
-        rendered = rendered.replace('</head>', theme + '</head>', 1)
+    from .webmail_proxy import is_rewritable_content_type, rewrite_resource_urls, safe_theme_color
+    if is_rewritable_content_type(content_type):
+        rendered = rewrite_resource_urls(content.decode('utf-8', errors='replace'), prefix,
+                                         trusted_origins=(cfg.app_url, upstream))
+        if content_type.partition(';')[0].strip().lower() == 'text/html':
+            title = identity['display_name'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            primary = safe_theme_color(identity.get('primary_color'), '#006D77')
+            secondary = safe_theme_color(identity.get('secondary_color'), '#0D1B2A')
+            theme = (f'<title>{title} · E-mail</title>'
+                     '<link rel="stylesheet" href="/api/v1/institution/theme.css">'
+                     f'<style>:root{{--pige-mail-primary:{primary};--pige-mail-secondary:{secondary}}}'
+                     'body,md-content,md-toolbar,button,input,select,textarea,.md-button,.md-headline,.md-title,.md-subhead'
+                     '{font-family:var(--institution-font,system-ui,sans-serif)!important}'
+                     'md-toolbar:not(.md-menu-toolbar){background:var(--pige-mail-primary)!important;color:#fff!important}'
+                     'a,.toolbarButton,.button,.md-button.md-primary{color:var(--pige-mail-primary)}'
+                     '.md-button.md-primary.md-raised{background:var(--pige-mail-primary);color:#fff}'
+                     'md-checkbox.md-checked .md-icon,md-switch.md-checked .md-thumb{background:var(--pige-mail-primary)}'
+                     '.toolbar,.menu{border-color:var(--pige-mail-primary)}'
+                     '.sg-account-section > md-list > md-list-item > .sg-no-wrap{display:none!important}'
+                     '@media(max-width:760px){.sg-mailbox-list-item,.sg-account-section md-list-item{min-height:44px}}'
+                     '</style>')
+            rendered = re.sub(r'</head\s*>', lambda match: theme + match.group(0), rendered,
+                              count=1, flags=re.I)
         content = rendered.encode('utf-8')
     response_headers = {}
-    for name in ('content-type', 'content-language', 'cache-control', 'etag', 'last-modified', 'content-disposition'):
+    for name in ('content-type', 'content-language', 'cache-control', 'etag', 'last-modified',
+                 'content-disposition', 'content-range', 'accept-ranges'):
         if name in upstream_response.headers:
             response_headers[name] = upstream_response.headers[name]
     location = upstream_response.headers.get('location')
@@ -1119,9 +1129,8 @@ async def proxy_webmail(school_id: str, resource: str, request: Request):
                                                        upstream_response.status_code, request.method)
     response_headers['X-Frame-Options'] = 'SAMEORIGIN'
     response_headers['Content-Security-Policy'] = ("default-src 'self' data: blob:; img-src 'self' data: blob:; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src 'self' data: https://fonts.gstatic.com; "
+        "style-src 'self' 'unsafe-inline'; style-src-elem 'self' 'unsafe-inline'; "
+        "font-src 'self' data: blob:; "
         "script-src 'self' 'unsafe-inline'; frame-ancestors 'self'; object-src 'none'; base-uri 'self'")
     response = Response(content=content, status_code=upstream_response.status_code, headers=response_headers)
     for cookie in upstream_response.headers.get_list('set-cookie'):
