@@ -16,7 +16,7 @@ import smtplib
 import socket
 import ssl
 import time
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta
 from email import policy
 from email.message import EmailMessage
@@ -965,6 +965,18 @@ def _validated_webmail_resource(resource: str) -> str:
     return decoded
 
 
+@asynccontextmanager
+async def _webmail_http_client(request: Request):
+    """Reuse the lifespan-owned HTTP pool, with a fallback for isolated tests."""
+    client = getattr(request.app.state, 'webmail_http', None)
+    if client is not None:
+        yield client
+        return
+    async with httpx.AsyncClient(timeout=httpx.Timeout(60, connect=8, pool=10),
+                                 follow_redirects=False, trust_env=False) as client:
+        yield client
+
+
 @webmail_router.post('/webmail/{school_id}/launch', include_in_schema=False)
 def redeem_webmail_ticket(school_id: str, ticket: str = Form(...)):
     """Consome o ticket POST e cria cookie HttpOnly vinculado a uma escola."""
@@ -1055,7 +1067,7 @@ async def proxy_webmail(school_id: str, resource: str, request: Request):
         body = await request.body()
         if len(body) > 20 * 1024 * 1024:
             fail(413, 'O conteúdo enviado ao webmail excede 20 MB.')
-        async with httpx.AsyncClient(timeout=httpx.Timeout(60), follow_redirects=False, trust_env=False) as client:
+        async with _webmail_http_client(request) as client:
             upstream_request = client.build_request(request.method, target, headers=headers, content=body or None)
             upstream_response = await client.send(upstream_request, stream=True)
             try:

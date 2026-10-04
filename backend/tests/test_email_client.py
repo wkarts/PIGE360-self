@@ -714,8 +714,13 @@ def test_sogo_proxy_injects_credentials_server_side_and_rewrites_same_origin_pat
             if '/SOGo.woa/WebServerResources/js/' in str(request.url):
                 return httpx.Response(200, content=b'window.mailReady=true;', headers={'content-type':'application/javascript'})
             return httpx.Response(200,content=b'<html><head><link rel="stylesheet" href="/SOGo.woa/WebServerResources/css/styles.css?lm=1"><script src="/SOGo.woa/WebServerResources/js/Mailer.js?lm=1"></script></head><body><a href="/SOGo/Mail">Inbox</a></body></html>',headers={'content-type':'text/html; charset=utf-8','set-cookie':'SOGo=sample; Path=/; HttpOnly'})
-    monkeypatch.setattr(e.httpx,'AsyncClient',FakeAsyncClient)
+    monkeypatch.setattr(a['client'].app.state, 'webmail_http', FakeAsyncClient(), raising=False)
     response=a['client'].post(a['base']+'/webmail-ticket',headers={**a['headers'],'X-CSRF-Protection':'1'},json={})
+    from app import main as app_main
+    def unexpected_policy_lookup(*args, **kwargs):
+        raise AssertionError('webmail requests must not query unrelated CSP policies')
+    monkeypatch.setattr(app_main.embedding, 'frame_sources', unexpected_policy_lookup)
+    monkeypatch.setattr(app_main.support, 'csp_sources', unexpected_policy_lookup)
     launch=a['client'].post(f"/webmail/{a['school']['id']}/launch",data={'ticket':response.json()['ticket']},follow_redirects=False)
     cookie=launch.headers['set-cookie'].split(';',1)[0]
     value=cookie.split('=',1)[1]
@@ -755,7 +760,7 @@ def test_sogo_mail_view_keeps_upstream_open_while_reading(mailbox_api, monkeypat
             yield b'<html><head></head><body>SOGo Mail</body></html>'
 
     class LiveClient:
-        open = False
+        open = True
 
         def __init__(self, **kwargs):
             pass
@@ -776,7 +781,7 @@ def test_sogo_mail_view_keeps_upstream_open_while_reading(mailbox_api, monkeypat
                                   stream=LiveStream(), request=request)
 
     upstream = LiveClient()
-    monkeypatch.setattr(e.httpx, 'AsyncClient', lambda **kwargs: upstream)
+    monkeypatch.setattr(a['client'].app.state, 'webmail_http', upstream, raising=False)
     ticket = a['client'].post(a['base']+'/webmail-ticket',
                               headers={**a['headers'], 'X-CSRF-Protection': '1'}, json={}).json()['ticket']
     launch = a['client'].post(f"/webmail/{a['school']['id']}/launch", data={'ticket': ticket},
@@ -790,7 +795,7 @@ def test_sogo_mail_view_keeps_upstream_open_while_reading(mailbox_api, monkeypat
         assert 'simulated upstream disconnect' not in result.text
     else:
         assert 'SOGo Mail' in result.text
-    assert not upstream.open
+    assert upstream.open
 
 
 def test_sogo_proxy_rejects_path_traversal_and_non_webmail_resources():
