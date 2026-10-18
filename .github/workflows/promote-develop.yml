@@ -1,0 +1,142 @@
+name: Develop - Promover PR para main
+on:
+  workflow_call:
+    inputs:
+      sha: {type: string, required: true}
+      node_ref: {type: string, required: true}
+      python_ref: {type: string, required: true}
+      postgres_ref: {type: string, required: true}
+permissions:
+  contents: read
+jobs:
+  prepare:
+    if: >-
+      github.repository == 'wkarts/PIGE360-self' &&
+      github.ref == 'refs/heads/develop' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs:
+      ready: ${{ steps.prepare.outputs.ready }}
+      pr: ${{ steps.prepare.outputs.pr }}
+      head: ${{ steps.prepare.outputs.head }}
+      base: ${{ steps.prepare.outputs.base }}
+      merge: ${{ steps.prepare.outputs.merge }}
+      tree: ${{ steps.prepare.outputs.tree }}
+      bump: ${{ steps.prepare.outputs.bump }}
+      release_sha: ${{ steps.prepare.outputs.release_sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Criar ou reconciliar a única PR develop para main
+        id: prepare
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXPECTED_HEAD: ${{ inputs.sha }}
+        run: python scripts/ci/auto_promotion.py prepare
+  tests:
+    needs: prepare
+    if: needs.prepare.outputs.ready == 'true'
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.prepare.outputs.merge }}
+      node_ref: ${{ inputs.node_ref }}
+      python_ref: ${{ inputs.python_ref }}
+      postgres_ref: ${{ inputs.postgres_ref }}
+  merge:
+    needs: [prepare, tests]
+    if: needs.prepare.outputs.ready == 'true' && needs.tests.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: read
+    outputs:
+      release_sha: ${{ steps.merge.outputs.release_sha }}
+    steps:
+      # Executa o script do develop que já passou pelo pipeline, nunca o checkout da PR.
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Revalidar SHAs e fazer merge sem bypass
+        id: merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXPECTED_PR: ${{ needs.prepare.outputs.pr }}
+          EXPECTED_HEAD: ${{ needs.prepare.outputs.head }}
+          EXPECTED_BASE: ${{ needs.prepare.outputs.base }}
+          EXPECTED_MERGE: ${{ needs.prepare.outputs.merge }}
+          EXPECTED_TREE: ${{ needs.prepare.outputs.tree }}
+          EXPECTED_BUMP: ${{ needs.prepare.outputs.bump }}
+          CI_RESULT: ${{ needs.tests.result }}
+        run: python scripts/ci/auto_promotion.py merge
+  dispatch:
+    needs: [prepare, tests, merge]
+    if: >-
+      always() && needs.prepare.result == 'success' &&
+      (needs.merge.result == 'success' ||
+       (needs.prepare.outputs.ready == 'false' && needs.prepare.outputs.release_sha != ''))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
+    outputs:
+      sha: ${{ steps.dispatch.outputs.release_sha }}
+      correlation: ${{ steps.dispatch.outputs.correlation }}
+      pr: ${{ steps.dispatch.outputs.pr }}
+      run_id: ${{ steps.dispatch.outputs.run_id }}
+      published: ${{ steps.dispatch.outputs.published }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Acionar explicitamente release em main com SHA exato
+        id: dispatch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_SHA: ${{ needs.merge.outputs.release_sha || needs.prepare.outputs.release_sha }}
+          PROMOTION_PR: ${{ needs.prepare.outputs.pr }}
+          BUMP: ${{ needs.prepare.outputs.bump }}
+          CORRELATION: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: python scripts/ci/auto_promotion.py dispatch
+  publication:
+    needs: dispatch
+    if: always() && needs.dispatch.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 125
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Esperar e verificar release e imagens publicadas
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_SHA: ${{ needs.dispatch.outputs.sha }}
+          CORRELATION: ${{ needs.dispatch.outputs.correlation }}
+          PROMOTION_PR: ${{ needs.dispatch.outputs.pr }}
+          RELEASE_RUN_ID: ${{ needs.dispatch.outputs.run_id }}
+          ALREADY_PUBLISHED: ${{ needs.dispatch.outputs.published }}
+        run: python scripts/ci/auto_promotion.py watch
