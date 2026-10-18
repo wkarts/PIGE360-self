@@ -345,6 +345,12 @@ def main():
                     db.commit()
                 next_reconcile=time.monotonic()+60
             worked = process_one() or process_connect_one()
+            # Optional bridge faults must never prevent native banking/notifications.
+            try:
+                from .crm_bridge import process_one as process_crm_one
+                worked = process_crm_one() or worked
+            except Exception:
+                LOG.error('code=CRM_BRIDGE_WORKER_FAILED')
         except Exception:
             emit('worker.loop_failed',service='worker',level='ERROR',code='WORKER_DATABASE_OR_CONFIGURATION_ERROR')
             LOG.error('code=WORKER_DATABASE_OR_CONFIGURATION_ERROR'); worked = False

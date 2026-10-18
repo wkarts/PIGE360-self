@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     allow_sqlite: bool = False
     integration_encryption_key: str = ''
     signature_trust_roots_dir: Path | None = Path('/data/trust-roots')
+    crm_bridge_enabled: bool = False
+    crm_bridge_connections: str = '{}'
     integration_timeout_seconds: int = 15
     connect_pairing_timeout_seconds: int = 75
     connect_api_base_url: str = ''
