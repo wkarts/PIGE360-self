@@ -5,6 +5,7 @@ set -Eeuo pipefail
 [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
 [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]
 git fetch origin main --tags
+[[ "$(git rev-parse FETCH_HEAD)" == "$TARGET_SHA" ]] || { echo "main mudou; aliases estáveis não serão promovidos." >&2; exit 1; }
 # Nenhuma release antiga pode rebaixar aliases móveis.
 python - <<'PY'
 import os,sys,subprocess
@@ -30,9 +31,21 @@ if ! gh release view "$VERSION" >/dev/null 2>&1; then
   gh release create "$VERSION" --verify-tag --draft --title "PIGE360 Self $VERSION" --notes-file release/NOTES.md
 fi
 DRAFT="$(gh release view "$VERSION" --json isDraft --jq '.isDraft')"
-[[ "$DRAFT" == true ]] || { echo 'Release já publicada; sem alterações.'; exit 0; }
+if [[ "$DRAFT" != true ]]; then
+  python scripts/ci/release_state.py verify --version "$VERSION" --sha "$TARGET_SHA"
+  exit 0
+fi
 gh release upload "$VERSION" "release/PIGE360-Self-$VERSION.zip" "release/PIGE360-Self-$VERSION.zip.sha256" --clobber
-python scripts/ci/promote.py release
-IMAGE="$MAIL_AGENT_IMAGE" DIGEST="$MAIL_AGENT_DIGEST" python scripts/ci/promote.py release
-IMAGE="$SOGO_IMAGE" DIGEST="$SOGO_DIGEST" python scripts/ci/promote.py release
+python scripts/ci/stable_set.py
+gh release upload "$VERSION" release/images.json --clobber
+# A publicação da release só confirma sucesso após conferir novamente o conjunto completo.
+python - <<'PYVERIFY'
+import os, sys
+sys.path.insert(0, "scripts/ci")
+from promote import inspect
+for image, digest in [('IMAGE', 'DIGEST'), ('MAIL_AGENT_IMAGE', 'MAIL_AGENT_DIGEST'), ('SOGO_IMAGE', 'SOGO_DIGEST')]:
+    for alias in (os.environ['VERSION'], 'production', 'stable', 'latest'):
+        if inspect(os.environ[image] + ':' + alias) != os.environ[digest]:
+            raise SystemExit('Conjunto estável divergente; release permanece em rascunho')
+PYVERIFY
 gh release edit "$VERSION" --draft=false --latest --notes-file release/NOTES.md
