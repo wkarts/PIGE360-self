@@ -164,13 +164,13 @@ jobs:
             done
           done
           docker compose --env-file deploy/docker/.env.ci -f deploy/docker/compose.yaml config --quiet
-          docker build --build-arg SOURCE_REVISION="$GITHUB_SHA" --build-arg APP_VERSION="$(cat VERSION)" \
+          docker build --build-arg SOURCE_REVISION="$(git rev-parse HEAD)" --build-arg APP_VERSION="$(cat VERSION)" \
             --build-arg NODE_BASE_IMAGE="$NODE_BASE_IMAGE" \
             --build-arg PYTHON_BASE_IMAGE="$PYTHON_BASE_IMAGE" \
             --build-arg POSTGRES_IMAGE="$POSTGRES_IMAGE" -t pige360-self:ci .
           # O Dockerfile deve falhar se o Apache upstream voltar a remover os
           # cabeçalhos de login confiáveis ou reescrever a URL pública.
-          docker build --build-arg SOURCE_REVISION="$GITHUB_SHA" --build-arg APP_VERSION="$(cat VERSION)" \
+          docker build --build-arg SOURCE_REVISION="$(git rev-parse HEAD)" --build-arg APP_VERSION="$(cat VERSION)" \
             -t pige360-sogo:ci services/sogo
           docker run --rm --entrypoint python3 pige360-sogo:ci -c 'from pathlib import Path; c=Path("/etc/apache2/conf-available/SOGo.conf").read_text(); assert "RequestHeader unset \"x-webobjects-remote-user\"" not in c; assert "RequestHeader set \"x-webobjects-server-url\"" not in c'
           # O pacote GHCR do Memcached nasce após o merge em develop. O smoke
@@ -192,7 +192,7 @@ jobs:
         if: always() && vars.CI_UPLOAD_EVIDENCE == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: ci-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ci-${{ github.run_id }}-${{ github.run_attempt }}-${{ inputs.ref || github.sha }}
           path: ci-evidence/
           retention-days: 3
           compression-level: 9

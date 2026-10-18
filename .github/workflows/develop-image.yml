@@ -46,3 +46,16 @@ jobs:
       node_ref: ${{ needs.bases.outputs.node_ref }}
       python_ref: ${{ needs.bases.outputs.python_ref }}
       postgres_ref: ${{ needs.bases.outputs.postgres_ref }}
+  promote:
+    needs: [version, bases, tests, publish]
+    permissions:
+      contents: write
+      packages: read
+      pull-requests: write
+      actions: write
+    uses: ./.github/workflows/promote-develop.yml
+    with:
+      sha: ${{ needs.version.outputs.sha }}
+      node_ref: ${{ needs.bases.outputs.node_ref }}
+      python_ref: ${{ needs.bases.outputs.python_ref }}
+      postgres_ref: ${{ needs.bases.outputs.postgres_ref }}
