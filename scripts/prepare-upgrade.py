@@ -15,8 +15,15 @@ import subprocess
 def refresh_compose(root,env_path,preview=False):
     target=root/env_path.parent/'compose.yaml'
     source=root/'deploy/docker/compose.yaml'
+    # Resolve with interpolation first. Compose normalizes a literal ${...} in
+    # name under --no-interpolate, also changing generated network/volume names.
+    result=subprocess.run(['docker','compose','--env-file',str(root/env_path),'-f',str(target),
+        'config','--format','json'],check=True,capture_output=True,text=True,timeout=30)
+    project=json.loads(result.stdout).get('name')
+    if not isinstance(project,str) or not re.fullmatch(r'[a-z0-9][a-z0-9_-]*',project):
+        raise ValueError('Não foi possível confirmar o projeto Compose. Nenhum Compose foi alterado.')
     def read(path):
-        result=subprocess.run(['docker','compose','--env-file',str(root/env_path),'-f',str(path),
+        result=subprocess.run(['docker','compose','--env-file',str(root/env_path),'-f',str(path),'-p',project,
             'config','--no-interpolate','--no-env-resolution','--no-path-resolution','--format','json'],
             check=True,capture_output=True,text=True,timeout=30)
         return json.loads(result.stdout)
@@ -38,7 +45,7 @@ def refresh_compose(root,env_path,preview=False):
     try:
         os.chmod(temp,0o600)
         with os.fdopen(fd,'w') as handle:json.dump(merged,handle,indent=2)
-        subprocess.run(['docker','compose','--env-file',str(root/env_path),'-f',temp,'config','--quiet'],
+        subprocess.run(['docker','compose','--env-file',str(root/env_path),'-f',temp,'-p',project,'config','--quiet'],
             check=True,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,timeout=30)
         backup=target.with_name('compose.backup-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')+'.yaml')
         shutil.copyfile(target,backup);os.chmod(backup,0o600)

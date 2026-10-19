@@ -84,7 +84,9 @@ HTTPServer(('0.0.0.0',8000),Handler).serve_forever()
         deployer=importlib.util.module_from_spec(spec);spec.loader.exec_module(deployer)
         deployer.deploy(root,'deploy/instances/synthetic/.env.production',refresh=True)
         after=probe();resolved=json.loads(execute('config','--format','json'))
-        assert resolved['name']==project and deployer.compose_project(root,'deploy/instances/synthetic/.env.production')==project
+        helper_project=deployer.compose_project(root,'deploy/instances/synthetic/.env.production')
+        assert resolved['name']==project and helper_project==project, {
+            'expected_project':project,'resolved_project':resolved['name'],'compose_project':helper_project}
         assert 'COMPOSE_PROJECT_NAME=' not in env.read_text()
         assert all(line in env.read_text().splitlines() for line in original.splitlines())
         assert {key:value for key,value in after.items() if key!='added'}=={key:value for key,value in before.items() if key!='added'}
