@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     embed_allowed_origins: str = ''
     access_token_minutes: int = 15
     refresh_token_days: int = 7
-    max_upload_mb: int = 10
+    max_upload_mb: int = 16
     max_photo_mb: int = 5
     legacy_import_max_mb: int = 128
     portability_enabled: bool = False
@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     rabbitmq_url: str = ''
     worker_poll_seconds: int = 5
     bank_reconcile_interval_seconds: int = 900
-    ocr_max_upload_mb: int = 8
+    ocr_max_upload_mb: int = 16
     ocr_retention_hours: int = 24
     ocr_timeout_seconds: int = 120
 

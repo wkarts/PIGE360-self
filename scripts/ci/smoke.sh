@@ -11,7 +11,7 @@ mkdir -p ci-evidence
 STACK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/pige360-smoke.XXXXXXXX")"
 cp deploy/docker/compose.yaml "$STACK_DIR/compose.yaml"
 mkdir -p "$STACK_DIR/services"
-cp -a services/mail-agent services/sogo "$STACK_DIR/services/"
+cp -a services/mail-agent services/sogo services/website "$STACK_DIR/services/"
 sed -i 's#../../services/#./services/#g' "$STACK_DIR/compose.yaml"
 touch "$STACK_DIR/.pige360-smoke-owned"
 ENVFILE="$STACK_DIR/.env.ci"
@@ -24,7 +24,8 @@ export POSTGRES_IMAGE="${POSTGRES_IMAGE:-ghcr.io/wkarts/pige360-self-postgres:17
 python - "$ENVFILE" <<'PYCONF'
 import base64, os, secrets, sys
 values={'APP_SECRET_KEY':secrets.token_urlsafe(48),'SETUP_TOKEN':secrets.token_urlsafe(32),
-        'POSTGRES_PASSWORD':secrets.token_urlsafe(36), 'APP_ENV':'production',
+        'POSTGRES_PASSWORD':secrets.token_urlsafe(36),'STORAGE_SECRET_KEY':secrets.token_urlsafe(36),
+        'STORAGE_ACCESS_KEY':'pige360minio','STORAGE_ENDPOINT_URL':'http://minio:9000', 'APP_ENV':'production',
         'APP_URL':'http://localhost','APP_PORT':'0','APP_BIND':'127.0.0.1',
         'COOKIE_SECURE':'false','ALLOWED_HOSTS':'localhost,127.0.0.1',
         'INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(),
@@ -148,3 +149,12 @@ result['image']=sys.argv[2]
 with open('ci-evidence/docker-smoke.json','w') as f:json.dump(result,f,indent=2)
 print(json.dumps(result,indent=2))
 PYHTTP
+
+# Restauração efetiva, não apenas verificação de hashes. Os nomes e volumes são
+# exclusivos do projeto pige360-ci-* criado acima; a instalação real não é usada.
+compose --profile s3 up -d --wait --wait-timeout 180 minio
+compose stop app worker worker-ocr
+compose run --rm -T --no-deps --entrypoint python app - < scripts/ci/backup-smoke.py
+compose up -d --no-recreate --wait --wait-timeout 240 app worker worker-ocr
+assert_healthy_services
+printf '{"postgresql_restore":true,"local_documents":true,"minio_documents":true,"isolated_stack":true}\n' > ci-evidence/backup-restore.json

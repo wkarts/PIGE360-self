@@ -1,6 +1,8 @@
 from alembic import context
 from sqlalchemy import create_engine, pool
 from app.config import settings
+from app.school_website import SchoolWebsite  # noqa: F401
+from app.backups import BackupRun, BackupTarget  # noqa: F401
 from app.crm_bridge_models import CRMBridgeRequest, CRMBridgeObservation  # noqa: F401
 from app.models import Base
 from app.institution import InstitutionAsset, InstitutionIdentity  # noqa: F401 — metadados dos ativos públicos

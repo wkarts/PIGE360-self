@@ -1,6 +1,6 @@
 {
   "name": "pige360-self-web",
-  "version": "0.10.0",
+  "version": "0.12.1",
   "private": true,
   "description": "Vue 3 local com templates pré-compilados e TypeScript strict",
   "scripts": {

@@ -20,7 +20,7 @@ from .common import audit
 from .config import settings
 from .crm_bridge_contract import (ContractError, MAX_BODY, REQUEST_PATH, decode, encode,
     exact, signature, validate_envelope, validate_receipt, validate_scope, verify_signature)
-from .crm_bridge_models import CRMBridgeObservation, CRMBridgeRequest
+from .crm_bridge_models import CRMBridgeObservation, CRMBridgeRequest, CRMBridgeConnection
 from .db import engine, now, uid
 from .security import Actor, DB, Scope, fail, lock_school, require, scoped
 
@@ -29,13 +29,21 @@ hooks = APIRouter(tags=['CRM opcional'])
 BLOCKED_MESSAGE = 'Solicitação registrada. Emissão no CRM indisponível: isolamento financeiro por emitente pendente.'
 
 
-def connections():
+def connections(db=None):
     """Configuration is deployment-only; no credential UI/API or secret in DB/output."""
     cfg = settings()
-    if not cfg.crm_bridge_enabled:
-        return {}
     try:
-        values = decode(cfg.crm_bridge_connections.encode())
+        values = decode(cfg.crm_bridge_connections.encode()) if cfg.crm_bridge_enabled else {}
+        if db is None:
+            with Session(engine) as session:
+                stored=list(session.scalars(select(CRMBridgeConnection).where(CRMBridgeConnection.enabled.is_(True))))
+        else:
+            stored=list(db.scalars(select(CRMBridgeConnection).where(CRMBridgeConnection.enabled.is_(True))))
+        from .integration_core import unseal
+        for item in stored:
+            values[item.id]={'base_url':item.base_url,'scope':{'school_id':item.school_id,'issuer_id':item.issuer_id,
+                'account_id':item.account_id,'environment':item.environment},'secret':unseal(item.encrypted_secret)['secret']}
+        if not values:return {}
         if not isinstance(values, dict) or not values or len(values) > 100:
             raise ContractError('INVALID_CONNECTIONS')
         scopes, secrets = set(), set()
@@ -59,8 +67,8 @@ def connections():
         fail(503, 'Configuração CRM inválida. Consulte o administrador.')
 
 
-def configured(connection_id, school_id=None):
-    item = connections().get(connection_id)
+def configured(connection_id, school_id=None, db=None):
+    item = connections(db).get(connection_id)
     if not item or (school_id and item['scope']['school_id'] != school_id):
         fail(409, 'Integração CRM desabilitada ou fora do escopo desta escola.')
     return item
@@ -69,7 +77,7 @@ def configured(connection_id, school_id=None):
 def request_output(row):
     return {'id': row.id, 'charge_id': row.charge_id, 'connection_id': row.connection_id,
             'scope': row.scope, 'status': row.status, 'request_id': row.request_id,
-            'attempts': row.attempts, 'error_code': row.error_code,
+            'attempts': row.attempts, 'error_code': row.error_code,'receipt':row.receipt,
             'capabilities': {'issue_charge': False}, 'message': BLOCKED_MESSAGE,
             'financial_effect_applied': False}
 
@@ -83,8 +91,8 @@ class QueueInput(BaseModel):
 @router.get('/status')
 def status(db: DB, user: Actor, school: Scope):
     require(user, 'banking.read')
-    available = connections()
-    return {'enabled': bool(settings().crm_bridge_enabled), 'capabilities': {'issue_charge': False},
+    available = connections(db)
+    return {'enabled': any(item['scope']['school_id']==school.id for item in available.values()), 'capabilities': {'issue_charge': False},
             'message': BLOCKED_MESSAGE,
             'connections': [{'id': key, 'scope': value['scope']} for key, value in available.items()
                             if value['scope']['school_id'] == school.id]}
@@ -93,7 +101,7 @@ def status(db: DB, user: Actor, school: Scope):
 @router.post('/requests', status_code=202)
 def queue_request(data: QueueInput, db: DB, user: Actor, school: Scope, request: Request):
     require(user, 'banking.write')
-    config = configured(data.connection_id, school.id)
+    config = configured(data.connection_id, school.id, db)
     lock_school(db, school.id)
     charge = scoped(db, m.BankCharge, data.charge_id, school.id)
     existing = db.scalar(select(CRMBridgeRequest).where(CRMBridgeRequest.school_id == school.id,
@@ -143,7 +151,7 @@ def reconcile(request_id: str, db: DB, user: Actor, school: Scope, request: Requ
         CRMBridgeRequest.school_id == school.id).with_for_update())
     if not row:
         fail(404, 'Solicitação não encontrada nesta escola.')
-    cfg = configured(row.connection_id, school.id)
+    cfg = configured(row.connection_id, school.id, db)
     if row.scope != cfg['scope']:
         fail(409, 'Escopo CRM alterado; reconciliação bloqueada.')
     # Reconciliation resends the SAME immutable event/body. Never issue a new charge.
@@ -154,7 +162,7 @@ def reconcile(request_id: str, db: DB, user: Actor, school: Scope, request: Requ
 
 @hooks.post('/api/crm-bridge/webhooks/{connection_id}')
 async def webhook(connection_id: str, request: Request, db: DB):
-    cfg = configured(connection_id)
+    cfg = configured(connection_id, db=db)
     raw = bytearray()
     async for part in request.stream():
         raw.extend(part)
@@ -249,9 +257,8 @@ def send_request(config, event_id, raw):
 
 
 def process_one():
-    if not settings().crm_bridge_enabled:
-        return False
     available = connections()
+    if not available:return False
     # A short bounded HTTP call stays under the row lock. A crash rolls back and the
     # SAME event/body is retried; PostgreSQL SKIP LOCKED supports multiple workers.
     with Session(engine, expire_on_commit=False) as db:
@@ -295,3 +302,86 @@ def process_one():
             failed.status, failed.error_code, failed.attempts = 'failed', 'CRM_MAPPING_CONFLICT', attempts
             db.commit()
         return True
+
+
+class ConnectionInput(BaseModel):
+    model_config=ConfigDict(extra='forbid',str_strip_whitespace=True)
+    version:int|None=Field(default=None,ge=1)
+    enabled:bool=False
+    base_url:str=Field(max_length=500)
+    issuer_id:str=Field(pattern=r'^[1-9][0-9]{0,18}$')
+    account_id:str=Field(pattern=r'^[A-Za-z0-9_.:-]{1,128}$')
+    environment:str=Field(default='sandbox',pattern=r'^(sandbox|production)$')
+    secret:str=Field(default='',max_length=512)
+
+
+def connection_output(row):
+    return {'id':row.id,'version':row.version,'enabled':row.enabled,'base_url':row.base_url,
+        'issuer_id':row.issuer_id,'account_id':row.account_id,'environment':row.environment,
+        'secret_configured':bool(row.encrypted_secret)} if row else None
+
+
+@router.get('/configuration')
+def get_configuration(db:DB,user:Actor,school:Scope):
+    require(user,'integrations.manage')
+    return {'configuration':connection_output(db.scalar(select(CRMBridgeConnection).where(CRMBridgeConnection.school_id==school.id))),
+        'capabilities':{'issue_charge':False},'message':BLOCKED_MESSAGE}
+
+
+@router.put('/configuration')
+def save_configuration(data:ConnectionInput,db:DB,user:Actor,school:Scope,request:Request):
+    require(user,'integrations.manage');lock_school(db,school.id)
+    url=urlsplit(data.base_url)
+    try:valid=url.scheme=='https' and url.hostname and not url.username and not url.password and url.port in (None,443) and url.path in ('','/') and not url.query and not url.fragment
+    except ValueError:valid=False
+    if not valid:fail(422,'Informe a origem HTTPS do serviço, sem caminho, credenciais ou porta alternativa.')
+    row=db.scalar(select(CRMBridgeConnection).where(CRMBridgeConnection.school_id==school.id))
+    if row:
+        from .security import check_version
+        if data.version is None:fail(409,'Recarregue a configuração antes de alterar.')
+        check_version(row,data.version)
+        if db.scalar(select(CRMBridgeRequest.id).where(CRMBridgeRequest.connection_id==row.id).limit(1)) and (row.base_url,row.issuer_id,row.account_id,row.environment)!=(data.base_url.rstrip('/'),data.issuer_id,data.account_id,data.environment):
+            fail(409,'Esta conexão já possui solicitações. Preserve seu destino e mapeamento para conciliação.')
+    elif data.version is not None:fail(409,'A conexão não existe. Recarregue antes de salvar.')
+    else:row=CRMBridgeConnection(school_id=school.id,encrypted_secret='');db.add(row)
+    from .integration_core import seal
+    if data.secret:
+        if len(data.secret.encode())<32:fail(422,'O segredo compartilhado deve possuir pelo menos 32 bytes.')
+        row.encrypted_secret=seal({'secret':data.secret})
+    if not row.encrypted_secret:fail(422,'Informe o segredo compartilhado da integração.')
+    row.enabled=data.enabled;row.base_url=data.base_url.rstrip('/');row.issuer_id=data.issuer_id
+    row.account_id=data.account_id;row.environment=data.environment
+    if row.id:row.version+=1
+    db.flush();connections(db)  # valida duplicidade de escopos e segredos sem expô-los
+    audit(db,request,user,'crm.configuration_changed',row,school.id,{'enabled':row.enabled,'environment':row.environment})
+    return connection_output(row)
+
+
+@router.get('/requests')
+def list_requests(db:DB,user:Actor,school:Scope):
+    require(user,'banking.read')
+    return {'items':[request_output(row) for row in db.scalars(select(CRMBridgeRequest).where(
+        CRMBridgeRequest.school_id==school.id).order_by(CRMBridgeRequest.created_at.desc()).limit(100))]}
+
+
+@router.post('/connection-test')
+def test_connection(db:DB,user:Actor,school:Scope,request:Request):
+    require(user,'integrations.manage')
+    row=db.scalar(select(CRMBridgeConnection).where(CRMBridgeConnection.school_id==school.id))
+    if not row or not row.enabled:fail(409,'Salve e habilite a conexão antes do teste.')
+    # HEAD apenas verifica transporte; não envia evento financeiro nem cria cobrança.
+    host=urlsplit(row.base_url).hostname
+    try:
+        addresses=socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)
+        if not addresses or any(not ipaddress.ip_address(x[4][0]).is_global for x in addresses):
+            fail(422,'O destino deve resolver somente para endereços públicos.')
+        url=httpx.URL(row.base_url+REQUEST_PATH).copy_with(host=addresses[0][4][0])
+        with httpx.Client(timeout=settings().integration_timeout_seconds,follow_redirects=False,trust_env=False) as client:
+            response=client.head(url,headers={'Host':host},extensions={'sni_hostname':host})
+        ok=response.status_code in (200,202,204,401,403,405)
+        result={'reachable':ok,'http_status':response.status_code,'charge_created':False,
+            'message':'Transporte HTTPS acessível. Este teste não homologa autenticação nem emissão.' if ok else 'O destino respondeu, mas a rota da ponte não foi confirmada.'}
+    except (httpx.HTTPError,OSError):
+        result={'reachable':False,'charge_created':False,'message':'Não foi possível alcançar o destino por HTTPS.'}
+    audit(db,request,user,'crm.connection_tested',row,school.id,{'reachable':result['reachable']})
+    return result

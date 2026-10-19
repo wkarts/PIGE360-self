@@ -1,0 +1,84 @@
+{
+  "dataset": "synthetic-only-v1",
+  "engine_schema": 3,
+  "cases": [
+    {
+      "case": "scan",
+      "expected_fields": 3,
+      "correct_fields": 3,
+      "seconds": 1.034,
+      "warnings": [],
+      "fields": {
+        "cpf": "52998224725",
+        "name": "PESSOA EXEMPLO",
+        "birth_date": "2000-05-15",
+        "postal_code": "40020000"
+      },
+      "all_fields_require_review": true
+    },
+    {
+      "case": "rotation90",
+      "expected_fields": 3,
+      "correct_fields": 3,
+      "seconds": 3.722,
+      "warnings": [
+        "Orientação da imagem corrigida automaticamente. Confira os campos."
+      ],
+      "fields": {
+        "cpf": "52998224725",
+        "name": "PESSOA EXEMPLO",
+        "birth_date": "2000-05-15",
+        "postal_code": "40020000"
+      },
+      "all_fields_require_review": true
+    },
+    {
+      "case": "rotation180",
+      "expected_fields": 3,
+      "correct_fields": 3,
+      "seconds": 3.891,
+      "warnings": [
+        "Orientação da imagem corrigida automaticamente. Confira os campos."
+      ],
+      "fields": {
+        "cpf": "52998224725",
+        "name": "PESSOA EXEMPLO",
+        "birth_date": "2000-05-15",
+        "postal_code": "40020000"
+      },
+      "all_fields_require_review": true
+    },
+    {
+      "case": "rotation270",
+      "expected_fields": 3,
+      "correct_fields": 3,
+      "seconds": 1.013,
+      "warnings": [],
+      "fields": {
+        "cpf": "52998224725",
+        "name": "PESSOA EXEMPLO",
+        "birth_date": "2000-05-15",
+        "postal_code": "40020000"
+      },
+      "all_fields_require_review": true
+    },
+    {
+      "case": "digital_pdf",
+      "expected_fields": 3,
+      "correct_fields": 3,
+      "seconds": 0.044,
+      "warnings": [],
+      "fields": {
+        "cpf": "52998224725",
+        "name": "PESSOA EXEMPLO",
+        "birth_date": "2000-05-15",
+        "postal_code": "40020000"
+      },
+      "all_fields_require_review": true
+    }
+  ],
+  "correct_fields": 15,
+  "expected_fields": 15,
+  "recall_on_expected_fields": 1.0,
+  "real_document_accuracy_established": false
+}

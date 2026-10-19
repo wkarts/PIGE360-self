@@ -50,7 +50,7 @@ def reusable(row):
     if row.status!='succeeded':return True
     # Uma atualização do motor precisa reler documentos cujo resultado antigo
     # ignorou imagens de PDFs híbridos; não reutilizar o erro por mais 24 horas.
-    try:return json.loads(cipher().decrypt(row.encrypted_result.encode())).get('schema_version')==2
+    try:return json.loads(cipher().decrypt(row.encrypted_result.encode())).get('schema_version')==3
     except (ValueError,TypeError,AttributeError,InvalidToken):return False
 
 

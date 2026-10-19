@@ -1,6 +1,6 @@
 > **Fluxo GitHub/GHCR:** veja [desenvolvimento, releases, limpeza e implantação self-hosted](docs/ci-cd/FLUXO-GITHUB-GHCR.md). Os deploys ficam em `deploy/`, separados por Docker, Dockge, Portainer e CloudPanel, com ambientes develop e produção. Nenhum deploy externo é executado automaticamente.
 
-# PIGE360 Self 0.10.0
+# PIGE360 Self 0.12.1
 ## Gestão escolar, portais e integrações
 
 Aplicação self-hosted em **FastAPI + Vue 3**, exclusivamente Web/PWA, para a instituição e suas unidades. O pacote contém a aplicação, o frontend compilado, migrations, testes e documentação, preservando a identidade configurada pela escola.

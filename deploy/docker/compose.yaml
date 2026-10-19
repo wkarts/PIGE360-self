@@ -137,7 +137,7 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       EMBED_ALLOWED_ORIGINS: ${EMBED_ALLOWED_ORIGINS:-}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
-      OCR_MAX_UPLOAD_MB: ${OCR_MAX_UPLOAD_MB:-8}
+      OCR_MAX_UPLOAD_MB: ${OCR_MAX_UPLOAD_MB:-16}
       OCR_RETENTION_HOURS: ${OCR_RETENTION_HOURS:-24}
       OCR_TIMEOUT_SECONDS: ${OCR_TIMEOUT_SECONDS:-120}
       MAX_PHOTO_MB: ${MAX_PHOTO_MB:-5}
@@ -204,6 +204,29 @@ services:
     logging:
       driver: json-file
       options: {max-size: "10m", max-file: "3"}
+
+  website:
+    profiles: [website]
+    image: ${WEBSITE_IMAGE:-ghcr.io/wkarts/pige360-self-website:latest}
+    build: {context: ../../services/website, dockerfile: Dockerfile}
+    restart: unless-stopped
+    init: true
+    environment:
+      PIGE_INTERNAL_URL: http://app:8000
+      WEBSITE_SCHOOL_ID: ${WEBSITE_SCHOOL_ID:-}
+    ports:
+      - "${WEBSITE_BIND:-127.0.0.1}:${WEBSITE_PORT:-58082}:8080"
+    depends_on:
+      app: {condition: service_healthy}
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
 
   mail-agent:
     image: ${MAIL_AGENT_IMAGE:-ghcr.io/wkarts/pige360-self-mail-agent:latest}

@@ -158,6 +158,8 @@ jobs:
           MAIL_AGENT_DIGEST: ${{ needs.candidate.outputs.mail_agent_digest }}
           SOGO_IMAGE: ghcr.io/wkarts/pige360-self-sogo
           SOGO_DIGEST: ${{ needs.candidate.outputs.sogo_digest }}
+          WEBSITE_IMAGE: ghcr.io/wkarts/pige360-self-website
+          WEBSITE_DIGEST: ${{ needs.candidate.outputs.website_digest }}
         run: bash scripts/ci/finalize-release.sh
       - uses: actions/upload-artifact@v4
         if: always()

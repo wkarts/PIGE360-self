@@ -104,6 +104,10 @@ def campaign_output(db,obj):
     for id in obj.class_group_ids:
         g=db.get(m.ClassGroup,id)
         if not g or g.school_id!=obj.school_id or not g.active:continue
+        from .enrollments import check_group
+        from fastapi import HTTPException
+        try:check_group(db,g,obj.school_id)
+        except HTTPException:continue
         y=db.get(m.AcademicYear,g.academic_year_id)
         if y.status!='active':continue
         groups.append({'id':g.id,'name':g.name,'grade':db.get(m.Grade,g.grade_id).name,'shift':db.get(m.Shift,g.shift_id).name,'year':y.name,'unit':db.get(m.Unit,g.unit_id).name,'vacancies':max(0,g.capacity-occupancy(db,g.id))})
@@ -135,9 +139,12 @@ def admission_output(db,obj,public=True):
     contract=next((item for item in issued if obj.contract_template_id and item.template_id==obj.contract_template_id
                    and item.template_version==str(obj.contract_template_version)
                    and (item.snapshot or {}).get('template_revision_sha256')==obj.contract_template_revision_sha256),None) if obj.enrollment_id else None
-    data['contract']={'required':bool(selected_template),'template_id':selected_template,
+    from .admission_reservations import state as reservation_state
+    data['reservation']={'status':reservation_state(obj),'payment_deadline':obj.reserved_until.isoformat() if obj.reserved_until else None,
+        'paid_at':obj.reservation_paid_at.isoformat() if obj.reservation_paid_at else None}
+    data['contract']={'signing_order':obj.contract_signing_order,'required':bool(selected_template),'template_id':selected_template,
                       'template_version':obj.contract_template_version,
-                      'issued_document_id':contract.id if contract and contract.signature_status in ('company_signed','pending_validation','verified','rejected') else None,
+                      'issued_document_id':contract.id if contract and (obj.contract_signing_order=='applicant_first' or contract.signature_status in ('company_signed','pending_validation','verified','rejected')) else None,
                       'signature_status':contract.signature_status if contract else 'awaiting_school'}
     return data
 
@@ -565,21 +572,22 @@ def upload(id:str,request:Request,db:DB,account:Parent,document_type_id:str=Form
     if count>=settings().portal_max_files or used+len(content)>settings().portal_max_storage_mb*1024*1024:fail(413,'Limite de armazenamento do portal atingido. Procure a Secretaria.')
     # Um anexo atual por tipo; as versões anteriores permanecem preservadas.
     db.execute(update(m.AdmissionAttachment).where(m.AdmissionAttachment.admission_id==obj.id,m.AdmissionAttachment.document_type_id==document_type_id,m.AdmissionAttachment.active.is_(True)).values(active=False))
-    root=settings().storage_path.resolve();key=f'{account.school_id}/portal/{uid()}';path=root/key
-    path.parent.mkdir(parents=True,exist_ok=True)
-    descriptor=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
-    with os.fdopen(descriptor,'wb') as handle:handle.write(content);handle.flush();os.fsync(handle.fileno())
-    db.info.setdefault('new_files',[]).append(path)
-    attachment=m.AdmissionAttachment(school_id=account.school_id,admission_id=obj.id,document_type_id=document_type_id,original_name=name,storage_key=key,mime_type=mime,size=len(content),sha256=hashlib.sha256(content).hexdigest())
+    from .storage import put_bytes, backend_name
+    key=f'{account.school_id}/portal/{uid()}'
+    put_bytes(key,content,mime)
+    backend=backend_name();bucket=settings().storage_bucket if backend=='s3' else ''
+    db.info.setdefault('new_storage_objects',[]).append((backend,bucket,key))
+    attachment=m.AdmissionAttachment(school_id=account.school_id,admission_id=obj.id,document_type_id=document_type_id,original_name=name,storage_key=key,mime_type=mime,size=len(content),sha256=hashlib.sha256(content).hexdigest(),storage_backend=backend,bucket_name=bucket)
     db.add(attachment);obj.version+=1;db.flush();parent_audit(db,request,account,'attachment.uploaded',attachment,{'sha256':attachment.sha256})
     return admission_output(db,obj)
 
 def attachment_response(obj):
-    root=settings().storage_path.resolve();path=(root/obj.storage_key).resolve()
-    if not path.is_relative_to(root) or not path.is_file():fail(404,'Arquivo indisponível.')
-    with path.open('rb') as h:hash=hashlib.file_digest(h,'sha256').hexdigest()
-    if not secrets.compare_digest(hash,obj.sha256):fail(409,'Integridade do arquivo inválida.')
-    return FileResponse(path,media_type=obj.mime_type,filename=obj.original_name,headers={'Cache-Control':'no-store'})
+    from .storage import read_bytes
+    try:raw=read_bytes(obj)
+    except (FileNotFoundError,KeyError):fail(404,'Arquivo indisponível.')
+    if not secrets.compare_digest(hashlib.sha256(raw).hexdigest(),obj.sha256):fail(409,'Integridade do arquivo inválida.')
+    name=Path(obj.original_name.replace('\\','/')).name.replace('"','')
+    return Response(raw,media_type=obj.mime_type,headers={'Content-Disposition':f'attachment; filename="{name}"','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
 
 @router.get('/admissions/{id}/attachments/{attachment_id}')
 def download(id:str,attachment_id:str,request:Request,db:DB,account:Parent):
@@ -607,7 +615,7 @@ def issued(id:str,issued_id:str,request:Request,db:DB,account:Parent):
     obj=own_admission(db,account,id)
     record=db.get(m.IssuedDocument,issued_id)
     if not obj.enrollment_id or not record or record.school_id!=obj.school_id or record.enrollment_id!=obj.enrollment_id:fail(404,'Documento não encontrado.')
-    if record.template_id and record.template_id==obj.contract_template_id and record.signature_status not in ('company_signed','pending_validation','verified','rejected'):
+    if obj.contract_signing_order!='applicant_first' and record.template_id and record.template_id==obj.contract_template_id and record.signature_status not in ('company_signed','pending_validation','verified','rejected'):
         fail(409,'A escola ainda está preparando a assinatura do contrato.')
     if record.template_id and record.template_id==obj.contract_template_id:
         from .contract_signatures import latest_signed_file
@@ -645,7 +653,7 @@ def submit_signed_contract(id:str,issued_id:str,request:Request,db:DB,account:Pa
         m.IssuedDocument.template_version==str(obj.contract_template_version)).with_for_update())
     if not record or (record.snapshot or {}).get('template_revision_sha256')!=obj.contract_template_revision_sha256:
         fail(404,'Contrato da revisão aprovada não encontrado.')
-    if record.signature_status not in ('company_signed','pending_validation','verified','rejected'):
+    if obj.contract_signing_order!='applicant_first' and record.signature_status not in ('company_signed','pending_validation','verified','rejected'):
         fail(409,'A escola deve assinar o contrato com o certificado A1 antes do envio pelo responsável.')
     enrollment=db.get(m.Enrollment,obj.enrollment_id)
     guardian=db.get(m.Person,enrollment.financial_person_id) if enrollment.financial_person_id else None

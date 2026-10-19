@@ -33,7 +33,7 @@ for adapter in adapters:
     assert compose_text==reference_compose,f'Compose divergente de deploy/docker: {compose}'
     assert 'build: {context: ../../services/mail-agent, dockerfile: Dockerfile}' in compose_text,compose
     assert 'build: {context: ../../services/sogo, dockerfile: Dockerfile}' in compose_text,compose
-    assert compose_text.count('ports:')==1,compose
+    assert compose_text.count('ports:')==2,compose
     assert './data-postgres:/var/lib/postgresql/data' in compose_text,compose
     assert './data-documents:/data' in compose_text,compose
     assert 'postgres_data:' not in compose_text and 'documents_data:' not in compose_text,compose

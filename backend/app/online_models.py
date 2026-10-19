@@ -1,7 +1,7 @@
 """Admissões, portal de responsáveis e integrações. Tabelas aditivas da versão 0.3."""
 from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint, CheckConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint, CheckConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from .db import Base, Record
 from .models import Scoped
@@ -20,6 +20,7 @@ class AdmissionCampaign(Record, Scoped, Base):
     require_verified_contact: Mapped[bool] = mapped_column(Boolean, default=True)
     require_documents: Mapped[bool] = mapped_column(Boolean, default=False)
     require_payment_before_enrollment: Mapped[bool] = mapped_column(Boolean, default=False)
+    payment_reservation_hours: Mapped[int | None] = mapped_column(Integer)
     contract_template_id: Mapped[str | None] = mapped_column(ForeignKey('document_templates.id'), index=True)
     __table_args__ = (CheckConstraint('closes_on >= opens_on', name='campaign_dates'),)
 
@@ -94,7 +95,11 @@ class Admission(Record, Scoped, Base):
     contract_template_id: Mapped[str | None] = mapped_column(ForeignKey('document_templates.id'), index=True)
     contract_template_version: Mapped[int | None] = mapped_column(Integer)
     contract_template_revision_sha256: Mapped[str | None] = mapped_column(String(64))
-    __table_args__ = (UniqueConstraint('school_id','number'), UniqueConstraint('account_id','client_key'), CheckConstraint("status IN ('draft','submitted','under_review','changes_requested','waitlisted','approved','enrolled','rejected','withdrawn')", name='admission_status'))
+    contract_signing_order: Mapped[str] = mapped_column(String(24), default='school_first', server_default='school_first')
+    reservation_status: Mapped[str] = mapped_column(String(24), default='none', server_default='none')
+    reserved_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reservation_paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (Index('ix_admissions_reservation','class_group_id','reservation_status','reserved_until'), UniqueConstraint('school_id','number'), UniqueConstraint('account_id','client_key'), CheckConstraint("status IN ('draft','submitted','under_review','changes_requested','waitlisted','approved','enrolled','rejected','withdrawn')", name='admission_status'))
 
 class AdmissionMessage(Record, Scoped, Base):
     __tablename__ = 'admission_messages'
@@ -117,6 +122,8 @@ class AdmissionAttachment(Record, Scoped, Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     review_status: Mapped[str] = mapped_column(String(20), default='received')
     review_note: Mapped[str] = mapped_column(Text, default='')
+    storage_backend: Mapped[str] = mapped_column(String(16), default='local', server_default='local')
+    bucket_name: Mapped[str] = mapped_column(String(120), default='', server_default='')
     student_document_id: Mapped[str | None] = mapped_column(ForeignKey('student_documents.id'))
 
 class ConnectInstance(Record, Base):

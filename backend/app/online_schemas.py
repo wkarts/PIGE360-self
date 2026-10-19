@@ -21,6 +21,7 @@ class CampaignInput(Input):
     require_verified_contact: bool = True
     require_documents: bool = False
     require_payment_before_enrollment: bool = False
+    payment_reservation_hours: int | None = Field(default=None,ge=1,le=8760)
     contract_template_id: str | None = None
     @model_validator(mode='after')
     def dates(self):

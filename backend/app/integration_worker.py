@@ -351,6 +351,9 @@ def main():
                 worked = process_crm_one() or worked
             except Exception:
                 LOG.error('code=CRM_BRIDGE_WORKER_FAILED')
+            if not worked:
+                from .backups import process_one as process_backup_one
+                worked=process_backup_one()
         except Exception:
             emit('worker.loop_failed',service='worker',level='ERROR',code='WORKER_DATABASE_OR_CONFIGURATION_ERROR')
             LOG.error('code=WORKER_DATABASE_OR_CONFIGURATION_ERROR'); worked = False

@@ -5,6 +5,7 @@ Run on the Docker host and reach 127.0.0.1 through an SSH tunnel. The tool
 does not mount docker.sock into the application or expose stack credentials.
 """
 import argparse
+import json
 import base64  # Helper scripts are loaded at runtime by the frozen executable.
 from datetime import datetime, timezone
 from http import cookies
@@ -103,7 +104,7 @@ def create(root, name, channel, url, port):
         raise
 
 
-def deploy(root, env_path):
+def deploy(root, env_path,refresh=False):
     available = stacks(root)
     if env_path not in available:
         raise ValueError('Stack não encontrada.')
@@ -112,7 +113,7 @@ def deploy(root, env_path):
     env = root / env_path
     compose = env.parent / 'compose.yaml'
     commands = (
-        helper_command(root, 'prepare-upgrade.py', '--env-file', env_path, '--track-channel'),
+        helper_command(root, 'prepare-upgrade.py', '--env-file', env_path, '--track-channel',*(['--refresh-compose'] if refresh else [])),
         ['docker', 'compose', '--env-file', str(env), '-f', str(compose), 'config', '--quiet'],
         ['docker', 'compose', '--env-file', str(env), '-f', str(compose), 'pull'],
         ['docker', 'compose', '--env-file', str(env), '-f', str(compose), 'up', '-d', '--wait'],
@@ -127,6 +128,28 @@ def deploy(root, env_path):
             raise ValueError('Atualização interrompida na etapa ' + ('validar configuração' if 'config' in command else
                 'baixar imagens' if 'pull' in command else 'iniciar serviços' if 'up' in command else 'preparar ambiente') +
                 '. Confira docker compose e os logs no host.') from error
+
+
+def preview_upgrade(root,env_path):
+    if env_path not in stacks(root):raise ValueError('Stack não encontrada.')
+    result=subprocess.run(helper_command(root,'prepare-upgrade.py','--env-file',env_path,'--preview'),
+        cwd=root,check=True,capture_output=True,text=True,timeout=40)
+    return json.dumps(json.loads(result.stdout),ensure_ascii=False,indent=2)
+
+
+def inspect_stack(root,env_path):
+    if env_path not in stacks(root):raise ValueError('Stack não encontrada.')
+    command=['docker','compose','--env-file',str(root/env_path),'-f',str((root/env_path).parent/'compose.yaml')]
+    result=subprocess.run([*command,'ps','--format','json'],cwd=root,check=True,capture_output=True,text=True,timeout=30)
+    parsed=json.loads(result.stdout) if result.stdout.strip().startswith('[') else [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    health=json.dumps([{key:row.get(key,'') for key in ('Service','State','Health','Status')} for row in parsed],ensure_ascii=False)
+    logs=subprocess.run([*command,'logs','--no-color','--tail=60','app','worker','worker-ocr'],cwd=root,check=True,capture_output=True,text=True,timeout=30).stdout[-16000:]
+    for line in (root/env_path).read_text().splitlines():
+        if '=' in line:
+            key,value=line.split('=',1)
+            if value and len(value)>=6 and re.search(r'PASSWORD|TOKEN|SECRET|KEY|CREDENTIAL',key):logs=logs.replace(value,'[protegido]')
+    logs=re.sub(r'(?i)(bearer\s+|(?:token|api_key|password)[=:]\s*)[^\s,;]+',r'\1[protegido]',logs)
+    return health+'\n'+logs
 
 
 def serve(port):
@@ -173,7 +196,9 @@ def serve(port):
                 escape(v.get('STORAGE_BACKEND', 'local')) +
                 '<form method="post" action="/deploy">' + field +
                 '<input type="hidden" name="path" value="' + escape(path, quote=True) + '">' +
-                '<button>Atualizar imagens e serviços</button></form></li>'
+                '<label><input type="checkbox" name="refresh" value="yes"> Incluir evolução do Compose preservando parâmetros</label><button>Atualizar imagens e serviços</button></form>' +
+                '<form method="post" action="/preview">'+field+'<input type="hidden" name="path" value="'+escape(path,quote=True)+'"><button>Conferir diferenças</button></form>'+
+                '<form method="post" action="/inspect">'+field+'<input type="hidden" name="path" value="'+escape(path,quote=True)+'"><button>Saúde e logs</button></form></li>'
                 for path, v in stacks(ROOT).items())
             return (head + notice + '<section><h2>Stacks deste checkout</h2><ul>' + (items or '<li>Nenhuma stack criada.</li>') +
                 '</ul></section><section><h2>Nova stack isolada</h2><p>O ambiente é criado com segredos próprios; '
@@ -188,7 +213,7 @@ def serve(port):
             self.send_html(self.page() if self.path == '/' else 'Não encontrado', 200 if self.path == '/' else 404)
 
         def do_POST(self):
-            if self.path not in ('/login', '/create', '/deploy'):
+            if self.path not in ('/login', '/create', '/deploy','/preview','/inspect'):
                 return self.send_html('Não encontrado', 404)
             if self.headers.get('Origin') != origin:
                 return self.send_html('Origem inválida', 403)
@@ -211,7 +236,9 @@ def serve(port):
                 if self.path == '/create':
                     path = create(ROOT, form.get('name', ''), form.get('channel', ''), form.get('url', ''), form.get('port', ''))
                     return self.send_html(self.page('Stack criada: ' + path + '. Revise o .env antes de implantar.'))
-                deploy(ROOT, form.get('path', ''))
+                if self.path=='/preview':return self.send_html(self.page(preview_upgrade(ROOT,form.get('path',''))))
+                if self.path=='/inspect':return self.send_html(self.page(inspect_stack(ROOT,form.get('path',''))))
+                deploy(ROOT, form.get('path', ''),refresh=form.get('refresh')=='yes')
                 return self.send_html(self.page('Stack atualizada; confira a saúde dos serviços no Docker.'))
             except (ValueError, FileExistsError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
                 return self.send_html(self.page(str(error) if isinstance(error, ValueError) else 'Não foi possível criar a stack.'), 400)

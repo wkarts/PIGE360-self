@@ -303,8 +303,8 @@ class StableSetTests(unittest.TestCase):
     def setUp(self):
         import stable_set
         self.module = stable_set
-        self.new = {image: 'sha256:' + char * 64 for image, char in zip(stable_set.IMAGES, 'abc')}
-        self.old = {image: 'sha256:' + char * 64 for image, char in zip(stable_set.IMAGES, 'def')}
+        self.new = {image: 'sha256:' + char * 64 for image, char in zip(stable_set.IMAGES, 'abcd')}
+        self.old = {image: 'sha256:' + char * 64 for image, char in zip(stable_set.IMAGES, 'efab')}
         self.registry = {}
         for image, digest in self.new.items():
             self.registry[image + '@' + digest] = digest
@@ -536,7 +536,7 @@ class PublishedContractTests(unittest.TestCase):
         self.api = Mock()
         self.release = {'tag_name': '0.12.0', 'draft': False, 'prerelease': False,
                         'html_url': 'https://github.com/example/release/0.12.0'}
-        self.images = {image: 'sha256:' + char * 64 for image, char in zip(release_state.IMAGES, 'abc')}
+        self.images = {image: 'sha256:' + char * 64 for image, char in zip(release_state.IMAGES[:3], 'abc')}
         self.manifest = {'version': '0.12.0', 'commit': H, 'images': self.images}
         self.api.api.side_effect = lambda path: self.release if path.startswith('/releases/') else {'object': {'type': 'commit', 'sha': H}}
         self.loader = Mock(return_value=self.manifest)
@@ -575,7 +575,7 @@ class PublishedContractTests(unittest.TestCase):
 
     def test_foreign_images_in_manifest_are_rejected(self):
         self.images['ghcr.io/other/project'] = self.images.pop(self.module.IMAGES[0])
-        with self.assertRaisesRegex(RuntimeError, 'exatamente as três'):
+        with self.assertRaisesRegex(RuntimeError, 'conjunto de imagens'):
             self.verify()
 
     def test_newer_latest_is_verified_without_repointing_old_aliases(self):

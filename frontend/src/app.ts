@@ -103,9 +103,9 @@ namespace PigeUI {
     return true;
   }
   function adminTool(page:string):boolean {
+    const flags=state.user?.admin_tools;
+    if(page==='legacy-import')return state.user?.role==='admin'||flags?.portability===true;
     if(state.user?.role!=='admin')return false;
-    const flags=state.user.admin_tools;
-    if(page==='legacy-import')return flags?.portability===true;
     return page==='diagnostics' ? flags?.diagnostics!==false : page==='audit'&&flags?.audit!==false;
   }
   function lifecycleResource():string {return state.page==='academic'?state.catalog:['students','teachers','employees'].includes(state.page)?state.page:'persons';}

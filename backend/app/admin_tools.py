@@ -18,11 +18,25 @@ def develop_build():
         return False
 
 
+def portability_enabled(db):
+    from .models import Installation
+    obj=db.get(Installation,1) if db else None
+    return obj.portability_enabled if obj and obj.portability_enabled is not None else (settings().portability_enabled or develop_build())
+
+
 def capabilities(user):
-    admin = user.role == 'admin'
-    development = develop_build()
-    return {'portability': admin and (settings().portability_enabled or development),
-            'diagnostics': admin, 'audit': admin, 'develop_build': admin and development}
+    from sqlalchemy.orm import object_session
+    from sqlalchemy import select
+    from .models import SchoolAccess
+    db=object_session(user)
+    admin=user.role=='admin'
+    sid=getattr(user,'_active_school_id',None)
+    query=select(SchoolAccess).where(SchoolAccess.user_id==user.id,SchoolAccess.active.is_(True),
+        SchoolAccess.archived_at.is_(None),SchoolAccess.portability_granted.is_(True))
+    if sid:query=query.where(SchoolAccess.school_id==sid)
+    delegated=bool(db and user.role in {'direction','coordination','secretary'} and db.scalar(query.limit(1)))
+    return {'portability':bool((admin or delegated) and portability_enabled(db)),
+            'diagnostics':admin,'audit':admin,'develop_build':admin and develop_build()}
 
 
 def require_admin(user):
@@ -31,6 +45,5 @@ def require_admin(user):
 
 
 def require_portability(user):
-    require_admin(user)
     if not capabilities(user)['portability']:
-        fail(403, 'A portabilidade de dados não está habilitada nesta instalação.')
+        fail(403,'A portabilidade não está habilitada ou seu acesso não foi delegado nesta escola.')

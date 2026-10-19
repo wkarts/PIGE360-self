@@ -43,7 +43,7 @@ python - <<'PYVERIFY'
 import os, sys
 sys.path.insert(0, "scripts/ci")
 from promote import inspect
-for image, digest in [('IMAGE', 'DIGEST'), ('MAIL_AGENT_IMAGE', 'MAIL_AGENT_DIGEST'), ('SOGO_IMAGE', 'SOGO_DIGEST')]:
+for image, digest in [('IMAGE', 'DIGEST'), ('MAIL_AGENT_IMAGE', 'MAIL_AGENT_DIGEST'), ('SOGO_IMAGE', 'SOGO_DIGEST'),('WEBSITE_IMAGE','WEBSITE_DIGEST')]:
     for alias in (os.environ['VERSION'], 'production', 'stable', 'latest'):
         if inspect(os.environ[image] + ':' + alias) != os.environ[digest]:
             raise SystemExit('Conjunto estável divergente; release permanece em rascunho')

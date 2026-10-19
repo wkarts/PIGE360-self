@@ -9,6 +9,8 @@ class Installation(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     configured: Mapped[bool] = mapped_column(Boolean, default=False)
     configured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    portability_enabled: Mapped[bool | None] = mapped_column(Boolean)
+    portability_version: Mapped[int] = mapped_column(Integer, default=1, server_default='1')
 
 class EmbeddingSettings(Base):
     __tablename__ = 'installation_embedding'
@@ -112,6 +114,7 @@ class SchoolAccess(Base):
     school_id: Mapped[str] = mapped_column(ForeignKey('schools.id'), primary_key=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
+    portability_granted: Mapped[bool] = mapped_column(Boolean,default=False,server_default='false')
     access_profile_id: Mapped[str | None] = mapped_column(ForeignKey('school_access_profiles.id'), index=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
