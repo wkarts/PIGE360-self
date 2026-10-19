@@ -12,7 +12,7 @@
     "browser": "Chromium 140.0.7339.186"
   },
   "observed_validation": {
-    "backend_passed": 551,
+    "backend_passed": 552,
     "postgresql_only_skipped_locally": 3,
     "subtests_passed": 5,
     "ci_unit_tests": 186,
@@ -24,7 +24,9 @@
     "mailcow_invitation_user_regression_passed": 51,
     "portal_secure_configuration_test_passed": 1,
     "management_async_import_checks": 3,
-    "postgresql_previous_composition_passed": 554
+    "postgresql_previous_composition_passed": 555,
+    "additional_http_suites_passed": 15,
+    "remote_previous_local_minio_restore": true
   },
   "remote_ci": "Check run associated with the final published SHA; no earlier SHA is proof for this composition.",
   "not_executed_locally": [
@@ -325,7 +327,7 @@
     "docs/history/0.1.0/README.md": "c7b7003c80760aa820b8c6de18ab784fd5322368784a99b21946559ab41e19e4",
     "docs/history/0.1.0/RELATORIO-ENTREGA.md": "aef3275d404af21ddb29d3fb6184200e9ed12583e0d39abe3590ad717abd0a4b",
     "docs/implementation/2026-10-19-academic-completion.md": "9aaec22845b1c91e239363d879eb998e37aed0b636e624e39c77a700a4630682",
-    "docs/implementation/2026-10-19-pr57-continuity.md": "91370b86349695aa4fa959623078836bfaa739045eee3687af8caf91e94aef6f",
+    "docs/implementation/2026-10-19-pr57-continuity.md": "6f9a45c055398742602f9e9c13a0f47ebe6249aa6a614a0c05e83efb3320b3c9",
     "docs/implementation/evidence/checkpoint-origin-37a6fd8.json": "4820c501d4cb6c25be5287a99fb896a270cbd802977f87abaabc5b63d820ad55",
     "docs/implementation/evidence/completion-http-results.json": "658d5df76ab8480b5d3c6499e31c8fc68dc5fab20642b067b3d19e1ceed1c037",
     "docs/implementation/evidence/continuity-http-results.json": "b5e5dd1e68b9c8c2450399afe6b7a0ec07a973c4b273bf121f7ebd7fad37776a",
@@ -538,7 +540,7 @@
     "scripts/backup.sh": "cb78153c76ad652c8eb685188b6b808bc6181c51b25b7bc087623e07c7869c22",
     "scripts/check.sh": "502f3a7430c0ea493b6a0af48226c8c0ab7390108acbfe2d6fbb7ed5a5984249",
     "scripts/ci/auto_promotion.py": "ffb361ec17dabb20aa92b905bb0917d93324b1e8ecd1c2951134430c8ff35bd1",
-    "scripts/ci/backup-smoke.py": "811dc12fa924b0d0230d3b1f2be648a2f75834ae7f55b5be8cc7a9954aa020f5",
+    "scripts/ci/backup-smoke.py": "774ffb29c1b716b7d75926bbf656f98534b682152fdca3e136956a343335877c",
     "scripts/ci/base-policy.sh": "787cda6fd434d111baea1263736831e516055e216077bdbdd3dac0b5762c9905",
     "scripts/ci/base_images.py": "02ba2dd8c85e7fe1625e106c7667e0da4f8e8f787993d058894d0e96e9b8a490",
     "scripts/ci/build-deployer.sh": "6a2141cf6448a422c5f6ad756bc4481b72836727531291dd686f751e8bf6f135",
@@ -549,7 +551,7 @@
     "scripts/ci/release_state.py": "873e45a4cb5a377cfbd9071a5a26b1c3eb5e14be20d8d72920bc30c054c3fda7",
     "scripts/ci/smoke.sh": "9857be2100ae4661711de382891a42765f7dcf5cc432f7d0d02895d1aa00fefa",
     "scripts/ci/stable_set.py": "56f21fe0c126fcda38e3886a3b8e148e7bb8ca6cb0ce3a8c295c11481bfbff19",
-    "scripts/ci/surfaces-smoke.py": "db519103c0e8c4b7072663da1261a75b07d85217520b5caf3e9094d0a5fa9ffd",
+    "scripts/ci/surfaces-smoke.py": "0ec5102479c2f7b4365437a532f9d2af907a51c8bebb2ee104498124306538d9",
     "scripts/ci/validate.py": "c4672eff7ab92b1254d69154f9f7622bdd8a056097a056f5e38c3e36c5b3b1e8",
     "scripts/ci/version.py": "68a6f5f9df309a1eea77b815c59876cd49e619fdf07e560371a379746b07f678",
     "scripts/configure.py": "81588590437bb11d6888acf48b49550a56b575f4d731f0aab6550fbec93eafab",

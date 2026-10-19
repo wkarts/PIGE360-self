@@ -17,7 +17,7 @@ stack=Path(stack).resolve()
 if not project.startswith('pige360-ci-') or not (stack/'.pige360-smoke-owned').is_file():raise SystemExit('Exige stack descartável pertencente ao CI.')
 url='http://'+address;password='Synthetic-Backup-2026!'
 client=httpx.Client(base_url=url,trust_env=False,timeout=30)
-login=client.post('/api/v1/auth/login',json={'email':'backup@example.test','password':password});assert login.is_success,login.text
+login=client.post('/api/v1/auth/login',json={'email':'backup@example.com','password':password});assert login.is_success,login.text
 headers={'Authorization':'Bearer '+login.json()['access_token']}
 school=client.get('/api/v1/schools',headers=headers).json()[0];base='/api/v1/schools/'+school['id']
 response=client.put(base+'/website',headers=headers,json={'enabled':True,'theme':'campus','headline':'Site integrado no Docker','introduction':'Somente conteúdo público sintético.','public_url':'https://school.example.test','portal_url':'https://portal.example.test'})
@@ -48,7 +48,7 @@ try:
     deployer='http://127.0.0.1:'+str(port)
     with sync_playwright() as p:
         browser=p.chromium.launch(headless=True);page=browser.new_page(viewport={'width':1280,'height':1000})
-        page.goto(url);page.get_by_label('E-mail',exact=True).fill('backup@example.test');page.get_by_label('Senha',exact=True).fill(password);page.get_by_role('button',name='Entrar na aplicação').click()
+        page.goto(url);page.get_by_label('E-mail',exact=True).fill('backup@example.com');page.get_by_label('Senha',exact=True).fill(password);page.get_by_role('button',name='Entrar na aplicação').click()
         expect(page.locator('.app-root')).to_have_attribute('aria-busy','false');page.get_by_label('Selecionar escola',exact=True).select_option(school['id']);expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
         page.locator('aside a[href="#/legacy-import"]').click();workspace=page.locator('.import-workspace');expect(workspace).to_be_visible()
         workspace.get_by_role('button',name='Preparar restauração',exact=True).first.click()
@@ -75,7 +75,7 @@ try:
     assert client.get('/health/ready').status_code==200
     # Sessão anterior foi revogada: reautenticar e provar banco/documentos.
     assert client.get('/api/v1/auth/me',headers=headers).status_code==401
-    auth=client.post('/api/v1/auth/login',json={'email':'backup@example.test','password':password}).json();headers={'Authorization':'Bearer '+auth['access_token']}
+    auth=client.post('/api/v1/auth/login',json={'email':'backup@example.com','password':password}).json();headers={'Authorization':'Bearer '+auth['access_token']}
     verified=client.get('/api/v1/backups/restore/plans',headers=headers).json()[0]
     assert verified['status']=='completed' and verified['previous_backup_id']
     subprocess.run([*command,'exec','-T','app','python','-c',"from app.db import SessionLocal;from app import models as m;from app.storage import read_bytes;import hashlib;db=SessionLocal();rows=db.query(m.FileRecord).all();assert len(rows)>=2;assert all(hashlib.sha256(read_bytes(f)).hexdigest()==f.sha256 for f in rows);print('PASS: banco e objetos locais/MinIO íntegros após restore UI')"],check=True)
