@@ -213,6 +213,8 @@ def school_lookup(kind:Literal['cnpj','cep'],data:LookupInput,db:DB,user:Actor,s
 
 @router.post('/api/v1/institution/lookups/{kind}')
 def institution_lookup(kind:Literal['cnpj','cep'],data:LookupInput,db:DB,user:Actor):
+    from .profiles import school_ids
+    if user.role!='admin' and not school_ids(db,user):fail(403,'Seu acesso institucional está indisponível.')
     require(user,'schools.manage');normalize_key(kind,data.value);quota(db,'lookup:user:'+user.id,60)
     return lookup(db,kind,data.value)
 

@@ -174,6 +174,8 @@ def file_job(file_id:str,data:Source,request:Request,db:DB,user:Actor,school:Sco
 
 @router.get('/api/v1/institution/intake')
 def intake_status(db:DB,user:Actor):
+    from .profiles import school_ids
+    if user.role!='admin' and not school_ids(db,user):fail(403,'Seu acesso institucional está indisponível.')
     require(user,'schools.manage');row=db.get(IntakeSettings,1)
     return {'version':row.version,'ocr_enabled':row.ocr_enabled,'lookups_enabled':row.lookups_enabled,
         'ocr_max_upload_mb':settings().ocr_max_upload_mb,'ocr_retention_hours':settings().ocr_retention_hours}
