@@ -541,7 +541,7 @@
     "scripts/ci/package.py": "c8daaeb0377291a3e02e74a19e5276a4ebadd50a70abd86f91be1ac83d619059",
     "scripts/ci/promote.py": "361b1dba2698a9acdb69d2f6436909011b7dcbd200258e41ce87e76501f4257d",
     "scripts/ci/release_state.py": "873e45a4cb5a377cfbd9071a5a26b1c3eb5e14be20d8d72920bc30c054c3fda7",
-    "scripts/ci/smoke.sh": "b379c32d2a46c1dffe0f387f33a35f163a81a48e65b87ec6e7db86cf6b39198a",
+    "scripts/ci/smoke.sh": "9857be2100ae4661711de382891a42765f7dcf5cc432f7d0d02895d1aa00fefa",
     "scripts/ci/stable_set.py": "56f21fe0c126fcda38e3886a3b8e148e7bb8ca6cb0ce3a8c295c11481bfbff19",
     "scripts/ci/surfaces-smoke.py": "db519103c0e8c4b7072663da1261a75b07d85217520b5caf3e9094d0a5fa9ffd",
     "scripts/ci/validate.py": "c4672eff7ab92b1254d69154f9f7622bdd8a056097a056f5e38c3e36c5b3b1e8",
