@@ -18,7 +18,6 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
     const _component_users_panel = _resolveComponent("users-panel")
     const _component_signing_panel = _resolveComponent("signing-panel")
     const _component_lifecycle_panel = _resolveComponent("lifecycle-panel")
-    const _component_learning_portal = _resolveComponent("learning-portal")
     const _component_camera_capture = _resolveComponent("camera-capture")
 
     return (_openBlock(), _createElementBlock("div", {
@@ -3685,181 +3684,251 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       }), 128))])]))
                     : _createCommentVNode("", true),
                   (familyRelevant())
-                    ? (_openBlock(), _createElementBlock("div", {
+                    ? _withDirectives((_openBlock(), _createElementBlock("section", {
                         key: 13,
-                        class: "family-shell",
-                        "aria-busy": s.busy
+                        class: "family-editor",
+                        "data-form-section": "links"
                       }, [
-                        _createElementVNode("a", {
-                          class: "skip",
-                          href: "#family-content"
-                        }, "Ir para conteúdo"),
-                        _createElementVNode("header", { class: "family-header" }, [_createElementVNode("a", {
-                          href: "/",
-                          class: "family-brand"
-                        }, [(identity.logo_url)
-                          ? (_openBlock(), _createElementBlock("img", {
+                        _createElementVNode("div", { class: "form-section-heading" }, [_createElementVNode("h3", null, "Vínculos"), _createElementVNode("p", null, "Um único relacionamento, visível na ficha do aluno e da família. Parentesco não concede responsabilidades automaticamente.")]),
+                        (dossier.state.error)
+                          ? (_openBlock(), _createElementBlock("div", {
                               key: 0,
-                              src: identity.logo_url,
-                              alt: ""
-                            }, null, 8, ["src"]))
-                          : _createCommentVNode("", true), _createElementVNode("span", null, [_createTextVNode(_toDisplayString(identity.display_name), 1), _createElementVNode("small", null, "Portal do aluno e responsável")])]), (s.account)
+                              class: "alert error",
+                              role: "alert"
+                            }, _toDisplayString(dossier.state.error), 1))
+                          : _createCommentVNode("", true),
+                        (!dossier.state.editor)
                           ? (_openBlock(), _createElementBlock("button", {
-                              key: 0,
-                              class: "btn",
-                              onClick: logout,
-                              disabled: s.busy
-                            }, "Sair", 8, ["onClick", "disabled"]))
-                          : _createCommentVNode("", true)]),
-                        _createElementVNode("main", { id: "family-content" }, [
-                          (!s.ready)
-                            ? (_openBlock(), _createElementBlock("p", {
-                                key: 0,
-                                role: "status"
-                              }, "Carregando seu espaço…"))
-                            : _createCommentVNode("", true),
-                          (s.error)
-                            ? (_openBlock(), _createElementBlock("p", {
-                                key: 1,
-                                class: "alert error",
-                                role: "alert"
-                              }, _toDisplayString(s.error), 1))
-                            : _createCommentVNode("", true),
-                          (s.ready&&!s.account)
-                            ? (_openBlock(), _createElementBlock("section", {
-                                key: 2,
-                                class: "family-login panel"
-                              }, [
-                                _createElementVNode("p", { class: "eyebrow" }, "SEU ESPAÇO NA ESCOLA"),
-                                _createElementVNode("h1", null, "Aprendizado e cuidado, de perto."),
-                                _createElementVNode("p", null, "Acompanhe a vida escolar com seu acesso de aluno ou responsável."),
-                                _createElementVNode("form", { onSubmit: _withModifiers(login, ["prevent"]) }, [_createElementVNode("label", null, [_createTextVNode("E-mail de acesso"), _withDirectives(_createElementVNode("input", {
-                                  type: "email",
-                                  "onUpdate:modelValue": $event => ((s.email) = $event),
-                                  required: "",
-                                  autocomplete: "username"
-                                }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.email]])]), _createElementVNode("label", null, [_createTextVNode("Senha"), _withDirectives(_createElementVNode("input", {
-                                  type: "password",
-                                  "onUpdate:modelValue": $event => ((s.password) = $event),
-                                  required: "",
-                                  autocomplete: "current-password"
-                                }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.password]])]), _createElementVNode("button", {
-                                  class: "btn btn-primary",
-                                  disabled: s.busy
-                                }, "Entrar", 8, ["disabled"])], 40, ["onSubmit"]),
-                                _createElementVNode("p", null, "Primeiro acesso? Utilize o convite enviado ao e-mail do seu cadastro. Para recuperar seu acesso escolar, fale com a Secretaria."),
-                                _createElementVNode("a", { href: "/online.html" }, "Inscrição e matrícula online"),
-                                _createElementVNode("p", { class: "muted" }, "A conta da inscrição é independente do acesso escolar.")
-                              ]))
-                            : _createCommentVNode("", true),
-                          (mfa.state.challenge)
-                            ? (_openBlock(), _createElementBlock("section", {
-                                key: 3,
-                                class: "family-login panel"
-                              }))
-                            : _createCommentVNode("", true),
-                          (s.account)
-                            ? (_openBlock(), _createElementBlock(_Fragment, { key: 4 }, [_createElementVNode("div", { class: "family-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "BEM-VINDO AO SEU PORTAL"), _createElementVNode("h1", null, "Olá, " + _toDisplayString(s.account.name) + ".", 1)]), (s.account.school_ids.length>1)
-                                ? (_openBlock(), _createElementBlock("label", { key: 0 }, [_createTextVNode("Instituição"), _withDirectives(_createElementVNode("select", {
-                                    "onUpdate:modelValue": $event => ((s.schoolId) = $event),
-                                    onChange: changeSchool
-                                  }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.account.school_ids, (id) => {
-                                    return (_openBlock(), _createElementBlock("option", { value: id }, _toDisplayString(id), 9, ["value"]))
-                                  }), 256))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, s.schoolId]])]))
-                                : _createCommentVNode("", true), (s.students.length)
-                                ? (_openBlock(), _createElementBlock("label", { key: 1 }, [_createTextVNode("Aluno"), _withDirectives(_createElementVNode("select", {
-                                    "onUpdate:modelValue": $event => ((s.studentId) = $event),
-                                    onChange: changeStudent
-                                  }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.students, (item) => {
-                                    return (_openBlock(), _createElementBlock("option", { value: item.id }, _toDisplayString(item.name), 9, ["value"]))
-                                  }), 256))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, s.studentId]])]))
-                                : _createCommentVNode("", true)]), _createElementVNode("nav", {
-                                class: "family-nav",
-                                "aria-label": "Seu portal"
-                              }, [
-                                _createElementVNode("button", {
-                                  "aria-current": s.section==='academic'?'page':undefined,
-                                  onClick: $event => (section('academic'))
-                                }, "Boletim e matrículas", 8, ["aria-current", "onClick"]),
-                                _createElementVNode("button", {
-                                  "aria-current": s.section==='documents'?'page':undefined,
-                                  onClick: $event => (section('documents'))
-                                }, "Documentos", 8, ["aria-current", "onClick"]),
-                                _createElementVNode("button", {
-                                  "aria-current": s.section==='finance'?'page':undefined,
-                                  onClick: $event => (section('finance'))
-                                }, "Financeiro", 8, ["aria-current", "onClick"]),
-                                _createElementVNode("a", { href: "/online.html" }, "Inscrição e contratos ↗"),
-                                _createElementVNode("button", {
-                                  onClick: $event => (run(load)),
-                                  disabled: s.busy
-                                }, "Atualizar", 8, ["onClick", "disabled"])
-                              ]), (!s.students.length)
-                                ? (_openBlock(), _createElementBlock("section", {
-                                    key: 0,
-                                    class: "panel"
-                                  }, [_createElementVNode("h2", null, "Nenhum aluno disponível"), _createElementVNode("p", null, "A escola precisa vincular seu cadastro ao aluno e autorizar seu perfil. Um vínculo inativo não permite consultas.")]))
-                                : (student())
-                                  ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [(s.section==='academic')
-                                      ? (_openBlock(), _createElementBlock("section", { key: 0 }, [_createElementVNode("article", { class: "panel" }, [
-                                          _createElementVNode("h2", null, _toDisplayString(student().name), 1),
-                                          _createElementVNode("p", null, "Código " + _toDisplayString(student().number), 1),
-                                          _createElementVNode("div", { class: "family-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(student().enrollments, (enrollment) => {
-                                            return (_openBlock(), _createElementBlock("div", { key: enrollment.id }, [_createElementVNode("strong", null, _toDisplayString(enrollment.class_name), 1), _createElementVNode("p", null, _toDisplayString(enrollment.year_name) + " · " + _toDisplayString(enrollment.status), 1), _createElementVNode("span", null, "Matrícula " + _toDisplayString(enrollment.number), 1)]))
-                                          }), 128))]),
-                                          (!student().enrollments.length)
-                                            ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Nenhuma matrícula disponível."))
-                                            : _createCommentVNode("", true)
-                                        ]), (_openBlock(), _createBlock(_component_learning_portal, {
-                                          key: s.schoolId,
-                                          request: request,
-                                          download: download,
-                                          "school-id": s.schoolId
-                                        }, null, 8, ["request", "download", "school-id"]))]))
-                                      : _createCommentVNode("", true), (s.section==='documents')
-                                      ? (_openBlock(), _createElementBlock("section", {
-                                          key: 1,
-                                          class: "panel"
-                                        }, [
-                                          _createElementVNode("h2", null, "Documentos de " + _toDisplayString(student().name), 1),
-                                          _createElementVNode("p", null, "Documentos e pendências conferidos pela escola. Anexos da inscrição são enviados em Inscrição e contratos."),
-                                          (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(student().documents, (file) => {
-                                            return (_openBlock(), _createElementBlock("article", {
-                                              key: file.id,
-                                              class: "family-line"
-                                            }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(file.type_name), 1), _createElementVNode("p", null, _toDisplayString(file.status), 1)]), (file.file_id)
-                                              ? (_openBlock(), _createElementBlock("button", {
-                                                  key: 0,
-                                                  class: "btn",
-                                                  onClick: $event => (document(file)),
-                                                  disabled: s.busy
-                                                }, "Baixar documento", 8, ["onClick", "disabled"]))
-                                              : _createCommentVNode("", true)]))
-                                          }), 128)),
-                                          (!student().documents.length)
-                                            ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Nenhum documento disponível."))
-                                            : _createCommentVNode("", true)
-                                        ]))
-                                      : _createCommentVNode("", true), (s.section==='finance')
-                                      ? (_openBlock(), _createElementBlock("section", {
-                                          key: 2,
-                                          class: "panel"
-                                        }, [_createElementVNode("h2", null, "Financeiro de " + _toDisplayString(student().name), 1), (!student().financial_authorized)
-                                          ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Seu vínculo não autoriza a consulta financeira. Procure a escola se precisar revisar esta permissão."))
-                                          : (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [_createElementVNode("p", null, _toDisplayString(s.financeNote), 1), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.charges, (charge) => {
-                                              return (_openBlock(), _createElementBlock("article", {
-                                                key: charge.id,
-                                                class: "family-line"
-                                              }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(charge.description), 1), _createElementVNode("p", null, "Vencimento: " + _toDisplayString(charge.due_on) + " · " + _toDisplayString(charge.status), 1)]), _createElementVNode("strong", null, "R$ " + _toDisplayString(Number(charge.amount).toLocaleString('pt-BR',{minimumFractionDigits:2})), 1)]))
-                                            }), 128)), (!s.charges.length)
-                                              ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Nenhuma cobrança registrada para estas matrículas."))
-                                              : _createCommentVNode("", true)], 64))]))
-                                      : _createCommentVNode("", true)], 64))
-                                  : _createCommentVNode("", true)], 64))
-                            : _createCommentVNode("", true)
-                        ]),
-                        _createElementVNode("footer", { class: "family-footer" }, _toDisplayString(identity.display_name) + " · Atendimento pela Secretaria", 1)
-                      ], 8, ["aria-busy"]))
+                              key: 1,
+                              type: "button",
+                              class: "btn btn-secondary",
+                              disabled: dossier.state.loading,
+                              onClick: $event => (dossier.begin(selectedPersonTypes().includes('student')))
+                            }, "Adicionar vínculo", 8, ["disabled", "onClick"]))
+                          : _createCommentVNode("", true),
+                        (dossier.state.editor)
+                          ? (_openBlock(), _createElementBlock("div", {
+                              key: 2,
+                              class: "family-draft"
+                            }, [
+                              _createElementVNode("div", { class: "form-grid" }, [
+                                (!dossier.state.editId)
+                                  ? (_openBlock(), _createElementBlock("label", {
+                                      key: 0,
+                                      class: "field"
+                                    }, [_createTextVNode("Vincular ao cadastro atual"), _withDirectives(_createElementVNode("select", {
+                                      "onUpdate:modelValue": $event => ((dossier.state.draft.direction) = $event),
+                                      onChange: dossier.search
+                                    }, [(selectedPersonTypes().includes('student'))
+                                      ? (_openBlock(), _createElementBlock("option", {
+                                          key: 0,
+                                          value: "guardian"
+                                        }, "Familiar / responsável"))
+                                      : _createCommentVNode("", true), _createElementVNode("option", { value: "student" }, "Aluno")], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, dossier.state.draft.direction]])]))
+                                  : _createCommentVNode("", true),
+                                _createElementVNode("label", { class: "field" }, [_createTextVNode("Parentesco / relacionamento"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((dossier.state.draft.relationship) = $event) }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(['Responsável','Mãe','Pai','Avó','Avô','Tia','Tio','Irmã','Irmão','Tutor(a)','Outro'], (name) => {
+                                  return (_openBlock(), _createElementBlock("option", { key: name }, _toDisplayString(name), 1))
+                                }), 128)), (!['Responsável','Mãe','Pai','Avó','Avô','Tia','Tio','Irmã','Irmão','Tutor(a)','Outro'].includes(dossier.state.draft.relationship))
+                                  ? (_openBlock(), _createElementBlock("option", { key: 0 }, _toDisplayString(dossier.state.draft.relationship), 1))
+                                  : _createCommentVNode("", true)], 8, ["onUpdate:modelValue"]), [[_vModelSelect, dossier.state.draft.relationship]])]),
+                                (!dossier.state.editId)
+                                  ? (_openBlock(), _createElementBlock("div", {
+                                      key: 1,
+                                      class: "field wide"
+                                    }, [_createElementVNode("label", { class: "checkbox-field" }, [_withDirectives(_createElementVNode("input", {
+                                      type: "checkbox",
+                                      "onUpdate:modelValue": $event => ((dossier.state.draft.newMode) = $event),
+                                      onChange: $event => (dossier.state.draft.person_id='')
+                                    }, null, 40, ["onUpdate:modelValue", "onChange"]), [[_vModelCheckbox, dossier.state.draft.newMode]]), _createTextVNode("Cadastrar " + _toDisplayString(dossier.state.draft.direction==='student'?'novo aluno':'nova pessoa') + " nesta ficha", 1)])]))
+                                  : _createCommentVNode("", true),
+                                (dossier.state.draft.newMode)
+                                  ? (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [
+                                      _createElementVNode("div", { class: "wide" }, [_createVNode(_component_assist_panel, {
+                                        target: dossier.state.draft,
+                                        fields: familyAssistFields,
+                                        request: assistRequest,
+                                        root: base(),
+                                        label: dossier.state.draft.direction==='guardian'?'familiar / responsável a vincular':'aluno a vincular'
+                                      }, null, 8, ["target", "fields", "request", "root", "label"])]),
+                                      _createElementVNode("label", { class: "field" }, [_createTextVNode("Nome completo"), _withDirectives(_createElementVNode("input", {
+                                        "onUpdate:modelValue": $event => ((dossier.state.draft.name) = $event),
+                                        maxlength: "180"
+                                      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.name]])]),
+                                      _createElementVNode("label", { class: "field" }, [_createTextVNode("CPF"), _withDirectives(_createElementVNode("input", {
+                                        "onUpdate:modelValue": $event => ((dossier.state.draft.cpf) = $event),
+                                        maxlength: "14"
+                                      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.cpf]])]),
+                                      _createElementVNode("label", { class: "field" }, [_createTextVNode("Data de nascimento" + _toDisplayString(dossier.state.draft.direction==='student'?' *':''), 1), _withDirectives(_createElementVNode("input", {
+                                        type: "date",
+                                        "onUpdate:modelValue": $event => ((dossier.state.draft.birth_date) = $event)
+                                      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.birth_date]])]),
+                                      _createElementVNode("label", { class: "field" }, [_createTextVNode("Telefone"), _withDirectives(_createElementVNode("input", {
+                                        type: "tel",
+                                        "onUpdate:modelValue": $event => ((dossier.state.draft.phone) = $event),
+                                        maxlength: "32"
+                                      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.phone]])]),
+                                      _createElementVNode("label", { class: "field" }, [_createTextVNode("E-mail"), _withDirectives(_createElementVNode("input", {
+                                        type: "email",
+                                        "onUpdate:modelValue": $event => ((dossier.state.draft.email) = $event),
+                                        maxlength: "254"
+                                      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.email]])]),
+                                      _createElementVNode("details", { class: "wide" }, [_createElementVNode("summary", null, "Documentos e endereço da pessoa a vincular"), _createElementVNode("div", { class: "form-grid" }, [
+                                        _createElementVNode("label", { class: "field" }, [_createTextVNode("RG"), _withDirectives(_createElementVNode("input", {
+                                          "onUpdate:modelValue": $event => ((dossier.state.draft.rg) = $event),
+                                          maxlength: "120"
+                                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.rg]])]),
+                                        _createElementVNode("label", { class: "field" }, [_createTextVNode("Órgão emissor"), _withDirectives(_createElementVNode("input", {
+                                          "onUpdate:modelValue": $event => ((dossier.state.draft.rg_issuer) = $event),
+                                          maxlength: "120"
+                                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.rg_issuer]])]),
+                                        _createElementVNode("label", { class: "field" }, [_createTextVNode("Certidão"), _withDirectives(_createElementVNode("input", {
+                                          "onUpdate:modelValue": $event => ((dossier.state.draft.birth_certificate) = $event),
+                                          maxlength: "120"
+                                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.birth_certificate]])]),
+                                        _createElementVNode("label", { class: "field" }, [_createTextVNode("Nome da mãe"), _withDirectives(_createElementVNode("input", {
+                                          "onUpdate:modelValue": $event => ((dossier.state.draft.mother_name) = $event),
+                                          maxlength: "120"
+                                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.mother_name]])]),
+                                        _createElementVNode("label", { class: "field" }, [_createTextVNode("Nome do pai"), _withDirectives(_createElementVNode("input", {
+                                          "onUpdate:modelValue": $event => ((dossier.state.draft.father_name) = $event),
+                                          maxlength: "120"
+                                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.father_name]])]),
+                                        _createElementVNode("label", { class: "field" }, [_createTextVNode("CEP"), _withDirectives(_createElementVNode("input", {
+                                          "onUpdate:modelValue": $event => ((dossier.state.draft.postal_code) = $event),
+                                          maxlength: "120"
+                                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.postal_code]])]),
+                                        _createElementVNode("label", { class: "field" }, [_createTextVNode("Logradouro"), _withDirectives(_createElementVNode("input", {
+                                          "onUpdate:modelValue": $event => ((dossier.state.draft.street) = $event),
+                                          maxlength: "120"
+                                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.street]])]),
+                                        _createElementVNode("label", { class: "field" }, [_createTextVNode("Número"), _withDirectives(_createElementVNode("input", {
+                                          "onUpdate:modelValue": $event => ((dossier.state.draft.address_number) = $event),
+                                          maxlength: "120"
+                                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.address_number]])]),
+                                        _createElementVNode("label", { class: "field" }, [_createTextVNode("Complemento"), _withDirectives(_createElementVNode("input", {
+                                          "onUpdate:modelValue": $event => ((dossier.state.draft.address_complement) = $event),
+                                          maxlength: "120"
+                                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.address_complement]])]),
+                                        _createElementVNode("label", { class: "field" }, [_createTextVNode("Bairro"), _withDirectives(_createElementVNode("input", {
+                                          "onUpdate:modelValue": $event => ((dossier.state.draft.district) = $event),
+                                          maxlength: "120"
+                                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.district]])]),
+                                        _createElementVNode("label", { class: "field" }, [_createTextVNode("Cidade"), _withDirectives(_createElementVNode("input", {
+                                          "onUpdate:modelValue": $event => ((dossier.state.draft.city) = $event),
+                                          maxlength: "120"
+                                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.city]])]),
+                                        _createElementVNode("label", { class: "field" }, [_createTextVNode("UF"), _withDirectives(_createElementVNode("input", {
+                                          "onUpdate:modelValue": $event => ((dossier.state.draft.state) = $event),
+                                          maxlength: "120"
+                                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.state]])]),
+                                        _createElementVNode("label", { class: "field" }, [_createTextVNode("País"), _withDirectives(_createElementVNode("input", {
+                                          "onUpdate:modelValue": $event => ((dossier.state.draft.country) = $event),
+                                          maxlength: "120"
+                                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.country]])]),
+                                        _createElementVNode("label", { class: "field" }, [_createTextVNode("Endereço completo"), _withDirectives(_createElementVNode("input", {
+                                          "onUpdate:modelValue": $event => ((dossier.state.draft.address) = $event),
+                                          maxlength: "400"
+                                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, dossier.state.draft.address]])])
+                                      ])])
+                                    ], 64))
+                                  : (!dossier.state.editId)
+                                    ? (_openBlock(), _createElementBlock("div", {
+                                        key: 3,
+                                        class: "field wide"
+                                      }, [
+                                        _createElementVNode("label", null, [_createTextVNode("Buscar " + _toDisplayString(dossier.state.draft.direction==='student'?'aluno':'pessoa') + " existente", 1), _withDirectives(_createElementVNode("input", {
+                                          type: "search",
+                                          "onUpdate:modelValue": $event => ((dossier.state.query) = $event),
+                                          placeholder: "Nome ou CPF · mínimo 2 caracteres",
+                                          onInput: dossier.search,
+                                          onKeydown: _withKeys(_withModifiers(() => {}, ["prevent"]), ["enter"])
+                                        }, null, 40, ["onUpdate:modelValue", "onInput", "onKeydown"]), [[_vModelText, dossier.state.query]])]),
+                                        (dossier.state.searching)
+                                          ? (_openBlock(), _createElementBlock("small", { key: 0 }, "Buscando…"))
+                                          : _createCommentVNode("", true),
+                                        _createElementVNode("div", { class: "family-matches" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(dossier.state.matches, (person) => {
+                                          return (_openBlock(), _createElementBlock("button", {
+                                            key: person.id,
+                                            type: "button",
+                                            onClick: $event => (dossier.choose(person))
+                                          }, _toDisplayString(person.name) + " · " + _toDisplayString(cpf(person.cpf)), 9, ["onClick"]))
+                                        }), 128))]),
+                                        (dossier.state.draft.person_id)
+                                          ? (_openBlock(), _createElementBlock("small", { key: 1 }, "Selecionado: " + _toDisplayString(dossier.state.draft.name), 1))
+                                          : _createCommentVNode("", true)
+                                      ]))
+                                    : (_openBlock(), _createElementBlock("p", {
+                                        key: 4,
+                                        class: "field wide"
+                                      }, [_createElementVNode("strong", null, _toDisplayString(dossier.state.draft.name), 1)]))
+                              ]),
+                              _createElementVNode("div", { class: "family-flags" }, [
+                                _createElementVNode("label", null, [_withDirectives(_createElementVNode("input", {
+                                  type: "checkbox",
+                                  "onUpdate:modelValue": $event => ((dossier.state.draft.legal) = $event)
+                                }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, dossier.state.draft.legal]]), _createTextVNode("Responsável legal")]),
+                                _createElementVNode("label", null, [_withDirectives(_createElementVNode("input", {
+                                  type: "checkbox",
+                                  "onUpdate:modelValue": $event => ((dossier.state.draft.financial) = $event)
+                                }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, dossier.state.draft.financial]]), _createTextVNode("Responsável financeiro")]),
+                                _createElementVNode("label", null, [_withDirectives(_createElementVNode("input", {
+                                  type: "checkbox",
+                                  "onUpdate:modelValue": $event => ((dossier.state.draft.pickup) = $event)
+                                }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, dossier.state.draft.pickup]]), _createTextVNode("Autorizado a retirar")]),
+                                _createElementVNode("label", null, [_withDirectives(_createElementVNode("input", {
+                                  type: "checkbox",
+                                  "onUpdate:modelValue": $event => ((dossier.state.draft.primary_contact) = $event)
+                                }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, dossier.state.draft.primary_contact]]), _createTextVNode("Contato principal")])
+                              ]),
+                              _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                                type: "button",
+                                class: "btn btn-secondary",
+                                onClick: dossier.cancelEditor
+                              }, "Cancelar vínculo", 8, ["onClick"]), _createElementVNode("button", {
+                                type: "button",
+                                class: "btn btn-primary",
+                                onClick: dossier.stage
+                              }, "Adicionar à ficha", 8, ["onClick"])]),
+                              _createElementVNode("small", null, "Será gravado junto com o cadastro ao clicar em Salvar.")
+                            ]))
+                          : _createCommentVNode("", true),
+                        (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(dossier.state.rows, (row) => {
+                          return (_openBlock(), _createElementBlock("article", {
+                            key: row.id,
+                            class: _normalizeClass(["family-row", {inactive:!row.active}])
+                          }, [_createElementVNode("div", null, [
+                            _createElementVNode("strong", null, _toDisplayString(row.peer.name), 1),
+                            _createElementVNode("span", null, _toDisplayString(row.direction==='student'?'Aluno · ':'') + _toDisplayString(row.relationship) + " · " + _toDisplayString(row.active?'Ativo':'Inativo'), 1),
+                            _createElementVNode("small", null, _toDisplayString([row.legal?'Legal':'',row.financial?'Financeiro':'',row.pickup?'Retirada':'',row.primary_contact?'Contato principal':''].filter(Boolean).join(' · ') || 'Nenhuma responsabilidade adicional'), 1),
+                            (dossier.state.operations[row.id])
+                              ? (_openBlock(), _createElementBlock("small", { key: 0 }, "Alteração pendente"))
+                              : _createCommentVNode("", true)
+                          ]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                            class: "link-button",
+                            type: "button",
+                            onClick: $event => (dossier.edit(row))
+                          }, "Editar", 8, ["onClick"]), _createElementVNode("button", {
+                            class: "link-button",
+                            type: "button",
+                            onClick: $event => (dossier.toggle(row))
+                          }, _toDisplayString(row.local?'Remover':row.active?'Desativar':'Reativar'), 9, ["onClick"])])], 2))
+                        }), 128)),
+                        (!dossier.state.rows.length && !dossier.state.editor)
+                          ? (_openBlock(), _createElementBlock("p", {
+                              key: 3,
+                              class: "small muted"
+                            }, "Nenhum vínculo cadastrado."))
+                          : _createCommentVNode("", true),
+                        (dossier.state.page*50<dossier.state.total)
+                          ? (_openBlock(), _createElementBlock("button", {
+                              key: 4,
+                              class: "link-button",
+                              type: "button",
+                              disabled: dossier.state.loading,
+                              onClick: dossier.more
+                            }, "Carregar mais vínculos", 8, ["disabled", "onClick"]))
+                          : _createCommentVNode("", true)
+                      ], 512)), [[_vShow, visibleSection('links')]])
                     : _createCommentVNode("", true),
                   (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(modalSections().filter(s=>s.id!=='links'), (section) => {
                     return _withDirectives((_openBlock(), _createElementBlock("section", {
@@ -5706,7 +5775,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
         : _createCommentVNode("", true)
     ]), _createElementVNode("footer", { class: "portal-footer" }, _toDisplayString(identity.display_name) + " · Atendimento escolar", 1)])], 64))
   }
-},family:function render(_ctx, _cache) {
+},familyPortal:function render(_ctx, _cache) {
   with (_ctx) {
     const { createElementVNode: _createElementVNode, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, toDisplayString: _toDisplayString, createTextVNode: _createTextVNode, vModelText: _vModelText, withDirectives: _withDirectives, withModifiers: _withModifiers, renderList: _renderList, Fragment: _Fragment, withKeys: _withKeys, vModelSelect: _vModelSelect, resolveComponent: _resolveComponent, createBlock: _createBlock } = _Vue
 

@@ -12,7 +12,7 @@
   "page_errors": [],
   "external_email_sent": false,
   "data": "synthetic",
-  "api": "http://127.0.0.1:41081",
-  "portal": "http://127.0.0.1:53295",
-  "website": "http://127.0.0.1:34663"
+  "api": "http://127.0.0.1:34263",
+  "portal": "http://127.0.0.1:57055",
+  "website": "http://127.0.0.1:48491"
 }
