@@ -141,13 +141,16 @@ async def body_too_large(request, exc):
     return JSONResponse({'detail':'Requisição acima do limite permitido.'}, status_code=413)
 
 class BodyLimitMiddleware:
-    def __init__(self, app, maximum, legacy_maximum):
+    def __init__(self, app, maximum, legacy_maximum, restore_maximum=None):
         self.app, self.maximum, self.legacy_maximum = app, maximum, legacy_maximum
+        self.restore_maximum = maximum if restore_maximum is None else restore_maximum
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http':
             return await self.app(scope, receive, send)
         path = scope.get('path', '')
         maximum = self.legacy_maximum if '/legacy-import/' in path else self.maximum
+        if path == '/api/v1/backups/restore/upload':
+            maximum = self.restore_maximum
         headers = dict(scope.get('headers', []))
         try:
             length = int(headers.get(b'content-length', b'0'))
@@ -174,7 +177,8 @@ class BodyLimitMiddleware:
                 await JSONResponse({'detail':'Requisição acima do limite permitido.'}, status_code=413)(scope, receive, send)
 
 app.add_middleware(BodyLimitMiddleware, maximum=(cfg.max_upload_mb+1)*1024*1024,
-                   legacy_maximum=(cfg.legacy_import_max_mb*2+1)*1024*1024)
+                   legacy_maximum=(cfg.legacy_import_max_mb*2+1)*1024*1024,
+                   restore_maximum=(cfg.restore_max_upload_mb+1)*1024*1024)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=cfg.hosts)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.add_middleware(telemetry.RequestTelemetry)

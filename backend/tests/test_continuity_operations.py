@@ -296,3 +296,21 @@ def test_public_portal_requires_tls_and_secure_cookie_configuration():
         with pytest.raises(ValueError,match='HTTPS e COOKIE_SECURE'):
             Settings(**base,portal_public_url=public_url,cookie_secure=cookie)
     assert Settings(**base,portal_public_url='https://family.example.test',cookie_secure=True).cookie_secure
+
+
+def test_restore_transport_limit_is_distinct_and_streaming_is_bounded():
+    from app.main import BodyLimitMiddleware
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse
+    from starlette.testclient import TestClient
+    async def echo(scope, receive, send):
+        data = await Request(scope, receive).body()
+        await JSONResponse({'bytes': len(data)})(scope, receive, send)
+    client = TestClient(BodyLimitMiddleware(echo, maximum=8, legacy_maximum=16, restore_maximum=32))
+    path = '/api/v1/backups/restore/upload'
+    assert client.post(path, content=b'x' * 24).json() == {'bytes': 24}
+    assert client.post('/api/v1/files', content=b'x' * 24).status_code == 413
+    assert client.post(path, content=b'x' * 33).status_code == 413
+    assert client.post(path, content=iter([b'x' * 12, b'y' * 12])).json() == {'bytes': 24}
+    assert client.post(path, content=iter([b'x' * 20, b'y' * 20])).status_code == 413
+    assert client.post('/api/v1/backups/restore/other', content=b'x' * 24).status_code == 413

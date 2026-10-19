@@ -12,7 +12,7 @@
     "browser": "Chromium 140.0.7339.186"
   },
   "observed_validation": {
-    "backend_passed": 552,
+    "backend_passed": 553,
     "postgresql_only_skipped_locally": 3,
     "subtests_passed": 5,
     "ci_unit_tests": 186,
@@ -30,7 +30,16 @@
     "controlled_student_http_runs": 2,
     "legacy_portal_after_controlled_student_checks": 16,
     "surfaces_login_site_posts_schema_preflight": true,
-    "smoke_existing_installation_login_navigation_ui": true
+    "smoke_existing_installation_login_navigation_ui": true,
+    "restore_transport_regression_passed": true,
+    "previous_full_ci": {
+      "sha": "d7917c6e846fc53c2151fedab07669f6f009b215",
+      "run": 39289471459,
+      "checks": "4 success",
+      "real_restore_ui": true,
+      "postgresql_local_minio_verified": true,
+      "sessions_revoked": true
+    }
   },
   "remote_ci": "Check run associated with the final published SHA; no earlier SHA is proof for this composition.",
   "not_executed_locally": [
@@ -126,7 +135,7 @@
     "backend/app/lifecycle_models.py": "eed8b792a64162a68b6a57376d7890e2dbccb44494c429acc467d2e5341a9268",
     "backend/app/lookups.py": "a5d05f38f0476b6948c43b94c1fe4e9f17ecb2f45a206b5cf52cd7480b2d9396",
     "backend/app/mailcow.py": "f0d3c7243d188a28605813e36b1bcbc915c05fa235de22a1729d02642dcc61c1",
-    "backend/app/main.py": "bece47e0aa4b76d6e3fe719d947fa67cc786a64b4f1250752f8ff96cc100f990",
+    "backend/app/main.py": "f9d8bb475b0932a32d45eb88337f18877c8788234ef6bd8781374be19e85d99f",
     "backend/app/management_reports.py": "e6ef87d491e4284d0311d35434997cebdbc7f9563e888c0af0698b4ff22cd405",
     "backend/app/mfa.py": "786564787c2bc40013eff096b698d9e40f91aab616e2b809065517777560ee13",
     "backend/app/models.py": "71ae34dd99d4a8e8718518c46bd6ace4d6487be97de200d282a0eedde79f4e7b",
@@ -222,7 +231,7 @@
     "backend/tests/test_business_people.py": "a3ba59db7dc2456e0a5076fde8cad1a043f8e008ac491eff32380302f3e94adf",
     "backend/tests/test_campaign_defaults.py": "c319cd65dcc37865d79a95a36ee1d806e3941f4ed1a5f6761e30a81610aaa6a9",
     "backend/tests/test_connect_instance_selection.py": "08434354174bec6d468920e44a0f22ec6a665e9222112168d90e719e85bceabb",
-    "backend/tests/test_continuity_operations.py": "f026b9d1c3f4d4e650cda298c1335b393794179ce403a3942922d1a6fce2c2a1",
+    "backend/tests/test_continuity_operations.py": "d34ef8366728d649661af33c2097f322de204770e6ca048b9142c90de9134ee2",
     "backend/tests/test_contract_signatures.py": "7c7f7a35b0c3b58c297cb8b8f8ba727ad6815eb338e69a474f1bfa8c766166ab",
     "backend/tests/test_contract_templates.py": "73f8a315a7208d01100eb6c765583c503437dcd8373daae1d18e7e533d067848",
     "backend/tests/test_crm_bridge.py": "d4f1b3a498aae3d0e03cf05b39a848fab268cf8366c24c815d6326b882da004a",
@@ -331,7 +340,7 @@
     "docs/history/0.1.0/README.md": "c7b7003c80760aa820b8c6de18ab784fd5322368784a99b21946559ab41e19e4",
     "docs/history/0.1.0/RELATORIO-ENTREGA.md": "aef3275d404af21ddb29d3fb6184200e9ed12583e0d39abe3590ad717abd0a4b",
     "docs/implementation/2026-10-19-academic-completion.md": "9aaec22845b1c91e239363d879eb998e37aed0b636e624e39c77a700a4630682",
-    "docs/implementation/2026-10-19-pr57-continuity.md": "c36644de1dc20056557ff5ed358c12b5228ba6e86e6d507ad1a7f9e9e834ddf7",
+    "docs/implementation/2026-10-19-pr57-continuity.md": "b3be924d73a0934fe46853bb931bd3f21adbfa34303577e19e91bb4ec9c0396b",
     "docs/implementation/evidence/checkpoint-origin-37a6fd8.json": "4820c501d4cb6c25be5287a99fb896a270cbd802977f87abaabc5b63d820ad55",
     "docs/implementation/evidence/completion-http-results.json": "658d5df76ab8480b5d3c6499e31c8fc68dc5fab20642b067b3d19e1ceed1c037",
     "docs/implementation/evidence/continuity-http-results.json": "b5e5dd1e68b9c8c2450399afe6b7a0ec07a973c4b273bf121f7ebd7fad37776a",
