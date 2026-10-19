@@ -53,3 +53,6 @@ for adapter in adapters:
         assert 'APP_SECRET_KEY=' in env_text and 'POSTGRES_PASSWORD=' in env_text,env
         assert f'APP_PORT={"58081" if channel=="develop" else "58080"}' in env_text,env
 print('Workflows sem hospedagem externa; PWA, scripts e quatro adaptadores de implantação conferidos.')
+
+# O service worker privado é independente do bundle PWA do gestor.
+subprocess.run(['node','--check',str(root/'services/portal/sw.js')],check=True)
