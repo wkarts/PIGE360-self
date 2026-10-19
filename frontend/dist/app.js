@@ -394,6 +394,9 @@ var PigeOnline;
     PigeOnline.statuses = { held: 'Vaga reservada · aguardando pagamento', paid: 'Vaga reservada · pagamento recebido', expired: 'Reserva vencida', review: 'Reserva em análise', consumed: 'Reserva convertida em matrícula', released: 'Vaga liberada', draft: 'Rascunho', submitted: 'Enviada', under_review: 'Em análise', changes_requested: 'Correção solicitada', waitlisted: 'Lista de espera', approved: 'Aprovada / em preparação', enrolled: 'Matriculada', rejected: 'Indeferida', withdrawn: 'Desistência', queued: 'Na fila', pending: 'Aguardando', processing: 'Processando', completed: 'Concluído', confirmed: 'Confirmado / aguardando recebimento', received: 'Recebido', received_external: 'Baixa externa (não bancária)', overdue: 'Vencido', cancelled: 'Cancelado', refunded: 'Estornado', refund_requested: 'Estorno em análise', partially_refunded: 'Estorno parcial', disputed: 'Em disputa', awaiting_review: 'Conferência necessária', failed: 'Falhou', uncertain: 'Resultado incerto', retry: 'Nova tentativa programada', validated: 'Validado', sent: 'Enviada ao provedor', delivered: 'Entregue', read: 'Lida', active: 'Ativa' };
     function label(value) { return PigeOnline.statuses[value] || value; }
     PigeOnline.label = label;
+    function dateTime(value) { if (!value)
+        return '—'; const timestamp = /(?:Z|[+-]\d{2}:\d{2})$/.test(value) ? value : value + 'Z'; return new Date(timestamp).toLocaleString('pt-BR', { timeZone: 'America/Bahia', dateStyle: 'short', timeStyle: 'short' }); }
+    PigeOnline.dateTime = dateTime;
     function date(value) { return value ? new Date(value.length === 10 ? value + 'T12:00:00Z' : value).toLocaleDateString('pt-BR', { timeZone: 'America/Bahia' }) : '—'; }
     PigeOnline.date = date;
     function money(value) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value)); }
@@ -477,7 +480,7 @@ var PigeExpansion;
                     await PigeAPI.post(base() + '/document-templates/' + templateId + '/issue', { enrollment_id: admission.enrollment_id, template_version: version, values: s.contractValues });
                     await openAdmission(admission.id);
                     await queue();
-                    s.notice = 'Contrato emitido da revisão aprovada. A família pode baixar, assinar fora da aplicação e devolver o PDF. A instituição assina por último na efetivação.';
+                    s.notice = admission.contract.signing_order === 'applicant_first' ? 'Contrato emitido da revisão aprovada. A família pode baixar, assinar fora da aplicação e devolver o PDF. A instituição assina por último na efetivação.' : 'Contrato emitido e assinado pela escola conforme o fluxo histórico. A família pode baixar essa via para adicionar sua assinatura.';
                 });
             }
             async function downloadSignedContract() {
@@ -486,7 +489,7 @@ var PigeExpansion;
                     if (!documentId)
                         throw new Error('Contrato ainda não emitido.');
                     const details = await PigeAPI.request(base() + '/issued-documents/' + documentId + '/signatures');
-                    await PigeAPI.download(base() + '/files/' + details.file_id + '/download', 'contrato-assinado-pela-escola.pdf');
+                    await PigeAPI.download(base() + '/files/' + details.file_id + '/download', 'contrato-matricula.pdf');
                 });
             }
             async function queue() { const result = await PigeAPI.request(base() + `/admissions?page=${s.page}&q=${encodeURIComponent(s.q)}&status=${s.status}`); s.rows = result.items; s.total = result.total; const summary = await PigeAPI.request(base() + '/admissions-summary'); s.counts = summary.counts; }
@@ -757,7 +760,7 @@ var PigeExpansion;
             async function copy(value) { await run(async () => { await navigator.clipboard.writeText(value); s.notice = 'Copiado.'; }); }
             const connectionFor = (provider) => s.connections.find(c => c.provider === provider);
             Vue.onMounted(() => { void run(load); });
-            return { s, props, saveBridge, testBridge, queueBridge, retryBridge, loadBridge, campaignSlug, campaignGroupLabel, campaignGroups, admissionActions, bankCards, bankPeriod, reconcileBank, bankError, bankOperation, activateBankWebhook, identity: PigeInstitution.state, changeCollectionMode, chargeMethod, chargeStatus, receiptMethods, receiptDate, receiveManualCharge, receiptPdf, closeCharge, chargeTotal, can, str, run, load, search, paginate, paginateJobs, newCampaign, editCampaign, saveCampaign, campaignYearId, eligibleContractTemplates, templateName, selectedContractVersion, contractStatus, contractPreviewKeys, contractFieldLabel, contractValue, contractAutomatic, setContractValue, previewFrozenContract, previewFrozenPdf, issueFrozenContract, downloadSignedContract, view, action, match, approve, finalize, renewReservation, reviewDoc, message, whatsapp, download, newCharge, findEnrollments, createCharge, inspectCharge, chargeAction, configure, saveConnection, testConnection, retry, copy, connectionFor, jobs, connectLoad, connectJobs, connectInventory, connectAdopt, connectAdoptNamed, connectReleaseLegacy, connectPrefer, connectPreferUnit, connectRestart, connectCreate, connectSync, connectQr, connectPairingCode, connectSavePhone, connectLogout, connectDelete, connectTest, connectRetry, clearConnectQr, label: PigeOnline.label, date: PigeOnline.date, money: PigeOnline.money, publicURL: PigeOnline.publicURL, safeLink: PigeOnline.safeLink, origin: location.origin, statuses: PigeOnline.statuses };
+            return { s, props, saveBridge, testBridge, queueBridge, retryBridge, loadBridge, campaignSlug, campaignGroupLabel, campaignGroups, admissionActions, bankCards, bankPeriod, reconcileBank, bankError, bankOperation, activateBankWebhook, identity: PigeInstitution.state, changeCollectionMode, chargeMethod, chargeStatus, receiptMethods, receiptDate, receiveManualCharge, receiptPdf, closeCharge, chargeTotal, can, str, run, load, search, paginate, paginateJobs, newCampaign, editCampaign, saveCampaign, campaignYearId, eligibleContractTemplates, templateName, selectedContractVersion, contractStatus, contractPreviewKeys, contractFieldLabel, contractValue, contractAutomatic, setContractValue, previewFrozenContract, previewFrozenPdf, issueFrozenContract, downloadSignedContract, view, action, match, approve, finalize, renewReservation, reviewDoc, message, whatsapp, download, newCharge, findEnrollments, createCharge, inspectCharge, chargeAction, configure, saveConnection, testConnection, retry, copy, connectionFor, jobs, connectLoad, connectJobs, connectInventory, connectAdopt, connectAdoptNamed, connectReleaseLegacy, connectPrefer, connectPreferUnit, connectRestart, connectCreate, connectSync, connectQr, connectPairingCode, connectSavePhone, connectLogout, connectDelete, connectTest, connectRetry, clearConnectQr, label: PigeOnline.label, date: PigeOnline.date, dateTime: PigeOnline.dateTime, money: PigeOnline.money, publicURL: PigeOnline.publicURL, safeLink: PigeOnline.safeLink, origin: location.origin, statuses: PigeOnline.statuses };
         } };
 })(PigeExpansion || (PigeExpansion = {}));
 var PigeDialogs;

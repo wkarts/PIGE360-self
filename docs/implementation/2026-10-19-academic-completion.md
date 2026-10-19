@@ -7,7 +7,7 @@ Origem conferida em 19/10/2026: `develop` em `b04df7c215f3fd7ef13cd8c4290471f496
 | Frente | Existia | Incremento |
 |---|---|---|
 | Estrutura acadêmica | Unidades, períodos, séries, turnos, turmas e capacidade | Turma deixa de aceitar vínculos quando sua unidade, série ou turno está inativo/arquivado; vagas incluem reservas válidas |
-| Matrícula online | Conta, rascunho, retomada, documentos, análise e ativação | Prazo financeiro configurável por processo, reserva na aprovação, expiração independente do worker, recebimento tardio em análise, renovação explícita e verificação de capacidade |
+| Matrícula online | Conta, rascunho, retomada, documentos, análise e ativação | Prazo financeiro configurável por processo, reserva na aprovação, expiração independente do worker, data/hora no fuso da Bahia, recebimento tardio em análise, renovação explícita e verificação de capacidade |
 | Contrato | Modelos/revisões imutáveis, PDF, assinaturas e conferência | Novas aprovações usam família primeiro, A1 da instituição por último na efetivação; contratos anteriores mantêm a ordem histórica |
 | OCR | Worker local, português/inglês, PDF híbrido, sugestões revisáveis | Limite padrão passa a 16 MiB, OSD e recuperação de rotações, divergências de nomes não são escolhidas silenciosamente, cache de resultado atualizado |
 | Documentos | Armazenamento privado e SHA-256 | Anexos do portal passam a usar local/MinIO como os demais arquivos, inclusive download, OCR e incorporação ao aluno |
@@ -16,7 +16,7 @@ Origem conferida em 19/10/2026: `develop` em `b04df7c215f3fd7ef13cd8c4290471f496
 | Financeiro opcional | Outbox e protocolo autenticado | Configuração criptografada pela tela, teste HTTPS sem cobrança, consulta de eventos/recibos/mapeamentos e reenvio do mesmo evento |
 | Site | Notícias/eventos e conteúdo público | Serviço/imagem próprios, porta separada e três modelos configuráveis, reaproveitando publicações e marca |
 | Deployer | Instalação nova e atualização de imagens/ambiente | Prévia sanitizada, mesclagem opcional do Compose, backup e validação antes da troca, saúde e logs com redação de segredos |
-| Versões | Release estável 0.12.1; fontes ainda 0.10.0 | Metadados fonte reconciliados em 0.12.1; próxima versão continua calculada pelo fluxo normal |
+| Versões | Release estável 0.12.1; fontes ainda 0.10.0 | Metadados fonte reconciliados em 0.12.1; versão da API usa APP_VERSION explícito, manifesto compilado ou VERSION; próxima versão segue o fluxo normal |
 
 ## Operação pela interface
 
@@ -110,7 +110,7 @@ O downgrade remove os novos controles e seus históricos: não deve ser tratado 
 Validações locais observadas antes da revisão final:
 
 - Python 3.13.16, dependências fixadas do projeto; frontend compilado com Node 22.
-- Backend: 527 aprovados, dois casos de concorrência pulados por exigir PostgreSQL; cinco subtestes aprovados. Avisos de depreciação do TestClient permanecem.
+- Backend: 530 aprovados, dois casos de concorrência pulados por exigir PostgreSQL; cinco subtestes aprovados. Avisos de depreciação do TestClient permanecem.
 - Políticas de CI: 181 aprovadas; TypeScript strict, build pré-compilado e validador estrutural aprovados.
 - E2E das novas jornadas: seis verificações integradas, incluindo delegação pela navegação, configuração da ponte/site, três modelos responsivos e conclusão de contrato pela UI. [Resultado HTTP](evidence/completion-http-results.json).
 - E2E HTTP matrícula: 16 verificações, sem erros JavaScript, dados SQLite descartáveis, sem chamadas a provedores reais.
@@ -131,3 +131,6 @@ Decisões mantidas pendentes: prazo comercial de reserva, aceitação de assinat
 - [Habilitação da portabilidade e backup administrativo](screenshots/portabilidade-backup.png).
 
 O worker reconcilia backups interrompidos sem bloquear permanentemente novos pedidos. Sem progresso por 30 minutos, ele valida um pacote final já disponível ou marca a tentativa como interrompida; durante cópia prolongada de objetos, atualiza o heartbeat. A suite também exercita timeout do OCR, encerramento do grupo de processos, remoção dos temporários, nova tentativa bem-sucedida e limpeza da origem expirada.
+
+
+A revisão de interface também valida o horário exato de vencimento no fuso America/Bahia. Textos e nomes dos downloads distinguem a via emitida sem assinatura, a assinatura conferida do responsável e o contrato final. O teste de identidade visual passou com 12 verificações, incluindo rodapé de versão, sessão e 2FA em iframe autorizado. Uma bateria adicional de 29 testes de configuração, identidade, contratos e novos controles passou após a correção da origem da versão. O CI já aprovou 532 testes PostgreSQL na composição anterior à última correção de apresentação/versão; o estado do HEAD corrente deve ser consultado nos checks da PR.

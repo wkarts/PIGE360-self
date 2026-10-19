@@ -1,3 +1,5 @@
+import json
+import re
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -8,7 +10,27 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
     app_name: str = 'PIGE360 Self'
-    app_version: str = '0.10.0'
+    app_version: str = ''
+    @model_validator(mode='after')
+    def resolve_application_version(self):
+        # APP_VERSION explícito identifica a imagem imutável e sempre prevalece.
+        if self.app_version:return self
+        try:
+            manifest=json.loads((self.frontend_path/'build-info.json').read_text())
+            version=manifest.get('version','')
+            if (manifest.get('product')=='PIGE360 Self'
+                and manifest.get('pipeline')=='typescript-vue-precompiled'
+                and isinstance(version,str) and re.fullmatch(r'\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?',version)):
+                self.app_version=version;return self
+        except (OSError,ValueError,AttributeError):pass
+        try:
+            version=(Path(__file__).resolve().parents[2]/'VERSION').read_text().strip()
+            if re.fullmatch(r'\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?',version):
+                self.app_version=version;return self
+        except OSError:pass
+        self.app_version='unknown'
+        return self
+
     app_env: str = 'production'
     app_url: str = 'http://localhost:58080'
     app_secret_key: str

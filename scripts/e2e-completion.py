@@ -141,6 +141,9 @@ try:
         family.goto(URL+'/online.html?campaign='+campaign['slug']);family.get_by_label('E-mail',exact=True).fill('familia@example.com');family.get_by_label('Senha',exact=True).fill(PASSWORD);family.get_by_role('button',name='Entrar no portal',exact=True).click()
         family.locator('.x-record',has_text='Aluno de possibilidades').click()
         expect(family.get_by_role('heading',name='Reserva de vaga',exact=True)).to_be_visible()
+        reserve=family.locator('section.panel').filter(has=family.get_by_role('heading',name='Reserva de vaga',exact=True))
+        expect(reserve).to_contain_text(re.compile(r'\b\d{2}:\d{2}\b'))
+        expect(reserve).to_contain_text('horário da Bahia')
         expect(family.get_by_label('PDF assinado pelo responsável',exact=True)).to_be_visible()
         assert family.get_by_label('Seu certificado A1 (.pfx ou .p12)',exact=True).count()==0
         with family.expect_download() as event:family.get_by_role('button',name='Conferir contrato em PDF',exact=True).click()

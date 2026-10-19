@@ -163,3 +163,14 @@ def test_interrupted_backup_is_reconciled_without_blocking_future_requests(clien
     with SessionLocal() as db:
         row=db.get(BackupRun,key)
         assert row.status=='failed' and row.error_code=='BACKUP_INTERRUPTED'
+
+
+def test_version_uses_built_frontend_and_preserves_explicit_image_version(monkeypatch,tmp_path):
+    from app.config import Settings
+    monkeypatch.delenv('APP_VERSION',raising=False)
+    (tmp_path/'build-info.json').write_text(json.dumps({'product':'PIGE360 Self',
+        'pipeline':'typescript-vue-precompiled','version':'9.8.7-develop.123'}))
+    assert Settings(_env_file=None,frontend_path=tmp_path).app_version=='9.8.7-develop.123'
+    assert Settings(_env_file=None,frontend_path=tmp_path,app_version='1.2.3').app_version=='1.2.3'
+    (tmp_path/'build-info.json').write_text('{broken')
+    assert Settings(_env_file=None,frontend_path=tmp_path).app_version==(Path(__file__).resolve().parents[2]/'VERSION').read_text().strip()

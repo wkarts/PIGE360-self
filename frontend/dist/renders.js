@@ -5422,7 +5422,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                             _createElementVNode("h2", null, "Reserva de vaga"),
                             _createElementVNode("p", null, _toDisplayString(label(state.selected.reservation.status)), 1),
                             (state.selected.reservation.payment_deadline)
-                              ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Prazo para pagamento: " + _toDisplayString(date(state.selected.reservation.payment_deadline)), 1))
+                              ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Prazo para pagamento: " + _toDisplayString(dateTime(state.selected.reservation.payment_deadline)) + " · horário da Bahia", 1))
                               : _createCommentVNode("", true),
                             (state.selected.reservation.status==='paid')
                               ? (_openBlock(), _createElementBlock("p", { key: 1 }, "Pagamento recebido. A reserva permanece enquanto a escola confere a documentação."))
@@ -5445,7 +5445,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                                   ? (_openBlock(), _createElementBlock("p", {
                                       key: 0,
                                       role: "status"
-                                    }, "Assinaturas verificadas. A Secretaria pode concluir a matrícula após as demais conferências."))
+                                    }, _toDisplayString(state.selected.contract.signing_order==='applicant_first' && state.selected.status!=='enrolled'?'Assinatura do responsável conferida. A instituição assinará com A1 ao concluir a matrícula.':'Assinaturas verificadas. A matrícula segue a situação exibida acima.'), 1))
                                   : (state.selected.contract.signature_status==='pending_validation')
                                     ? (_openBlock(), _createElementBlock("p", {
                                         key: 1,
@@ -5456,13 +5456,15 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                                           key: 2,
                                           role: "alert"
                                         }, "O PDF enviado não foi validado. Baixe novamente o contrato disponível, assine e envie outro arquivo. Confira as orientações da Secretaria."))
-                                      : (_openBlock(), _createElementBlock("p", { key: 3 }, "Baixe o PDF assinado pela escola. Assine este mesmo arquivo no portal Gov.br, salve o PDF resultante e envie-o abaixo. Não imprima, digitalize nem converta em imagem.")), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                                      : (state.selected.contract.signing_order==='applicant_first')
+                                        ? (_openBlock(), _createElementBlock("p", { key: 3 }, "Baixe o contrato, assine este mesmo PDF fora da aplicação e envie o arquivo abaixo. A instituição assina por último ao concluir a matrícula. Não converta o PDF depois de assinar."))
+                                        : (_openBlock(), _createElementBlock("p", { key: 4 }, "Baixe o PDF assinado pela escola. Assine este mesmo arquivo no portal Gov.br, salve o PDF resultante e envie-o abaixo. Não imprima, digitalize nem converta em imagem.")), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
                                   class: "btn btn-secondary",
                                   onClick: $event => (download('/admissions/'+state.selected.id+'/issued/'+state.selected.contract.issued_document_id,'contrato-matricula.pdf'))
                                 }, "Conferir contrato em PDF", 8, ["onClick"])]), (['unsigned','company_signed','rejected'].includes(state.selected.contract.signature_status))
-                                  ? (_openBlock(), _createElementBlock("div", { key: 4 }, [
+                                  ? (_openBlock(), _createElementBlock("div", { key: 5 }, [
                                       (state.selected.contract.signing_order==='applicant_first')
-                                        ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Baixe o PDF, assine fora da aplicação e devolva abaixo. A instituição assina por último após a conferência. Nesta etapa aceitamos assinatura digital no PDF; imagem escaneada não equivale a assinatura criptográfica."))
+                                        ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Nesta etapa aceitamos assinatura digital no PDF; imagem escaneada não equivale a assinatura criptográfica. Você pode usar o assinador externo de sua escolha."))
                                         : _createCommentVNode("", true),
                                       (state.selected.contract.signing_order!=='applicant_first')
                                         ? (_openBlock(), _createElementBlock("h4", { key: 1 }, "Como deseja assinar?"))
@@ -6127,7 +6129,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                                     type: "button",
                                     class: "btn btn-secondary",
                                     onClick: downloadSignedContract
-                                  }, "Baixar PDF assinado atual", 8, ["onClick"]), (s.selected.contract.signature_status==='pending_validation')
+                                  }, "Baixar PDF atual", 8, ["onClick"]), (s.selected.contract.signature_status==='pending_validation')
                                     ? (_openBlock(), _createElementBlock("p", {
                                         key: 0,
                                         class: "small muted"
@@ -6202,7 +6204,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                               _createElementVNode("h2", null, "Reserva de vaga"),
                               _createElementVNode("p", null, "Situação: " + _toDisplayString(label(s.selected.reservation.status)), 1),
                               (s.selected.reservation.payment_deadline)
-                                ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Prazo para pagamento: " + _toDisplayString(date(s.selected.reservation.payment_deadline)), 1))
+                                ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Prazo para pagamento: " + _toDisplayString(dateTime(s.selected.reservation.payment_deadline)) + " · horário da Bahia", 1))
                                 : _createCommentVNode("", true),
                               (s.selected.reservation.status==='paid')
                                 ? (_openBlock(), _createElementBlock("p", { key: 1 }, "Pagamento recebido no prazo. Pendências documentais não expiram esta reserva."))
