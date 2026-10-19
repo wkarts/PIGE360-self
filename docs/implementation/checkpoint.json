@@ -28,7 +28,8 @@
     "additional_http_suites_passed": 15,
     "remote_previous_local_minio_restore": true,
     "controlled_student_http_runs": 2,
-    "legacy_portal_after_controlled_student_checks": 16
+    "legacy_portal_after_controlled_student_checks": 16,
+    "surfaces_login_site_posts_schema_preflight": true
   },
   "remote_ci": "Check run associated with the final published SHA; no earlier SHA is proof for this composition.",
   "not_executed_locally": [
@@ -553,7 +554,7 @@
     "scripts/ci/release_state.py": "873e45a4cb5a377cfbd9071a5a26b1c3eb5e14be20d8d72920bc30c054c3fda7",
     "scripts/ci/smoke.sh": "9857be2100ae4661711de382891a42765f7dcf5cc432f7d0d02895d1aa00fefa",
     "scripts/ci/stable_set.py": "56f21fe0c126fcda38e3886a3b8e148e7bb8ca6cb0ce3a8c295c11481bfbff19",
-    "scripts/ci/surfaces-smoke.py": "0ec5102479c2f7b4365437a532f9d2af907a51c8bebb2ee104498124306538d9",
+    "scripts/ci/surfaces-smoke.py": "ad2b0df096d3df85a10a83d387ce822e21710054548b14e0b362ba37b0c64377",
     "scripts/ci/validate.py": "c4672eff7ab92b1254d69154f9f7622bdd8a056097a056f5e38c3e36c5b3b1e8",
     "scripts/ci/version.py": "68a6f5f9df309a1eea77b815c59876cd49e619fdf07e560371a379746b07f678",
     "scripts/configure.py": "81588590437bb11d6888acf48b49550a56b575f4d731f0aab6550fbec93eafab",

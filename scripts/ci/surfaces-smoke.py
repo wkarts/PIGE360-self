@@ -22,8 +22,8 @@ headers={'Authorization':'Bearer '+login.json()['access_token']}
 school=client.get('/api/v1/schools',headers=headers).json()[0];base='/api/v1/schools/'+school['id']
 response=client.put(base+'/website',headers=headers,json={'enabled':True,'theme':'campus','headline':'Site integrado no Docker','introduction':'Somente conteúdo público sintético.','public_url':'https://school.example.test','portal_url':'https://portal.example.test'})
 assert response.is_success,response.text
-client.post(base+'/community-posts',headers=headers,json={'title':'Publicação Docker visível','content':'Conteúdo aprovado via API interna.','audience':'public','status':'published'}).raise_for_status()
-client.post(base+'/community-posts',headers=headers,json={'title':'Publicação privada nunca visível','content':'Privado.','audience':'guardians','status':'published'}).raise_for_status()
+response=client.post(base+'/community-posts',headers=headers,json={'title':'Publicação Docker visível','content':'Conteúdo aprovado via API interna.','audience':'public','status':'published'});assert response.is_success,response.text
+response=client.post(base+'/community-posts',headers=headers,json={'title':'Publicação privada nunca visível','content':'Conteúdo privado para os responsáveis autorizados.','audience':'guardians','status':'published'});assert response.is_success,response.text
 site=httpx.get('http://127.0.0.1:58082/',trust_env=False);assert site.is_success,site.text
 assert 'Site integrado no Docker' in site.text and 'Publicação Docker visível' in site.text and 'Publicação privada nunca visível' not in site.text
 assert httpx.get('http://127.0.0.1:58083/',trust_env=False).status_code==200
