@@ -62,6 +62,13 @@ def test_new_user_opt_in_queues_without_network_and_worker_provisions_once(clien
     user = new_user(client, admin, school, create_mailbox=True, mailbox_school_id=school['id'], mailbox_local_part='professor.teste')
     mailbox = user['mailbox']
     assert mailbox['status'] == 'pending'
+    from app.user_invitations import UserInvitation
+    with SessionLocal() as db:
+        invitation=db.scalar(select(UserInvitation).where(UserInvitation.user_id==user['id']))
+        message=unseal(db.get(m.IntegrationJob,invitation.job_id).encrypted_payload)
+        assert message['to']==user['email'] and message['to']!=mailbox['address']
+    access=next(row for row in client.get('/api/v1/schools/'+school['id']+'/users',headers=admin).json() if row['id']==user['id'])
+    assert access['mailbox']['status']=='pending' and access['invitation']['delivery_status']=='pending'
     assert calls == []
     with SessionLocal() as db:
         obj = db.get(mailcow.SchoolMailbox, mailbox['id'])

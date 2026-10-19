@@ -3360,11 +3360,12 @@ var PigeUsers;
             function requestDeleteProfile(profile) { s.deleteProfile = profile; s.profileEditing = false; s.actionReason = ''; s.confirmation = ''; s.error = ''; }
             async function removeProfile() { if (!s.deleteProfile)
                 return; await run(async () => { const p = s.deleteProfile; await PigeAPI.post(base() + '/access-profiles/' + p.id + '/delete', { action: 'delete', version: p.version, reason: s.actionReason, confirmation: s.confirmation }); s.deleteProfile = null; await refresh(); s.notice = 'Perfil excluído.'; }); }
+            const mailboxLabel = (value) => ({ active: 'Caixa ativa', disabled: 'Caixa desativada', pending: 'Criação enfileirada', retry: 'Aguardando retomada', processing: 'Criando caixa', completed: 'Provisionada', failed: 'Falha na criação', uncertain: 'Resultado do provisionamento desconhecido' }[value] || value);
             const invitationLabel = (value) => ({ pending: 'Aguardando primeiro acesso', used: 'Primeiro acesso concluído', revoked: 'Revogado', expired: 'Expirado' }[value] || value);
             const statusLabel = (u) => u.archived_at ? 'Arquivado' : !u.account_active ? 'Conta inativa' : !u.profile_active ? 'Perfil inativo' : u.active ? 'Ativo' : 'Inativo';
             Vue.onMounted(() => { void load(); });
             Vue.onBeforeUnmount(() => { epoch++; });
-            return { s, invitation, load, rows, roleOptions, matchingProfiles, individual, editUser, changeRole, searchPeople, saveUser, actionUser, applyAction, editProfile, duplicateRole, duplicateProfile, profileBase, permissionGroups, toggleGroup, saveProfile, requestDeleteProfile, removeProfile, statusLabel, invitationLabel };
+            return { s, invitation, load, rows, roleOptions, matchingProfiles, individual, editUser, changeRole, searchPeople, saveUser, actionUser, applyAction, editProfile, duplicateRole, duplicateProfile, profileBase, permissionGroups, toggleGroup, saveProfile, requestDeleteProfile, removeProfile, statusLabel, invitationLabel, mailboxLabel };
         } };
 })(PigeUsers || (PigeUsers = {}));
 var PigeUI;

@@ -1,6 +1,6 @@
 namespace PigeUsers {
   type Invitation={id:string;state:string;delivery_label:string;error_code:string;attempts:number;can_resend:boolean};
-  type Access={invitation:Invitation|null;id:string;name:string;email:string;role:string;role_label:string;person_id:string|null;active:boolean;access_active:boolean;account_active:boolean;archived_at:string|null;version:number;access_profile_id:string|null;access_profile_name:string;profile_active:boolean};
+  type Access={mailbox?:{address:string;status:string;job_status:string;error_message:string}|null;invitation:Invitation|null;id:string;name:string;email:string;role:string;role_label:string;person_id:string|null;active:boolean;access_active:boolean;account_active:boolean;archived_at:string|null;version:number;access_profile_id:string|null;access_profile_name:string;profile_active:boolean};
   type Profile={id:string;name:string;description:string;base_role:string;base_role_label:string;permissions:string[];active:boolean;version:number;users_count:number};
   type Catalog={roles:Record<string,{label:string;permissions:string[]}>;permissions:{id:string;group:string;label:string}[];can_manage_admin:boolean};
   type Form={id:string;version:number;name:string;email:string;password:string;role:string;person_id:string;active:boolean;access_profile_id:string;reason:string;create_mailbox:boolean;mailbox_local_part:string;mailbox_quota_mb:number|null};
@@ -33,9 +33,10 @@ namespace PigeUsers {
     async function saveProfile():Promise<void>{await run(async()=>{const {id,name,description,base_role,permissions,active,version,reason}=s.profile;const payload={name,description,base_role,permissions:[...permissions],active,version,reason};if(id)await PigeAPI.patch(base()+'/access-profiles/'+id,payload);else await PigeAPI.post(base()+'/access-profiles',payload);s.profileEditing=false;await refresh();s.notice='Perfil de acesso salvo.';context.emit('changed');});}
     function requestDeleteProfile(profile:Profile):void{s.deleteProfile=profile;s.profileEditing=false;s.actionReason='';s.confirmation='';s.error='';}
     async function removeProfile():Promise<void>{if(!s.deleteProfile)return;await run(async()=>{const p=s.deleteProfile!;await PigeAPI.post(base()+'/access-profiles/'+p.id+'/delete',{action:'delete',version:p.version,reason:s.actionReason,confirmation:s.confirmation});s.deleteProfile=null;await refresh();s.notice='Perfil excluído.';});}
+    const mailboxLabel=(value:string):string=>({active:'Caixa ativa',disabled:'Caixa desativada',pending:'Criação enfileirada',retry:'Aguardando retomada',processing:'Criando caixa',completed:'Provisionada',failed:'Falha na criação',uncertain:'Resultado do provisionamento desconhecido'} as Record<string,string>)[value]||value;
     const invitationLabel=(value:string):string=>({pending:'Aguardando primeiro acesso',used:'Primeiro acesso concluído',revoked:'Revogado',expired:'Expirado'} as Record<string,string>)[value]||value;
     const statusLabel=(u:Access)=>u.archived_at?'Arquivado':!u.account_active?'Conta inativa':!u.profile_active?'Perfil inativo':u.active?'Ativo':'Inativo';
     Vue.onMounted(()=>{void load();});Vue.onBeforeUnmount(()=>{epoch++;});
-    return{s,invitation,load,rows,roleOptions,matchingProfiles,individual,editUser,changeRole,searchPeople,saveUser,actionUser,applyAction,editProfile,duplicateRole,duplicateProfile,profileBase,permissionGroups,toggleGroup,saveProfile,requestDeleteProfile,removeProfile,statusLabel,invitationLabel};
+    return{s,invitation,load,rows,roleOptions,matchingProfiles,individual,editUser,changeRole,searchPeople,saveUser,actionUser,applyAction,editProfile,duplicateRole,duplicateProfile,profileBase,permissionGroups,toggleGroup,saveProfile,requestDeleteProfile,removeProfile,statusLabel,invitationLabel,mailboxLabel};
   }};
 }

@@ -8169,9 +8169,25 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                       ? (_openBlock(), _createElementBlock("small", { key: 0 }, " · " + _toDisplayString(u.role_label), 1))
                       : _createCommentVNode("", true)])]),
                     _createElementVNode("span", { class: _normalizeClass(["badge", u.active&&u.profile_active?'active':'archived']) }, _toDisplayString(statusLabel(u)), 3),
-                    (u.invitation)
+                    (u.mailbox)
                       ? (_openBlock(), _createElementBlock("div", {
                           key: 0,
+                          class: "mailbox-state"
+                        }, [
+                          _createElementVNode("strong", null, "E-mail institucional: " + _toDisplayString(mailboxLabel(u.mailbox.status)), 1),
+                          _createElementVNode("p", null, _toDisplayString(u.mailbox.address), 1),
+                          (u.mailbox.error_message)
+                            ? (_openBlock(), _createElementBlock("p", {
+                                key: 0,
+                                role: "alert"
+                              }, _toDisplayString(u.mailbox.error_message), 1))
+                            : _createCommentVNode("", true),
+                          _createElementVNode("small", null, "O estado da caixa é independente do convite enviado ao e-mail de acesso.")
+                        ]))
+                      : _createCommentVNode("", true),
+                    (u.invitation)
+                      ? (_openBlock(), _createElementBlock("div", {
+                          key: 1,
                           class: "invitation-state"
                         }, [
                           _createElementVNode("strong", null, "Convite: " + _toDisplayString(invitationLabel(u.invitation.state)), 1),

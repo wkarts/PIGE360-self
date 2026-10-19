@@ -97,7 +97,11 @@ def account_access(db, sid, user_id, lock=False):
 def scoped_output(db, obj, access):
     profile = db.get(SchoolAccessProfile, access.access_profile_id) if access.access_profile_id else None
     from .user_invitations import info
-    return {'invitation':info(db,obj.id,access.school_id),'id': obj.id, 'name': obj.name, 'email': obj.email, 'role': obj.role,
+    from .mailcow import SchoolMailbox,mailbox_output
+    box=db.scalar(select(SchoolMailbox).where(SchoolMailbox.user_id==obj.id,SchoolMailbox.school_id==access.school_id))
+    details=mailbox_output(db,box) if box else None
+    mailbox={key:details[key] for key in ('address','status','job_status','attempts','error_code','error_message')} if details else None
+    return {**({'mailbox':mailbox} if mailbox else {}),'invitation':info(db,obj.id,access.school_id),'id': obj.id, 'name': obj.name, 'email': obj.email, 'role': obj.role,
             'role_label': ROLE_LABELS.get(obj.role, obj.role), 'person_id': obj.person_id,
             'active': obj.active and access.active and not access.archived_at and (not profile or profile.active),
             'account_active': obj.active, 'access_active': access.active,
