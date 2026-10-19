@@ -17,6 +17,7 @@ stack=Path(stack).resolve()
 if not project.startswith('pige360-ci-') or not (stack/'.pige360-smoke-owned').is_file():raise SystemExit('Exige stack descartável pertencente ao CI.')
 url='http://'+address;password='Synthetic-Backup-2026!'
 client=httpx.Client(base_url=url,trust_env=False,timeout=30)
+setup=client.get('/api/v1/setup/status');assert setup.is_success and setup.json()['configured'],setup.text
 login=client.post('/api/v1/auth/login',json={'email':'backup@example.com','password':password});assert login.is_success,login.text
 headers={'Authorization':'Bearer '+login.json()['access_token']}
 school=client.get('/api/v1/schools',headers=headers).json()[0];base='/api/v1/schools/'+school['id']
@@ -48,9 +49,9 @@ try:
     deployer='http://127.0.0.1:'+str(port)
     with sync_playwright() as p:
         browser=p.chromium.launch(headless=True);page=browser.new_page(viewport={'width':1280,'height':1000})
-        page.goto(url);page.get_by_label('E-mail',exact=True).fill('backup@example.com');page.get_by_label('Senha',exact=True).fill(password);page.get_by_role('button',name='Entrar na aplicação').click()
+        page.goto(url);expect(page.get_by_role('heading',name='Acesse sua instituição',exact=True)).to_be_visible();page.get_by_label('E-mail',exact=True).fill('backup@example.com');page.get_by_label('Senha',exact=True).fill(password);page.get_by_role('button',name='Entrar na aplicação').click()
         expect(page.locator('.app-root')).to_have_attribute('aria-busy','false');page.get_by_label('Selecionar escola',exact=True).select_option(school['id']);expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
-        page.locator('aside a[href="#/legacy-import"]').click();workspace=page.locator('.import-workspace');expect(workspace).to_be_visible()
+        page.locator('aside').get_by_role('button',name='Administração do sistema',exact=True).click();page.locator('aside a[href="#/legacy-import"]').click();workspace=page.locator('.import-workspace');expect(workspace).to_be_visible()
         workspace.get_by_role('button',name='Preparar restauração',exact=True).first.click()
         expect(workspace.get_by_text('Confirmação no deployer:',exact=False)).to_be_visible()
         plans=client.get('/api/v1/backups/restore/plans',headers=headers).json();plan=plans[0]

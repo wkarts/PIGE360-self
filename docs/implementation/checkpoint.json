@@ -29,7 +29,8 @@
     "remote_previous_local_minio_restore": true,
     "controlled_student_http_runs": 2,
     "legacy_portal_after_controlled_student_checks": 16,
-    "surfaces_login_site_posts_schema_preflight": true
+    "surfaces_login_site_posts_schema_preflight": true,
+    "smoke_existing_installation_login_navigation_ui": true
   },
   "remote_ci": "Check run associated with the final published SHA; no earlier SHA is proof for this composition.",
   "not_executed_locally": [
@@ -543,7 +544,7 @@
     "scripts/backup.sh": "cb78153c76ad652c8eb685188b6b808bc6181c51b25b7bc087623e07c7869c22",
     "scripts/check.sh": "502f3a7430c0ea493b6a0af48226c8c0ab7390108acbfe2d6fbb7ed5a5984249",
     "scripts/ci/auto_promotion.py": "ffb361ec17dabb20aa92b905bb0917d93324b1e8ecd1c2951134430c8ff35bd1",
-    "scripts/ci/backup-smoke.py": "774ffb29c1b716b7d75926bbf656f98534b682152fdca3e136956a343335877c",
+    "scripts/ci/backup-smoke.py": "7a420487832125d6325284334de4e7bb50f06d94e21ea37554d1430ba9e51c23",
     "scripts/ci/base-policy.sh": "787cda6fd434d111baea1263736831e516055e216077bdbdd3dac0b5762c9905",
     "scripts/ci/base_images.py": "02ba2dd8c85e7fe1625e106c7667e0da4f8e8f787993d058894d0e96e9b8a490",
     "scripts/ci/build-deployer.sh": "6a2141cf6448a422c5f6ad756bc4481b72836727531291dd686f751e8bf6f135",
@@ -554,7 +555,7 @@
     "scripts/ci/release_state.py": "873e45a4cb5a377cfbd9071a5a26b1c3eb5e14be20d8d72920bc30c054c3fda7",
     "scripts/ci/smoke.sh": "9857be2100ae4661711de382891a42765f7dcf5cc432f7d0d02895d1aa00fefa",
     "scripts/ci/stable_set.py": "56f21fe0c126fcda38e3886a3b8e148e7bb8ca6cb0ce3a8c295c11481bfbff19",
-    "scripts/ci/surfaces-smoke.py": "ad2b0df096d3df85a10a83d387ce822e21710054548b14e0b362ba37b0c64377",
+    "scripts/ci/surfaces-smoke.py": "4c3aa07a0c27544e58f5a3e1ac6b6fa25eec0b80baebedce0bf57132096dfdde",
     "scripts/ci/validate.py": "c4672eff7ab92b1254d69154f9f7622bdd8a056097a056f5e38c3e36c5b3b1e8",
     "scripts/ci/version.py": "68a6f5f9df309a1eea77b815c59876cd49e619fdf07e560371a379746b07f678",
     "scripts/configure.py": "81588590437bb11d6888acf48b49550a56b575f4d731f0aab6550fbec93eafab",

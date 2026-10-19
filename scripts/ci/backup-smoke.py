@@ -19,7 +19,9 @@ cfg=settings()
 synthetic_login=Login(email='backup@example.com',password='Synthetic-Backup-2026!')
 with SessionLocal.begin() as db:
     installation=db.get(m.Installation,1)
-    if not installation:db.add(m.Installation(id=1,configured=True))
+    if not installation:
+        installation=m.Installation(id=1);db.add(installation)
+    installation.configured=True
     if db.query(m.Company).count():raise SystemExit('Smoke exige instalação sem dados anteriores.')
     company=m.Company(name='Mantenedora sintética de backup');db.add(company);db.flush()
     school=m.School(name='Escola sintética de backup',company_id=company.id);db.add(school)
