@@ -101,7 +101,8 @@ class Settings(BaseSettings):
             portal=urlsplit(self.portal_public_url)
             if portal.scheme not in {'https','http'} or not portal.hostname or portal.username or portal.password or portal.path not in ('','/') or portal.query or portal.fragment:
                 raise ValueError('PORTAL_PUBLIC_URL exige uma origem exata HTTP(S).')
-            if self.app_env=='production' and portal.hostname not in {'localhost','127.0.0.1'} and portal.scheme!='https':raise ValueError('Portal público exige HTTPS.')
+            if self.app_env=='production' and portal.hostname not in {'localhost','127.0.0.1'}:
+                if portal.scheme!='https' or not self.cookie_secure:raise ValueError('Portal público exige HTTPS e COOKIE_SECURE=true.')
         if not 1 <= self.invitation_hours <= 168:raise ValueError('INVITATION_HOURS deve estar entre 1 e 168.')
         if not 1 <= self.ocr_max_upload_mb <= 16 or not 1 <= self.ocr_retention_hours <= 168 or not 30 <= self.ocr_timeout_seconds <= 180:
             raise ValueError('Limites OCR inválidos: 1–16 MB, retenção 1–168 horas e timeout 30–180 segundos.')

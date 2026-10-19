@@ -287,3 +287,12 @@ def test_restore_preparation_validates_schema_integrity_permissions_and_no_http_
     auth=client.post('/api/v1/auth/login',json={'email':user['email'],'password':PASSWORD}).json()
     denied=client.get('/api/v1/backups/restore/plans',headers={'Authorization':'Bearer '+auth['access_token']})
     assert denied.status_code==403
+
+
+def test_public_portal_requires_tls_and_secure_cookie_configuration():
+    from app.config import Settings
+    base={'_env_file':None,'app_env':'production','app_url':'http://127.0.0.1:58080','database_url':'postgresql+psycopg://synthetic:synthetic@localhost/synthetic','allow_sqlite':False}
+    for public_url,cookie in [('http://family.example.test',True),('https://family.example.test',False)]:
+        with pytest.raises(ValueError,match='HTTPS e COOKIE_SECURE'):
+            Settings(**base,portal_public_url=public_url,cookie_secure=cookie)
+    assert Settings(**base,portal_public_url='https://family.example.test',cookie_secure=True).cookie_secure
