@@ -113,7 +113,7 @@ jobs:
         env:
           PIGE_TEST_DATABASE_URL: postgresql+psycopg://pige_test:disposable-test-password@127.0.0.1:5432/pige_test
           PYTHONPATH: .
-        run: python -m pytest -q --junitxml=../ci-evidence/postgresql-tests.xml
+        run: python -m pytest -q -vv -o faulthandler_timeout=90 --junitxml=../ci-evidence/postgresql-tests.xml
       - name: E2E HTTP no Chromium (sem bridge)
         run: |
           python -m playwright install --with-deps chromium

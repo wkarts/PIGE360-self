@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Annotated
 from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, update, text
 from . import models as m, online_schemas as s
 from .config import settings
 from .db import now, uid
@@ -38,6 +38,9 @@ def rate_limit(db,request,namespace,key,limit=12,seconds=900):
     peer=request.client.host if request.client else 'unknown'
     for suffix,ceiling in [(key,limit),('ip:'+peer,120)]:
         ident=digest('portal:'+namespace+':'+suffix)
+        if db.bind.dialect.name=='postgresql':
+            key=int.from_bytes(hashlib.sha256(ident.encode()).digest()[:8],'big',signed=True)
+            db.execute(text('SELECT pg_advisory_xact_lock(:key)'),{'key':key})
         row=db.scalar(select(m.LoginAttempt).where(m.LoginAttempt.key==ident).with_for_update())
         if not row:
             row=m.LoginAttempt(key=ident,count=0,window_started=now());db.add(row);db.flush()

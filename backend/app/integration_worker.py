@@ -189,6 +189,12 @@ def recover_expired(db):
 
     rows = db.scalars(select(m.IntegrationJob).where(m.IntegrationJob.status == 'processing', m.IntegrationJob.lease_until < now()).with_for_update(skip_locked=True))
     for row in rows:
+        if row.kind=='legacy_import':
+            from .import_operations import read_progress
+            heartbeat=read_progress(unseal(row.encrypted_payload)['operation_id']).get('heartbeat_at')
+            if heartbeat and utc(datetime.fromisoformat(heartbeat))+timedelta(minutes=5)>now():
+                row.lease_until=now()+timedelta(minutes=5)
+                continue
         row.status = 'failed' if row.kind=='legacy_import' and row.attempts>=5 else ('retry' if row.kind in SAFE_KINDS else 'uncertain')
         row.error_code = 'WORKER_LEASE_EXPIRED'
         row.available_at = now() + timedelta(seconds=30)

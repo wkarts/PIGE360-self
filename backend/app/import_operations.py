@@ -5,7 +5,7 @@ from fastapi import APIRouter, File, Form, Request, UploadFile
 from sqlalchemy import ForeignKey, JSON, String, UniqueConstraint, select
 from sqlalchemy.orm import Mapped, mapped_column
 from . import models as m
-from .db import Base, Record, SessionLocal, uid
+from .db import Base, Record, uid
 from .config import settings
 from .common import output, audit
 from .security import DB, Actor, Scope, fail, lock_school
@@ -34,9 +34,25 @@ def directory(ident):
     return settings().storage_path.parent/'import-operations'/ident
 
 
+def read_progress(ident):
+    path=directory(ident)/'progress.json'
+    try:return json.loads(path.read_text())
+    except (OSError,ValueError):return {}
+
+
+def write_progress(ident,value):
+    import os
+    from .db import now
+    path=directory(ident)/'progress.json';temporary=path.with_suffix('.part')
+    with temporary.open('w') as f:
+        json.dump({**value,'heartbeat_at':now().isoformat()},f);f.flush();os.fsync(f.fileno())
+    temporary.chmod(0o600);temporary.replace(path)
+
+
 def view(db,row):
     job=db.get(m.IntegrationJob,row.job_id)
-    return {**output(row,('options',)), 'status':job.status if job else 'failed',
+    snapshot=read_progress(row.id) if job and job.status!='completed' else {}
+    return {**output(row,('options',)),**snapshot, 'status':job.status if job else 'failed',
         'attempts':job.attempts if job else 0,'error_code':job.error_code if job else 'JOB_UNAVAILABLE',
         'available_at':job.available_at if job else None}
 
@@ -110,18 +126,13 @@ def execute(db,job,payload):
     previous=db.scalar(select(m.LegacyImportRun).where(m.LegacyImportRun.school_id==school.id,m.LegacyImportRun.fingerprint==row.fingerprint))
     if previous:
         row.stage='completed';row.result={'run_id':previous.id,'summary':previous.summary};return previous.id
-    def progress(stage,counts=None):
-        # PostgreSQL persiste a observação fora da transação dos dados importados.
-        # No SQLite de testes, evita uma segunda conexão concorrente de escrita.
-        if db.bind.dialect.name=='postgresql':
-            with SessionLocal.begin() as observer:
-                current=observer.get(ImportOperation,row.id);current.stage=stage
-                from datetime import timedelta
-                from .db import now
-                observer.get(m.IntegrationJob,job.id).lease_until=now()+timedelta(minutes=5)
-                if counts:current.progress={**current.progress,**dict(counts)}
-        else:row.stage=stage
     root=directory(row.id);options=row.options
+    observed={'stage':'validating','progress':dict(row.progress)}
+    def progress(stage,counts=None):
+        observed['stage']=stage
+        if counts:
+            observed['progress']={**observed['progress'],**dict(counts),'archived_records':counts.get('source_records_archived',0)}
+        write_progress(row.id,observed)
     intents=root/'storage-intents.json'
     from .storage import delete_key
     recorded=json.loads(intents.read_text()) if intents.is_file() else []
@@ -129,12 +140,16 @@ def execute(db,job,payload):
         if not key.startswith(school.id+'/'):raise IntegrationFailure('IMPORT_STORAGE_SCOPE_MISMATCH')
         if not db.scalar(select(m.FileRecord.id).where(m.FileRecord.storage_key==key,m.FileRecord.storage_backend==backend)):
             delete_key(backend,key,bucket)
+            if backend=='local':
+                from .storage import _local_path
+                _local_path(key).with_suffix('.part').unlink(missing_ok=True)
     recorded=[]
     def storage_intent(backend,bucket,key):
         import os
         recorded.append((backend,bucket,key));temporary=intents.with_suffix('.part')
         with temporary.open('w') as f:json.dump(recorded,f);f.flush();os.fsync(f.fileno())
         temporary.chmod(0o600);temporary.replace(intents)
+        write_progress(row.id,observed)
     db.info['storage_intent']=storage_intent
     db.info['import_progress']=progress
     from contextlib import ExitStack
