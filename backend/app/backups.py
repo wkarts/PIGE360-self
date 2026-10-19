@@ -72,7 +72,7 @@ def pg_environment():
         'PGDATABASE':url.database or '', 'PGUSER':url.username or '', 'PGPASSWORD':url.password or ''}
 
 
-def add_objects(archive,db,progress=lambda:None):
+def add_objects(archive,db,progress=lambda:None,*,damage=None):
     from .assisted_models import OcrJob
     manifest=[];seen=set()
     for model in (m.FileRecord,m.AdmissionAttachment,OcrJob):
@@ -85,17 +85,30 @@ def add_objects(archive,db,progress=lambda:None):
             seen.add(key)
             # OCR expirado é temporário; não impede backup do acervo permanente.
             if model is OcrJob and utc(record.expires_at)<=now():continue
-            data=read_bytes(record)
-            if len(data)!=record.size or hashlib.sha256(data).hexdigest()!=record.sha256:
-                raise ValueError('BACKUP_OBJECT_INTEGRITY')
+            expected={'backend':backend,'bucket':bucket,'key':record.storage_key,
+                'expected_sha256':record.sha256,'expected_size':record.size}
+            try:data=read_bytes(record)
+            except Exception as error:
+                # Only proven absence is recoverable. Permission/network failures
+                # still abort protection before any restoration writes.
+                from botocore.exceptions import ClientError
+                missing=isinstance(error,FileNotFoundError) or (isinstance(error,ClientError) and
+                    error.response.get('Error',{}).get('Code') in {'NoSuchKey','NoSuchObject'})
+                if damage is None or not missing:raise
+                damage.append({**expected,'state':'missing'})
+                continue
+            actual=hashlib.sha256(data).hexdigest()
+            if len(data)!=record.size or actual!=record.sha256:
+                if damage is None:raise ValueError('BACKUP_OBJECT_INTEGRITY')
+                damage.append({**expected,'state':'corrupt','actual_sha256':actual,'actual_size':len(data)})
             path=f'objects/{len(manifest):08d}'
             archive.writestr(path,data)
             manifest.append({'path':path,'backend':backend,'bucket':bucket,'key':record.storage_key,
-                'sha256':record.sha256,'size':len(data),'mime_type':getattr(record,'mime_type','application/octet-stream')})
+                'sha256':actual,'size':len(data),'mime_type':getattr(record,'mime_type','application/octet-stream')})
     return manifest
 
 
-def create_bundle(ident):
+def create_bundle(ident,*,protect_current=False):
     if engine.dialect.name!='postgresql':raise ValueError('BACKUP_REQUIRES_POSTGRESQL')
     destination=bundle_path(ident)
     temporary=destination.with_suffix('.part')
@@ -123,7 +136,8 @@ def create_bundle(ident):
                         stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
                     with zipfile.ZipFile(temporary,'x',compression=zipfile.ZIP_DEFLATED,compresslevel=4) as archive:
                         archive.write(dump,'database.dump')
-                        with SessionLocal(bind=connection) as db:objects=add_objects(archive,db,progress)
+                        damage=[] if protect_current else None
+                        with SessionLocal(bind=connection) as db:objects=add_objects(archive,db,progress,damage=damage)
                         roots=[];trust=settings().signature_trust_roots_dir
                         if trust and trust.is_dir():
                             for path in sorted(trust.iterdir()):
@@ -132,6 +146,7 @@ def create_bundle(ident):
                                     archive.writestr(name,data);roots.append({'path':name,'sha256':hashlib.sha256(data).hexdigest(),'size':len(data)})
                         with dump.open('rb') as handle:digest=hashlib.file_digest(handle,'sha256').hexdigest()
                         archive.writestr('manifest.json',json.dumps({'format':'pige360-backup-v2','created_at':now().isoformat(),
+                            'protection':{'purpose':'pre_restore','damage':damage} if protect_current else None,
                             'backup_id':ident,'schema_revision':connection.scalar(text('SELECT version_num FROM alembic_version')),'app_version':settings().app_version,'database_sha256':digest,'objects':objects,'trust_roots':roots},ensure_ascii=False))
         temporary.chmod(0o600);temporary.replace(destination)
         with destination.open('rb') as handle:digest=hashlib.file_digest(handle,'sha256').hexdigest()
@@ -141,7 +156,7 @@ def create_bundle(ident):
         raise
 
 
-def verify_bundle(path):
+def verify_bundle(path,*,allow_degraded=False):
     """Valida conteúdo e nomes sem extrair caminhos fornecidos pelo pacote."""
     with zipfile.ZipFile(path) as archive:
         if sum(x.file_size for x in archive.infolist())>100*1024**3:raise ValueError('BACKUP_TOO_LARGE')
@@ -150,6 +165,9 @@ def verify_bundle(path):
         if archive.getinfo('manifest.json').file_size>64*1024*1024:raise ValueError('BACKUP_MANIFEST_TOO_LARGE')
         manifest=json.loads(archive.read('manifest.json'))
         if manifest.get('format')!='pige360-backup-v2':raise ValueError('BACKUP_INVALID_FORMAT')
+        protection=manifest.get('protection')
+        if protection and protection.get('damage') and not allow_degraded:
+            raise ValueError('BACKUP_DEGRADED_PROTECTION_NOT_RESTORABLE')
         wanted={'manifest.json','database.dump'};keys=set()
         for item in [*manifest['objects'],*manifest['trust_roots']]:
             name=item['path']

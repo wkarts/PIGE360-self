@@ -95,11 +95,43 @@ try:
             page.reload()
             expect(page.get_by_role('heading',name='Operações em andamento e recuperação')).to_be_visible()
             expect(page.get_by_text('Na fila · Na fila',exact=True)).to_be_visible()
+            # Interrupt a real worker after people processing, expose persisted
+            # progress, then resume through the UI without repeating the upload.
+            interrupted="""from app import import_operations,legacy_import
+from app.integration_worker import process_one
+import time
+original=import_operations.write_progress
+def progress(ident,value):
+    original(ident,value)
+    if value['stage']=='people':time.sleep(8)
+def stop(*args,**kwargs):raise RuntimeError('synthetic interrupted transaction')
+import_operations.write_progress=progress
+legacy_import._import_academic=stop
+process_one()
+"""
+            worker=subprocess.Popen([sys.executable,'-c',interrupted],cwd=ROOT/'backend',env=env,stdout=log,stderr=log)
+            try:
+                for _ in range(80):
+                    current=client.get(base+'/legacy-import/operations',headers=headers).json()[0]
+                    if current['stage']=='people' and current['status']=='processing':break
+                    time.sleep(.1)
+                else:raise AssertionError('Persisted in-flight progress was not observable')
+                assert current['progress']['selected_records']==1
+                page.reload();expect(page.get_by_role('heading',name='Operações em andamento e recuperação')).to_be_visible()
+                worker.wait(timeout=30);assert worker.returncode==0
+            finally:
+                if worker.poll() is None:worker.kill();worker.wait()
+            age="from app.db import SessionLocal,now;from app.import_operations import ImportOperation;from app import models as m;from datetime import timedelta;db=SessionLocal();op=db.get(ImportOperation,"+repr(operation_id)+");job=db.get(m.IntegrationJob,op.job_id);assert job.status=='failed';job.updated_at=now()-timedelta(minutes=1);db.commit()"
+            subprocess.run([sys.executable,'-c',age],cwd=ROOT/'backend',env=env,check=True)
+            page.reload();expect(page.get_by_role('button',name='Retomar operação',exact=True)).to_be_visible()
+            assert client.get(base+'/students',headers=headers).json()['total']==0
+            page.get_by_role('button',name='Retomar operação',exact=True).click()
+            expect(page.get_by_role('button',name='Retomar operação',exact=True)).to_have_count(0)
             subprocess.run([sys.executable,'-m','app.integration_worker','--once','--limit','10'],cwd=ROOT/'backend',env=env,check=True,stdout=log,stderr=log,timeout=40)
             expect(page.get_by_text('Importação concluída em Escola Horizonte.',exact=False)).to_be_visible(timeout=15000)
             operation=client.get(base+'/legacy-import/operations',headers=headers).json()[0]
             assert operation['id']==operation_id and operation['status']=='completed'
-            assert operation['attempts']==1 and operation['progress']['archived_records']==1
+            assert operation['attempts']==2 and operation['progress']['archived_records']==1
             assert len(client.get('/api/v1/schools',headers=headers).json())==len(schools)
             assert len(client.get(base+'/units',headers=headers).json())==len(units)
             students=client.get(base+'/students',headers=headers).json()

@@ -2,7 +2,7 @@
 import secrets
 from datetime import timedelta
 from urllib.parse import urlsplit
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import Field
 from sqlalchemy import DateTime, ForeignKey, String, select, update
 from sqlalchemy.orm import Mapped, mapped_column
@@ -11,7 +11,7 @@ from .common import audit
 from .config import settings
 from .db import Base, Record, now
 from .schemas import Input
-from .security import DB, Actor, Scope, digest, fail, hash_password, lock_school, utc
+from .security import DB, Actor, Scope, digest, fail, hash_password, lock_school, request_csrf, utc
 from .integration_core import enqueue, IntegrationFailure
 
 router=APIRouter(prefix='/api/v1',tags=['Convites de primeiro acesso'])
@@ -80,15 +80,38 @@ def issue(db,user,school):
         fail(409,'Configure a URL pública segura do gestor antes de enviar convites.')
     # Fragmento não participa do request HTTP nem do Referer. A página o remove.
     link=origin+'/first-access.html#'+token
-    job=enqueue(db,school.id,'smtp_email',{'to':user.email,'subject':school.name+' · Primeiro acesso',
-        'text':f'Olá, {user.name}.\n\nVocê recebeu acesso a {school.name}.\nDefina sua senha: {link}\n\nO link expira em {settings().invitation_hours} horas e só pode ser utilizado uma vez. Se não reconhece este convite, procure a escola.',
+    from .institution import public_identity
+    institution_name=public_identity(db)['display_name']
+    job=enqueue(db,school.id,'smtp_email',{'to':user.email,'subject':institution_name+' · Primeiro acesso',
+        'text':f'Olá, {user.name}.\n\nConvite de {institution_name}. Você recebeu acesso a {school.name}.\nDefina sua senha: {link}\n\nO link expira em {settings().invitation_hours} horas e só pode ser utilizado uma vez. Se não reconhece este convite, procure a escola.',
         'invitation_id':row.id,'expires_at':row.expires_at.isoformat()},'user-invitation:'+row.id)
     row.job_id=job.id
     return row
 
 
-class TokenInput(Input):token:str=Field(min_length=32,max_length=128)
+class TokenInput(Input):
+    token:str|None=Field(default=None,min_length=32,max_length=128)
+    invitation_id:str|None=Field(default=None,pattern=r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
 class AcceptInput(TokenInput):password:str=Field(min_length=12,max_length=128)
+
+
+INVITATION_COOKIE='pige_invitation'
+INVITATION_COOKIE_PATH='/api/v1/invitations'
+
+
+def request_token(data,request):
+    if data.token:return data.token
+    # Cookie é restrito à mesma origem. O contrato anterior com token no corpo permanece.
+    request_csrf(request)
+    if not data.invitation_id:fail(400,'Convite indisponível. Reabra o link enviado pela escola.')
+    token=request.cookies.get(INVITATION_COOKIE+'_'+data.invitation_id,'')
+    if not 32<=len(token)<=128:fail(400,'Convite indisponível. Reabra o link enviado pela escola.')
+    return token
+
+
+def invitation_cookie(response,invitation_id,token='',max_age=0):
+    response.set_cookie(INVITATION_COOKIE+'_'+invitation_id,token,path=INVITATION_COOKIE_PATH,max_age=max_age,
+        secure=settings().cookie_secure or settings().app_env=='production',httponly=True,samesite='strict')
 
 
 def resolve(db,token):
@@ -97,19 +120,34 @@ def resolve(db,token):
     return row
 
 
+def resolve_session(db,token,data):
+    try:return resolve(db,token)
+    except HTTPException as error:
+        if error.status_code==400 and not data.token and data.invitation_id:
+            # Revogação/consumo em outra aba também encerra o cookie no próximo acesso.
+            cleanup=Response();invitation_cookie(cleanup,data.invitation_id)
+            error.headers={**(error.headers or {}),'Set-Cookie':cleanup.headers['set-cookie']}
+        raise
+
+
 @router.post('/invitations/inspect')
-def inspect(data:TokenInput,db:DB,request:Request):
+def inspect(data:TokenInput,db:DB,request:Request,response:Response):
     from .portal import rate_limit
-    rate_limit(db,request,'invitation-inspect',digest(data.token),20)
-    row=resolve(db,data.token);school=db.get(m.School,row.school_id)
-    return {'school_name':school.name,'expires_at':row.expires_at,'min_password_length':12}
+    token=request_token(data,request)
+    rate_limit(db,request,'invitation-inspect',digest(token),20)
+    row=resolve_session(db,token,data);school=db.get(m.School,row.school_id)
+    if data.invitation_id and data.invitation_id!=row.id:fail(400,'Convite indisponível. Reabra o link enviado pela escola.')
+    invitation_cookie(response,row.id,token,max_age=max(1,int((utc(row.expires_at)-now()).total_seconds())))
+    return {'invitation_id':row.id,'school_name':school.name,'expires_at':row.expires_at,'min_password_length':12}
 
 
 @router.post('/invitations/accept')
-def accept(data:AcceptInput,db:DB,request:Request):
+def accept(data:AcceptInput,db:DB,request:Request,response:Response):
     from .portal import rate_limit
-    rate_limit(db,request,'invitation-accept',digest(data.token),10)
-    row=resolve(db,data.token)
+    token=request_token(data,request)
+    rate_limit(db,request,'invitation-accept',digest(token),10)
+    row=resolve_session(db,token,data)
+    if data.invitation_id and data.invitation_id!=row.id:fail(400,'Convite indisponível. Reabra o link enviado pela escola.')
     lock_school(db,row.school_id)
     user=db.scalar(select(m.User).where(m.User.id==row.user_id).with_for_update())
     # Revalida depois dos locks e consome por compare-and-set também no SQLite.
@@ -124,6 +162,7 @@ def accept(data:AcceptInput,db:DB,request:Request):
     job=db.get(m.IntegrationJob,row.job_id)
     if job:job.encrypted_payload=''
     audit(db,request,user,'users.invitation_used',row,row.school_id)
+    invitation_cookie(response,row.id)
     return {'message':'Senha definida. Entre com seu e-mail e sua nova senha.','login_path':'/'}
 
 

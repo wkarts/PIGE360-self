@@ -11,7 +11,8 @@ namespace PigeInstitution {
   export const state = Vue.reactive<Identity>({display_name:'Sua escola',short_name:'Escola',primary_color:'#006D77',secondary_color:'#0D1B2A',font_family:'system',logo_url:'',font_configured:false,show_preenrollment_button:true,version:1,...(initial||{})});
   export function apply(value:Identity):void {
     Object.assign(state,value);
-    document.title=value.display_name+' · '+(location.pathname==='/online.html'?'Portal dos responsáveis':'Gestão escolar');
+    const surface=document.documentElement?.dataset?.institutionSurface;
+    document.title=value.display_name+' · '+(location.pathname==='/online.html'?'Portal dos responsáveis':surface==='portal'?'Portal do aluno e responsável':'Gestão escolar');
     document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute('content',value.primary_color);
     const theme=document.querySelector<HTMLLinkElement>('link[data-institution-theme]');
     if(theme && !theme.href.endsWith('/api/v1/institution/theme.css?v='+value.version))theme.href='/api/v1/institution/theme.css?v='+value.version;

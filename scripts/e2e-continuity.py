@@ -3,6 +3,7 @@
 import datetime
 from email import policy
 from email.parser import BytesParser
+import io
 import ipaddress
 import json
 import os
@@ -19,6 +20,7 @@ import tempfile
 import threading
 import time
 import httpx
+from PIL import Image
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes,serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -66,6 +68,8 @@ env={**os.environ,'PYTHONPATH':str(ROOT/'backend'),'DATABASE_URL':'sqlite:///'+s
     'APP_SECRET_KEY':'synthetic-continuity-secret-000000000000000000000','SETUP_TOKEN':'synthetic-continuity-setup-00000000000000000',
     'INTEGRATION_ENCRYPTION_KEY':'MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=',
     'SMTP_HOST':'127.0.0.1','SMTP_PORT':str(smtp.server_address[1]),'SMTP_SECURITY':'ssl','SMTP_FROM':'school@example.test',
+    'PORTAL_INTERNAL_TOKEN':'synthetic-portal-service-key-00000000000000000',
+    'PORTAL_TRUSTED_PROXY_IPS':'127.0.0.1/32',
     'SSL_CERT_FILE':str(TEMP/'smtp.crt'),'WEBSITE_INTERNAL_TOKEN':'synthetic-website-service-key-00000000000000000'}
 log=(OUT/'services.log').open('w')
 def spawn(command,extra=None):
@@ -89,6 +93,20 @@ try:
     headers={'Authorization':'Bearer '+auth['access_token']};school=client.get('/api/v1/schools',headers=headers).json()[0];base='/api/v1/schools/'+school['id']
     def call(method,path,data=None):
         r=client.request(method,base+path,headers=headers,json=data);assert r.is_success,(path,r.text);return r.json()
+    identity=client.get('/api/v1/institution/identity').json()
+    brand='Colégio Horizonte Vivo';primary='#A12255'
+    payload={key:identity[key] for key in ('version','display_name','short_name','primary_color','secondary_color','font_family')}
+    payload.update(display_name=brand,short_name='Horizonte',primary_color=primary,secondary_color='#223344',font_family='georgia')
+    logo=io.BytesIO();Image.new('RGBA',(80,40),(161,34,85,255)).save(logo,'PNG')
+    result=client.put('/api/v1/institution/identity',headers=headers,data={'payload':json.dumps(payload)},files={'logo':('logo.png',logo.getvalue(),'image/png')});assert result.status_code==200,result.text
+    identity=result.json()
+    subprocess.run([sys.executable,'-c',"from app.db import SessionLocal,now;from app.models import LoginAttempt;from app.security import digest\nwith SessionLocal.begin() as db:db.add(LoginAttempt(key=digest('ip:198.51.100.73'),count=80,window_started=now()))"],cwd=ROOT/'backend',env=env,check=True,stdout=log,stderr=log)
+    bad_login={'email':'synthetic-rate@example.com','password':PASSWORD}
+    rate_headers={'Origin':PORTAL,'X-CSRF-Protection':'1','X-Forwarded-For':'198.51.100.73'}
+    assert httpx.post(PORTAL+'/api/v1/auth/login',json=bad_login,headers=rate_headers,trust_env=False).status_code==429
+    rate_headers.update({'X-Forwarded-For':'198.51.100.74','X-Pige-Portal-IP':'198.51.100.73','X-Pige-Portal-Signature':'f'*64})
+    assert httpx.post(PORTAL+'/api/v1/auth/login',json=bad_login,headers=rate_headers,trust_env=False).status_code==401
+    record('Proxy assina IP do salto confiável: bloqueio de um cliente não atinge outro e headers internos forjados são descartados')
     students=[call('POST','/students',{'person':{'name':name,'birth_date':'2016-05-15'}}) for name in ['Aluno Horizonte','Aluna Aurora']]
     guardian=call('POST','/persons',{'name':'Responsável dos encontros','is_guardian':True,'phone':'5575999990000'})
     links=[call('POST','/students/'+student['id']+'/guardians',{'person_id':guardian['id'],'legal':True,'financial':True}) for student in students]
@@ -110,13 +128,32 @@ try:
         record('Cadastro pela UI cria usuário, vínculo, convite e outbox sem senha inicial')
         subprocess.run([sys.executable,'-m','app.integration_worker','--once','--limit','10'],cwd=ROOT/'backend',env=env,check=True,stdout=log,stderr=log,timeout=40)
         message=BytesParser(policy=policy.default).parsebytes(messages.get(timeout=10));assert message['To']=='family-access@example.com'
+        assert str(message['Subject'])==brand+' · Primeiro acesso'
         text=message.get_body(preferencelist=('plain',)).get_content();link=re.search(r'http://[^\s]+/first-access.html#[A-Za-z0-9_-]+',text).group(0);assert link.startswith(PORTAL+'/')
         assert 'Senha temporária' not in text and PASSWORD not in text
         record('SMTP TLS capturador aceita convite em User.email e preserva o domínio público configurado')
         family=browser.new_page(viewport={'width':1365,'height':1000});family.on('pageerror',lambda e:errors.append(str(e)))
         family.goto(link);expect(family.locator('#invite-form')).to_be_visible();assert '#' not in family.url
+        expect(family.locator('#institution-name')).to_have_text(brand)
+        expect(family).to_have_title(brand+' · Primeiro acesso')
+        family.wait_for_function('document.querySelector("#institution-logo").naturalWidth>0')
+        cookies=[cookie for cookie in family.context.cookies(PORTAL+'/api/v1/invitations/inspect') if cookie['name'].startswith('pige_invitation_')]
+        assert len(cookies)==1 and cookies[0]['httpOnly'] and cookies[0]['sameSite']=='Strict' and cookies[0]['path']=='/api/v1/invitations'
+        assert family.evaluate('localStorage.length===0&&sessionStorage.length===0')
+        family.reload();expect(family.locator('#invite-form')).to_be_visible();assert '#' not in family.url
+        expect(family.locator('#institution-name')).to_have_text(brand)
+        record('Primeiro acesso mantém identidade e convite após refresh sem token em URL ou armazenamento JavaScript')
         family.get_by_label('Nova senha',exact=True).fill(PASSWORD);family.get_by_label('Confirme a senha',exact=True).fill(PASSWORD);family.get_by_role('button',name='Definir senha',exact=True).click();expect(family.get_by_text('Senha definida.',exact=False)).to_be_visible()
         family.get_by_role('link',name='Ir para o login',exact=True).click();family.get_by_label('E-mail de acesso').fill('family-access@example.com');family.get_by_label('Senha',exact=True).fill(PASSWORD);family.get_by_role('button',name='Entrar',exact=True).click();expect(family.get_by_role('heading',name='Olá, Responsável dos encontros.')).to_be_visible()
+        expect(family.locator('.family-brand')).to_contain_text(brand)
+        expect(family).to_have_title(brand+' · Portal do aluno e responsável')
+        family.wait_for_function('document.querySelector(".family-brand img").naturalWidth>0')
+        assert family.locator('.family-nav [aria-current=page]').evaluate('(el)=>getComputedStyle(el).backgroundColor')=='rgb(161, 34, 85)'
+        assert 'Georgia' in family.locator('h1').evaluate('(el)=>getComputedStyle(el).fontFamily')
+        assert httpx.get(PORTAL+identity['logo_url'],trust_env=False).status_code==200
+        assert httpx.get(PORTAL+'/api/v1/institution/icon.png?size=32',trust_env=False).content.startswith(b'\x89PNG')
+        manifest=httpx.get(PORTAL+'/manifest.webmanifest',trust_env=False).json()
+        assert manifest['name']==brand and manifest['theme_color']==primary and all('/#/' not in item['url'] for item in manifest['shortcuts'])
         expect(family.locator('.family-heading').get_by_label('Aluno',exact=False).locator('option')).to_have_count(2)
         learning=family.locator('.learning-workspace');expect(learning).to_have_attribute('aria-busy','false')
         expect(learning.get_by_label('Aluno',exact=False)).to_have_count(0)
@@ -157,8 +194,16 @@ try:
         for theme in ['horizon','editorial','campus']:
             cfg=call('GET','/website')['configuration'];call('PUT','/website',{**{k:cfg[k] for k in ['enabled','headline','introduction','about','public_url','portal_url','notice']},'version':cfg['version'],'theme':theme})
             site.goto(SITE);expect(site.get_by_role('heading',name='Educação que aproxima')).to_be_visible();expect(site.get_by_role('heading',name='Notícia aberta sintética')).to_be_visible();expect(site.get_by_text('Mensagem privada invisível')).to_have_count(0)
+            expect(site).to_have_title(brand);expect(site.locator('footer strong')).to_have_text(brand)
+            assert site.locator('header img.logo').evaluate('(img)=>img.complete&&img.naturalWidth>0')
+            assert 'Georgia' in site.locator('h1').evaluate('(el)=>getComputedStyle(el).fontFamily')
+            assert site.locator('html').evaluate('(el)=>getComputedStyle(el).getPropertyValue("--primary").trim()')==primary
+            assert httpx.get(SITE+identity['logo_url'],trust_env=False).status_code==200
+            assert httpx.get(SITE+'/api/v1/institution/icon.png?size=32',trust_env=False).content.startswith(b'\x89PNG')
+            manifest=httpx.get(SITE+'/manifest.webmanifest',trust_env=False).json()
+            assert manifest['name']==brand and manifest['theme_color']==primary and manifest['display']=='browser'
             site.screenshot(path=str(OUT/('site-'+theme+'.png')),full_page=True)
-        record('Três modelos do site servem conteúdo aprovado pela API interna autenticada sem mensagens privadas')
+        record('Três modelos preservam layout e usam nome, logo, cores, fonte, favicon e manifest canônicos; conteúdo privado continua ausente')
         # Sem o núcleo, superfícies falham de forma isolada e sem sucesso fictício.
         processes[0].terminate();processes[0].wait(timeout=10)
         assert httpx.get(PORTAL+'/health/ready',trust_env=False).status_code==503

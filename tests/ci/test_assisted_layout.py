@@ -21,7 +21,10 @@ class AssistedLayoutTests(unittest.TestCase):
         script=(ROOT/'scripts/ci/smoke.sh').read_text()
         self.assertIn('for service in db storage-init app mail-agent sogo worker worker-ocr;',script)
         self.assertIn('compose exec -T worker-ocr',script)
-        self.assertIn("'app.ocr_engine'",script)
+        self.assertIn("scripts/evaluate-ocr.py",script)
+        evaluator=(ROOT/'scripts/evaluate-ocr.py').read_text()
+        self.assertIn("'app.ocr_engine'",evaluator)
+        self.assertIn("docker-ocr-evaluation.json",script)
     def test_previous_browser_suites_and_new_suite_are_required(self):
         text=(ROOT/'.github/workflows/ci.yml').read_text()
         for script in ['e2e.py','e2e-online.py','e2e-cadastres.py','e2e-workspace.py','e2e-whitelabel.py','e2e-access.py','e2e-assisted.py']:

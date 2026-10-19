@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -14,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from . import restore_control,family_portal,user_invitations, import_operations, school_website, backups, portability_access
 from . import crm_bridge
 from .config import settings
+from .portal_proxy import PortalClientMiddleware
 from .db import engine
 from .storage import ensure_storage
 from .queue_notifications import install as install_queue_notifications
@@ -133,17 +135,21 @@ async def security_headers(request: Request, call_next):
         response.headers['Strict-Transport-Security'] = 'max-age=31536000'
     return response
 
-class BodyTooLarge(Exception):
-    pass
+class BodyTooLarge(HTTPException):
+    def __init__(self):
+        # FastAPI's multipart parser preserves HTTP exceptions; a plain custom
+        # exception would be converted into a misleading 400 on streamed bodies.
+        super().__init__(status_code=413, detail='Requisição acima do limite permitido.')
 
 @app.exception_handler(BodyTooLarge)
 async def body_too_large(request, exc):
     return JSONResponse({'detail':'Requisição acima do limite permitido.'}, status_code=413)
 
 class BodyLimitMiddleware:
-    def __init__(self, app, maximum, legacy_maximum, restore_maximum=None):
+    def __init__(self, app, maximum, legacy_maximum, restore_maximum=None, ocr_maximum=None):
         self.app, self.maximum, self.legacy_maximum = app, maximum, legacy_maximum
         self.restore_maximum = maximum if restore_maximum is None else restore_maximum
+        self.ocr_maximum = maximum if ocr_maximum is None else ocr_maximum
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http':
             return await self.app(scope, receive, send)
@@ -151,6 +157,13 @@ class BodyLimitMiddleware:
         maximum = self.legacy_maximum if '/legacy-import/' in path else self.maximum
         if path == '/api/v1/backups/restore/upload':
             maximum = self.restore_maximum
+        # OCR has its own file limit. Keep the multipart envelope bounded without
+        # raising the limit of ordinary documents or similarly named endpoints.
+        if scope.get('method') == 'POST' and (
+            path == '/api/v1/portal/ocr/jobs'
+            or re.fullmatch(r'/api/v1/schools/[^/]+/ocr/jobs', path)
+        ):
+            maximum = self.ocr_maximum
         headers = dict(scope.get('headers', []))
         try:
             length = int(headers.get(b'content-length', b'0'))
@@ -158,16 +171,25 @@ class BodyLimitMiddleware:
             return await JSONResponse({'detail':'Content-Length inválido.'}, status_code=400)(scope,receive,send)
         if length > maximum:
             return await JSONResponse({'detail':'Requisição acima do limite permitido.'}, status_code=413)(scope,receive,send)
-        consumed, started = 0, False
+        consumed, started, too_large = 0, False, False
         async def limited_receive():
-            nonlocal consumed
+            nonlocal consumed, too_large
             message = await receive()
             consumed += len(message.get('body', b''))
             if consumed > maximum:
+                too_large = True
                 raise BodyTooLarge()
             return message
         async def track_send(message):
             nonlocal started
+            if too_large:
+                # Multipart parsers/middleware can wrap a receive exception and
+                # turn it into a generic 400. Preserve the actual bounded-body
+                # failure (and never forward a success after exceeding it).
+                if not started:
+                    started = True
+                    await JSONResponse({'detail':'Requisição acima do limite permitido.'}, status_code=413)(scope, receive, send)
+                return
             if message['type'] == 'http.response.start': started = True
             await send(message)
         try:
@@ -178,7 +200,9 @@ class BodyLimitMiddleware:
 
 app.add_middleware(BodyLimitMiddleware, maximum=(cfg.max_upload_mb+1)*1024*1024,
                    legacy_maximum=(cfg.legacy_import_max_mb*2+1)*1024*1024,
-                   restore_maximum=(cfg.restore_max_upload_mb+1)*1024*1024)
+                   restore_maximum=(cfg.restore_max_upload_mb+1)*1024*1024,
+                   ocr_maximum=(cfg.ocr_max_upload_mb+1)*1024*1024)
+app.add_middleware(PortalClientMiddleware)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=cfg.hosts)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.add_middleware(telemetry.RequestTelemetry)

@@ -48,7 +48,7 @@ def main():
             'ALLOWED_HOSTS':','.join(dict.fromkeys(['localhost','127.0.0.1',url.hostname])),
             'APP_SECRET_KEY':secrets.token_urlsafe(48),'SETUP_TOKEN':secrets.token_urlsafe(32),
             'INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(),
-            'WEBSITE_INTERNAL_TOKEN':secrets.token_urlsafe(48),'MAIL_AGENT_SHARED_KEY':secrets.token_urlsafe(48),'SOGO_DB_PASSWORD':secrets.token_urlsafe(36),
+            'WEBSITE_INTERNAL_TOKEN':secrets.token_urlsafe(48),'PORTAL_INTERNAL_TOKEN':secrets.token_urlsafe(48),'MAIL_AGENT_SHARED_KEY':secrets.token_urlsafe(48),'SOGO_DB_PASSWORD':secrets.token_urlsafe(36),
             'POSTGRES_PASSWORD':secrets.token_urlsafe(36),
             'STORAGE_ACCESS_KEY':'pige360minio','STORAGE_SECRET_KEY':secrets.token_urlsafe(48),
             'REDIS_PASSWORD':redis_password,'REDIS_URL':f'redis://:{redis_password}@redis:6379/0',

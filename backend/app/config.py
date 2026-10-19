@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     restore_max_upload_mb: int = 1024
     invitation_hours: int = 24
     portal_public_url: str = ''
+    portal_internal_token: str = ''
     portal_session_hours: int = 12
     portal_max_files: int = 20
     portal_max_storage_mb: int = 50
@@ -96,6 +97,8 @@ class Settings(BaseSettings):
     @model_validator(mode='after')
     def validate_runtime(self):
         if not 1<=self.restore_max_upload_mb<=4096:raise ValueError('Limite de restauração deve estar entre 1 e 4096 MiB.')
+        if self.portal_internal_token and len(self.portal_internal_token.encode())<32:
+            raise ValueError('PORTAL_INTERNAL_TOKEN exige pelo menos 32 bytes.')
         if self.portal_public_url:
             if self.portal_public_url.rstrip('/')==self.app_url.rstrip('/'):raise ValueError('Portal e gestor devem usar origens distintas.')
             portal=urlsplit(self.portal_public_url)

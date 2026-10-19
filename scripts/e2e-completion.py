@@ -106,6 +106,21 @@ try:
         expect(admin.get_by_text('A geração completa exige PostgreSQL.',exact=False)).to_be_visible()
         admin.screenshot(path=str(OUT/'portabilidade-backup.png'),full_page=True)
         record('Habilitação em produção e delegação pela interface, com backup SQLite explicitamente indisponível')
+        # A legacy transfer without an outbox job remains recoverable through UI.
+        # No worker/provider runs here: only the explicitly confirmed local queue.
+        legacy_id=str(uuid.uuid4())
+        seed="from app.db import SessionLocal,now;from app import models as m;from app.backups import BackupRun,BackupTarget;from app.integration_core import seal;from sqlalchemy import select;from datetime import timedelta;db=SessionLocal();user=db.scalar(select(m.User).where(m.User.email=='admin@example.com'));db.add(BackupTarget(provider='dropbox',folder='/synthetic',encrypted_token=seal({'access_token':'synthetic-never-sent'})));db.add(BackupRun(id="+repr(legacy_id)+",created_by=user.id,status='completed',stage='completed',remote_status='sending',updated_at=now()-timedelta(minutes=31)));db.commit()"
+        subprocess.run([sys.executable,'-c',seed],cwd=ROOT/'backend',env=env,check=True)
+        admin.get_by_role('button',name='Atualizar histórico',exact=True).click()
+        recovery=admin.get_by_role('button',name='Conciliar e retomar',exact=True)
+        expect(recovery).to_be_visible()
+        admin.once('dialog',lambda dialog:dialog.dismiss());recovery.click()
+        assert next(b for b in client.get('/api/v1/backups',headers=headers).json()['items'] if b['id']==legacy_id)['remote_status']=='sending'
+        admin.once('dialog',lambda dialog:dialog.accept());recovery.click()
+        expect(recovery).to_have_count(0)
+        assert next(b for b in client.get('/api/v1/backups',headers=headers).json()['items'] if b['id']==legacy_id)['remote_status']=='queued'
+        record('Envio legado parado reaparece na UI, cancelar preserva estado e confirmar enfileira uma única recuperação')
+
         staff=browser.new_context(viewport={'width':1280,'height':900}).new_page();staff.goto(URL)
         staff.get_by_label('E-mail',exact=True).fill('delegada@example.com');staff.get_by_label('Senha',exact=True).fill(PASSWORD);staff.get_by_role('button',name='Entrar na aplicação').click()
         expect(staff.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible()

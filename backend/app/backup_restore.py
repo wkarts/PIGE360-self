@@ -28,7 +28,9 @@ def restore(path,*,progress=lambda *args:None,previous_id=None):
             raise ValueError('Configure o mesmo nome de bucket do backup antes de restaurar.')
     progress('protecting_current_state')
     if previous_id is None:
-        previous_id=uid();create_bundle(previous_id)
+        previous_id=uid();create_bundle(previous_id,protect_current=True)
+        from .backups import bundle_path
+        verify_bundle(bundle_path(previous_id),allow_degraded=True)
     else:
         from .backups import bundle_path
         verify_bundle(bundle_path(previous_id))

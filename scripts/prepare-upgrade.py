@@ -99,10 +99,12 @@ def main():
     for line in example:
         if '=' not in line or line.lstrip().startswith('#'):continue
         key=line.split('=',1)[0]
-        if key in existing or key in ('APP_SECRET_KEY','SETUP_TOKEN','POSTGRES_PASSWORD','STORAGE_SECRET_KEY','REDIS_PASSWORD','REDIS_URL','RABBITMQ_PASSWORD','RABBITMQ_URL'):continue
+        if key in existing or key in ('COMPOSE_PROJECT_NAME','APP_SECRET_KEY','SETUP_TOKEN','POSTGRES_PASSWORD','STORAGE_SECRET_KEY','REDIS_PASSWORD','REDIS_URL','RABBITMQ_PASSWORD','RABBITMQ_URL'):continue
+        # An absent project name is meaningful: Compose may use its top-level
+        # name or directory fallback. Never replace that identity with a sample.
         # Upgrades must not silently move existing local files to S3 or start new
         # stateful services. Those choices belong to an explicit migration.
-        if key=='WEBSITE_INTERNAL_TOKEN':line='WEBSITE_INTERNAL_TOKEN='+secrets.token_urlsafe(48)
+        if key in ('WEBSITE_INTERNAL_TOKEN','PORTAL_INTERNAL_TOKEN'):line=key+'='+secrets.token_urlsafe(48)
         if key=='COMPOSE_PROFILES':line='COMPOSE_PROFILES='
         if key=='STORAGE_BACKEND':line='STORAGE_BACKEND=local'
         if key=='STORAGE_ENDPOINT_URL':line='STORAGE_ENDPOINT_URL='

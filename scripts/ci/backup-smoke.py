@@ -41,7 +41,6 @@ for backend in ('local','s3'):
     assert digest and size>0
     assert any(obj['backend']==backend for obj in manifest['objects'])
     with SessionLocal.begin() as db:db.get(m.Company,company_id).name='Alteração posterior ao snapshot'
-    safety=uid();create_bundle(safety)
     # Prova de recuperação: nenhum objeto original pode sobreviver no destino.
     # Este script recusa instalações com dados anteriores e só roda no Compose CI.
     for obj in manifest['objects']:
@@ -52,7 +51,7 @@ for backend in ('local','s3'):
             except Exception:pass
             else:raise AssertionError('Objeto original ainda acessível antes do restore')
     with SessionLocal.begin() as db:db.get(m.Company,company_id).name='Alteração posterior ao snapshot'
-    restore(bundle_path(ident),previous_id=safety)
+    restore(bundle_path(ident))
     with SessionLocal() as db:
         assert db.get(m.Company,company_id).name=='Mantenedora sintética de backup'
         assert read_bytes(db.get(m.FileRecord,file_id))==b'synthetic local backup document'

@@ -189,6 +189,7 @@ jobs:
           docker build --build-arg UPSTREAM_IMAGE=docker.io/library/memcached:1.6-alpine \
             -f containers/service.Dockerfile -t pige360-memcached:ci .
           SOGO_CACHE_IMAGE=pige360-memcached:ci bash scripts/ci/smoke.sh pige360-self:ci local
+          python scripts/ci/deployer-upgrade-smoke.py "$PYTHON_BASE_IMAGE"
           python - <<'PY'
           import json
           from pathlib import Path

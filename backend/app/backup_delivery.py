@@ -100,6 +100,8 @@ def execute(db,job,payload):
                 r.raise_for_status();job.remote_id=r.json()['ids'][0];db.commit()
             remote=reconcile(client,target,path,job.remote_id)
             if not remote:
+                if payload.get('legacy') and not payload.get('allow_new_upload'):
+                    raise IntegrationFailure('BACKUP_LEGACY_NOT_FOUND_REQUIRES_CONFIRMATION',uncertain=True)
                 remote=upload_remote(target,token,path,job.remote_id)
                 # Resposta de upload sem conteúdo verificável não encerra conciliação.
                 remote=reconcile(client,target,path,job.remote_id or remote)
@@ -124,4 +126,4 @@ def sync_state(db,job):
 def delivery_info(db,row):
     job=db.scalar(select(m.IntegrationJob).where(m.IntegrationJob.dedupe_key=='backup-send:'+row.id))
     history=[{'at':a.created_at,'action':a.action,'details':a.details} for a in db.scalars(select(m.AuditEvent).where(m.AuditEvent.entity_type=='backup_runs',m.AuditEvent.entity_id==row.id,m.AuditEvent.action.like('backup.delivery_%')).order_by(m.AuditEvent.created_at.desc()).limit(20))]
-    return {**output(row),'delivery_history':history,'delivery':None if not job else {key:getattr(job,key) for key in ('id','status','attempts','error_code','remote_id','available_at','updated_at','completed_at')}}
+    return {**output(row),'delivery_history':history,'can_recover':row.remote_status in {'failed','uncertain'} or (row.remote_status=='sending' and job is None and utc(row.updated_at)<=now()-timedelta(minutes=30)),'delivery':None if not job else {key:getattr(job,key) for key in ('id','status','attempts','error_code','remote_id','available_at','updated_at','completed_at')}}

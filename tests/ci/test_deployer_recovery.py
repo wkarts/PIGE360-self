@@ -21,6 +21,8 @@ class DeployerRecoveryTests(unittest.TestCase):
         (directory/'compose.yaml').write_text('services: {}')
         self.env=directory/'.env.production';self.path='deploy/docker/.env.production'
         self.env.write_text('COMPOSE_PROJECT_NAME=school-original\nAPP_PORT=58181\nAPP_URL=https://manager.example.test\nAPP_IMAGE=ghcr.io/wkarts/pige360-self:latest\nSMTP_PASSWORD=preserve-smtp\nCONNECT_API_KEY=preserve-whatsapp\nSTORAGE_BACKEND=s3\nCOMPOSE_PROFILES=s3,infra\n')
+        project=patch.object(deployer,'compose_project',return_value='school-original')
+        project.start();self.addCleanup(project.stop)
 
     def test_surfaces_preserve_project_secrets_and_existing_profiles(self):
         original=self.env.read_text()

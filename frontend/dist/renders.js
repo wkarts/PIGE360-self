@@ -11009,7 +11009,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
               onClick: $event => (run(loadBackups))
             }, "Atualizar histórico", 8, ["disabled", "onClick"])]),
             _createElementVNode("p", null, "Inclui todas as escolas, banco PostgreSQL, documentos locais ou MinIO e raízes de confiança. Durante a cópia, gravações aguardam o término. Mantenha as chaves de criptografia em cópia segura separada."),
-            _createElementVNode("p", null, "Frequência manual. Nenhum backup é apagado automaticamente. Restauração: prepare o pacote abaixo e confirme no deployer local. Os serviços serão parados e o estado anterior preservado antes da substituição."),
+            _createElementVNode("p", null, "Frequência manual. Nenhum backup é apagado automaticamente. Restauração: prepare o pacote abaixo e confirme no deployer local. Os serviços serão parados e o estado anterior preservado antes da substituição. Se houver arquivos ausentes ou corrompidos, a proteção registra essas avarias e guarda os bytes disponíveis; essa cópia degradada não é tratada como backup íntegro."),
             (!state.backupSupported)
               ? (_openBlock(), _createElementBlock("p", {
                   key: 0,
@@ -11082,7 +11082,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                         disabled: !['not_sent','failed'].includes(backup.remote_status)
                       }, "Enviar ao destino configurado", 8, ["onClick", "disabled"]),
                       _createElementVNode("span", null, "Envio: " + _toDisplayString(statusLabel(backup.remote_status)), 1),
-                      (['failed','uncertain'].includes(backup.remote_status))
+                      (backup.can_recover)
                         ? (_openBlock(), _createElementBlock("button", {
                             key: 0,
                             class: "btn btn-secondary",

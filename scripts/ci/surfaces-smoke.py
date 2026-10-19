@@ -62,6 +62,11 @@ try:
         control.get_by_label('Confirmação exibida no plano').fill('CANCELADO')
         control.get_by_role('button',name='Confirmar restauração destrutiva').click();expect(control.get_by_text('Digite exatamente a confirmação',exact=False)).to_be_visible()
         assert client.get('/health/ready').status_code==200
+        # Destroy one object and corrupt another immediately before the UI restore.
+        # The safety snapshot must preserve this degraded state, not require a
+        # pristine copy prepared before the disaster. Only our owned CI stack.
+        damage_code="from app.db import SessionLocal;from app import models as m;from app.storage import delete_file,_s3_client,_local_path;db=SessionLocal();rows=db.query(m.FileRecord).all();assert len(rows)>=2;local=next(f for f in rows if f.storage_backend=='local');remote=next(f for f in rows if f.storage_backend=='s3');delete_file(local);_s3_client().put_object(Bucket=remote.bucket_name,Key=remote.storage_key,Body=b'corrupt synthetic bytes');print('PASS: local missing and MinIO corrupt before UI restore')"
+        subprocess.run([*command,'exec','-T','app','python','-c',damage_code],check=True)
         control.get_by_label('ID do plano preparado no gestor').fill(plan['id']);control.get_by_label('Confirmação exibida no plano').fill(plan['confirmation']);control.get_by_role('button',name='Confirmar restauração destrutiva').click()
         expect(control.get_by_text('Restauração iniciada.',exact=False)).to_be_visible()
         for _ in range(180):
@@ -79,6 +84,8 @@ try:
     auth=client.post('/api/v1/auth/login',json={'email':'backup@example.com','password':password}).json();headers={'Authorization':'Bearer '+auth['access_token']}
     verified=client.get('/api/v1/backups/restore/plans',headers=headers).json()[0]
     assert verified['status']=='completed' and verified['previous_backup_id']
+    protection_code="from app.backups import bundle_path,verify_bundle;manifest=verify_bundle(bundle_path("+repr(verified['previous_backup_id'])+"),allow_degraded=True);damage=manifest['protection']['damage'];assert {x['state'] for x in damage}=={'missing','corrupt'};print('PASS: degraded pre-restore state preserved with auditable damage manifest')"
+    subprocess.run([*command,'exec','-T','app','python','-c',protection_code],check=True)
     subprocess.run([*command,'exec','-T','app','python','-c',"from app.db import SessionLocal;from app import models as m;from app.storage import read_bytes;import hashlib;db=SessionLocal();rows=db.query(m.FileRecord).all();assert len(rows)>=2;assert all(hashlib.sha256(read_bytes(f)).hexdigest()==f.sha256 for f in rows);print('PASS: banco e objetos locais/MinIO íntegros após restore UI')"],check=True)
     (ROOT/'ci-evidence/surfaces-restore.json').write_text(json.dumps({'same_compose_project':project,'site_internal_content':True,'private_content_blocked':True,'portal_image':True,'restore_ui':True,'cancelled_confirmation_no_effect':True,'sessions_revoked':True,'database_and_objects_verified':True,'previous_backup':True},indent=2)+'\n')
     print('PASS: restauração pela UI com confirmação, cópia prévia, serviços, sessões e arquivos verificados',flush=True)
