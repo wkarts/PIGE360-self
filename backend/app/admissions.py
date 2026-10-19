@@ -231,7 +231,7 @@ def finalize(id:str,data:s.FinalizeAdmission,db:DB,user:Actor,school:Scope,reque
             m.IssuedDocument.template_version==str(obj.contract_template_version)).order_by(m.IssuedDocument.created_at.desc()).limit(1))
         auto_sign_issued_document(db,contract,user.id,request)
     if enrollment.status!='active':
-        movement(enrollment.id,schemas.MovementInput(version=enrollment.version,action='activate',reason=data.reason),db,user,school,request)
+        movement(enrollment.id,schemas.MovementInput(version=enrollment.version,action='reactivate' if enrollment.status=='cancelled' else 'activate',reason=data.reason),db,user,school,request)
     # Comprovante persistido: a família recebe exatamente o documento emitido.
     from .documents import issue
     issue(obj.student_id,schemas.IssueInput(kind='enrollment_receipt',enrollment_id=enrollment.id),db,user,school,request)
@@ -292,7 +292,7 @@ def renew_reservation(id:str,data:s.FinalizeAdmission,db:DB,user:Actor,school:Sc
     from .registry import occupancy
     enrollment=scoped(db,m.Enrollment,obj.enrollment_id,school.id)
     group=valid_group(db,db.get(m.AdmissionCampaign,obj.campaign_id),obj.class_group_id)
-    if enrollment.status!='draft':fail(409,'A matrícula não está em preparação.')
+    if enrollment.status not in ('draft','cancelled'):fail(409,'A matrícula não está em preparação ou cancelada para revisão.')
     if state(obj) in ('held','paid'):fail(409,'A reserva ainda está válida.')
     if occupancy(db,group.id,enrollment.id)>=group.capacity:fail(409,'Turma sem vagas. Não foi possível renovar a reserva.')
     start(db,obj,db.get(m.AdmissionCampaign,obj.campaign_id),reviewed=True)

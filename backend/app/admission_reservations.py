@@ -21,7 +21,7 @@ def reserved_count(db, class_id, exclude_enrollment_id=None):
     query = select(func.count()).select_from(m.Admission).join(
         m.Enrollment, m.Enrollment.id == m.Admission.enrollment_id).where(
         m.Admission.class_group_id == class_id, m.Admission.status == 'approved',
-        m.Enrollment.status == 'draft',
+        m.Enrollment.status.in_(['draft','cancelled']),
         or_(m.Admission.reservation_status == 'paid', and_(
             m.Admission.reservation_status == 'held', m.Admission.reserved_until > now())))
     if exclude_enrollment_id:
@@ -82,5 +82,5 @@ def payment_changed(db, charge):
 
 def gate(db, enrollment_id):
     admission = db.scalar(select(m.Admission).where(m.Admission.enrollment_id == enrollment_id))
-    if admission and state(admission) in {'expired', 'review', 'released'}:
+    if admission and admission.status=='approved' and state(admission) in {'expired', 'review', 'released'}:
         fail(409, 'Reserva vencida ou pagamento em análise. A Secretaria deve conferir as vagas e renovar a reserva explicitamente.')

@@ -29,7 +29,7 @@ Origem conferida em 19/10/2026: `develop` em `b04df7c215f3fd7ef13cd8c4290471f496
 5. Uma reserva não paga deixa de ocupar vaga no horário limite, mesmo sem worker. Recebimento confirmado durante a vigência fixa a reserva paga; documentação pendente não a expira.
 6. Recebimento observado após liberação fica em análise. A Secretaria confere a capacidade e usa **Revisar e renovar reserva**, com justificativa. Não há recuperação automática de vaga já oferecida a outra pessoa.
 7. Pagamento confirmado pelo provedor não equivale a recebido. A conciliação consulta o provedor; webhook não efetiva matrícula. Observação antiga de pendência não desfaz um recebimento já conciliado.
-8. A efetivação confere pagamento, reserva, capacidade, documentos e contrato. A própria reserva não é contada duas vezes ao ativar sua matrícula. Cancelamento libera a reserva.
+8. A efetivação confere pagamento, reserva, capacidade, documentos e contrato. A própria reserva não é contada duas vezes ao ativar sua matrícula. Cancelamento libera a reserva. Uma matrícula ainda em preparação pode ter a reserva revista explicitamente antes da reativação; uma matrícula já efetivada mantém o fluxo administrativo de reativação e a nova conferência de capacidade.
 
 O PostgreSQL serializa mutações de vaga pelo lock da escola. Leituras podem atualizar a disponibilidade sem alterar registros. A duração configurada afeta novas reservas; não muda retroativamente o prazo já concedido. Aprovações anteriores à migração preservam seu estado anterior e não recebem prazos inventados.
 

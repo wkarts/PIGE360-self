@@ -110,3 +110,23 @@ def test_concurrent_approvals_cannot_reserve_same_last_seat(online):
     with ThreadPoolExecutor(max_workers=2) as pool:codes=list(pool.map(approve_one,admissions))
     assert sorted(codes)==[200,409]
     assert o['api'].get('/class-groups')[0]['occupied']==1
+
+
+def test_cancel_and_reactivate_preserve_online_history_and_reservation_rules(online):
+    o=online;policy(o)
+    a=approve(o,submit(o,draft(o)));c=bill(o,a);receive(o,c)
+    enrollment=o['api'].get('/enrollments/'+a['enrollment_id'])
+    o['api'].move(enrollment,'cancel')
+    a=o['api'].get('/admissions/'+a['id'])
+    assert a['reservation']['status']=='released'
+    a=o['api'].post('/admissions/'+a['id']+'/reservation',{'version':a['version'],
+        'reason':'Cancelamento revisto; pagamento e vaga conferidos.'},200)
+    assert o['api'].get('/class-groups')[0]['occupied']==1
+    a=o['api'].post('/admissions/'+a['id']+'/finalize',{'version':a['version'],
+        'reason':'Reativação auditada da matrícula em preparação.'},200)
+    enrollment=o['api'].get('/enrollments/'+a['enrollment_id'])
+    assert {'cancel','reactivate'}.issubset({e['action'] for e in enrollment['history']})
+    cancelled=o['api'].move(enrollment,'cancel')
+    reactivated=o['api'].move(cancelled,'reactivate')
+    assert reactivated['status']=='active'
+    assert o['api'].get('/class-groups')[0]['occupied']==1
