@@ -303,8 +303,8 @@ class StableSetTests(unittest.TestCase):
     def setUp(self):
         import stable_set
         self.module = stable_set
-        self.new = {image: 'sha256:' + char * 64 for image, char in zip(stable_set.IMAGES, 'abcd')}
-        self.old = {image: 'sha256:' + char * 64 for image, char in zip(stable_set.IMAGES, 'efab')}
+        self.new = {image: 'sha256:' + char * 64 for image, char in zip(stable_set.IMAGES, 'abcde')}
+        self.old = {image: 'sha256:' + char * 64 for image, char in zip(stable_set.IMAGES, 'efabc')}
         self.registry = {}
         for image, digest in self.new.items():
             self.registry[image + '@' + digest] = digest
@@ -322,7 +322,7 @@ class StableSetTests(unittest.TestCase):
              patch.object(self.module, 'set_tag', side_effect=writer or self.write):
             return self.module.promote_set(self.new, '0.12.0', H)
 
-    def test_three_images_match_same_sha_and_digests(self):
+    def test_all_images_match_same_sha_and_digests(self):
         result = self.call()
         self.assertEqual(result['commit'], H)
         for image, digest in self.new.items():

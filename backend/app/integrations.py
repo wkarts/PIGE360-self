@@ -150,6 +150,8 @@ def jobs(db:DB,user:Actor,school:Scope,status:str='',page:int=Query(1,ge=1),page
 def retry(id:str,data:s.Reason,db:DB,user:Actor,school:Scope,request:Request):
     require(user,'integrations.manage');lock_school(db,school.id);obj=scoped(db,m.IntegrationJob,id,school.id)
     if obj.status not in ('failed','retry'):fail(409,'Operação incerta não é reenviada automaticamente. Confira o resultado remoto antes de criar novo envio; cobranças têm conciliação própria.')
+    if obj.kind in {'legacy_import','backup_send'}:fail(409,'Use a ação de recuperação na área de Portabilidade para manter conciliação, limites e histórico.')
+    if obj.kind=='smtp_email' and obj.dedupe_key.startswith('user-invitation:'):fail(409,'Use Reenviar convite na área de Usuários; o link anterior precisa ser revogado.')
     if obj.kind=='bank_issue':fail(409,'Utilize Conciliar ou Autorizar reemissão na cobrança para evitar duplicidade.')
     obj.status='pending';obj.attempts=0;obj.available_at=now();obj.error_code='';obj.lease_until=None
     audit(db,request,user,'integration.job.retry',obj,school.id,{'reason':data.reason})

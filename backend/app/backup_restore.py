@@ -18,7 +18,7 @@ from .db import engine, uid
 from .storage import _local_path, _s3_client
 
 
-def restore(path):
+def restore(path,*,progress=lambda *args:None,previous_id=None):
     manifest=verify_bundle(path)
     if engine.dialect.name!='postgresql':raise ValueError('Restauração completa exige PostgreSQL.')
     # Falha antes de tocar no destino se o bucket do pacote não corresponde ao
@@ -26,7 +26,13 @@ def restore(path):
     for item in manifest['objects']:
         if item['backend']=='s3' and item['bucket']!=settings().storage_bucket:
             raise ValueError('Configure o mesmo nome de bucket do backup antes de restaurar.')
-    previous_id=uid();create_bundle(previous_id)
+    progress('protecting_current_state')
+    if previous_id is None:
+        previous_id=uid();create_bundle(previous_id)
+    else:
+        from .backups import bundle_path
+        verify_bundle(bundle_path(previous_id))
+    progress('restoring_objects',previous_id)
     from .backups import bundle_path
     print('Estado anterior preservado em',bundle_path(previous_id).name,flush=True)
     with tempfile.TemporaryDirectory(prefix='pige-restore-') as temp,zipfile.ZipFile(path) as archive:
@@ -40,7 +46,7 @@ def restore(path):
             if item['backend']=='local':
                 destination=_local_path(item['key']);destination.parent.mkdir(parents=True,exist_ok=True)
                 temporary=destination.with_suffix('.restore-part');temporary.write_bytes(data);temporary.chmod(0o600);temporary.replace(destination)
-            else:_s3_client().put_object(Bucket=item['bucket'],Key=item['key'],Body=data)
+            else:_s3_client().put_object(Bucket=item['bucket'],Key=item['key'],Body=data,ContentType=item.get('mime_type','application/octet-stream'),Metadata={'pige360-managed':'true'})
         roots=settings().signature_trust_roots_dir
         if manifest['trust_roots'] and roots is None:raise ValueError('Configure o diretório das raízes de confiança.')
         if roots:
@@ -51,9 +57,11 @@ def restore(path):
             for item in manifest['trust_roots']:
                 destination=roots/Path(item['path']).name
                 destination.write_bytes(archive.read(item['path']));destination.chmod(0o600)
+        progress('restoring_database',previous_id)
         subprocess.run(['pg_restore','--clean','--if-exists','--no-owner','--single-transaction',
             '--dbname='+pg_environment()['PGDATABASE'],str(dump)],env=pg_environment(),
             check=True,timeout=600,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    progress('revoking_sessions_and_reconciling_jobs',previous_id)
     with engine.begin() as connection:
         connection.execute(text("UPDATE integration_jobs SET status='uncertain',error_code='RESTORE_REQUIRES_RECONCILIATION',lease_until=NULL WHERE status IN ('pending','retry','processing')"))
         connection.execute(text("UPDATE connect_message_jobs SET status='uncertain',error_code='RESTORE_REQUIRES_RECONCILIATION',lease_until=NULL WHERE status IN ('pending','retry','processing')"))
@@ -61,6 +69,10 @@ def restore(path):
         connection.execute(text("UPDATE bank_charges SET status='uncertain' WHERE status='queued'"))
         connection.execute(text("UPDATE backup_runs SET status='failed',stage='failed',error_code='RESTORE_INTERRUPTED' WHERE status IN ('queued','processing')"))
         connection.execute(text("UPDATE ocr_jobs SET status='failed',error_code='RESTORE_REQUIRES_RESCAN',lease_until=NULL,lease_token='' WHERE status IN ('queued','processing')"))
+        from sqlalchemy import inspect
+        if inspect(connection).has_table('user_invitations'):
+            connection.execute(text('UPDATE user_invitations SET revoked_at=CURRENT_TIMESTAMP WHERE used_at IS NULL AND revoked_at IS NULL'))
+        connection.execute(text("UPDATE backup_runs SET remote_status='uncertain' WHERE remote_status IN ('queued','sending')"))
         connection.execute(text('UPDATE auth_sessions SET revoked=true'))
         connection.execute(text('UPDATE portal_sessions SET revoked=true'))
     print('Banco e arquivos restaurados. Valide saúde, autenticação e documentos antes de liberar a instalação.')

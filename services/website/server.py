@@ -10,6 +10,7 @@ from urllib.request import Request, build_opener, ProxyHandler, HTTPRedirectHand
 
 ORIGIN=os.environ.get('PIGE_INTERNAL_URL','http://app:8000').rstrip('/')
 SCHOOL=os.environ.get('WEBSITE_SCHOOL_ID','')
+TOKEN=os.environ.get('WEBSITE_INTERNAL_TOKEN','')
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -18,7 +19,7 @@ class NoRedirect(HTTPRedirectHandler):
 
 def fetch(path,limit=2*1024*1024):
     # O navegador nunca recebe a origem interna nem cookies/sessões do gestor.
-    with build_opener(ProxyHandler({}),NoRedirect()).open(Request(ORIGIN+path,headers={'Host':'localhost','Accept':'application/json'}),timeout=8) as response:
+    with build_opener(ProxyHandler({}),NoRedirect()).open(Request(ORIGIN+path,headers={'Host':'localhost','Accept':'application/json',**({'X-Website-Key':TOKEN} if TOKEN else {})}),timeout=8) as response:
         data=response.read(limit+1)
         if len(data)>limit:raise ValueError('Resposta acima do limite')
         return data,response.headers.get('Content-Type','application/octet-stream')
@@ -57,6 +58,7 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path=='/':
                 if SCHOOL and not re.fullmatch(r'[0-9a-f-]{36}',SCHOOL):raise ValueError('Escola inválida')
                 path=f'/api/v1/public/schools/{SCHOOL}/website' if SCHOOL else '/api/v1/public/website'
+                if TOKEN:path='/api/v1/internal/website'+('?school_id='+SCHOOL if SCHOOL else '')
                 body=render(json.loads(fetch(path)[0])).encode();mime='text/html; charset=utf-8'
             else:self.send_error(404);return
             self.send_response(200)

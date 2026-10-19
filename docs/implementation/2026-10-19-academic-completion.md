@@ -134,3 +134,7 @@ O worker reconcilia backups interrompidos sem bloquear permanentemente novos ped
 
 
 A revisão de interface também valida o horário exato de vencimento no fuso America/Bahia. Textos e nomes dos downloads distinguem a via emitida sem assinatura, a assinatura conferida do responsável e o contrato final. O teste de identidade visual passou com 12 verificações, incluindo rodapé de versão, sessão e 2FA em iframe autorizado. Uma bateria adicional de 29 testes de configuração, identidade, contratos e novos controles passou após a correção da origem da versão. O CI já aprovou 532 testes PostgreSQL na composição anterior à última correção de apresentação/versão; o estado do HEAD corrente deve ser consultado nos checks da PR.
+
+## Continuidade posterior na mesma PR
+
+A decisão de portal separado foi confirmada. [A continuação operacional](2026-10-19-pr57-continuity.md) descreve o serviço/imagem privados agora implementados, convites de primeiro acesso, importação persistente, conciliação externa e restauração visual pelo deployer. Os resultados acima são históricos; consulte o checkpoint e o CI do HEAD atual para a composição final.

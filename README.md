@@ -122,3 +122,7 @@ Os usuários do portal não recebem token administrativo. Anexos exigem acesso �
 A instituição deve definir aviso de privacidade, retenção, pessoas autorizadas e procedimentos de conferência. Os controles técnicos entregues não são certificação jurídica de conformidade. Backups contêm dados pessoais e devem ser protegidos, cifrados e testados no destino.
 
 **ASAAS e Connect API não foram homologados com credenciais reais nesta entrega. Docker/PostgreSQL e instalação PWA precisam ser conferidos na infraestrutura de destino.**
+
+### Continuidade operacional da PR 57
+
+[Portal privado, convites, importação persistente e recuperação de backups/restauração](docs/implementation/2026-10-19-pr57-continuity.md). Site e portal têm imagens, portas e perfis Compose próprios; a matrícula e suas regras continuam no núcleo. A documentação distingue testes sintéticos, Docker/CI e homologações externas.

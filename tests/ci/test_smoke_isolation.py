@@ -23,6 +23,7 @@ class SmokeIsolationTests(unittest.TestCase):
             shutil.copytree(ROOT / 'services/mail-agent', checkout / 'services/mail-agent')
             shutil.copytree(ROOT / 'services/sogo', checkout / 'services/sogo')
             shutil.copytree(ROOT / 'services/website', checkout / 'services/website')
+            shutil.copytree(ROOT / 'services/portal', checkout / 'services/portal')
             for name in ('data-postgres', 'data-documents'):
                 folder = deployment / name
                 folder.mkdir()

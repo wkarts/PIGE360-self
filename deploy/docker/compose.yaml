@@ -118,6 +118,9 @@ services:
     environment: &application_environment
       APP_ENV: ${APP_ENV:-production}
       APP_URL: ${APP_URL:-http://localhost:58080}
+      PORTAL_PUBLIC_URL: ${PORTAL_PUBLIC_URL:-}
+      WEBSITE_INTERNAL_TOKEN: ${WEBSITE_INTERNAL_TOKEN:-}
+      INVITATION_HOURS: ${INVITATION_HOURS:-24}
       APP_SECRET_KEY: ${APP_SECRET_KEY:?Defina APP_SECRET_KEY no arquivo de ambiente}
       SETUP_TOKEN: ${SETUP_TOKEN:?Defina SETUP_TOKEN no arquivo de ambiente}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-pige360}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-pige360}
@@ -205,6 +208,29 @@ services:
       driver: json-file
       options: {max-size: "10m", max-file: "3"}
 
+  portal:
+    profiles: [portal]
+    image: ${PORTAL_IMAGE:-ghcr.io/wkarts/pige360-self-portal:latest}
+    build: {context: ../.., dockerfile: services/portal/Dockerfile}
+    restart: unless-stopped
+    init: true
+    environment:
+      PIGE_INTERNAL_URL: http://app:8000
+      PORTAL_PUBLIC_URL: ${PORTAL_PUBLIC_URL:-http://localhost:58083}
+    ports:
+      - "${PORTAL_BIND:-127.0.0.1}:${PORTAL_PORT:-58083}:8080"
+    depends_on:
+      app: {condition: service_healthy}
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
   website:
     profiles: [website]
     image: ${WEBSITE_IMAGE:-ghcr.io/wkarts/pige360-self-website:latest}
@@ -214,6 +240,7 @@ services:
     environment:
       PIGE_INTERNAL_URL: http://app:8000
       WEBSITE_SCHOOL_ID: ${WEBSITE_SCHOOL_ID:-}
+      WEBSITE_INTERNAL_TOKEN: ${WEBSITE_INTERNAL_TOKEN:-}
     ports:
       - "${WEBSITE_BIND:-127.0.0.1}:${WEBSITE_PORT:-58082}:8080"
     depends_on:

@@ -8,6 +8,7 @@ from .models import Installation, Company, School, Unit, AcademicYear, User, Per
 from .schemas import Login, Setup, UserInput, UserEdit, PasswordChange
 from .security import Actor, DB, PERMISSIONS, ROLE_LABELS, access_token, check_version, digest, fail, hash_password, require, request_csrf, utc, verify
 from .common import audit, output
+from .security import allowed_request_origin
 
 router = APIRouter(prefix='/api/v1', tags=['Autenticação e instalação'])
 DUMMY_PASSWORD_HASH = hash_password('not-an-account-password-93401980')
@@ -154,6 +155,8 @@ def change_password(data: PasswordChange, db: DB, user: Actor, request: Request)
     if not verify(data.current_password, user.password_hash):
         fail(422, 'Senha atual inválida.')
     user.password_hash = hash_password(data.new_password)
+    from .user_invitations import UserInvitation,revoke
+    for invitation in db.scalars(select(UserInvitation).where(UserInvitation.user_id==user.id,UserInvitation.used_at.is_(None),UserInvitation.revoked_at.is_(None))):revoke(db,invitation)
     db.execute(update(AuthSession).where(AuthSession.user_id == user.id).values(revoked=True))
     audit(db, request, user, 'auth.password_changed', user)
     return {'message': 'Senha alterada. Entre novamente.'}

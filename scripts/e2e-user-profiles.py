@@ -30,6 +30,7 @@ env = {**os.environ, 'PYTHONPATH': str(ROOT/'backend'), 'DATABASE_URL': 'sqlite:
        'APP_SECRET_KEY': 'synthetic-user-profiles-01234567890123456789',
        'SETUP_TOKEN': 'synthetic-user-profiles-setup-01234567890123456789',
        'STORAGE_PATH': str(TEMP/'files'), 'FRONTEND_PATH': str(TEMP/'frontend'), 'COOKIE_SECURE': 'false'}
+env.setdefault('INTEGRATION_ENCRYPTION_KEY','MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=')
 subprocess.run([sys.executable, '-m', 'alembic', 'upgrade', 'head'], cwd=ROOT/'backend', env=env, check=True)
 log = (OUT/'server.log').open('w')
 proc = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', str(PORT)],
@@ -139,13 +140,16 @@ try:
         workspace.get_by_role('button', name='+ Criar usuário', exact=True).click()
         workspace.get_by_label('Nome', exact=True).fill('Operador Exemplo')
         workspace.get_by_label('E-mail', exact=True).fill(USER_EMAIL)
-        workspace.get_by_label(re.compile('^Senha inicial')).fill(PASSWORD)
         workspace.get_by_label(re.compile('^Permissões')).select_option(profile['id'])
         workspace.get_by_role('button', name='Salvar acesso', exact=True).click()
         user_card = workspace.locator('.access-user-card').filter(has_text=USER_EMAIL)
         expect(user_card).to_be_visible()
         user = next(item for item in client.get(base_a+'/users', headers=headers).json() if item['email']==USER_EMAIL)
         user_id = user['id']
+        # Primeiro acesso usa o convite persistido, sem senha inicial do administrador.
+        token_script="from sqlalchemy import select;from app.db import SessionLocal;from app import models as m;from app.integration_core import unseal;import re;db=SessionLocal();j=db.scalar(select(m.IntegrationJob).where(m.IntegrationJob.dedupe_key=='user-invitation:'+__import__('sys').argv[1]));print(re.search(r'first-access.html#([A-Za-z0-9_-]+)',unseal(j.encrypted_payload)['text']).group(1))"
+        invitation_token=subprocess.check_output([sys.executable,'-c',token_script,user['invitation']['id']],cwd=ROOT/'backend',env=env,text=True).strip()
+        client.post('/api/v1/invitations/accept',json={'token':invitation_token,'password':PASSWORD}).raise_for_status()
         assert user['access_profile_id'] == profile['id'] and user['school_ids'] == [school_a]
         assert USER_EMAIL not in [item['email'] for item in client.get(base_b+'/users', headers=headers).json()]
         record('Usuário criado na UI recebe o perfil e vínculo exclusivo com a escola ativa')

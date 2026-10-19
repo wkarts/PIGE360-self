@@ -45,9 +45,10 @@ def checklist(db, school_id, student_id, grade_id=None):
 def write_file(db, school_id, user_id, name, mime, data, file_kind='document'):
     cfg = settings()
     key = f'{school_id}/{uid()}'
-    put_bytes(key, data, mime)
     backend = cfg.storage_backend.lower()
     bucket = cfg.storage_bucket if backend == 's3' else ''
+    if db.info.get('storage_intent'):db.info['storage_intent'](backend,bucket,key)
+    put_bytes(key, data, mime)
     db.info.setdefault('new_storage_objects', []).append((backend, bucket, key))
     obj = m.FileRecord(
         school_id=school_id,

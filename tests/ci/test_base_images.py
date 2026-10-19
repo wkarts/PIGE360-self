@@ -135,7 +135,7 @@ class CatalogAndRetentionTests(unittest.TestCase):
             text=(ROOT/'deploy'/name/'compose.yaml').read_text()
             self.assertIn('\n  redis:\n    profiles: ["infra"]',text)
             self.assertIn('\n  rabbitmq:\n    profiles: ["infra"]',text)
-            self.assertEqual(text.count('\n    ports:'),2)
+            self.assertEqual(text.count('\n    ports:'),3)
     def test_bases_not_visited_by_cleanup_even_for_orphans(self):
         calls=[]
         def api(path,method='GET'):

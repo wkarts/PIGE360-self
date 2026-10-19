@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     connect_api_key: str = ''
     connect_allowed_hosts: str = ''
     connect_allow_private: bool = False
+    restore_max_upload_mb: int = 1024
+    invitation_hours: int = 24
+    portal_public_url: str = ''
     portal_session_hours: int = 12
     portal_max_files: int = 20
     portal_max_storage_mb: int = 50
@@ -77,6 +80,7 @@ class Settings(BaseSettings):
     smtp_password: str = ''
     smtp_from: str = ''
     smtp_security: str = 'starttls'
+    website_internal_token: str = ''
     sogo_upstream_url: str = ''
     mail_agent_url: str = ''
     mail_agent_shared_key: str = ''
@@ -91,6 +95,14 @@ class Settings(BaseSettings):
 
     @model_validator(mode='after')
     def validate_runtime(self):
+        if not 1<=self.restore_max_upload_mb<=4096:raise ValueError('Limite de restauração deve estar entre 1 e 4096 MiB.')
+        if self.portal_public_url:
+            if self.portal_public_url.rstrip('/')==self.app_url.rstrip('/'):raise ValueError('Portal e gestor devem usar origens distintas.')
+            portal=urlsplit(self.portal_public_url)
+            if portal.scheme not in {'https','http'} or not portal.hostname or portal.username or portal.password or portal.path not in ('','/') or portal.query or portal.fragment:
+                raise ValueError('PORTAL_PUBLIC_URL exige uma origem exata HTTP(S).')
+            if self.app_env=='production' and portal.hostname not in {'localhost','127.0.0.1'} and portal.scheme!='https':raise ValueError('Portal público exige HTTPS.')
+        if not 1 <= self.invitation_hours <= 168:raise ValueError('INVITATION_HOURS deve estar entre 1 e 168.')
         if not 1 <= self.ocr_max_upload_mb <= 16 or not 1 <= self.ocr_retention_hours <= 168 or not 30 <= self.ocr_timeout_seconds <= 180:
             raise ValueError('Limites OCR inválidos: 1–16 MB, retenção 1–168 horas e timeout 30–180 segundos.')
         from .embedding import origins

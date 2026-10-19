@@ -1,6 +1,8 @@
 from alembic import context
 from sqlalchemy import create_engine, pool
 from app.config import settings
+from app.import_operations import ImportOperation  # noqa: F401
+from app.user_invitations import UserInvitation  # noqa: F401
 from app.school_website import SchoolWebsite  # noqa: F401
 from app.backups import BackupRun, BackupTarget  # noqa: F401
 from app.crm_bridge_models import CRMBridgeRequest, CRMBridgeObservation  # noqa: F401

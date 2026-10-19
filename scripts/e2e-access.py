@@ -11,6 +11,7 @@ TEMP=Path(tempfile.mkdtemp(prefix='pige-access-'))
 with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
 URL=f'http://127.0.0.1:{port}';PASSWORD='Synthetic-Access-Password-2026!';BRIDGE=os.getenv('PIGE_UI_BRIDGE')=='1'
 env={**os.environ,'PYTHONPATH':str(ROOT/'backend'),'DATABASE_URL':'sqlite:///'+str(TEMP/'test.db'),'ALLOW_SQLITE':'true','APP_ENV':'test','APP_URL':URL,'ALLOWED_HOSTS':'localhost,127.0.0.1','APP_SECRET_KEY':'synthetic-access-only-012345678901234567890123456','SETUP_TOKEN':'synthetic-setup-only-01234567890123456789','STORAGE_PATH':str(TEMP/'files'),'FRONTEND_PATH':str(ROOT/'frontend/dist'),'COOKIE_SECURE':'false','EMBED_ALLOWED_ORIGINS':''}
+env.setdefault('INTEGRATION_ENCRYPTION_KEY','MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=')
 subprocess.run([sys.executable,'-m','alembic','upgrade','head'],cwd=ROOT/'backend',env=env,check=True)
 log=(OUT/'server.log').open('w');proc=subprocess.Popen([sys.executable,'-m','uvicorn','app.main:app','--host','127.0.0.1','--port',str(port)],cwd=ROOT/'backend',env=env,stdout=log,stderr=log)
 checks=[];errors=[]

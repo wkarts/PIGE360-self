@@ -95,3 +95,12 @@ def default_site(db:DB):
     rows=list(db.scalars(select(SchoolWebsite).join(m.School).where(SchoolWebsite.enabled.is_(True),m.School.active.is_(True)).limit(2)))
     if len(rows)!=1:fail(404,'Selecione a escola no serviço de site institucional.')
     return site_data(db,rows[0])
+
+
+@router.get('/internal/website')
+def internal_site(db:DB,request:Request,school_id:str=''):
+    import secrets
+    from .config import settings
+    token=settings().website_internal_token
+    if not token or not secrets.compare_digest(request.headers.get('X-Website-Key',''),token):fail(403,'Serviço não autorizado.')
+    return published(school_id,db) if school_id else default_site(db)

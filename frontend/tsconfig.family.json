@@ -1,0 +1,1 @@
+{"compilerOptions":{"target":"ES2022","module":"none","lib":["ES2022","DOM"],"strict":true,"skipLibCheck":true,"outFile":"dist/family.js"},"files":["src/vue-globals.d.ts","src/institution.ts","src/mfa.ts","src/learning.ts","src/family.ts"]}

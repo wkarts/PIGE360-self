@@ -24,6 +24,7 @@ def refresh_compose(root,env_path,preview=False):
     if env_path.parent.parent.name=='instances':
         for service in baseline.get('services',{}).values():
             if isinstance(service.get('build'),dict):service['build']['context']=service['build']['context'].replace('../../services/','../../../services/')
+            if isinstance(service.get('build'),dict) and service['build']['context']=='../..':service['build']['context']='../../..'
     def merge(default,existing):
         if isinstance(default,dict) and isinstance(existing,dict):
             return {key:merge(default.get(key),existing[key]) if key in existing else default[key] for key in default.keys()|existing.keys()}
@@ -77,7 +78,7 @@ def main():
     tag='develop' if channel=='develop' else 'latest'
     official={'APP_IMAGE':'ghcr.io/wkarts/pige360-self',
               'MAIL_AGENT_IMAGE':'ghcr.io/wkarts/pige360-self-mail-agent',
-              'SOGO_IMAGE':'ghcr.io/wkarts/pige360-self-sogo','WEBSITE_IMAGE':'ghcr.io/wkarts/pige360-self-website'}
+              'PORTAL_IMAGE':'ghcr.io/wkarts/pige360-self-portal','SOGO_IMAGE':'ghcr.io/wkarts/pige360-self-sogo','WEBSITE_IMAGE':'ghcr.io/wkarts/pige360-self-website'}
     example=(root/'deploy'/('docker' if instance else env_path.parts[1])/f'.env.{channel}.example').read_text().splitlines()
     version=(root/'VERSION').read_text().strip()
     version_tuple=tuple(map(int,version.split('.')))
@@ -101,6 +102,7 @@ def main():
         if key in existing or key in ('APP_SECRET_KEY','SETUP_TOKEN','POSTGRES_PASSWORD','STORAGE_SECRET_KEY','REDIS_PASSWORD','REDIS_URL','RABBITMQ_PASSWORD','RABBITMQ_URL'):continue
         # Upgrades must not silently move existing local files to S3 or start new
         # stateful services. Those choices belong to an explicit migration.
+        if key=='WEBSITE_INTERNAL_TOKEN':line='WEBSITE_INTERNAL_TOKEN='+secrets.token_urlsafe(48)
         if key=='COMPOSE_PROFILES':line='COMPOSE_PROFILES='
         if key=='STORAGE_BACKEND':line='STORAGE_BACKEND=local'
         if key=='STORAGE_ENDPOINT_URL':line='STORAGE_ENDPOINT_URL='

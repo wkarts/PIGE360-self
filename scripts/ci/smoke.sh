@@ -13,14 +13,14 @@ STACK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/pige360-smoke.XXXXXXXX")"
 trap 'rm -rf -- "$STACK_DIR"' EXIT
 cp deploy/docker/compose.yaml "$STACK_DIR/compose.yaml"
 mkdir -p "$STACK_DIR/services"
-cp -a services/mail-agent services/sogo services/website "$STACK_DIR/services/"
+cp -a services/mail-agent services/sogo services/website services/portal "$STACK_DIR/services/"
 sed -i 's#../../services/#./services/#g' "$STACK_DIR/compose.yaml"
 touch "$STACK_DIR/.pige360-smoke-owned"
 ENVFILE="$STACK_DIR/.env.ci"
 PROJECT="pige360-ci-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-${RANDOM}"
 export APP_IMAGE="$IMAGE" APP_PULL_POLICY=never COMPOSE_PROJECT_NAME="$PROJECT"
 if [[ "$MODE" == local ]]; then
-  export MAIL_AGENT_IMAGE=pige360-mail-agent:ci SOGO_IMAGE=pige360-sogo:ci
+  export MAIL_AGENT_IMAGE=pige360-mail-agent:ci SOGO_IMAGE=pige360-sogo:ci WEBSITE_IMAGE=pige360-website:ci PORTAL_IMAGE=pige360-portal:ci
 fi
 export POSTGRES_IMAGE="${POSTGRES_IMAGE:-ghcr.io/wkarts/pige360-self-postgres:17-bookworm}"
 python - "$ENVFILE" <<'PYCONF'
@@ -28,7 +28,7 @@ import base64, os, secrets, sys
 values={'APP_SECRET_KEY':secrets.token_urlsafe(48),'SETUP_TOKEN':secrets.token_urlsafe(32),
         'POSTGRES_PASSWORD':secrets.token_urlsafe(36),'STORAGE_SECRET_KEY':secrets.token_urlsafe(36),
         'STORAGE_ACCESS_KEY':'pige360minio','STORAGE_ENDPOINT_URL':'http://minio:9000', 'APP_ENV':'production',
-        'APP_URL':'http://localhost','APP_PORT':'0','APP_BIND':'127.0.0.1',
+        'PORTAL_PUBLIC_URL':'http://127.0.0.1:58083','PORTAL_PORT':'58083','WEBSITE_PORT':'58082','WEBSITE_INTERNAL_TOKEN':secrets.token_urlsafe(36),'APP_URL':'http://localhost','APP_PORT':'0','APP_BIND':'127.0.0.1',
         'COOKIE_SECURE':'false','ALLOWED_HOSTS':'localhost,127.0.0.1',
         'INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(),
         'MAIL_AGENT_SHARED_KEY':secrets.token_urlsafe(48),'SOGO_DB_PASSWORD':secrets.token_urlsafe(36),
@@ -160,3 +160,7 @@ compose run --rm -T --no-deps --entrypoint python app - < scripts/ci/backup-smok
 compose up -d --no-recreate --wait --wait-timeout 240 app worker worker-ocr
 assert_healthy_services
 printf '{"postgresql_restore":true,"local_documents":true,"minio_documents":true,"isolated_stack":true}\n' > ci-evidence/backup-restore.json
+
+# Site e portal construídos/puxados separadamente, usando API interna real.
+compose --profile website --profile portal up -d --wait --wait-timeout 180 website portal
+python scripts/ci/surfaces-smoke.py "$ADDRESS" "$STACK_DIR" "$ENVFILE" "$PROJECT"

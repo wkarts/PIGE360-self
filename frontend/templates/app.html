@@ -143,7 +143,7 @@
         </div>
 
         <div v-if="state.loading && !['email','webmail'].includes(state.page)" class="loading-strip" role="status">Carregando registros…</div>
-        <legacy-import-panel v-if="state.page==='legacy-import' && adminTool('legacy-import')" :key="state.schoolId" :school-id="state.schoolId" :school-name="school()?.name || ''" :units="state.catalogs.units || []"></legacy-import-panel>
+        <legacy-import-panel v-if="state.page==='legacy-import' && adminTool('legacy-import')" :key="state.schoolId" :school-id="state.schoolId" :school-name="school()?.name || ''" :units="state.catalogs.units || []" @changed="importedDataChanged"></legacy-import-panel>
         <diagnostics-panel :key="state.schoolId" v-if="state.page==='diagnostics' && adminTool('diagnostics')"></diagnostics-panel>
         <section v-if="state.page==='webmail'" class="webmail-view" :key="state.schoolId+':webmail'" :style="{'--webmail-primary':identity.primary_color,'--webmail-secondary':identity.secondary_color}" aria-label="Caixa de e-mail">
           <div v-if="state.sogoStarting && !state.sogoFallback && !state.sogoError" class="webmail-loading" role="status"><span class="webmail-spinner" aria-hidden="true"></span><span>Abrindo sua caixa de e-mail…</span></div>

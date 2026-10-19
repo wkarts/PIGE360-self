@@ -91,7 +91,7 @@ def add_objects(archive,db,progress=lambda:None):
             path=f'objects/{len(manifest):08d}'
             archive.writestr(path,data)
             manifest.append({'path':path,'backend':backend,'bucket':bucket,'key':record.storage_key,
-                'sha256':record.sha256,'size':len(data)})
+                'sha256':record.sha256,'size':len(data),'mime_type':getattr(record,'mime_type','application/octet-stream')})
     return manifest
 
 
@@ -132,7 +132,7 @@ def create_bundle(ident):
                                     archive.writestr(name,data);roots.append({'path':name,'sha256':hashlib.sha256(data).hexdigest(),'size':len(data)})
                         with dump.open('rb') as handle:digest=hashlib.file_digest(handle,'sha256').hexdigest()
                         archive.writestr('manifest.json',json.dumps({'format':'pige360-backup-v2','created_at':now().isoformat(),
-                            'backup_id':ident,'database_sha256':digest,'objects':objects,'trust_roots':roots},ensure_ascii=False))
+                            'backup_id':ident,'schema_revision':connection.scalar(text('SELECT version_num FROM alembic_version')),'app_version':settings().app_version,'database_sha256':digest,'objects':objects,'trust_roots':roots},ensure_ascii=False))
         temporary.chmod(0o600);temporary.replace(destination)
         with destination.open('rb') as handle:digest=hashlib.file_digest(handle,'sha256').hexdigest()
         return digest,destination.stat().st_size
@@ -215,7 +215,8 @@ class Create(Input):
 @router.get('')
 def history(db:DB,user:Actor):
     require_admin(user)
-    return {'items':[output(row) for row in db.scalars(select(BackupRun).order_by(BackupRun.created_at.desc()).limit(100))],
+    from .backup_delivery import delivery_info
+    return {'items':[delivery_info(db,row) for row in db.scalars(select(BackupRun).order_by(BackupRun.created_at.desc()).limit(100))],
         'supported':engine.dialect.name=='postgresql','note':'Backup completo da instalação; inclui todas as escolas. Frequência manual; sem exclusão automática.'}
 
 
@@ -282,28 +283,22 @@ def configure_target(data:TargetInput,db:DB,user:Actor,request:Request):
 
 @router.post('/{id}/send')
 def send(id:str,db:DB,user:Actor,request:Request):
-    require_admin(user)
-    row=db.scalar(select(BackupRun).where(BackupRun.id==id).with_for_update())
-    destination=db.scalar(select(BackupTarget).limit(1))
-    if not row or row.status!='completed':fail(409,'Gere e conclua o backup antes do envio.')
-    if not destination:fail(409,'Configure o destino e seu token autorizado.')
-    if row.remote_status=='sent':return output(row)
-    if row.remote_status in {'sending','uncertain'}:fail(409,'Confira o arquivo no destino antes de repetir um envio incerto. O backup local está preservado.')
-    path=bundle_path(row.id)
-    with path.open('rb') as handle:digest=hashlib.file_digest(handle,'sha256').hexdigest()
-    if digest!=row.sha256:fail(409,'A integridade do backup falhou.')
-    credentials=unseal(destination.encrypted_token)
-    row.remote_status='sending';db.commit()  # crash/timeout não gera reenvio automático
-    try:
-        remote=upload_remote(destination,credentials['access_token'],path)
-        row.remote_status='sent';row.remote_id=remote
-    except Exception:
-        row.remote_status='uncertain';row.error_code='BACKUP_REMOTE_UNCERTAIN_CHECK_DESTINATION'
-    audit(db,request,user,'backup.sent' if row.remote_status=='sent' else 'backup.send_uncertain',row)
-    return output(row)
+    from .backup_delivery import queue_delivery
+    return queue_delivery(id,db,user,request)
 
 
-def upload_remote(target,token,path):
+class RecoverInput(Input):
+    confirmed_original_destination:bool=False
+    allow_new_upload:bool=False
+
+
+@router.post('/{id}/recover')
+def recover_delivery(id:str,db:DB,user:Actor,request:Request,data:RecoverInput=RecoverInput()):
+    from .backup_delivery import queue_delivery
+    return queue_delivery(id,db,user,request,recover=True,confirmed=data.confirmed_original_destination,allow_new=data.allow_new_upload)
+
+
+def upload_remote(target,token,path,remote_id=''):
     """Somente hosts oficiais fixos. Tokens nunca são colocados em URLs/logs."""
     headers={'Authorization':'Bearer '+token}
     size=path.stat().st_size
@@ -324,7 +319,7 @@ def upload_remote(target,token,path):
             return result['id']
         response=client.post('https://www.googleapis.com/upload/drive/v3/files',params={'uploadType':'resumable','fields':'id'},
             headers={**headers,'X-Upload-Content-Type':'application/zip','X-Upload-Content-Length':str(size)},
-            json={'name':path.name,**({'parents':[target.folder]} if target.folder else {})})
+            json={'name':path.name,**({'id':remote_id} if remote_id else {}),**({'parents':[target.folder]} if target.folder else {})})
         response.raise_for_status();location=response.headers['Location'];url=urlsplit(location)
         if url.scheme!='https' or url.hostname!='www.googleapis.com' or url.username or url.password or url.port not in (None,443):
             raise ValueError('Untrusted upload session')

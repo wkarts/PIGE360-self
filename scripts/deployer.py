@@ -20,6 +20,9 @@ import subprocess
 import sys
 import os
 import tempfile
+import hashlib
+import threading
+from uuid import UUID
 from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(sys.executable).resolve().parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parents[1]
@@ -63,7 +66,7 @@ def stacks(root=ROOT):
             for line in env.read_text().splitlines():
                 if '=' in line and not line.startswith('#'):
                     key, value = line.split('=', 1)
-                    if key in {'APP_URL', 'APP_PORT', 'APP_ENV', 'APP_IMAGE', 'COMPOSE_PROJECT_NAME', 'STORAGE_BACKEND'}:
+                    if key in {'APP_URL', 'APP_PORT', 'APP_ENV', 'APP_IMAGE', 'COMPOSE_PROJECT_NAME', 'STORAGE_BACKEND','WEBSITE_PUBLIC_URL','WEBSITE_PORT','PORTAL_PUBLIC_URL','PORTAL_PORT','COMPOSE_PROFILES'}:
                         values[key] = value
             result[relative] = values
     return result
@@ -90,7 +93,7 @@ def create(root, name, channel, url, port):
     try:
         compose = (root / 'deploy' / 'docker' / 'compose.yaml').read_text()
         # The instance directory is one level deeper than an adapter.
-        compose = compose.replace('context: ../../services/', 'context: ../../../services/')
+        compose = compose.replace('context: ../../services/', 'context: ../../../services/').replace('context: ../..,','context: ../../..,')
         (destination / 'compose.yaml').write_text(compose)
         env_path = Path('deploy') / 'instances' / name / ('.env.develop' if channel == 'develop' else '.env.production')
         subprocess.run([*helper_command(root, 'configure.py'),
@@ -152,6 +155,136 @@ def inspect_stack(root,env_path):
     return health+'\n'+logs
 
 
+def restore_command(root,env_path):
+    if env_path not in stacks(root):raise ValueError('Stack não encontrada.')
+    return ['docker','compose','--env-file',str(root/env_path),'-f',str((root/env_path).parent/'compose.yaml')]
+
+
+def configure_surfaces(root,env_path,website_url,website_port,portal_url,portal_port,website_enabled,portal_enabled):
+    available=stacks(root)
+    if env_path not in available:raise ValueError('Stack não encontrada.')
+    values=available[env_path]
+    def origin(value):
+        parsed=urlsplit(value)
+        if (parsed.scheme not in {'http','https'} or not parsed.hostname or parsed.username or parsed.password
+            or parsed.path not in {'','/'} or parsed.query or parsed.fragment
+            or any(x in value for x in ('\n','\r','$','#','"',"'"))):raise ValueError('Informe origens públicas exatas, sem caminhos ou credenciais.')
+        if parsed.scheme!='https' and parsed.hostname not in {'localhost','127.0.0.1'}:raise ValueError('Domínios públicos de site e portal exigem HTTPS.')
+        return value.rstrip('/')
+    desired={}
+    for key,url,port,enabled in [('WEBSITE',website_url,website_port,website_enabled),('PORTAL',portal_url,portal_port,portal_enabled)]:
+        if enabled or url:
+            desired[key+'_PUBLIC_URL']=origin(url)
+        if not port.isdecimal() or not 1024<=int(port)<=65535:raise ValueError('Portas devem estar entre 1024 e 65535.')
+        desired[key+'_PORT']=port
+    used=[values.get('APP_PORT'),website_port if website_enabled else None,portal_port if portal_enabled else None]
+    used=[p for p in used if p]
+    if len(set(used))!=len(used):raise ValueError('Gestor, site e portal precisam de portas distintas.')
+    for path,other in available.items():
+        if path!=env_path and any(port in used for key,port in other.items() if key.endswith('_PORT')):raise ValueError('Uma das portas pertence a outra stack deste checkout.')
+    destination=root/env_path;original=destination.read_text();lines=original.splitlines()
+    old=dict(line.split('=',1) for line in lines if '=' in line and not line.lstrip().startswith('#'))
+    profiles={x for x in old.get('COMPOSE_PROFILES','').split(',') if x}
+    for profile,enabled in [('website',website_enabled),('portal',portal_enabled)]:
+        if enabled:profiles.add(profile)
+        else:profiles.discard(profile)
+    desired['COMPOSE_PROFILES']=','.join(sorted(profiles))
+    if portal_enabled and values.get('APP_URL','').rstrip('/')==desired.get('PORTAL_PUBLIC_URL'):raise ValueError('O domínio do portal deve ser distinto do gestor.')
+    if website_enabled and website_url.rstrip('/') in {values.get('APP_URL','').rstrip('/'),portal_url.rstrip('/') if portal_enabled else ''}:raise ValueError('O site deve usar domínio próprio.')
+    stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+    backup=destination.with_name('.env.backup-'+stamp);shutil.copyfile(destination,backup);backup.chmod(0o600)
+    updated=[]
+    for line in lines:
+        key=line.split('=',1)[0]
+        updated.append(key+'='+desired[key] if key in desired else line)
+    updated.extend(key+'='+value for key,value in desired.items() if key not in old)
+    temp=destination.with_name('.env.surfaces-'+stamp)
+    try:
+        temp.write_text('\n'.join(updated)+'\n');temp.chmod(0o600)
+        command=['docker','compose','--env-file',str(temp),'-f',str(destination.parent/'compose.yaml'),'config','--quiet']
+        subprocess.run(command,cwd=root,check=True,capture_output=True,text=True,timeout=40)
+        temp.replace(destination)
+    finally:temp.unlink(missing_ok=True)
+    return 'Configuração validada e salva. Gestor, SMTP, WhatsApp, segredos, volumes e projeto preservados. Confira diferenças antes de atualizar serviços.'
+
+
+def restore_plans(root,env_path):
+    command=restore_command(root,env_path)
+    result=subprocess.run([*command,'run','--rm','--no-deps','-T','--entrypoint','python','app','-m','app.restore_control','list'],cwd=root,check=True,capture_output=True,text=True,timeout=60)
+    return json.loads(result.stdout)
+
+
+def restore_state_dir(root,env_path):
+    values=stacks(root)
+    if env_path not in values:raise ValueError('Stack não encontrada.')
+    # Mesmo projeto Compose usa a mesma exclusão mútua, inclusive entre arquivos env.
+    identity=values[env_path].get('COMPOSE_PROJECT_NAME') or str((root/env_path).parent)
+    directory=root/'deploy'/'restore-state'/hashlib.sha256(identity.encode()).hexdigest()
+    directory.mkdir(parents=True,exist_ok=True,mode=0o700)
+    return directory
+
+
+def restore_history(root,env_path):
+    import fcntl
+    directory=restore_state_dir(root,env_path)
+    rows=[]
+    for path in directory.glob('*.json'):
+        row=json.loads(path.read_text())
+        if row['status']=='processing':
+            with (directory/'execution.lock').open('a') as lock:
+                try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                except BlockingIOError:pass
+                else:
+                    row['status']='interrupted';row['error_code']='DEPLOYER_INTERRUPTED_KEEP_SERVICES_STOPPED'
+                    path.write_text(json.dumps(row))
+        rows.append(row)
+    return sorted(rows,key=lambda r:r['created_at'],reverse=True)
+
+
+def start_restore(root,env_path,ident,confirmation):
+    import fcntl
+    if str(UUID(ident))!=ident:raise ValueError('Plano inválido.')
+    plan=next((p for p in restore_plans(root,env_path) if p['id']==ident),None)
+    if not plan or plan['status']!='prepared' or plan['expires_at']<datetime.now(timezone.utc).isoformat():raise ValueError('Prepare novamente o plano na administração. Ele precisa estar válido e não utilizado.')
+    if confirmation!=plan['confirmation']:raise ValueError('Digite exatamente a confirmação mostrada no plano. Nenhum serviço foi parado.')
+    command=restore_command(root,env_path);directory=restore_state_dir(root,env_path)
+    lock=(directory/'execution.lock').open('a')
+    try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock.close();raise ValueError('Já existe restauração em andamento nesta stack.')
+    path=directory/(ident+'.json')
+    if path.exists():
+        lock.close();raise ValueError('Este plano já possui execução. Consulte o resultado; não o repita automaticamente.')
+    row={'id':ident,'status':'processing','stage':'validating','created_at':datetime.now(timezone.utc).isoformat(),'error_code':''}
+    def save():
+        temporary=path.with_suffix('.part');temporary.write_text(json.dumps(row));temporary.chmod(0o600);temporary.replace(path)
+    save()
+    def run():
+        def execute(args,timeout=120):return subprocess.run([*command,*args],cwd=root,check=True,capture_output=True,text=True,timeout=timeout)
+        try:
+            execute(['config','--quiet'])
+            # Verifica o pacote outra vez antes de interromper os serviços.
+            execute(['run','--rm','--no-deps','-T','--entrypoint','python','app','-m','app.restore_control','inspect',ident])
+            config=json.loads(execute(['config','--format','json']).stdout)
+            writers=[name for name in config['services'] if name not in {'db','minio','storage-init'}]
+            row['stage']='stopping_services';save();execute(['stop',*writers])
+            row['stage']='protecting_and_restoring';save()
+            execute(['run','--rm','--no-deps','-T','--entrypoint','python','app','-m','app.restore_control','execute',ident],timeout=1800)
+            row['stage']='verifying_result';save()
+            completed=next((p for p in restore_plans(root,env_path) if p['id']==ident),None)
+            if not completed or completed['status']!='completed':raise ValueError('Restore not completed')
+            row['stage']='starting_and_checking_health';save();execute(['up','-d','--wait'],timeout=600)
+            row['status']='completed';row['stage']='completed';save()
+        except BaseException:
+            row['status']='failed';row['error_code']='RESTORE_FAILED_KEEP_SERVICES_STOPPED';save()
+            if 'writers' in locals():
+                try:execute(['stop',*writers])
+                except Exception:pass
+        finally:lock.close()
+    threading.Thread(target=run,daemon=True,name='restore-'+ident[:8]).start()
+    return row
+
+
 def serve(port):
     password = secrets.token_urlsafe(32)
     session = secrets.token_urlsafe(32)
@@ -198,7 +331,13 @@ def serve(port):
                 '<input type="hidden" name="path" value="' + escape(path, quote=True) + '">' +
                 '<label><input type="checkbox" name="refresh" value="yes"> Incluir evolução do Compose preservando parâmetros</label><button>Atualizar imagens e serviços</button></form>' +
                 '<form method="post" action="/preview">'+field+'<input type="hidden" name="path" value="'+escape(path,quote=True)+'"><button>Conferir diferenças</button></form>'+
-                '<form method="post" action="/inspect">'+field+'<input type="hidden" name="path" value="'+escape(path,quote=True)+'"><button>Saúde e logs</button></form></li>'
+                '<form method="post" action="/inspect">'+field+'<input type="hidden" name="path" value="'+escape(path,quote=True)+'"><button>Saúde e logs</button></form>'+
+                '<form method="post" action="/restore-plans">'+field+'<input type="hidden" name="path" value="'+escape(path,quote=True)+'"><button>Consultar planos de restauração</button></form>'+
+                '<form method="post" action="/restore-history">'+field+'<input type="hidden" name="path" value="'+escape(path,quote=True)+'"><button>Acompanhar restauração</button></form>'+
+                '<details><summary>Configurar site e portal independentes</summary><form method="post" action="/surfaces">'+field+'<input type="hidden" name="path" value="'+escape(path,quote=True)+'">'+
+                '<label><input type="checkbox" name="website_enabled" value="yes" '+('checked' if 'website' in v.get('COMPOSE_PROFILES','').split(',') else '')+'> Habilitar site</label><label>URL pública do site<input name="website_url" value="'+escape(v.get('WEBSITE_PUBLIC_URL',''),quote=True)+'"></label><label>Porta do site<input name="website_port" value="'+escape(v.get('WEBSITE_PORT','58082'),quote=True)+'"></label>'+
+                '<label><input type="checkbox" name="portal_enabled" value="yes" '+('checked' if 'portal' in v.get('COMPOSE_PROFILES','').split(',') else '')+'> Habilitar portal</label><label>URL pública do portal<input name="portal_url" value="'+escape(v.get('PORTAL_PUBLIC_URL',''),quote=True)+'"></label><label>Porta do portal<input name="portal_port" value="'+escape(v.get('PORTAL_PORT','58083'),quote=True)+'"></label><p>O conteúdo e a marca do site continuam administrados pelo PIGE. Configure o proxy reverso de cada domínio antes de liberar o acesso externo.</p><button>Validar e salvar configuração</button></form></details>'+
+                '<form method="post" action="/restore">'+field+'<input type="hidden" name="path" value="'+escape(path,quote=True)+'"><label>ID do plano preparado no gestor<input name="id" required></label><p>Substitui o banco e repõe arquivos de toda a instalação. Para os serviços, preserva o estado anterior e revoga sessões. Falhas exigem recuperação antes de liberar a escola.</p><label>Confirmação exibida no plano<input name="confirmation" required autocomplete="off"></label><button>Confirmar restauração destrutiva</button></form></li>'
                 for path, v in stacks(ROOT).items())
             return (head + notice + '<section><h2>Stacks deste checkout</h2><ul>' + (items or '<li>Nenhuma stack criada.</li>') +
                 '</ul></section><section><h2>Nova stack isolada</h2><p>O ambiente é criado com segredos próprios; '
@@ -213,7 +352,7 @@ def serve(port):
             self.send_html(self.page() if self.path == '/' else 'Não encontrado', 200 if self.path == '/' else 404)
 
         def do_POST(self):
-            if self.path not in ('/login', '/create', '/deploy','/preview','/inspect'):
+            if self.path not in ('/login', '/create', '/deploy','/preview','/inspect','/restore-plans','/restore-history','/restore','/surfaces'):
                 return self.send_html('Não encontrado', 404)
             if self.headers.get('Origin') != origin:
                 return self.send_html('Origem inválida', 403)
@@ -238,6 +377,12 @@ def serve(port):
                     return self.send_html(self.page('Stack criada: ' + path + '. Revise o .env antes de implantar.'))
                 if self.path=='/preview':return self.send_html(self.page(preview_upgrade(ROOT,form.get('path',''))))
                 if self.path=='/inspect':return self.send_html(self.page(inspect_stack(ROOT,form.get('path',''))))
+                if self.path=='/surfaces':return self.send_html(self.page(configure_surfaces(ROOT,form.get('path',''),form.get('website_url',''),form.get('website_port',''),form.get('portal_url',''),form.get('portal_port',''),form.get('website_enabled')=='yes',form.get('portal_enabled')=='yes')))
+                if self.path=='/restore-plans':return self.send_html(self.page(json.dumps(restore_plans(ROOT,form.get('path','')),ensure_ascii=False,indent=2)))
+                if self.path=='/restore-history':return self.send_html(self.page(json.dumps(restore_history(ROOT,form.get('path','')),ensure_ascii=False,indent=2)))
+                if self.path=='/restore':
+                    start_restore(ROOT,form.get('path',''),form.get('id',''),form.get('confirmation',''))
+                    return self.send_html(self.page('Restauração iniciada. Use Acompanhar restauração. Não feche o deployer durante a operação.'))
                 deploy(ROOT, form.get('path', ''),refresh=form.get('refresh')=='yes')
                 return self.send_html(self.page('Stack atualizada; confira a saúde dos serviços no Docker.'))
             except (ValueError, FileExistsError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:

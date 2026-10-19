@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-: "${VERSION:?}" "${TARGET_SHA:?}" "${IMAGE:?}" "${DIGEST:?}" "${MAIL_AGENT_IMAGE:?}" "${MAIL_AGENT_DIGEST:?}" "${SOGO_IMAGE:?}" "${SOGO_DIGEST:?}"
+: "${VERSION:?}" "${TARGET_SHA:?}" "${IMAGE:?}" "${DIGEST:?}" "${MAIL_AGENT_IMAGE:?}" "${MAIL_AGENT_DIGEST:?}" "${SOGO_IMAGE:?}" "${SOGO_DIGEST:?}" "${WEBSITE_IMAGE:?}" "${WEBSITE_DIGEST:?}" "${PORTAL_IMAGE:?}" "${PORTAL_DIGEST:?}"
 [[ "$GITHUB_REF" == refs/heads/main || "$GITHUB_EVENT_NAME" == pull_request ]]
 [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
 [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]
@@ -43,7 +43,7 @@ python - <<'PYVERIFY'
 import os, sys
 sys.path.insert(0, "scripts/ci")
 from promote import inspect
-for image, digest in [('IMAGE', 'DIGEST'), ('MAIL_AGENT_IMAGE', 'MAIL_AGENT_DIGEST'), ('SOGO_IMAGE', 'SOGO_DIGEST'),('WEBSITE_IMAGE','WEBSITE_DIGEST')]:
+for image, digest in [('IMAGE', 'DIGEST'), ('MAIL_AGENT_IMAGE', 'MAIL_AGENT_DIGEST'), ('SOGO_IMAGE', 'SOGO_DIGEST'),('WEBSITE_IMAGE','WEBSITE_DIGEST'),('PORTAL_IMAGE','PORTAL_DIGEST')]:
     for alias in (os.environ['VERSION'], 'production', 'stable', 'latest'):
         if inspect(os.environ[image] + ':' + alias) != os.environ[digest]:
             raise SystemExit('Conjunto estável divergente; release permanece em rascunho')
