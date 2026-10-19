@@ -300,3 +300,41 @@ def renew_reservation(id:str,data:s.FinalizeAdmission,db:DB,user:Actor,school:Sc
     add_message(db,obj,'Reserva de vaga revista pela Secretaria. Confira o prazo para pagamento.','reservation',user=user)
     audit(db,request,user,'admission.reservation_renewed',obj,school.id,{'reason':data.reason})
     db.flush();return admission_output(db,obj,False)
+
+
+@router.post('/admissions/{id}/contract-revision')
+def revise_contract(id:str,data:s.ContractRevisionInput,db:DB,user:Actor,school:Scope,request:Request):
+    require(user,'admissions.write');require(user,'documents.generate')
+    if user.role not in {'admin','direction'}:fail(403,'A revisão do contrato vinculado exige direção ou administração.')
+    lock_school(db,school.id);obj=scoped(db,m.Admission,id,school.id)
+    if obj.status!='approved' or not obj.enrollment_id or not obj.contract_template_id or not obj.contract_template_version:
+        fail(409,'Revise o contrato antes da efetivação; documentos de matrículas concluídas exigem tratamento próprio.')
+    enrollment=scoped(db,m.Enrollment,obj.enrollment_id,school.id)
+    if enrollment.status not in ('draft','cancelled'):fail(409,'O vínculo acadêmico já saiu da etapa de preparação.')
+    if obj.contract_template_version==data.template_version:return admission_output(db,obj,False)
+    check_version(obj,data.version)
+    template=scoped(db,m.DocumentTemplate,obj.contract_template_id,school.id)
+    if not template.active or not template.require_signature or template.version!=data.template_version:
+        fail(409,'Selecione a revisão atual de um modelo ativo que exija assinatura.')
+    if template.academic_year_id and template.academic_year_id!=enrollment.academic_year_id:
+        fail(409,'A nova revisão não corresponde ao ano letivo da matrícula.')
+    if data.template_version<obj.contract_template_version:fail(409,'A revisão contratual não pode retroceder.')
+    revision=db.scalar(select(m.DocumentTemplateRevision).where(
+        m.DocumentTemplateRevision.template_id==template.id,m.DocumentTemplateRevision.school_id==school.id,
+        m.DocumentTemplateRevision.version_number==data.template_version))
+    if not revision:fail(409,'A revisão imutável do modelo está indisponível.')
+    issued=db.scalar(select(m.IssuedDocument).where(m.IssuedDocument.school_id==school.id,
+        m.IssuedDocument.enrollment_id==enrollment.id,m.IssuedDocument.template_id==template.id,
+        m.IssuedDocument.template_version==str(data.template_version)).limit(1))
+    if issued and issued.signature_status!='unsigned':
+        fail(409,'Esta revisão já recebeu assinatura fora deste fluxo. Crie outra revisão para iniciar um reenvio inequívoco.')
+    before={'version':obj.contract_template_version,'sha256':obj.contract_template_revision_sha256}
+    obj.contract_template_version=revision.version_number;obj.contract_template_revision_sha256=revision.sha256
+    obj.contract_signing_order='applicant_first';obj.reviewed_by=user.id;obj.version+=1
+    add_message(db,obj,'O contrato foi corrigido pela escola. Aguarde a nova via e assine novamente o PDF disponibilizado. '+data.reason,
+        'contract_revision',user=user)
+    audit(db,request,user,'admission.contract_revision_changed',obj,school.id,
+        {'before':before,'after':{'version':revision.version_number,'sha256':revision.sha256},'reason':data.reason})
+    admission_notification(db,obj,'O contrato da sua inscrição foi atualizado. Confira a nova via e as orientações da escola.',
+        'contract-revision-'+str(revision.version_number))
+    db.flush();return admission_output(db,obj,False)

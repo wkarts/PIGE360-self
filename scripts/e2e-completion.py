@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Jornadas novas em HTTP real, pessoas/certificados sintéticos e serviços locais."""
 import io
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
@@ -151,6 +152,30 @@ try:
         family.get_by_label('PDF assinado pelo responsável',exact=True).set_input_files(str(signed_path));family.get_by_role('button',name='Enviar contrato assinado',exact=True).click()
         expect(family.get_by_text('Contrato recebido.',exact=False).first).to_be_visible();family.screenshot(path=str(OUT/'contrato-familia-primeiro.png'),full_page=True)
         record('Família baixa o contrato sem A1 exigido, devolve PDF assinado e acompanha a reserva pela interface')
+        # Uma correção escolhe outra revisão explicitamente; não troca os bytes da via anterior.
+        old_id,old_signed=issued['id'],signed
+        call('PATCH','/document-templates/'+template['id'],{'version':template['version'],
+            'name':template['name'],'kind':template['kind'],'academic_year_id':year['id'],
+            'require_signature':True,'body':'Contrato corrigido de {{aluno.nome}} com {{escola.nome}}.'})
+        admin.goto(URL+'/#/online');admin.reload();admin.locator('.x-record',has_text='Aluno de possibilidades').click()
+        admin.get_by_label('Justificativa / parecer para a próxima ação',exact=True).fill('Correção sintética de conteúdo contratual aprovada pela Direção.')
+        admin.get_by_role('button',name='Vincular nova revisão do contrato',exact=True).click()
+        expect(admin.get_by_text('Nova revisão vinculada.',exact=False)).to_be_visible()
+        admin.get_by_role('button',name='Preparar contrato',exact=True).click()
+        admin.get_by_role('button',name='Emitir contrato da revisão aprovada',exact=True).click()
+        expect(admin.get_by_text('Contrato emitido da revisão aprovada.',exact=False)).to_be_visible()
+        current=call('GET','/admissions/'+a['id']);issued={'id':current['contract']['issued_document_id']}
+        assert issued['id']!=old_id and pc('GET',f"/admissions/{a['id']}/issued/{old_id}")==old_signed
+        family.reload();family.locator('.x-record',has_text='Aluno de possibilidades').click()
+        original=pc('GET',f"/admissions/{a['id']}/issued/{issued['id']}")
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            signed=executor.submit(sign_pdf_pfx,original,parent_pfx,'senha-teste','ResponsavelCorrigido').result()
+        signed_path.write_bytes(signed)
+        family.get_by_label('PDF assinado pelo responsável',exact=True).set_input_files(str(signed_path))
+        family.get_by_role('button',name='Enviar contrato assinado',exact=True).click()
+        expect(family.get_by_text('Contrato recebido.',exact=False).first).to_be_visible()
+        family.screenshot(path=str(OUT/'contrato-familia-primeiro.png'),full_page=True)
+        record('Correção contratual vincula nova revisão pela UI, preserva a via anterior e exige novo envio pela família')
         charge=call('POST','/bank-charges',{'admission_id':a['id'],'collection_mode':'manual','billing_type':'MANUAL',
             'amount':'150.00','due_on':str(date.today()),'description':'Taxa sintética','required_for_enrollment':True,'client_key':str(uuid.uuid4())})['items'][0]
         call('POST','/bank-charges/'+charge['id']+'/manual-receipt',{'version':charge['version'],'amount':'150.00',
@@ -158,7 +183,7 @@ try:
         r=client.post(base+f"/issued-documents/{issued['id']}/validate-signature",headers=headers,
             data={'signer_cpf':CPF,'validation_reference':'SYNTHETIC-E2E-001'},files={'report':('relatorio.pdf',blank_pdf(),'application/pdf')});assert r.is_success,r.text
         r=client.put(base+'/signing-certificate/a1',headers=headers,data={'password':'senha-teste'},files={'file':('escola.p12',school_pfx)});assert r.is_success,r.text
-        admin.goto(URL+'/#/online');admin.locator('.x-record',has_text='Aluno de possibilidades').click()
+        admin.goto(URL+'/#/online');admin.reload();admin.locator('.x-record',has_text='Aluno de possibilidades').click()
         admin.get_by_label('Justificativa / parecer para a próxima ação',exact=True).fill('Conferência sintética final com pagamento e assinatura do responsável.')
         admin.get_by_role('button',name='Efetivar matrícula e emitir comprovante',exact=True).click()
         expect(admin.get_by_text('Matrícula efetivada. Comprovante disponível no portal do responsável.',exact=True)).to_be_visible()

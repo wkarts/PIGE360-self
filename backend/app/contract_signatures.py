@@ -11,7 +11,7 @@ from cryptography import x509 as cryptography_x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.serialization import pkcs12
 from fastapi import APIRouter, File, Form, Header, Request, UploadFile
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func, select
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, cast, func, select
 from sqlalchemy.orm import Mapped, mapped_column
 
 from . import models as m
@@ -421,8 +421,12 @@ def pending_signatures(db: DB, user: Actor, school: Scope,
     require(user, 'documents.validate')
     if not 1 <= limit <= 100 or not 0 <= offset <= 10000:
         fail(422, 'Paginação inválida.')
+    superseded=select(m.Admission.id).where(m.Admission.school_id==school.id,
+        m.Admission.enrollment_id==m.IssuedDocument.enrollment_id,
+        m.Admission.contract_template_id==m.IssuedDocument.template_id,
+        cast(m.Admission.contract_template_version,String)!=m.IssuedDocument.template_version).exists()
     filters = (m.IssuedDocument.school_id == school.id,
-               m.IssuedDocument.signature_status == 'pending_validation')
+               m.IssuedDocument.signature_status == 'pending_validation',~superseded)
     total = db.scalar(select(func.count()).select_from(m.IssuedDocument).where(*filters))
     rows = db.execute(select(m.IssuedDocument, m.Person.name).join(
         m.Student, m.Student.id == m.IssuedDocument.student_id

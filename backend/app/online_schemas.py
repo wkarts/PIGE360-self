@@ -131,6 +131,11 @@ class FinalizeAdmission(Input):
     version: int = Field(ge=1)
     reason: str = Field(min_length=3,max_length=1000)
 
+class ContractRevisionInput(Input):
+    version: int = Field(ge=1)
+    template_version: int = Field(ge=1)
+    reason: str = Field(min_length=10,max_length=1000)
+
 class MessageInput(Input):
     text: str = Field(min_length=1,max_length=3000)
     internal: bool = False

@@ -41,7 +41,7 @@ O fluxo atualmente aceito continua sendo **PDF com assinatura criptográfica inc
 
 A conclusão de contrato novo exige perfil Direção/Administração e as permissões operacionais de matrícula e geração de documento. O teste usa certificados sintéticos; isso não homologa ICP-Brasil, revogação nem o VALIDAR/ITI real. Uma falha no A1 mantém matrícula em rascunho e não grava revisão institucional assinada. A ativação administrativa alternativa não contorna essa exigência. Repetir a efetivação devolve a mesma matrícula e os documentos persistidos.
 
-Revisões anteriores da escola permanecem com a ordem de assinatura antiga. Não há conversão de PDFs já assinados nem perda do histórico. Correções de conteúdo continuam exigindo nova revisão do modelo e conferência do vínculo: uma revisão já emitida não é sobrescrita.
+Revisões anteriores da escola permanecem com a ordem de assinatura antiga. Não há conversão de PDFs já assinados nem perda do histórico. Para corrigir conteúdo antes da efetivação, crie outra revisão do modelo e use **Vincular nova revisão do contrato** na inscrição, com justificativa da Direção/Administração. Prepare e emita a nova via. A família precisa assinar novamente; a via antiga permanece acessível no histórico e sai da fila operacional de assinaturas pendentes. Uma revisão já emitida não é sobrescrita.
 
 ### OCR
 
@@ -107,12 +107,12 @@ O downgrade remove os novos controles e seus históricos: não deve ser tratado 
 
 ## Evidências e limites
 
-Validações locais observadas antes da revisão final:
+Validações locais observadas na revisão final:
 
 - Python 3.13.16, dependências fixadas do projeto; frontend compilado com Node 22.
-- Backend: 530 aprovados, dois casos de concorrência pulados por exigir PostgreSQL; cinco subtestes aprovados. Avisos de depreciação do TestClient permanecem.
+- Backend: 532 aprovados, dois casos de concorrência pulados por exigir PostgreSQL; cinco subtestes aprovados. Avisos de depreciação do TestClient permanecem.
 - Políticas de CI: 181 aprovadas; TypeScript strict, build pré-compilado e validador estrutural aprovados.
-- E2E das novas jornadas: seis verificações integradas, incluindo delegação pela navegação, configuração da ponte/site, três modelos responsivos e conclusão de contrato pela UI. [Resultado HTTP](evidence/completion-http-results.json).
+- E2E das novas jornadas: sete verificações integradas, incluindo delegação pela navegação, configuração da ponte/site, três modelos responsivos, correção/reenvio de contrato e conclusão pela UI. [Resultado HTTP](evidence/completion-http-results.json).
 - E2E HTTP matrícula: 16 verificações, sem erros JavaScript, dados SQLite descartáveis, sem chamadas a provedores reais.
 - E2E espaço de matrícula: sete verificações, inclusive telas de 320/390px e janela baixa, sem erros de página/HTTP.
 - E2E OCR: leitura local pelo worker, revisão e aplicação pela interface; sem erros JavaScript nos fluxos exercitados.
@@ -128,7 +128,7 @@ Decisões mantidas pendentes: prazo comercial de reserva, aceitação de assinat
 
 - [Horizonte](screenshots/site-horizon.png), [Editorial](screenshots/site-editorial.png) e [Campus](screenshots/site-campus.png).
 - [Devolução do contrato pela família](screenshots/contrato-familia-primeiro.png).
-- [Habilitação da portabilidade e backup administrativo](screenshots/portabilidade-backup.png).
+- [Habilitação da portabilidade e backup administrativo](screenshots/portabilidade-backup.png), [navegação do usuário delegado](screenshots/delegation-navigation.png) e [configuração do site](screenshots/site-configuration.png).
 
 O worker reconcilia backups interrompidos sem bloquear permanentemente novos pedidos. Sem progresso por 30 minutos, ele valida um pacote final já disponível ou marca a tentativa como interrompida; durante cópia prolongada de objetos, atualiza o heartbeat. A suite também exercita timeout do OCR, encerramento do grupo de processos, remoção dos temporários, nova tentativa bem-sucedida e limpeza da origem expirada.
 

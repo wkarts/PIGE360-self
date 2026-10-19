@@ -146,6 +146,9 @@ def admission_output(db,obj,public=True):
                       'template_version':obj.contract_template_version,
                       'issued_document_id':contract.id if contract and (obj.contract_signing_order=='applicant_first' or contract.signature_status in ('company_signed','pending_validation','verified','rejected')) else None,
                       'signature_status':contract.signature_status if contract else 'awaiting_school'}
+    if not public and obj.contract_template_id:
+        current=db.get(m.DocumentTemplate,obj.contract_template_id)
+        data['contract']['available_template_version']=current.version if current and current.active else None
     return data
 
 def add_message(db,obj,text,kind='message',user=None,account=None,internal=False):

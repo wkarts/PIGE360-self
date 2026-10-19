@@ -6117,6 +6117,16 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                               class: "panel x-card"
                             }, [
                               _createElementVNode("h2", null, "Contrato desta matrícula"),
+                              (s.selected.status==='approved' && s.selected.contract.available_template_version && s.selected.contract.template_version && s.selected.contract.available_template_version>s.selected.contract.template_version && can('admissions.write') && can('documents.generate'))
+                                ? (_openBlock(), _createElementBlock("div", {
+                                    key: 0,
+                                    class: "alert warning"
+                                  }, [_createElementVNode("p", null, "O modelo possui a revisão v" + _toDisplayString(s.selected.contract.available_template_version) + ". A via atual continua vinculada à revisão aprovada. Para corrigir o conteúdo desta inscrição, a Direção/Administração deve registrar uma justificativa e vincular a nova revisão. A família precisará assinar a nova via; arquivos e assinaturas anteriores ficam no histórico.", 1), _createElementVNode("button", {
+                                    class: "btn btn-secondary",
+                                    onClick: reviseContract,
+                                    disabled: s.reason.trim().length<10
+                                  }, "Vincular nova revisão do contrato", 8, ["onClick", "disabled"])]))
+                                : _createCommentVNode("", true),
                               _createElementVNode("p", null, [_createTextVNode("Modelo " + _toDisplayString(templateName(s.selected.contract.template_id)) + " · revisão congelada v" + _toDisplayString(selectedContractVersion()), 1), (s.selected.contract_template_revision_sha256)
                                 ? (_openBlock(), _createElementBlock("span", {
                                     key: 0,
@@ -6125,7 +6135,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                                 : _createCommentVNode("", true)]),
                               _createElementVNode("p", { class: "alert info" }, "A revisão foi preservada na aprovação. Alterar o modelo depois não muda este contrato. " + _toDisplayString(s.selected.contract.signing_order==='applicant_first'?'A família baixa o contrato, assina fora da aplicação e devolve o PDF. A instituição assina com A1 por último ao efetivar a matrícula.':'Este contrato preserva o fluxo anterior: escola primeiro, responsável depois.'), 1),
                               (s.selected.contract.issued_document_id)
-                                ? (_openBlock(), _createElementBlock("div", { key: 0 }, [_createElementVNode("p", null, [_createTextVNode("Situação: "), _createElementVNode("strong", null, _toDisplayString(contractStatus(s.selected.contract.signature_status)), 1)]), _createElementVNode("button", {
+                                ? (_openBlock(), _createElementBlock("div", { key: 1 }, [_createElementVNode("p", null, [_createTextVNode("Situação: "), _createElementVNode("strong", null, _toDisplayString(contractStatus(s.selected.contract.signature_status)), 1)]), _createElementVNode("button", {
                                     type: "button",
                                     class: "btn btn-secondary",
                                     onClick: downloadSignedContract
@@ -6136,7 +6146,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                                       }, "A revisão está na fila de Assinaturas e revisão do menu Modelos e contratos."))
                                     : _createCommentVNode("", true)]))
                                 : (s.selected.status==='approved' && can('documents.generate'))
-                                  ? (_openBlock(), _createElementBlock("div", { key: 1 }, [_createElementVNode("button", {
+                                  ? (_openBlock(), _createElementBlock("div", { key: 2 }, [_createElementVNode("button", {
                                       type: "button",
                                       class: "btn btn-secondary",
                                       onClick: previewFrozenContract,
@@ -6190,7 +6200,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                                       : _createCommentVNode("", true)]))
                                   : (!s.selected.contract.issued_document_id)
                                     ? (_openBlock(), _createElementBlock("p", {
-                                        key: 2,
+                                        key: 3,
                                         class: "small muted"
                                       }, "O contrato pode ser emitido após a aprovação e a criação da matrícula em preparação."))
                                     : _createCommentVNode("", true)
