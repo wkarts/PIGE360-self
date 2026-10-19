@@ -13,7 +13,8 @@ import sys
 import tempfile
 import time
 import uuid
-from datetime import date,timedelta
+from datetime import date,datetime,timedelta
+from zoneinfo import ZoneInfo
 import httpx
 from playwright.sync_api import sync_playwright,expect
 from cryptography.hazmat.primitives import serialization
@@ -194,7 +195,7 @@ try:
         charge=call('POST','/bank-charges',{'admission_id':a['id'],'collection_mode':'manual','billing_type':'MANUAL',
             'amount':'150.00','due_on':str(date.today()),'description':'Taxa sintética','required_for_enrollment':True,'client_key':str(uuid.uuid4())})['items'][0]
         call('POST','/bank-charges/'+charge['id']+'/manual-receipt',{'version':charge['version'],'amount':'150.00',
-            'paid_on':str(date.today()),'payment_method':'cash','reference':'Conferência sintética','client_key':str(uuid.uuid4())})
+            'paid_on':str(datetime.now(ZoneInfo('America/Bahia')).date()),'payment_method':'cash','reference':'Conferência sintética','client_key':str(uuid.uuid4())})
         r=client.post(base+f"/issued-documents/{issued['id']}/validate-signature",headers=headers,
             data={'signer_cpf':CPF,'validation_reference':'SYNTHETIC-E2E-001'},files={'report':('relatorio.pdf',blank_pdf(),'application/pdf')});assert r.is_success,r.text
         r=client.put(base+'/signing-certificate/a1',headers=headers,data={'password':'senha-teste'},files={'file':('escola.p12',school_pfx)});assert r.is_success,r.text

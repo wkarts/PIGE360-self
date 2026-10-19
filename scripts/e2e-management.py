@@ -117,7 +117,9 @@ process_one()
                     time.sleep(.1)
                 else:raise AssertionError('Persisted in-flight progress was not observable')
                 assert current['progress']['selected_records']==1
-                page.reload();expect(page.get_by_role('heading',name='Operações em andamento e recuperação')).to_be_visible()
+                # SQLite serializes the session refresh behind this deliberately
+                # paused write transaction; allow the eight-second fixture to end.
+                page.reload();expect(page.get_by_role('heading',name='Operações em andamento e recuperação')).to_be_visible(timeout=15000)
                 worker.wait(timeout=30);assert worker.returncode==0
             finally:
                 if worker.poll() is None:worker.kill();worker.wait()

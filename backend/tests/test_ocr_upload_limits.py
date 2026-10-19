@@ -101,4 +101,3 @@ def test_ocr_envelope_remains_bounded(api, compose_client, streaming):
     response = compose_client.post(api.base+'/ocr/jobs', headers={**api.headers,
         'Content-Type': 'multipart/form-data; boundary=synthetic'}, content=content)
     assert response.status_code == 413, response.text
-
