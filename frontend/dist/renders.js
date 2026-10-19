@@ -5964,11 +5964,12 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                           ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Nenhuma matrícula disponível."))
                           : _createCommentVNode("", true)
                       ]), (_openBlock(), _createBlock(_component_learning_portal, {
-                        key: s.schoolId,
+                        key: s.schoolId+':'+s.studentId,
                         request: request,
                         download: download,
-                        "school-id": s.schoolId
-                      }, null, 8, ["request", "download", "school-id"]))]))
+                        "school-id": s.schoolId,
+                        "student-id": s.studentId
+                      }, null, 8, ["request", "download", "school-id", "student-id"]))]))
                     : _createCommentVNode("", true), (s.section==='documents')
                     ? (_openBlock(), _createElementBlock("section", {
                         key: 1,
@@ -11434,16 +11435,23 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
         ? (_openBlock(), _createElementBlock("div", {
             key: 2,
             class: "x-grid"
-          }, [_createElementVNode("label", null, [_createTextVNode("Aluno"), _withDirectives(_createElementVNode("select", {
-            "onUpdate:modelValue": $event => ((state.studentId) = $event),
-            onChange: selectStudent,
-            disabled: state.busy
-          }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.students, (item) => {
-            return (_openBlock(), _createElementBlock("option", {
-              key: item.student_id,
-              value: item.student_id
-            }, _toDisplayString(item.student_name), 9, ["value"]))
-          }), 128))], 40, ["onUpdate:modelValue", "onChange", "disabled"]), [[_vModelSelect, state.studentId]])]), _createElementVNode("label", null, [_createTextVNode("Matrícula"), _withDirectives(_createElementVNode("select", {
+          }, [(props.studentId && student())
+            ? (_openBlock(), _createElementBlock("p", {
+                key: 0,
+                class: "learning-student-name"
+              }, _toDisplayString(student().student_name), 1))
+            : _createCommentVNode("", true), (!props.studentId)
+            ? (_openBlock(), _createElementBlock("label", { key: 1 }, [_createTextVNode("Aluno"), _withDirectives(_createElementVNode("select", {
+                "onUpdate:modelValue": $event => ((state.studentId) = $event),
+                onChange: selectStudent,
+                disabled: state.busy
+              }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.students, (item) => {
+                return (_openBlock(), _createElementBlock("option", {
+                  key: item.student_id,
+                  value: item.student_id
+                }, _toDisplayString(item.student_name), 9, ["value"]))
+              }), 128))], 40, ["onUpdate:modelValue", "onChange", "disabled"]), [[_vModelSelect, state.studentId]])]))
+            : _createCommentVNode("", true), _createElementVNode("label", null, [_createTextVNode("Matrícula"), _withDirectives(_createElementVNode("select", {
             "onUpdate:modelValue": $event => ((state.enrollmentId) = $event),
             disabled: state.busy
           }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(student()?.enrollments || [], (item) => {

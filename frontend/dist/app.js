@@ -2770,7 +2770,7 @@ var PigeLegacyImport;
 })(PigeLegacyImport || (PigeLegacyImport = {}));
 var PigeLearning;
 (function (PigeLearning) {
-    PigeLearning.component = { props: ['request', 'download', 'rootPath', 'schoolId'], render: PigeRenders.learning, setup(props) {
+    PigeLearning.component = { props: ['request', 'download', 'rootPath', 'schoolId', 'studentId'], render: PigeRenders.learning, setup(props) {
             const state = Vue.reactive({ busy: false, error: '', students: [], studentId: '', enrollmentId: '', note: '' });
             const base = () => (props.rootPath || '/profile') + '/learning';
             const student = () => state.students.find(s => s.student_id === state.studentId);
@@ -2786,14 +2786,14 @@ var PigeLearning;
             finally {
                 state.busy = false;
             } }
-            async function load() { await run(async () => { const data = await props.request(base() + (props.schoolId ? '?school_id=' + encodeURIComponent(props.schoolId) : '')); state.students = data.students; state.note = data.note; if (!student())
+            async function load() { await run(async () => { const data = await props.request(base() + (props.schoolId ? '?school_id=' + encodeURIComponent(props.schoolId) : '')); state.students = props.studentId ? data.students.filter(item => item.student_id === props.studentId) : data.students; state.note = data.note; if (!student())
                 state.studentId = state.students[0]?.student_id || ''; selectStudent(); }); }
             const rows = () => (enrollment()?.subjects || []).flatMap(subject => subject.periods.map(period => ({ ...period, component_name: subject.component_name, diary_id: subject.diary_id })));
             const percent = (value) => value === null || value === undefined ? 'Não apurada' : Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%';
             async function download() { await run(async () => { if (!student() || !enrollment())
                 return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId), 'boletim-' + student().student_number + '.pdf'); }); }
             Vue.onMounted(() => { void load(); });
-            return { state, student, enrollment, selectStudent, rows, percent, load, download };
+            return { props, state, student, enrollment, selectStudent, rows, percent, load, download };
         } };
 })(PigeLearning || (PigeLearning = {}));
 /** Notícias e agenda com transporte compartilhável entre gestão, portal e página pública. */

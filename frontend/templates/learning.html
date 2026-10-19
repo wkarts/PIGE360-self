@@ -4,7 +4,8 @@
     <div v-if="state.error" class="alert error" role="alert">{{ state.error }}</div>
     <p v-if="state.busy" class="muted" role="status">Carregando informações escolares…</p>
     <div v-if="state.students.length" class="x-grid">
-      <label>Aluno<select v-model="state.studentId" @change="selectStudent" :disabled="state.busy"><option v-for="item in state.students" :key="item.student_id" :value="item.student_id">{{ item.student_name }}</option></select></label>
+      <p v-if="props.studentId && student()" class="learning-student-name">{{student().student_name}}</p>
+      <label v-if="!props.studentId">Aluno<select v-model="state.studentId" @change="selectStudent" :disabled="state.busy"><option v-for="item in state.students" :key="item.student_id" :value="item.student_id">{{ item.student_name }}</option></select></label>
       <label>Matrícula<select v-model="state.enrollmentId" :disabled="state.busy"><option v-for="item in student()?.enrollments || []" :key="item.enrollment_id" :value="item.enrollment_id">{{ item.year_name }} · {{ item.class_name }} · {{ item.number }}</option></select></label>
     </div>
     <div v-if="!state.students.length && !state.busy && !state.error" class="empty-state"><h3>Nenhum aluno vinculado</h3><p>Solicite à Secretaria a conferência do seu vínculo com o cadastro escolar.</p></div>
