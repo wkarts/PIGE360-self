@@ -136,6 +136,7 @@ jobs:
           python scripts/e2e-camera.py
           python scripts/e2e-support.py
           python scripts/e2e-assisted.py
+          python scripts/e2e-completion.py
           python scripts/e2e-diagnostics.py
       - name: Reunir somente evidências E2E novas
         if: always()
@@ -168,6 +169,12 @@ jobs:
             --build-arg NODE_BASE_IMAGE="$NODE_BASE_IMAGE" \
             --build-arg PYTHON_BASE_IMAGE="$PYTHON_BASE_IMAGE" \
             --build-arg POSTGRES_IMAGE="$POSTGRES_IMAGE" -t pige360-self:ci .
+          docker build --build-arg PYTHON_BASE_IMAGE="$PYTHON_BASE_IMAGE" \
+            --build-arg APP_VERSION="$(cat VERSION)" --build-arg SOURCE_REVISION="$(git rev-parse HEAD)" \
+            -t pige360-website:ci services/website
+          docker run -d --name pige360-website-ci -p 127.0.0.1:58082:8080 pige360-website:ci
+          curl -fsS --retry 20 --retry-all-errors --retry-delay 1 http://127.0.0.1:58082/health/ready
+          docker rm -f pige360-website-ci
           # O Dockerfile deve falhar se o Apache upstream voltar a remover os
           # cabeçalhos de login confiáveis ou reescrever a URL pública.
           docker build --build-arg SOURCE_REVISION="$(git rev-parse HEAD)" --build-arg APP_VERSION="$(cat VERSION)" \

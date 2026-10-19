@@ -722,7 +722,7 @@ var _Vue=Vue; var PigeRenders={app:function render(_ctx, _cache) {
                           onClick: _withModifiers($event => (navigate('certificate')), ["prevent"])
                         }, "Certificados A1", 10, ["aria-current", "onClick"])], 512), [[_vShow, state.configurationOpen || configurationPages.includes(state.page)]])], 2))
                       : _createCommentVNode("", true),
-                    (state.user?.role==='admin')
+                    (state.user?.role==='admin' || adminTool('legacy-import'))
                       ? (_openBlock(), _createElementBlock("div", {
                           key: 4,
                           class: _normalizeClass(["nav-group admin-nav-group", {selected:administrationPages.includes(state.page)}])

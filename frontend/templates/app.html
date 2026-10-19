@@ -99,7 +99,7 @@
             <a href="#/certificate" :class="{active:state.page==='certificate'}" :aria-current="state.page==='certificate'?'page':undefined" @click.prevent="navigate('certificate')">Certificados A1</a>
           </div>
         </div>
-        <div v-if="state.user?.role==='admin'" class="nav-group admin-nav-group" :class="{selected:administrationPages.includes(state.page)}">
+        <div v-if="state.user?.role==='admin' || adminTool('legacy-import')" class="nav-group admin-nav-group" :class="{selected:administrationPages.includes(state.page)}">
           <button type="button" class="nav-group-toggle" aria-label="Administração do sistema" @click="state.adminMenuOpen=!state.adminMenuOpen" :aria-expanded="state.adminMenuOpen || administrationPages.includes(state.page)" aria-controls="administration-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#admin"></use></svg><span>Administração do sistema</span><svg class="nav-chevron ui-icon" :class="{expanded:state.adminMenuOpen || administrationPages.includes(state.page)}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
           <div id="administration-menu" class="nav-group-items" v-show="state.adminMenuOpen || administrationPages.includes(state.page)">
             <a v-if="adminTool('diagnostics')" href="#/diagnostics" :class="{active:state.page==='diagnostics'}" :aria-current="state.page==='diagnostics'?'page':undefined" @click.prevent="navigate('diagnostics')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#diagnostics"></use></svg>Diagnóstico</a>

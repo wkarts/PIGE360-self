@@ -9,6 +9,8 @@ mkdir -p ci-evidence
 # Bind mounts relativos pertencem ao diretorio do compose. Nunca use os
 # data-postgres/data-documents de uma instalacao real para o smoke test.
 STACK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/pige360-smoke.XXXXXXXX")"
+# Protege também falhas de preparação antes do trap completo de cleanup.
+trap 'rm -rf -- "$STACK_DIR"' EXIT
 cp deploy/docker/compose.yaml "$STACK_DIR/compose.yaml"
 mkdir -p "$STACK_DIR/services"
 cp -a services/mail-agent services/sogo services/website "$STACK_DIR/services/"

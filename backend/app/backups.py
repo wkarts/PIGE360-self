@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 from urllib.parse import urlsplit
 import zipfile
 
@@ -71,11 +72,12 @@ def pg_environment():
         'PGDATABASE':url.database or '', 'PGUSER':url.username or '', 'PGPASSWORD':url.password or ''}
 
 
-def add_objects(archive,db):
+def add_objects(archive,db,progress=lambda:None):
     from .assisted_models import OcrJob
     manifest=[];seen=set()
     for model in (m.FileRecord,m.AdmissionAttachment,OcrJob):
         for record in db.scalars(select(model)):
+            progress()
             backend=getattr(record,'storage_backend','local') or 'local'
             bucket=getattr(record,'bucket_name','') or (settings().storage_bucket if backend=='s3' else '')
             key=(backend,bucket,record.storage_key)
@@ -97,6 +99,13 @@ def create_bundle(ident):
     if engine.dialect.name!='postgresql':raise ValueError('BACKUP_REQUIRES_POSTGRESQL')
     destination=bundle_path(ident)
     temporary=destination.with_suffix('.part')
+    last_progress=[time.monotonic()]
+    def progress():
+        if time.monotonic()-last_progress[0]<25:return
+        with SessionLocal.begin() as heartbeat:
+            row=heartbeat.get(BackupRun,ident)
+            if row:row.updated_at=now()
+        last_progress[0]=time.monotonic()
     try:
         with tempfile.TemporaryDirectory(prefix='pige-backup-') as temp:
             dump=Path(temp)/'database.dump'
@@ -114,7 +123,7 @@ def create_bundle(ident):
                         stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
                     with zipfile.ZipFile(temporary,'x',compression=zipfile.ZIP_DEFLATED,compresslevel=4) as archive:
                         archive.write(dump,'database.dump')
-                        with SessionLocal(bind=connection) as db:objects=add_objects(archive,db)
+                        with SessionLocal(bind=connection) as db:objects=add_objects(archive,db,progress)
                         roots=[];trust=settings().signature_trust_roots_dir
                         if trust and trust.is_dir():
                             for path in sorted(trust.iterdir()):
@@ -166,15 +175,24 @@ def verify_bundle(path):
 def process_one():
     from datetime import timedelta
     with SessionLocal() as db:
-        row=db.scalar(select(BackupRun).where(BackupRun.status=='queued').order_by(BackupRun.created_at).with_for_update(skip_locked=True).limit(1))
-        if not row:return False
-        # Advisory lock pertence à conexão dedicada do snapshot; reserva pela
-        # linha da instalação serializa também workers de processos distintos.
+        # Serializa claims entre workers sem manter lock da instalação no dump.
         installation=db.scalar(select(m.Installation).where(m.Installation.id==1).with_for_update())
-        if db.scalar(select(BackupRun.id).where(BackupRun.status=='processing',BackupRun.updated_at>now()-timedelta(minutes=30)).limit(1)):
-            db.rollback();return False
-        stale=list(db.scalars(select(BackupRun).where(BackupRun.status=='processing')))
-        for old in stale:old.status='failed';old.error_code='BACKUP_INTERRUPTED';old.stage='failed'
+        if not installation:return False
+        stale=list(db.scalars(select(BackupRun).where(BackupRun.status=='processing',
+            BackupRun.updated_at<=now()-timedelta(minutes=30)).with_for_update()))
+        for old in stale:
+            path=bundle_path(old.id)
+            try:
+                verify_bundle(path)
+                with path.open('rb') as handle:old.sha256=hashlib.file_digest(handle,'sha256').hexdigest()
+                old.size=path.stat().st_size;old.status='completed';old.stage='completed';old.completed_at=now()
+                old.error_code='BACKUP_RECOVERED_AFTER_INTERRUPTION'
+            except Exception:old.status='failed';old.error_code='BACKUP_INTERRUPTED';old.stage='failed'
+        if db.scalar(select(BackupRun.id).where(BackupRun.status=='processing').limit(1)):
+            db.commit();return bool(stale)
+        row=db.scalar(select(BackupRun).where(BackupRun.status=='queued').order_by(
+            BackupRun.created_at).with_for_update(skip_locked=True).limit(1))
+        if not row:db.commit();return bool(stale)
         row.status='processing';row.stage='database_and_storage';ident=row.id;db.commit()
     try:
         digest,size=create_bundle(ident)

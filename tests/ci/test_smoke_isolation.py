@@ -22,6 +22,7 @@ class SmokeIsolationTests(unittest.TestCase):
             shutil.copy2(ROOT / 'deploy/docker/compose.yaml', deployment / 'compose.yaml')
             shutil.copytree(ROOT / 'services/mail-agent', checkout / 'services/mail-agent')
             shutil.copytree(ROOT / 'services/sogo', checkout / 'services/sogo')
+            shutil.copytree(ROOT / 'services/website', checkout / 'services/website')
             for name in ('data-postgres', 'data-documents'):
                 folder = deployment / name
                 folder.mkdir()

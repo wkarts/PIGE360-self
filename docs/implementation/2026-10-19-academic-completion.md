@@ -111,7 +111,8 @@ Validações locais observadas antes da revisão final:
 
 - Python 3.13.16, dependências fixadas do projeto; frontend compilado com Node 22.
 - Backend: 527 aprovados, dois casos de concorrência pulados por exigir PostgreSQL; cinco subtestes aprovados. Avisos de depreciação do TestClient permanecem.
-- Políticas de CI: 178 aprovadas; TypeScript strict, build pré-compilado e validador estrutural aprovados.
+- Políticas de CI: 181 aprovadas; TypeScript strict, build pré-compilado e validador estrutural aprovados.
+- E2E das novas jornadas: seis verificações integradas, incluindo delegação pela navegação, configuração da ponte/site, três modelos responsivos e conclusão de contrato pela UI. [Resultado HTTP](evidence/completion-http-results.json).
 - E2E HTTP matrícula: 16 verificações, sem erros JavaScript, dados SQLite descartáveis, sem chamadas a provedores reais.
 - E2E espaço de matrícula: sete verificações, inclusive telas de 320/390px e janela baixa, sem erros de página/HTTP.
 - E2E OCR: leitura local pelo worker, revisão e aplicação pela interface; sem erros JavaScript nos fluxos exercitados.
@@ -121,3 +122,12 @@ Validações locais observadas antes da revisão final:
 Continuam externos: homologação ICP-Brasil/ITI/GOV.BR real, contas Drive/Dropbox, destino financeiro, proxy/domínios da escola, artefato Windows no Windows e documentos reais autorizados de OCR. O ambiente local não oferece Docker nem PostgreSQL operacional, portanto não comprova sozinho esses testes.
 
 Decisões mantidas pendentes: prazo comercial de reserva, aceitação de assinaturas digitalizadas, frequência/retenção e autorização de contas externas. Banco independente por escola/unidade permanece adiado; separação do portal em outro serviço permanece proposta, sem migração realizada.
+
+
+## Capturas das jornadas sintéticas
+
+- [Horizonte](screenshots/site-horizon.png), [Editorial](screenshots/site-editorial.png) e [Campus](screenshots/site-campus.png).
+- [Devolução do contrato pela família](screenshots/contrato-familia-primeiro.png).
+- [Habilitação da portabilidade e backup administrativo](screenshots/portabilidade-backup.png).
+
+O worker reconcilia backups interrompidos sem bloquear permanentemente novos pedidos. Sem progresso por 30 minutos, ele valida um pacote final já disponível ou marca a tentativa como interrompida; durante cópia prolongada de objetos, atualiza o heartbeat. A suite também exercita timeout do OCR, encerramento do grupo de processos, remoção dos temporários, nova tentativa bem-sucedida e limpeza da origem expirada.

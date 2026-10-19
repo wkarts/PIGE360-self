@@ -3867,7 +3867,7 @@ var PigeUI;
         if (state.busy || state.schoolLoading || state.modal.kind || document.querySelector('.modal-backdrop'))
             return;
         if (!pageAllowed(page)) {
-            state.error = page === 'legacy-import' ? 'A portabilidade está disponível somente para o administrador da instalação.' : page === 'contracts' ? 'Seu perfil não possui acesso aos documentos da escola.' : integrationPages.includes(page) ? 'Seu perfil não possui acesso a esta integração.' : 'Seu perfil não possui acesso a esta página.';
+            state.error = page === 'legacy-import' ? 'A portabilidade não está habilitada ou seu acesso não foi delegado nesta escola.' : page === 'contracts' ? 'Seu perfil não possui acesso aos documentos da escola.' : integrationPages.includes(page) ? 'Seu perfil não possui acesso a esta integração.' : 'Seu perfil não possui acesso a esta página.';
             if (location.hash !== `#/${state.page}`)
                 history.replaceState({}, '', `#/${state.page}`);
             return;

@@ -116,6 +116,9 @@ def test_backup_queue_is_idempotent_and_unsupported_database_is_explicit(client,
             run=db.get(BackupRun,key)
             assert run.status=='failed' and run.error_code=='BACKUP_REQUIRES_POSTGRESQL'
         assert client.get('/api/v1/backups/'+key+'/download',headers=admin).status_code==404
+    else:
+        with SessionLocal.begin() as db:
+            row=db.get(BackupRun,key);row.status='failed';row.error_code='TEST_FIXTURE_CLEANUP'
 
 
 def test_backup_collects_minio_references_and_checks_hashes_without_public_urls(api,monkeypatch,tmp_path):
@@ -144,3 +147,19 @@ def test_backup_collects_minio_references_and_checks_hashes_without_public_urls(
     assert verify_bundle(package)['objects'][0]['sha256']==sha
     with zipfile.ZipFile(package,'a') as archive:archive.writestr('../unexpected',b'bad')
     with pytest.raises(ValueError,match='BACKUP_UNEXPECTED_ENTRY'):verify_bundle(package)
+
+
+def test_interrupted_backup_is_reconciled_without_blocking_future_requests(client,admin,monkeypatch,tmp_path):
+    from datetime import timedelta
+    from app import backups
+    from app.db import now
+    monkeypatch.setattr(backups,'directory',lambda:tmp_path)
+    user=client.get('/api/v1/auth/me',headers=admin).json()
+    key=str(uuid.uuid4())
+    with SessionLocal.begin() as db:
+        db.add(BackupRun(id=key,created_by=user['id'],status='processing',stage='database_and_storage',
+            updated_at=now()-timedelta(minutes=31)))
+    assert backups.process_one()
+    with SessionLocal() as db:
+        row=db.get(BackupRun,key)
+        assert row.status=='failed' and row.error_code=='BACKUP_INTERRUPTED'
