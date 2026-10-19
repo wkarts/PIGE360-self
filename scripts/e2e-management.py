@@ -15,6 +15,7 @@ from pathlib import Path
 import httpx
 from playwright.sync_api import sync_playwright, expect
 from pypdf import PdfReader
+from cryptography.fernet import Fernet
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = Path(os.getenv('PIGE_EVIDENCE_DIR', str(ROOT/'evidence/0.10.0/management')))
@@ -29,7 +30,8 @@ env = {**os.environ, 'PYTHONPATH':str(ROOT/'backend'), 'DATABASE_URL':'sqlite://
        'ALLOW_SQLITE':'true', 'APP_ENV':'test', 'APP_URL':URL, 'ALLOWED_HOSTS':'127.0.0.1,localhost',
        'APP_SECRET_KEY':'test-only-management-key-01234567890123456789',
        'SETUP_TOKEN':'test-only-setup-01234567890123456789', 'STORAGE_PATH':str(TEMP/'files'),
-       'FRONTEND_PATH':str(TEMP/'frontend'), 'COOKIE_SECURE':'false', 'PORTABILITY_ENABLED':'true'}
+       'FRONTEND_PATH':str(TEMP/'frontend'), 'COOKIE_SECURE':'false', 'PORTABILITY_ENABLED':'true',
+       'INTEGRATION_ENCRYPTION_KEY':Fernet.generate_key().decode()}
 shutil.copytree(ROOT/'frontend/dist', TEMP/'frontend')
 subprocess.run([sys.executable,'-m','alembic','upgrade','head'],cwd=ROOT/'backend',env=env,check=True)
 legacy = TEMP/'legacy.sqlite'
@@ -72,7 +74,7 @@ try:
             expect(page.locator('h1')).to_have_text('Visão geral')
             page.locator('aside').get_by_role('button',name='Administração do sistema',exact=True).click()
             page.locator('aside').get_by_role('link',name='Portabilidade de dados',exact=True).click()
-            page.locator('.import-workspace input[type=file]').first.set_input_files(legacy)
+            page.get_by_label('Arquivo SQLite ou backup ZIP',exact=False).set_input_files(legacy)
             page.get_by_role('button',name='Analisar arquivo',exact=True).click()
             expect(page.get_by_role('heading',name='O que deseja importar?')).to_be_visible()
             category=page.locator('.import-category').filter(has=page.get_by_text('Alunos',exact=True))
@@ -85,8 +87,19 @@ try:
             expect(page.locator('.import-workspace').get_by_text('1 registro(s)',exact=True)).to_be_visible()
             page.screenshot(path=str(OUT/'01-importacao-seletiva.png'),full_page=True)
             page.get_by_label('Digite IMPORTAR para confirmar').fill('IMPORTAR')
-            page.get_by_role('button',name='Confirmar importação',exact=True).click()
-            expect(page.get_by_text('Importação concluída em Escola Horizonte.',exact=False)).to_be_visible()
+            with page.expect_response(lambda response:'/legacy-import/operations' in response.url and response.request.method=='POST') as queued:
+                page.get_by_role('button',name='Confirmar importação',exact=True).click()
+            assert queued.value.status==202,queued.value.text()
+            operation_id=queued.value.json()['id']
+            # The worker is a separate process; refresh must retain the pending operation.
+            page.reload()
+            expect(page.get_by_role('heading',name='Operações em andamento e recuperação')).to_be_visible()
+            expect(page.get_by_text('Na fila · Na fila',exact=True)).to_be_visible()
+            subprocess.run([sys.executable,'-m','app.integration_worker','--once','--limit','10'],cwd=ROOT/'backend',env=env,check=True,stdout=log,stderr=log,timeout=40)
+            expect(page.get_by_text('Importação concluída em Escola Horizonte.',exact=False)).to_be_visible(timeout=15000)
+            operation=client.get(base+'/legacy-import/operations',headers=headers).json()[0]
+            assert operation['id']==operation_id and operation['status']=='completed'
+            assert operation['attempts']==1 and operation['progress']['archived_records']==1
             assert len(client.get('/api/v1/schools',headers=headers).json())==len(schools)
             assert len(client.get(base+'/units',headers=headers).json())==len(units)
             students=client.get(base+'/students',headers=headers).json()

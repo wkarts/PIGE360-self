@@ -2747,8 +2747,10 @@ var PigeLegacyImport;
             function count(table, total) { return table in state.selection.record_ids ? state.selection.record_ids[table].length : total; }
             async function review() { await run(async () => { if (!state.selection.tables.length)
                 throw new Error('Selecione pelo menos uma categoria para importar.'); state.preview = await PigeAPI.request(base() + '/preview', { method: 'POST', body: form() }); state.confirmation = ''; }); }
-            async function loadRuns() { const previous = state.operations; [state.runs, state.operations] = await Promise.all([PigeAPI.request(base() + '/runs'), PigeAPI.request(base() + '/operations')]); if (state.operations.some(op => op.status === 'completed' && previous.some(old => old.id === op.id && old.status !== 'completed')))
-                context.emit('changed'); }
+            async function loadRuns() { const previous = state.operations; [state.runs, state.operations] = await Promise.all([PigeAPI.request(base() + '/runs'), PigeAPI.request(base() + '/operations')]); const completed = state.operations.find(op => op.status === 'completed' && previous.some(old => old.id === op.id && old.status !== 'completed')); if (completed) {
+                state.result = completed.result;
+                context.emit('changed');
+            } }
             async function apply() { await run(async () => { if (!state.preview?.can_apply || state.confirmation.trim().toUpperCase() !== 'IMPORTAR')
                 throw new Error('Revise a seleção e confirme a importação.'); const f = form(); f.append('fingerprint', state.preview.fingerprint); f.append('confirmation', state.confirmation); await PigeAPI.request(base() + '/operations', { method: 'POST', body: f }); state.preview = null; state.inventory = null; backup = null; media = null; state.backupName = ''; state.mediaName = ''; state.confirmation = ''; state.selection.tables = []; state.selection.record_ids = {}; state.records = null; state.recordTable = ''; await loadRuns(); }); }
             async function download(id) { await run(() => PigeAPI.download(base() + '/runs/' + id + '/archive', 'importacao-' + id.slice(0, 8) + '.jsonl')); }
