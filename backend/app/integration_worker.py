@@ -29,7 +29,7 @@ from .banking import apply_remote, queue_charge_sync
 
 LOG = logging.getLogger('pige360.worker')
 HEARTBEAT = Path('/tmp/pige360-worker-heartbeat')
-SAFE_KINDS = {'bank_sync', 'mailbox_provision'}
+SAFE_KINDS = {'bank_sync', 'mailbox_provision', 'legacy_import'}
 
 def refresh_pix(db, charge, provider):
     if charge.billing_type != 'PIX' or charge.status not in ('pending', 'overdue'):
@@ -166,16 +166,42 @@ def execute(db, job):
     if job.kind == 'certificate_expiry_alert':
         from .certificate_alerts import execute_certificate_alert
         return execute_certificate_alert(db, job, payload, send_email)
-    if job.kind == 'smtp_email': return send_email(payload)
+    if job.kind == 'legacy_import':
+        from .import_operations import execute as import_package
+        return import_package(db,job,payload)
+    if job.kind == 'backup_send':
+        from .backup_delivery import execute as deliver_backup
+        return deliver_backup(db,job,payload)
+    if job.kind == 'smtp_email':
+        from .user_invitations import validate_email_job
+        validate_email_job(db,payload)
+        return send_email(payload)
     raise IntegrationFailure('UNKNOWN_JOB_KIND')
 
 def recover_expired(db):
+    from .user_invitations import UserInvitation,state
+    for invitation in db.scalars(select(UserInvitation)):
+        if state(invitation)!='pending':
+            message=db.get(m.IntegrationJob,invitation.job_id)
+            if message and message.status!='processing':
+                message.encrypted_payload=''
+                if message.status in {'pending','retry'}:message.status='failed';message.error_code='INVITATION_UNAVAILABLE'
+
     rows = db.scalars(select(m.IntegrationJob).where(m.IntegrationJob.status == 'processing', m.IntegrationJob.lease_until < now()).with_for_update(skip_locked=True))
     for row in rows:
-        row.status = 'retry' if row.kind in SAFE_KINDS else 'uncertain'
+        if row.kind=='legacy_import':
+            from .import_operations import read_progress
+            heartbeat=read_progress(unseal(row.encrypted_payload)['operation_id']).get('heartbeat_at')
+            if heartbeat and utc(datetime.fromisoformat(heartbeat))+timedelta(minutes=5)>now():
+                row.lease_until=now()+timedelta(minutes=5)
+                continue
+        row.status = 'failed' if row.kind=='legacy_import' and row.attempts>=5 else ('retry' if row.kind in SAFE_KINDS else 'uncertain')
         row.error_code = 'WORKER_LEASE_EXPIRED'
         row.available_at = now() + timedelta(seconds=30)
         row.lease_until = None
+        if row.kind == 'backup_send':
+            from .backup_delivery import sync_state
+            sync_state(db,row)
         if row.kind == 'bank_issue':
             payload = unseal(row.encrypted_payload)
             charge = db.get(m.BankCharge, payload.get('charge_id'))
@@ -206,6 +232,7 @@ def process_one(job_id=None):
                 remote_id = execute(db, job)
                 job.remote_id = remote_id or job.remote_id
                 job.status = 'completed'; job.completed_at = now()
+                if job.kind=='smtp_email' and unseal(job.encrypted_payload).get('invitation_id'):job.encrypted_payload=''
                 if job.kind == 'connect_text': job.delivery_status = 'sent'
             except IntegrationFailure as error:
                 db.rollback(); db.refresh(job)
@@ -224,7 +251,11 @@ def process_one(job_id=None):
                 job.status = 'failed' if job.kind in SAFE_KINDS else 'uncertain'
                 job.error_code = 'UNEXPECTED_WORKER_ERROR'
                 LOG.error('job=%s kind=%s code=%s', job.id, job.kind, job.error_code)
-            job.lease_until = None; db.commit()
+            job.lease_until = None
+            if job.kind == 'backup_send':
+                from .backup_delivery import sync_state
+                sync_state(db,job)
+            db.commit()
             emit('integration.job_finished', service='worker', level='INFO' if job.status=='completed' else 'WARNING', job_id=job.id, school_id=job.school_id, kind=job.kind, state=job.status, code=job.error_code, attempts=job.attempts)
             return True
         finally:
@@ -351,6 +382,9 @@ def main():
                 worked = process_crm_one() or worked
             except Exception:
                 LOG.error('code=CRM_BRIDGE_WORKER_FAILED')
+            if not worked:
+                from .backups import process_one as process_backup_one
+                worked=process_backup_one()
         except Exception:
             emit('worker.loop_failed',service='worker',level='ERROR',code='WORKER_DATABASE_OR_CONFIGURATION_ERROR')
             LOG.error('code=WORKER_DATABASE_OR_CONFIGURATION_ERROR'); worked = False

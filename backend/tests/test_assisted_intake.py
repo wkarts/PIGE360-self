@@ -371,3 +371,35 @@ def test_ocr_per_owner_queue_limit_and_cancellation_releases_slot(api):
     upload(api,purpose='address',status=429)
     api.call('DELETE','/ocr/jobs/'+jobs[0]['id'])
     assert upload(api,purpose='address')['status']=='queued'
+
+
+def test_worker_timeout_kills_group_cleans_temporary_files_and_accepts_new_attempt(api,monkeypatch):
+    import subprocess
+    job=upload(api);temporary=[];killed=[]
+    real_popen=ocr_worker.subprocess.Popen
+    class TimedOut:
+        pid=123456789
+        calls=0
+        def communicate(self,timeout=None):
+            self.calls+=1
+            if self.calls==1:raise subprocess.TimeoutExpired('synthetic-ocr',timeout)
+            return b'',b''
+    def launch(args,**kwargs):
+        temporary.append(Path(args[3]).parent)
+        return TimedOut()
+    monkeypatch.setattr(ocr_worker.subprocess,'Popen',launch)
+    monkeypatch.setattr(ocr_worker.os,'killpg',lambda pid,signal:killed.append(pid))
+    assert ocr_worker.process_one()
+    failed=api.get('/ocr/jobs/'+job['id'])
+    assert failed['status']=='failed' and failed['error_code']=='processing_timeout'
+    assert killed==[TimedOut.pid] and temporary and all(not p.exists() for p in temporary)
+    retry=upload(api);assert retry['id']!=job['id']
+    monkeypatch.setattr(ocr_worker.subprocess,'Popen',real_popen)
+    assert ocr_worker.process_one()
+    assert api.get('/ocr/jobs/'+retry['id'])['status']=='succeeded'
+    with SessionLocal.begin() as db:
+        expired=db.get(OcrJob,job['id']);expired.expires_at=now()-timedelta(seconds=1)
+        source=settings().storage_path/expired.storage_key
+    with SessionLocal() as db:ocr_worker.cleanup(db)
+    with SessionLocal() as db:assert db.get(OcrJob,job['id']) is None
+    assert not source.exists()

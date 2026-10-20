@@ -1,6 +1,6 @@
 > **Fluxo GitHub/GHCR:** veja [desenvolvimento, releases, limpeza e implantação self-hosted](docs/ci-cd/FLUXO-GITHUB-GHCR.md). Os deploys ficam em `deploy/`, separados por Docker, Dockge, Portainer e CloudPanel, com ambientes develop e produção. Nenhum deploy externo é executado automaticamente.
 
-# PIGE360 Self 0.10.0
+# PIGE360 Self 0.12.1
 ## Gestão escolar, portais e integrações
 
 Aplicação self-hosted em **FastAPI + Vue 3**, exclusivamente Web/PWA, para a instituição e suas unidades. O pacote contém a aplicação, o frontend compilado, migrations, testes e documentação, preservando a identidade configurada pela escola.
@@ -122,3 +122,7 @@ Os usuários do portal não recebem token administrativo. Anexos exigem acesso �
 A instituição deve definir aviso de privacidade, retenção, pessoas autorizadas e procedimentos de conferência. Os controles técnicos entregues não são certificação jurídica de conformidade. Backups contêm dados pessoais e devem ser protegidos, cifrados e testados no destino.
 
 **ASAAS e Connect API não foram homologados com credenciais reais nesta entrega. Docker/PostgreSQL e instalação PWA precisam ser conferidos na infraestrutura de destino.**
+
+### Continuidade operacional da PR 57
+
+[Portal privado, convites, importação persistente e recuperação de backups/restauração](docs/implementation/2026-10-19-pr57-continuity.md). Site e portal têm imagens, portas e perfis Compose próprios; a matrícula e suas regras continuam no núcleo. A documentação distingue testes sintéticos, Docker/CI e homologações externas.

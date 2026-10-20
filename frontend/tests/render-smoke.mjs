@@ -117,6 +117,11 @@ context.state.page='dashboard';context.state.user={...context.state.user,permiss
 context.state.user=adminUser;
 console.log('Route and registration smoke: Diário sem rota fantasma, Guia acessível e busca de identidade limitada e ordenada OK.');
 assert.equal(typeof context.newPerson,'function','newPerson deve ser exposta por setup()');
+context.state.page='students';context.newStudent();
+const studentFormTree=render();
+assert.ok(nodes(studentFormTree).some(n=>n.props?.class==='family-editor'),'Cadastro do aluno preserva o editor de vínculos familiares');
+assert.ok(!nodes(studentFormTree).some(n=>n.props?.class==='family-shell'),'Portal independente não substitui fragmento do cadastro');
+context.state.modal.kind='';
 context.state.page='people';context.newPerson();render();
 assert.equal(context.state.modal.kind,'person');
 assert.equal(context.state.modal.title,'Cadastrar pessoa');

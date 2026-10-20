@@ -242,16 +242,20 @@ def icon(db: DB, size: int = Query(192)):
 
 
 @router.get('/manifest.webmanifest', include_in_schema=False)
-def manifest(db: DB):
+def manifest(db: DB, surface: Literal['manager','portal','website']='manager'):
     data = identity_data(db)
+    shortcuts={'manager':[{'name':'Alunos','url':'/#/students'},{'name':'Matrículas','url':'/#/enrollments'},{'name':'Protocolos','url':'/#/protocols'}],
+        'portal':[{'name':'Boletim','url':'/academic'},{'name':'Documentos','url':'/documents'},{'name':'Inscrição','url':'/online.html'}],
+        'website':[{'name':'A escola','url':'/#escola'},{'name':'Novidades','url':'/#novidades'},{'name':'Contato','url':'/#contato'}]}
+    descriptions={'manager':'Gestão escolar e atendimento da instituição.','portal':'Portal do aluno e responsável.','website':'Site institucional da escola.'}
     return JSONResponse({
         'id': '/', 'name': data['display_name'], 'short_name': data['short_name'],
-        'description': 'Gestão escolar e atendimento da instituição.', 'lang': 'pt-BR',
-        'start_url': '/', 'scope': '/', 'display': 'standalone',
+        'description': descriptions[surface], 'lang': 'pt-BR',
+        'start_url': '/', 'scope': '/', 'display': 'browser' if surface=='website' else 'standalone',
         'background_color': '#F2F4F7', 'theme_color': data['primary_color'],
         'icons': [{'src': f'/api/v1/institution/icon.png?size={size}&v={data["version"]}',
                    'sizes': f'{size}x{size}', 'type': 'image/png', 'purpose': 'any'} for size in (192, 512)],
-        'shortcuts': [{'name': 'Alunos', 'url': '/#/students'}, {'name': 'Matrículas', 'url': '/#/enrollments'}, {'name': 'Protocolos', 'url': '/#/protocols'}],
+        'shortcuts': shortcuts[surface],
     }, media_type='application/manifest+json')
 
 

@@ -20,8 +20,9 @@ const decodeEntities=(value)=>value.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|a
 const sandbox={console,document:{createElement(){return {textContent:'',get innerHTML(){return this.textContent},set innerHTML(value){this.textContent=decodeEntities(value);this.children=[{getAttribute(){return decodeEntities(value.slice(10,-2))}}]}}}}};vm.createContext(sandbox);vm.runInContext(source,sandbox);
 execFileSync(compiler,['-p',path.join(root,'tsconfig.portal.json')],{stdio:'inherit'});
 execFileSync(compiler,['-p',path.join(root,'tsconfig.news.json')],{stdio:'inherit'});
+execFileSync(compiler,['-p',path.join(root,'tsconfig.family.json')],{stdio:'inherit'});
 const renders={};
-for(const name of ['app','portal','expansion','camera','users','assist','diagnostics','diary','contracts','signing','reports','legacyImport','learning','community','news','mailcow','audit','email','lifecycle']){
+for(const name of ['app','portal','familyPortal','expansion','camera','users','assist','diagnostics','diary','contracts','signing','reports','legacyImport','learning','community','news','mailcow','audit','email','lifecycle']){
  const fragment=key=>fs.readFileSync(path.join(root,'templates',key+'.html'),'utf8');
  const template=fs.readFileSync(path.join(root,'templates',name+'.html'),'utf8').replaceAll('<!-- MFA-MANAGE -->',fragment('mfa-manage')).replaceAll('<!-- MFA-CHALLENGE -->',fragment('mfa-challenge')).replaceAll('<!-- FAMILY -->',fragment('family')).replaceAll('<!-- FORM-FIELDS -->',fragment('form-fields'));
  const errors=[];
@@ -34,7 +35,7 @@ fs.writeFileSync(path.join(dist,'renders.js'),'/* Vue pré-compilado; sem eval e
 fs.cpSync(path.join(root,'public'),dist,{recursive:true});
 fs.mkdirSync(path.join(dist,'vendor'),{recursive:true});fs.copyFileSync(path.join(root,'vendor/vue-3.5.13.global.prod.js'),path.join(dist,'vendor/vue-3.5.13.global.prod.js'));
 fs.copyFileSync(path.join(root,'src/app.css'),path.join(dist,'app.css'));
-const staticFiles=['/','/index.html','/app.js','/portal.js','/news.js','/renders.js','/app.css','/vendor/vue-3.5.13.global.prod.js'];
+const staticFiles=['/','/index.html','/app.js','/portal.js','/family.js','/news.js','/renders.js','/app.css','/vendor/vue-3.5.13.global.prod.js'];
 function collectPublic(dir,prefix='') { for(const entry of fs.readdirSync(dir,{withFileTypes:true})) {
  const name=prefix+'/'+entry.name;
  if(entry.isDirectory()){if(!['/branding','/fonts'].includes(name))collectPublic(path.join(dir,entry.name),name);}
@@ -44,7 +45,7 @@ collectPublic(path.join(root,'public'));
 const fingerprint=createHash('sha256');fingerprint.update(version);
 for(const asset of [...new Set(staticFiles.map(f=>f==='/'?'/index.html':f))].sort()){fingerprint.update(asset);fingerprint.update(fs.readFileSync(path.join(dist,asset.slice(1))));}
 const hash=fingerprint.digest('hex').slice(0,16);
-for(const name of ['index.html','online.html','news.html']){
+for(const name of ['index.html','online.html','news.html','family.html']){
  const file=path.join(dist,name);
  fs.writeFileSync(file,fs.readFileSync(file,'utf8').replace(/(src|href)="(\/(?!api\/)[^"?]+\.(?:js|css))"/g,(_,attr,url)=>`${attr}="${url}?v=${hash}"`));
 }

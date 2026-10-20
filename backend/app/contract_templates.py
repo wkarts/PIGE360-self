@@ -581,13 +581,16 @@ def issue_template(template_id: str, data: IssueInput, db: DB, user: Actor, scho
     input_hash = hashlib.sha256(json.dumps({'template': obj.id, 'version': obj.version,
          'revision_sha256': obj.revision_sha256,
          'enrollment': enrollment.id, 'values': data.values}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    admission = db.scalar(select(m.Admission).where(m.Admission.enrollment_id==enrollment.id))
+    applicant_first = bool(admission and admission.contract_signing_order=='applicant_first'
+        and admission.contract_template_id==obj.id)
     key = data.idempotency_key or input_hash
     existing = db.scalar(select(m.IssuedDocument).where(m.IssuedDocument.school_id == school.id,
          m.IssuedDocument.idempotency_key == key))
     if existing:
         if existing.snapshot.get('input_hash') != input_hash:
             fail(409, 'A chave de idempotência já foi usada para outro conteúdo.')
-        if _is_contract_kind(obj.kind) and existing.signature_status == 'unsigned':
+        if not applicant_first and _is_contract_kind(obj.kind) and existing.signature_status == 'unsigned':
             from .contract_signatures import auto_sign_issued_document
             auto_sign_issued_document(db, existing, user.id, request)
         result = output(existing, ('snapshot',))
@@ -600,7 +603,7 @@ def issue_template(template_id: str, data: IssueInput, db: DB, user: Actor, scho
     ).limit(1))
     if issued_for_version:
         if issued_for_version.snapshot.get('input_hash') == input_hash:
-            if _is_contract_kind(obj.kind) and issued_for_version.signature_status == 'unsigned':
+            if not applicant_first and _is_contract_kind(obj.kind) and issued_for_version.signature_status == 'unsigned':
                 from .contract_signatures import auto_sign_issued_document
                 auto_sign_issued_document(db, issued_for_version, user.id, request)
             return {**output(issued_for_version, ('snapshot',)),
@@ -631,10 +634,11 @@ def issue_template(template_id: str, data: IssueInput, db: DB, user: Actor, scho
                                         'pdf_sha256': stored.sha256, 'academic_year_id': enrollment.academic_year_id,
                                         'letterhead_file_id': obj.letterhead_file_id,
                                         'letterhead_sha256': preview['letterhead_file'].sha256 if obj.letterhead_file_id else None,
+                                        'signing_order': 'applicant_first' if applicant_first else 'school_first',
                                         'require_signature': obj.require_signature or _is_contract_kind(obj.kind)},
                               created_by=user.id)
     db.add(issued); db.flush()
-    if obj.require_signature or _is_contract_kind(obj.kind):
+    if not applicant_first and (obj.require_signature or _is_contract_kind(obj.kind)):
         from .contract_signatures import auto_sign_issued_document
         auto_sign_issued_document(db, issued, user.id, request)
     audit(db, request, user, 'document_template.issued', issued, school.id,

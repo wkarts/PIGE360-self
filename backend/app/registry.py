@@ -73,8 +73,9 @@ def validate(schema, payload):
     except ValidationError as exc:
         raise RequestValidationError(exc.errors()) from exc
 
-def occupancy(db, class_id):
-    return db.scalar(select(func.count()).select_from(m.Enrollment).where(m.Enrollment.class_group_id == class_id, m.Enrollment.status.in_(['active','suspended']))) or 0
+def occupancy(db, class_id, exclude_enrollment_id=None):
+    from .admission_reservations import reserved_count
+    return reserved_count(db, class_id, exclude_enrollment_id) + (db.scalar(select(func.count()).select_from(m.Enrollment).where(m.Enrollment.class_group_id == class_id, m.Enrollment.status.in_(['active','suspended']))) or 0)
 
 def catalog_output(db, obj):
     data = {**output(obj), **archive_output(db, obj)}

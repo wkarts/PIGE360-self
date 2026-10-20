@@ -162,7 +162,7 @@ class StorageTests(unittest.TestCase):
             self.assertNotIn('service_completed_successfully', text)
             self.assertNotIn('tail -f', storage)
             self.assertNotIn('sleep infinity', storage)
-            self.assertEqual(text.count('ports:'), 1)
+            self.assertEqual(text.count('ports:'), 3)
             self.assertIn('./data-documents:/data', storage)
 
 

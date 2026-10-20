@@ -21,6 +21,7 @@ class CampaignInput(Input):
     require_verified_contact: bool = True
     require_documents: bool = False
     require_payment_before_enrollment: bool = False
+    payment_reservation_hours: int | None = Field(default=None,ge=1,le=8760)
     contract_template_id: str | None = None
     @model_validator(mode='after')
     def dates(self):
@@ -129,6 +130,11 @@ class Approval(Input):
 class FinalizeAdmission(Input):
     version: int = Field(ge=1)
     reason: str = Field(min_length=3,max_length=1000)
+
+class ContractRevisionInput(Input):
+    version: int = Field(ge=1)
+    template_version: int = Field(ge=1)
+    reason: str = Field(min_length=10,max_length=1000)
 
 class MessageInput(Input):
     text: str = Field(min_length=1,max_length=3000)

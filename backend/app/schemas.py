@@ -388,7 +388,12 @@ class Setup(Input):
 class UserInput(Input):
     name: str = Field(min_length=2, max_length=160)
     email: EmailStr
-    password: str = Field(min_length=12, max_length=128)
+    password: str = Field(default='', max_length=128)
+    @field_validator('password')
+    @classmethod
+    def optional_initial_password(cls,value):
+        if value and len(value)<12:raise ValueError('A senha deve ter pelo menos 12 caracteres.')
+        return value
     role: Literal['admin','direction','coordination','secretary','teacher','student','guardian','viewer'] = 'secretary'
     school_ids: list[str] = Field(default_factory=list, max_length=100)
     person_id: str | None = None

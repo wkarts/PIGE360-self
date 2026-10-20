@@ -14,7 +14,8 @@ var PigeInstitution;
     PigeInstitution.state = Vue.reactive({ display_name: 'Sua escola', short_name: 'Escola', primary_color: '#006D77', secondary_color: '#0D1B2A', font_family: 'system', logo_url: '', font_configured: false, show_preenrollment_button: true, version: 1, ...(initial || {}) });
     function apply(value) {
         Object.assign(PigeInstitution.state, value);
-        document.title = value.display_name + ' · ' + (location.pathname === '/online.html' ? 'Portal dos responsáveis' : 'Gestão escolar');
+        const surface = document.documentElement?.dataset?.institutionSurface;
+        document.title = value.display_name + ' · ' + (location.pathname === '/online.html' ? 'Portal dos responsáveis' : surface === 'portal' ? 'Portal do aluno e responsável' : 'Gestão escolar');
         document.querySelector('meta[name="theme-color"]')?.setAttribute('content', value.primary_color);
         const theme = document.querySelector('link[data-institution-theme]');
         if (theme && !theme.href.endsWith('/api/v1/institution/theme.css?v=' + value.version))
@@ -215,7 +216,7 @@ var PigeCommunity;
         return parts.replace(' ', 'T');
     }
     PigeCommunity.component = { props: ['schoolId', 'permissions', 'publicMode', 'portalMode', 'request', 'compact'], render: PigeRenders.community, setup(props) {
-            const s = Vue.reactive({ busy: false, error: '', notice: '', items: [], page: 1, total: 0, q: '', kind: '', status: '', upcoming: false, selected: null, editing: false, discard: false, deleteConfirm: false, initial: '', form: empty() });
+            const s = Vue.reactive({ website: { enabled: false, theme: 'horizon', headline: '', introduction: '', about: '', public_url: '', portal_url: '', notice: '' }, websiteOpen: false, busy: false, error: '', notice: '', items: [], page: 1, total: 0, q: '', kind: '', status: '', upcoming: false, selected: null, editing: false, discard: false, deleteConfirm: false, initial: '', form: empty() });
             const manage = () => !props.publicMode && !props.portalMode && Boolean(props.permissions?.includes('schools.manage'));
             const endpoint = () => props.portalMode ? '/portal/community-feed' : props.publicMode ? '/public/schools/' + props.schoolId + '/community-feed' : '/schools/' + props.schoolId + (manage() ? '/community-posts' : '/community-feed');
             const transport = (path, options) => (props.request || request)(path, options);
@@ -237,6 +238,14 @@ var PigeCommunity;
                 s.items = result.items;
                 s.total = result.total;
             }
+            async function loadWebsite() { if (manage() && !props.compact) {
+                const data = await transport('/schools/' + props.schoolId + '/website');
+                if (data.configuration) {
+                    const c = data.configuration;
+                    s.website = { version: c.version, enabled: c.enabled, theme: c.theme, headline: c.headline, introduction: c.introduction, about: c.about, public_url: c.public_url, portal_url: c.portal_url, notice: c.notice };
+                }
+            } }
+            async function saveWebsite() { await run(async () => { await transport('/schools/' + props.schoolId + '/website', { method: 'PUT', body: JSON.stringify(s.website) }); await loadWebsite(); s.notice = 'Configuração do site salva. Somente publicações destinadas ao público aparecem no site.'; }); }
             async function search() { s.page = 1; await run(load); }
             async function page(delta) { s.page += delta; await run(load); }
             function open(post) { s.selected = post; s.error = ''; }
@@ -270,8 +279,8 @@ var PigeCommunity;
             const scheduled = (post) => post.status === 'published' && Boolean(post.publish_at) && new Date(post.publish_at) > new Date();
             const expired = (post) => Boolean(post.expires_at) && new Date(post.expires_at) <= new Date();
             const paragraphs = (value) => value.split(/\n\s*\n/).filter(Boolean);
-            Vue.onMounted(() => { void run(load); });
-            return { s, props, manage, run, load, search, page, open, edit, closeEditor, save, remove, date, audienceLabels, statusLabels, scheduled, expired, paragraphs };
+            Vue.onMounted(() => { void run(async () => { await load(); await loadWebsite(); }); });
+            return { s, props, manage, run, load, saveWebsite, search, page, open, edit, closeEditor, save, remove, date, audienceLabels, statusLabels, scheduled, expired, paragraphs };
         } };
 })(PigeCommunity || (PigeCommunity = {}));
 var PigeDialogs;

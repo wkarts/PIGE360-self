@@ -1,0 +1,17 @@
+{
+  "status": "passed",
+  "checks": [
+    "Habilitação em produção e delegação pela interface, com backup SQLite explicitamente indisponível",
+    "Usuário delegado alcança a importação pela navegação, sem acesso ao backup global",
+    "Configuração visual da ponte salva com segredo omitido na resposta e capacidade financeira indisponível informada",
+    "Três modelos do serviço separado configurados pela UI, conteúdo privado ausente e layout móvel sem overflow",
+    "Família baixa o contrato sem A1 exigido, devolve PDF assinado e acompanha a reserva pela interface",
+    "Correção contratual vincula nova revisão pela UI, preserva a via anterior e exige novo envio pela família",
+    "Efetivação pela Secretaria aplica o A1 institucional por último e preserva as duas assinaturas sintéticas"
+  ],
+  "page_errors": [],
+  "data": "synthetic-only",
+  "real_external_accounts_used": false,
+  "real_icp_brasil_homologation": false,
+  "database": "disposable SQLite"
+}
