@@ -54,6 +54,16 @@ assert.equal(loginLink(render()).length,1,'Reativar o atalho sem mudar de tela')
 console.log('Login smoke: remoções pontuais, slogan preservado e atalho configurável OK.');
 context.state.user={id:'test-admin',name:'Administrador',role:'admin',admin_tools:{portability:true,diagnostics:true,audit:true,develop_build:false},permissions:[...new Set([...fs.readFileSync(path.join(root,'templates/app.html'),'utf8').matchAll(/can\('([^']+)'\)/g)].map(match=>match[1]))]};
 context.state.schoolId='school-test';context.state.schools=[{id:'school-test',company_id:'company-test',name:'Escola de teste'}];
+context.state.supportHub={id:'support-test',school_id:'school-test',enabled:false,enabled_areas:['online_enrollment','news'],base_url:'https://hub.example.com',position:'left',widget_type:'standard',launcher_title:'Atendimento',token_configured:true,version:1};
+context.editSupportHub();await Promise.resolve();
+assert.ok(Array.isArray(context.state.modal.form.enabled_areas),'As áreas do atendimento devem iniciar como lista, nunca como booleano');
+assert.deepEqual(Array.from(context.state.modal.form.enabled_areas),['online_enrollment','news']);
+assert.equal(context.modalDirty(),false,'Abrir sem editar preserva o estado inicial do formulário');
+context.state.modal.form.enabled_areas.push('guardian_portal');
+assert.deepEqual(Array.from(context.state.supportHub.enabled_areas),['online_enrollment','news'],'Editar não altera a configuração salva antes de confirmar');
+context.closeModal(true);context.editSupportHub();await Promise.resolve();
+assert.deepEqual(Array.from(context.state.modal.form.enabled_areas),['online_enrollment','news'],'Cancelar e reabrir restaura as áreas salvas');
+context.closeModal(true);
 const originalObjectUrl=sandbox.PigeAPI.objectUrl;
 let activePhotos=0,maxActivePhotos=0;
 const photoRequests=[];

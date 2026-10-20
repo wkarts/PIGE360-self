@@ -165,7 +165,8 @@ def execute(db, job):
         return provision_job(db, job, payload)
     if job.kind == 'certificate_expiry_alert':
         from .certificate_alerts import execute_certificate_alert
-        return execute_certificate_alert(db, job, payload, send_email)
+        from .notification_email import send
+        return execute_certificate_alert(db, job, payload, lambda message: send(db, job.school_id, message, send_email))
     if job.kind == 'legacy_import':
         from .import_operations import execute as import_package
         return import_package(db,job,payload)
@@ -175,7 +176,8 @@ def execute(db, job):
     if job.kind == 'smtp_email':
         from .user_invitations import validate_email_job
         validate_email_job(db,payload)
-        return send_email(payload)
+        from .notification_email import send
+        return send(db, job.school_id, payload, send_email)
     raise IntegrationFailure('UNKNOWN_JOB_KIND')
 
 def recover_expired(db):

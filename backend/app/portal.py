@@ -409,7 +409,8 @@ def code_hash(account_id,purpose,code):
 def challenge(db,account,purpose,channel):
     config=settings()
     if channel=='email':
-        if not config.smtp_host or not config.smtp_from:fail(409,'Envio de e-mail não configurado. Solicite orientação à Secretaria.')
+        from .notification_email import available
+        if not available(db, account.school_id):fail(409,'Envio de e-mail não configurado. Solicite orientação à Secretaria.')
         conn=None;kind='smtp_email';target=account.email
     else:
         conn=connection(db,account.school_id,'connect_api')
@@ -455,7 +456,8 @@ def reset_request(data:s.ResetRequest,request:Request,db:DB):
     email=str(data.email).lower();rate_limit(db,request,'reset',email,4,600)
     school=login_school(db,data.school_id,data.campaign_slug)
     account=db.scalar(select(m.PortalAccount).where(m.PortalAccount.school_id==school.id,m.PortalAccount.email==email,m.PortalAccount.active.is_(True)))
-    if settings().smtp_host and settings().smtp_from and settings().integration_encryption_key and account:
+    from .notification_email import available
+    if account and settings().integration_encryption_key and available(db, school.id):
         challenge(db,account,'reset','email')
     return {'ok':True,'message':'Caso haja uma conta e envio de e-mail configurado, um código será enviado. Caso contrário, procure a Secretaria.'}
 

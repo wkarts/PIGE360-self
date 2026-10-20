@@ -68,6 +68,8 @@ def snapshot(db, school_id=None):
         info['database']={'status':'ok','dialect':db.bind.dialect.name,'migrations':revision}
         from .assisted_models import OcrJob
         if school_id:
+            from .notification_email import available
+            info['configuration']['smtp_configured'] = available(db, school_id)
             for label,model in [('integrations',m.IntegrationJob),('communication',m.ConnectMessageJob),('ocr',OcrJob)]:
                 info['queues'][label]=dict(db.execute(select(model.status,func.count()).where(model.school_id == school_id).group_by(model.status)).all())
             school = db.get(m.School, school_id)
