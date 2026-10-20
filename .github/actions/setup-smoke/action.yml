@@ -1,0 +1,31 @@
+name: Preparar runtime do smoke de publicação
+description: Instala o cliente HTTP e o Chromium sem depender do ambiente de testes do backend.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v6
+      with:
+        python-version: '3.13'
+        cache: pip
+        cache-dependency-path: scripts/ci/requirements-smoke.txt
+    - name: Dependências do smoke de publicação
+      shell: bash
+      run: |
+        python -m pip install -r scripts/ci/requirements-smoke.txt
+        python -m playwright install --with-deps chromium
+    - name: Conferir runtime isolado e navegador
+      shell: bash
+      run: |
+        python - <<'PY'
+        import httpx
+        from playwright.sync_api import sync_playwright
+        with httpx.Client(trust_env=False):
+            pass
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.set_content('<title>Smoke sintético</title>')
+            assert page.title() == 'Smoke sintético'
+            browser.close()
+        print('PASS: httpx, Playwright e Chromium disponíveis para o smoke')
+        PY

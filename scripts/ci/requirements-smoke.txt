@@ -1,0 +1,3 @@
+# Runtime do host para scripts/ci/surfaces-smoke.py (CI e publicação).
+httpx==0.28.1
+playwright==1.57.0
