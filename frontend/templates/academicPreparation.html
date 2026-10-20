@@ -1,0 +1,16 @@
+<section class="panel x-card" aria-labelledby="year-preparation-title">
+  <div class="x-heading"><div><h2 id="year-preparation-title">Preparar ano letivo</h2><p>Reutilize a estrutura de um ano e prepare todas as suas turmas. O cadastro manual continua disponível.</p></div><button v-if="!s.open" type="button" class="btn btn-secondary" @click="s.open=true">Preparar a partir de outro ano</button></div>
+  <p v-if="s.error" class="alert error" role="alert">{{s.error}}</p><p v-if="s.notice" class="alert success" role="status">{{s.notice}}</p>
+  <form v-if="s.open" @submit.prevent="preview" class="x-form" :aria-busy="s.busy">
+    <fieldset :disabled="s.busy"><legend>Origem e destino</legend><div class="x-grid">
+      <label>Copiar turmas do ano<select v-model="s.source" required><option value="">Selecione a origem</option><option v-for="year in props.years" :key="year.id" :value="year.id">{{year.name}}</option></select></label>
+      <label>Ano de destino<select v-model="s.targetId" @change="targetChanged"><option value="">Criar novo ano</option><option v-for="year in props.years.filter(y=>y.status==='active'&&y.id!==s.source)" :key="year.id" :value="year.id">{{year.name}}</option></select></label>
+      <label>Nome do ano<input v-model="s.name" required minlength="2" maxlength="40" :readonly="!!s.targetId"></label>
+      <label>Início<input v-model="s.starts" type="date" required :readonly="!!s.targetId" :max="s.ends"></label>
+      <label>Término<input v-model="s.ends" type="date" required :readonly="!!s.targetId" :min="s.starts"></label>
+    </div></fieldset>
+    <p class="muted">Copiam-se nomes, capacidades e situação das turmas disponíveis, reutilizando unidade, série e turno. Não são copiados alunos, matrículas, atribuições de professores, aulas, notas ou documentos. Nenhuma turma existente será sobrescrita.</p>
+    <div class="actions"><button class="btn btn-secondary" :disabled="s.busy" type="submit">Conferir prévia</button><button class="btn btn-secondary" :disabled="s.busy" type="button" @click="close">Cancelar</button></div>
+    <section v-if="s.plan" aria-label="Prévia da preparação"><p role="status">{{s.plan.create_count}} turma(s) para criar · {{s.plan.reuse_count}} já existente(s) para preservar</p><p>{{s.plan.scope}}</p><p v-if="s.plan.conflicts.length" class="alert error">Há turmas divergentes no destino. Confira o cadastro manual; nenhuma alteração será aplicada.</p><div class="table-wrap"><table><thead><tr><th>Turma</th><th>Unidade / série / turno</th><th>Capacidade</th><th>Resultado</th></tr></thead><tbody><tr v-for="row in s.plan.rows" :key="row.source_id"><td>{{row.name}}<small v-if="!row.active"> · inativa</small></td><td>{{row.unit}} · {{row.grade}} · {{row.shift}}</td><td>{{row.capacity}}</td><td>{{row.action==='create'?'Criar':row.action==='reuse'?'Preservar existente':'Conflito'}}</td></tr></tbody></table></div><button class="btn btn-primary" type="button" @click="apply" :disabled="s.busy||!!s.plan.conflicts.length">Confirmar preparação do ano letivo</button></section>
+  </form>
+</section>

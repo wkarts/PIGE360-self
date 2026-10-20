@@ -139,9 +139,10 @@ def setup_bank_webhook(data:WebhookSetup,db:DB,user:Actor,school:Scope,request:R
         return {'ok':False,'code':error.code,'message':'Não foi possível confirmar a configuração do retorno bancário. Confira a conta e tente novamente; a aplicação procura um retorno existente antes de cadastrar.'}
 
 @router.get('/integration-jobs')
-def jobs(db:DB,user:Actor,school:Scope,status:str='',page:int=Query(1,ge=1),page_size:int=Query(30,ge=1,le=100)):
+def jobs(db:DB,user:Actor,school:Scope,status:str='',page:int=Query(1,ge=1),page_size:int=Query(30,ge=1,le=100),category:str=Query('',pattern=r'^(|banking)$')):
     require(user,'integrations.manage')
     stmt=select(m.IntegrationJob).where(m.IntegrationJob.school_id==school.id)
+    if category=='banking':stmt=stmt.where(m.IntegrationJob.kind.in_(['bank_issue','bank_sync','bank_cancel']))
     if status:stmt=stmt.where(m.IntegrationJob.status==status)
     return {'items':[output(x,('encrypted_payload',)) for x in db.scalars(stmt.order_by(m.IntegrationJob.created_at.desc()).offset((page-1)*page_size).limit(page_size))],
             'total':db.scalar(select(func.count()).select_from(stmt.subquery())),'page':page,'page_size':page_size}

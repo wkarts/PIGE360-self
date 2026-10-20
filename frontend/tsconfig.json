@@ -37,6 +37,8 @@
     "src/email.ts",
     "src/lifecycle.ts",
     "src/users.ts",
+    "src/academic-preparation.ts",
+    "src/notification-email.ts",
     "src/app.ts"
   ]
 }

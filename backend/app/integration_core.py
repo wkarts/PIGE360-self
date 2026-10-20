@@ -192,6 +192,12 @@ def enqueue(db,school_id,kind,payload,key,connection_id=None):
 
 def admission_notification(db,admission,text,code):
     account=db.get(m.PortalAccount,admission.account_id)
+    from .notification_email import available
+    if account.active and available(db, admission.school_id):
+        enqueue(db, admission.school_id, 'smtp_email', {
+            'to': account.email, 'subject': 'Atualização da inscrição ' + admission.number,
+            'text': text + ' Acompanhe no portal: ' + settings().app_url + '/online.html'},
+            f'admission-email:{admission.id}:{code}:{admission.version}')
     if not account.whatsapp_opt_in or not account.phone_verified:
         return None
     from .connect_core import connect_instance_for_school, enqueue_connect_message

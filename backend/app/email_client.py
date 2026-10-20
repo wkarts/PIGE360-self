@@ -282,7 +282,7 @@ def _account_output(db, mailbox):
     connected = bool(available and connection and connection.encrypted_secret and connection.validated_at and not connection.last_error)
     automatic = bool(available and not connected and _recoverable(db, mailbox, connection))
     parameters = _settings_output(_server(db, mailbox.school_id), config) if mailbox else {}
-    return {'available': available, 'connected': connected, 'needs_password': available and not connected and not automatic,
+    return {'available': available, 'repair_available': bool(mailbox and config and config.enabled), 'connected': connected, 'needs_password': available and not connected and not automatic,
             'can_auto_connect': automatic,
             'connection_state': 'ready' if connected else 'preparing' if automatic else 'password_required' if available else 'unavailable',
             'connection_error': ERRORS.get(connection.last_error, '') if connection else '',
@@ -1243,6 +1243,48 @@ def connect(data: ConnectionInput, db: DB, user: Actor, school: EmailScope, requ
         connection.checked_at, connection.last_error = now(), ''
         db.flush(); audit(db, request, user, 'email.connected', connection, school.id, details={'mailbox_changed': address != mailbox.address.casefold()})
         return _account_output(db, mailbox)
+
+
+@router.post('/connection/repair')
+def repair_connection(db: DB, user: Actor, school: EmailScope, request: Request):
+    """Reconsulta e autentica a caixa existente; nenhum comando altera a caixa."""
+    from .mailcow import MailcowClient, _apply_remote, error_message
+    lock_school(db, school.id)
+    mailbox = _owned(db, user, school, required=False)
+    if not mailbox: fail(409, 'Vincule sua caixa existente antes de reparar a conexão.')
+    config = db.get(MailcowConfig, mailbox.config_id)
+    if not config or not config.enabled or config.school_id != school.id:
+        fail(409, 'Solicite ao administrador a revisão do servidor da escola.')
+    connection = _connection(db, mailbox)
+    if connection and connection.checked_at and utc(connection.checked_at) > now() - timedelta(seconds=10):
+        fail(429, 'Aguarde 10 segundos antes de verificar novamente.')
+    try:
+        remote = MailcowClient(config).mailbox(mailbox.address)
+        if not remote: fail(409, 'A caixa não foi encontrada no servidor. Nenhuma conta foi criada ou excluída.')
+        job = db.get(m.IntegrationJob, mailbox.job_id)
+        _apply_remote(mailbox, remote, reconciled=bool(job and job.kind == 'mailbox_reconcile'))
+    except IntegrationFailure as error:
+        fail(502, error_message(error.code))
+    if not mailbox.remote_active:
+        fail(409, 'A caixa está desativada no servidor. Solicite sua ativação sem recriar a conta.')
+    if not connection and _recoverable(db, mailbox, None):
+        password = unseal(mailbox.encrypted_password).get('password')
+        connection = provision_connection(db, mailbox, password)
+    if connection and connection.encrypted_secret:
+        try:
+            password = unseal(connection.encrypted_secret).get('password')
+            if not isinstance(password, str) or not password: raise IntegrationFailure('EMAIL_AUTH')
+            with MailClient(config, _server(db, school.id), mailbox, password,
+                            username=connection.address_override or mailbox.address) as client:
+                with client.smtp(): pass
+            connection.validated_at, connection.last_error = now(), ''
+        except (OSError, imaplib.IMAP4.error, smtplib.SMTPException, IntegrationFailure) as error:
+            connection.validated_at = None
+            connection.last_error = _mapped_error(error).code
+        connection.checked_at = now()
+    db.flush(); audit(db, request, user, 'email.connection_repaired', mailbox, school.id,
+        {'validated': bool(connection and connection.validated_at), 'code': connection.last_error if connection else ''})
+    return _account_output(db, mailbox)
 
 
 @router.delete('/connection')

@@ -146,6 +146,7 @@ jobs:
           python scripts/e2e-whatsapp-scope.py
           python scripts/e2e-camera.py
           python scripts/e2e-support.py
+          python scripts/e2e-school-operations.py
           python scripts/e2e-assisted.py
           python scripts/e2e-completion.py
           python scripts/e2e-continuity.py
