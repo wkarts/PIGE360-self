@@ -87,6 +87,17 @@ def test_disabled_school_never_falls_back_to_installation(api,monkeypatch):
     api.post('/notification-email/test',{'client_key':'00000000-0000-4000-8000-000000000001'},409)
 
 
+def test_long_sender_domain_does_not_turn_smtp_acceptance_into_database_error(api,monkeypatch):
+    sender='sender@'+'a'*63+'.'+'b'*63+'.example.com'
+    configure(api,from_address=sender);calls=transport(monkeypatch)
+    job=api.post('/notification-email/test',{'client_key':'00000000-0000-4000-8000-000000000001'},202)
+    assert process_one(job['job_id'])
+    assert len(str(calls[1]['Message-ID']))>160
+    with SessionLocal() as db:
+        row=db.get(m.IntegrationJob,job['job_id'])
+        assert row.status=='completed' and row.remote_id==''
+
+
 def test_school_smtp_handles_parent_verification_reset_and_admission_notices(online,monkeypatch):
     o=online;api=o['api'];configure(api);calls=transport(monkeypatch)
     pc(o,'POST','/verification/request',{'channel':'email'})

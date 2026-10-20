@@ -108,7 +108,10 @@ def send(db, school_id, payload, fallback):
         # Depois de DATA, não repetir automaticamente: pode ter sido aceito.
         code = _mapped_error(error).code
         raise IntegrationFailure(code if code.startswith('EMAIL_') else 'SMTP_SEND_FAILED', uncertain=sending) from None
-    return str(message['Message-ID'])
+    # Message-ID é gerado pelo cliente, não é recibo do provedor SMTP.
+    # Mantém o contrato do transporte da instalação e não grava um cabeçalho
+    # potencialmente longo na coluna de IDs remotos da fila.
+    return ''
 
 
 @router.get('')
