@@ -1,11 +1,15 @@
 """IP autenticado do portal, sessão temporária de convite e identidade pública."""
 from datetime import timedelta
+from functools import partial
 import hashlib
 import hmac
 import time
+from types import SimpleNamespace
+import pytest
 from starlette.testclient import TestClient
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+from app import portal_proxy
 from app.config import settings
 from app.portal_proxy import PortalClientMiddleware
 from app.db import SessionLocal,now
@@ -26,28 +30,66 @@ def signed(ip,path='/api/v1/auth/login',method='POST',timestamp=None):
     return {'X-Pige-Portal-IP':ip,'X-Pige-Portal-Time':stamp,'X-Pige-Portal-Signature':signature}
 
 
-def test_portal_ip_hmac_rejects_spoofing_replay_duplicate_headers_and_wrong_target(monkeypatch):
+@pytest.fixture
+def portal_clock(monkeypatch):
+    # Altera só o relógio consultado pelo middleware; não afeta timers do runner.
+    clock=SimpleNamespace(now=1_800_000_000.0)
+    monkeypatch.setattr(portal_proxy,'time',SimpleNamespace(time=lambda:clock.now))
+    return clock
+
+
+def test_portal_ip_hmac_rejects_spoofing_replay_duplicate_headers_and_wrong_target(monkeypatch,portal_clock):
     monkeypatch.setattr(settings(),'portal_internal_token',SECRET)
+    sign=partial(signed,timestamp=int(portal_clock.now))
     async def echo(scope,receive,send):
         request=Request(scope,receive)
         await JSONResponse({'peer':request.client.host,'internal_header':request.headers.get('x-pige-portal-ip')})(scope,receive,send)
     client=TestClient(PortalClientMiddleware(echo))
     for ip in ('198.51.100.1','198.51.100.2','2001:db8::1'):
-        response=client.post('/api/v1/auth/login',headers=signed(ip))
+        response=client.post('/api/v1/auth/login',headers=sign(ip))
         assert response.json()=={'peer':ip,'internal_header':None}
     for path in ('/api/v1/auth/mfa/verify','/api/v1/portal/mfa/enroll'):
-        assert client.post(path,headers=signed('198.51.100.1',path=path)).json()['peer']=='198.51.100.1'
+        assert client.post(path,headers=sign('198.51.100.1',path=path)).json()['peer']=='198.51.100.1'
     for headers in [
         {'X-Forwarded-For':'198.51.100.1','X-Pige-Portal-IP':'198.51.100.1'},
-        {**signed('198.51.100.1'),'X-Pige-Portal-IP':'198.51.100.2'},
-        signed('198.51.100.1',method='GET'),signed('198.51.100.1',path='/api/v1/auth/logout'),
-        signed('198.51.100.1',timestamp=int(time.time())-31),signed('198.51.100.1',timestamp=int(time.time())+31),
-        list(signed('198.51.100.1').items())+[('X-Pige-Portal-IP','198.51.100.2')],
+        {**sign('198.51.100.1'),'X-Pige-Portal-IP':'198.51.100.2'},
+        sign('198.51.100.1',method='GET'),sign('198.51.100.1',path='/api/v1/auth/logout'),
+        sign('198.51.100.1',timestamp=int(portal_clock.now)-31),sign('198.51.100.1',timestamp=int(portal_clock.now)+31),
+        list(sign('198.51.100.1').items())+[('X-Pige-Portal-IP','198.51.100.2')],
     ]:
         assert client.post('/api/v1/auth/login',headers=headers).json()['peer']=='testclient'
-    assert client.post('/api/v1/backups',headers=signed('198.51.100.1',path='/api/v1/backups')).json()['peer']=='testclient'
+    assert client.post('/api/v1/backups',headers=sign('198.51.100.1',path='/api/v1/backups')).json()['peer']=='testclient'
     monkeypatch.setattr(settings(),'portal_internal_token','')
-    assert client.post('/api/v1/auth/login',headers=signed('198.51.100.1')).json()['peer']=='testclient'
+    assert client.post('/api/v1/auth/login',headers=sign('198.51.100.1')).json()['peer']=='testclient'
+
+
+@pytest.mark.parametrize('offset,elapsed,accepted',[
+    pytest.param(-31,0,False,id='past-outside'),
+    pytest.param(-30,0,True,id='past-at-boundary'),
+    pytest.param(-30,0.001,False,id='past-just-expired'),
+    pytest.param(-29,0.999,True,id='past-within-fractional-second'),
+    pytest.param(0,29.999,True,id='arrival-before-expiry'),
+    pytest.param(0,30,True,id='arrival-at-expiry'),
+    pytest.param(0,30.001,False,id='arrival-after-expiry'),
+    pytest.param(30,0,True,id='future-at-boundary'),
+    pytest.param(31,0,False,id='future-outside'),
+    pytest.param(31,0.999,False,id='future-just-outside'),
+    pytest.param(31,1,True,id='future-enters-window-at-next-second'),
+    pytest.param(31,1.001,True,id='future-within-after-delivery'),
+])
+def test_portal_hmac_window_is_evaluated_at_reception(monkeypatch,portal_clock,offset,elapsed,accepted):
+    monkeypatch.setattr(settings(),'portal_internal_token',SECRET)
+    headers=signed('198.51.100.1',timestamp=int(portal_clock.now)+offset)
+    portal_clock.now+=elapsed
+    async def echo(scope,receive,send):
+        request=Request(scope,receive)
+        await JSONResponse({'peer':request.client.host,'internal_header':request.headers.get('x-pige-portal-ip')})(scope,receive,send)
+    client=TestClient(PortalClientMiddleware(echo))
+    try:
+        response=client.post('/api/v1/auth/login',headers=headers)
+    finally:
+        client.close()
+    assert response.json()=={'peer':'198.51.100.1' if accepted else 'testclient','internal_header':None}
 
 
 def test_invitation_refresh_uses_scoped_httponly_cookie_without_exposing_token(api,client):
