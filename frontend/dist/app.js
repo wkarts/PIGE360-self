@@ -3408,8 +3408,7 @@ var PigeAcademicPreparation;
             const s = Vue.reactive({ open: false, busy: false, error: '', notice: '', source: '', targetId: '', name: next, starts: next + '-01-01', ends: next + '-12-31', plan: null });
             const payload = () => ({ source_year_id: s.source, target: { name: s.name, starts_on: s.starts, ends_on: s.ends, status: 'active' } });
             const base = () => '/schools/' + props.schoolId + '/academic-preparation';
-            const dirty = Vue.computed(() => s.open && Boolean(s.source));
-            Vue.watch(() => JSON.stringify(payload()), () => { s.plan = null; s.error = ''; s.notice = ''; });
+            Vue.watch(() => JSON.stringify(payload()), () => { s.plan = null; s.error = ''; });
             function targetChanged() { const year = props.years.find(y => y.id === s.targetId); if (year) {
                 s.name = String(year.name);
                 s.starts = String(year.starts_on);

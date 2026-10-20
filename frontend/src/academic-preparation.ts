@@ -5,8 +5,7 @@ namespace PigeAcademicPreparation {
     const s=Vue.reactive({open:false,busy:false,error:'',notice:'',source:'',targetId:'',name:next,starts:next+'-01-01',ends:next+'-12-31',plan:null as Plan|null});
     const payload=()=>({source_year_id:s.source,target:{name:s.name,starts_on:s.starts,ends_on:s.ends,status:'active'}});
     const base=()=>'/schools/'+props.schoolId+'/academic-preparation';
-    const dirty=Vue.computed(()=>s.open&&Boolean(s.source));
-    Vue.watch(()=>JSON.stringify(payload()),()=>{s.plan=null;s.error='';s.notice='';});
+    Vue.watch(()=>JSON.stringify(payload()),()=>{s.plan=null;s.error='';});
     function targetChanged():void{const year=props.years.find(y=>y.id===s.targetId);if(year){s.name=String(year.name);s.starts=String(year.starts_on);s.ends=String(year.ends_on);}else{s.name=next;s.starts=next+'-01-01';s.ends=next+'-12-31';}s.plan=null;}
     async function run(task:()=>Promise<void>):Promise<void>{if(s.busy)return;s.busy=true;s.error='';s.notice='';try{await task();}catch(e){s.error=e instanceof Error?e.message:String(e);}finally{s.busy=false;}}
     async function preview():Promise<void>{await run(async()=>{s.plan=null;s.plan=await PigeAPI.post<Plan>(base()+'/preview',payload());});}

@@ -58,6 +58,7 @@ e.PinnedSMTPStartTLS=lambda *args:SMTP(state,*args)
 @app.get('/__synthetic_state')
 def synthetic_state():
     return {'remote_methods':calls,'inbox_count':len(state['folders']['INBOX']),'sent_count':len(state['sent'])}
+app.router.routes.insert(0,app.router.routes.pop())  # Antes do fallback HTML do gestor.
 def worker():
     while True:
         process_one();time.sleep(.15)
@@ -106,13 +107,21 @@ try:
         admission = pc('/admissions/' + admission['id'] + '/submit', {'version': admission['version'], 'accept_terms': True, 'legal_responsibility': True, 'terms_version': '1'})
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(executable_path=os.getenv('CHROMIUM_PATH') or None, headless=True, args=['--no-sandbox'])
-            page = browser.new_page(viewport={'width': 1440, 'height': 1000}); errors = []
+            page = browser.new_page(viewport={'width': 1440, 'height': 1000}, locale='pt-BR'); errors = []
             page.on('pageerror', lambda error: errors.append(str(error)))
             page.goto(URL); page.get_by_label('E-mail', exact=True).fill('admin@escola.example.com'); page.get_by_label('Senha', exact=True).fill(PASSWORD)
             page.get_by_role('button', name='Entrar na aplicação').click()
             expect(page.locator('#school-navigation')).to_be_visible()
+            expect(page.locator('.school-switch select')).to_be_enabled()
+            def navigate(route):
+                expect(page.locator('.school-switch select')).to_be_enabled()
+                page.goto(URL+'/#/'+route)
+                headings={'settings':'Instituição','academic':'Estrutura acadêmica','online':'Inscrições online','email':'E-mail'}
+                if route in headings: expect(page.locator('.page-header h1')).to_have_text(headings[route])
+                expect(page.locator('.school-switch select')).to_be_enabled()
+                expect(page.locator('.loading-strip')).to_have_count(0)
             # O formulário real mantém seleção independente e persiste o subconjunto.
-            page.goto(URL+'/#/settings')
+            navigate('settings')
             page.get_by_role('button', name='Atendimento', exact=True).click()
             page.get_by_role('button', name='Configurar atendimento', exact=False).click()
             modal = page.get_by_role('dialog')
@@ -128,7 +137,7 @@ try:
             saved = call('GET', '/support-hub')
             assert set(saved['enabled_areas']) == {'student_portal','news'} and not saved['enabled']
             checks.append('Áreas individuais do atendimento selecionadas e persistidas sem ativar as demais.')
-            page.goto(URL+'/#/academic')
+            navigate('academic')
             page.get_by_role('button', name='Preparar a partir de outro ano').click()
             page.get_by_label('Copiar turmas do ano').select_option(year['id'])
             page.get_by_label('Nome do ano', exact=True).fill('2027')
@@ -136,18 +145,19 @@ try:
             page.get_by_role('button', name='Conferir prévia', exact=True).click()
             expect(page.get_by_role('button', name='Confirmar preparação do ano letivo')).to_be_enabled()
             expect(page.get_by_label('Prévia da preparação')).to_contain_text('2 turma(s) para criar')
+            page.get_by_role('button', name='Confirmar preparação do ano letivo').scroll_into_view_if_needed()
             page.screenshot(path=str(OUT/'02-previa-ano-letivo.png'), full_page=True)
             page.get_by_role('button', name='Confirmar preparação do ano letivo').click()
             expect(page.get_by_text('Ano letivo preparado:', exact=False)).to_be_visible()
             assert len(call('GET', '/class-groups')) == 4
             checks.append('Prévia e preparação das duas turmas pelo formulário; origem e fluxo manual preservados.')
-            page.goto(URL+'/#/online')
+            navigate('online')
             page.get_by_role('button', name='Aluno sintético', exact=False).click()
             expect(page.get_by_label('Aluno existente (opcional)').locator('option')).to_have_count(2)
             expect(page.get_by_label('Responsável existente (opcional)').locator('option')).to_have_count(2)
             page.get_by_label('Aluno existente (opcional)').select_option(student['id'])
             page.get_by_label('Responsável existente (opcional)').select_option(guardian['id'])
-            page.get_by_label('Justificativa pronta', exact=True).select_option(label='Aprovação após conferência')
+            page.get_by_label('Justificativa pronta').select_option(label='Aprovação após conferência')
             page.get_by_role('button', name='Usar justificativa', exact=True).click()
             expect(page.get_by_label('Justificativa / parecer para a próxima ação')).to_have_value('Identidade, documentos e legitimidade dos vínculos conferidos pela Secretaria. Inscrição aprovada para preparação da matrícula.')
             page.screenshot(path=str(OUT/'03-conciliacao-automatica.png'), full_page=True)
@@ -157,9 +167,9 @@ try:
             assert call('GET', '/admissions/'+admission['id'])['student_id'] == student['id']
             assert call('GET', '/students')['total'] == 1
             checks.append('Busca automática separada, justificativa editável e aprovação explícita reutilizam aluno e responsável.')
-            page.goto(URL+'/#/email')
+            navigate('email')
             page.get_by_role('button', name='Configurar envio', exact=True).click()
-            page.get_by_label('Configuração', exact=True).select_option('school')
+            page.get_by_label('Configuração').select_option('school')
             page.get_by_label('Servidor SMTP', exact=True).fill('mail.escola.example.com')
             page.get_by_label('Usuário SMTP', exact=True).fill('admin@escola.example.com')
             page.get_by_label('Remetente', exact=True).fill('admin@escola.example.com')
@@ -175,16 +185,20 @@ try:
                 time.sleep(.1)
             page.get_by_role('button', name='Atualizar fila de e-mail').click()
             expect(page.get_by_role('cell', name='Aceito pelo servidor SMTP', exact=True)).to_be_visible()
+            page.get_by_role('cell', name='Aceito pelo servidor SMTP', exact=True).scroll_into_view_if_needed()
             page.screenshot(path=str(OUT/'04-notificacoes-smtp.png'), full_page=True)
             checks.append('Configuração SMTP da escola, autenticação e fila com aceitação pelo servidor sintético; sem alegar entrega externa.')
             page.get_by_role('button', name='Reparar vínculo local', exact=True).click()
             expect(page.get_by_text('Vínculo local reparado.', exact=False)).to_be_visible()
-            page.goto(URL+'/#/webmail')
+            navigate('webmail')
             expect(page.get_by_role('button', name='Reparar conexão da caixa existente')).to_be_visible()
             page.get_by_role('button', name='Reparar conexão da caixa existente').click()
             page.get_by_label('Senha da caixa', exact=True).fill(MAIL_PASSWORD)
             page.get_by_role('button', name='Conectar e-mail', exact=True).click()
             expect(page.get_by_text('Mensagem sintética preservada', exact=False)).to_be_visible()
+            call('POST', '/mailcow/mailboxes/'+box['id']+'/repair', {})
+            page.get_by_role('button', name='Reparar conexão', exact=True).click()
+            expect(page.get_by_text('Conexão reparada e autenticada.', exact=False)).to_be_visible()
             page.screenshot(path=str(OUT/'05-caixa-existente-preservada.png'), full_page=True)
             state = client.get('/__synthetic_state').json()
             assert state['inbox_count'] == 1 and state['remote_methods'] and set(state['remote_methods']) == {'GET'}
