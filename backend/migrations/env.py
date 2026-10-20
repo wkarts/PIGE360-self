@@ -1,6 +1,7 @@
 from alembic import context
 from sqlalchemy import create_engine, pool
 from app.config import settings
+from app.notification_email import NotificationEmailSettings  # noqa: F401
 from app.import_operations import ImportOperation  # noqa: F401
 from app.user_invitations import UserInvitation  # noqa: F401
 from app.school_website import SchoolWebsite  # noqa: F401

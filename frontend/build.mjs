@@ -22,7 +22,7 @@ execFileSync(compiler,['-p',path.join(root,'tsconfig.portal.json')],{stdio:'inhe
 execFileSync(compiler,['-p',path.join(root,'tsconfig.news.json')],{stdio:'inherit'});
 execFileSync(compiler,['-p',path.join(root,'tsconfig.family.json')],{stdio:'inherit'});
 const renders={};
-for(const name of ['app','portal','familyPortal','expansion','camera','users','assist','diagnostics','diary','contracts','signing','reports','legacyImport','learning','community','news','mailcow','audit','email','lifecycle']){
+for(const name of ['academicPreparation','notificationEmail','app','portal','familyPortal','expansion','camera','users','assist','diagnostics','diary','contracts','signing','reports','legacyImport','learning','community','news','mailcow','audit','email','lifecycle']){
  const fragment=key=>fs.readFileSync(path.join(root,'templates',key+'.html'),'utf8');
  const template=fs.readFileSync(path.join(root,'templates',name+'.html'),'utf8').replaceAll('<!-- MFA-MANAGE -->',fragment('mfa-manage')).replaceAll('<!-- MFA-CHALLENGE -->',fragment('mfa-challenge')).replaceAll('<!-- FAMILY -->',fragment('family')).replaceAll('<!-- FORM-FIELDS -->',fragment('form-fields'));
  const errors=[];

@@ -641,6 +641,43 @@ def sync_mailbox(mailbox_id: str, db: DB, user: Actor, school: Scope, request: R
     return mailbox_output(db, obj)
 
 
+@router.post('/mailboxes/{mailbox_id}/repair')
+def repair_mailbox(mailbox_id: str, db: DB, user: Actor, school: Scope, request: Request):
+    """Restaura o estado local a partir de GET, sem criar conta ou redefinir senha."""
+    from .email_client import EmailConnection, provision_connection
+    _admin(user); lock_school(db, school.id)
+    obj = _mailbox(db, school.id, mailbox_id)
+    config = _config(db, school.id)
+    if obj.config_id != config.id:
+        fail(409, 'A caixa está vinculada a outra configuração. Confira o vínculo antes de reparar.')
+    target = db.get(m.User, obj.user_id)
+    access = db.get(m.SchoolAccess, (obj.user_id, school.id))
+    if not target or not target.active or not access or not access.active or access.archived_at:
+        fail(409, 'O titular precisa de acesso ativo a esta escola para reparar o vínculo.')
+    job = db.get(m.IntegrationJob, obj.job_id)
+    if not job or job.school_id != school.id or job.kind not in {'mailbox_provision', 'mailbox_reconcile'} or unseal(job.encrypted_payload).get('mailbox_id') != obj.id:
+        fail(409, 'O histórico da caixa não corresponde a este vínculo. Solicite a conferência do administrador.')
+    if job.status == 'processing': fail(409, 'Aguarde a operação em processamento antes de reparar.')
+    try:
+        remote = MailcowClient(config).mailbox(obj.address)
+        if not remote: fail(409, 'A caixa não foi encontrada no servidor. Nenhuma conta foi criada ou excluída.')
+        _apply_remote(obj, remote, reconciled=bool(job and job.kind == 'mailbox_reconcile'))
+    except IntegrationFailure as error:
+        fail(502, error_message(error.code))
+    if not obj.remote_active: fail(409, 'A caixa está desativada no servidor. Solicite a ativação da conta existente.')
+    connection = db.scalar(select(EmailConnection).where(EmailConnection.mailbox_id == obj.id,
+        EmailConnection.school_id == school.id, EmailConnection.user_id == obj.user_id))
+    if not connection and obj.encrypted_password and job and job.kind == 'mailbox_provision':
+        connection = provision_connection(db, obj, unseal(obj.encrypted_password).get('password'))
+    if connection:
+        connection.validated_at, connection.checked_at, connection.last_error = None, None, ''
+    if job:
+        job.status, job.error_code, job.lease_until = 'completed', '', None
+    obj.version += 1
+    db.flush(); audit(db, request, user, 'mailcow.mailbox_repaired', obj, school.id)
+    return mailbox_output(db, obj)
+
+
 @router.post('/mailboxes/{mailbox_id}/credentials')
 def reveal_credentials(mailbox_id: str, db: DB, user: Actor, school: Scope, request: Request):
     _admin(user); lock_school(db, school.id)
