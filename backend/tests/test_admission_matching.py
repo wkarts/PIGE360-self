@@ -23,7 +23,7 @@ def test_auto_search_uses_separate_student_and_parent_identities(online):
 
 def test_accents_formatted_cpf_independent_queries_and_ambiguity(online):
     o=online;api=o['api'];a=submit(o,draft(o))
-    first=api.post('/students',{'person':{'name':'Áluno Ónline','birth_date':'2017-03-10'}})
+    first=api.post('/students',{'person':{'name':'Áluno  Ónline','birth_date':'2017-03-10'}})
     second=api.post('/students',{'person':{'name':'Aluno Online','birth_date':'2018-05-15'}})
     parent=api.post('/persons',{'name':'Responsável Teste','cpf':CPF})
     result=api.get('/admissions/'+a['id']+'/matches')

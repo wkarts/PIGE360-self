@@ -1,28 +1,27 @@
 """Sugestões independentes por identidade. Buscar nunca concilia automaticamente."""
 import re
-import unicodedata
 from fastapi import APIRouter, Query, Request
 from sqlalchemy import func, or_, select
 from . import models as m
 from .common import audit
 from .security import Actor, DB, Scope, require, scoped
 from .lifecycle_models import filter_archived
+from .text_normalization import normalized_name as normalized
 
 router = APIRouter(prefix='/api/v1/schools/{school_id}/admissions', tags=['Conciliação da inscrição'])
 
 
-def normalized(value):
-    return ' '.join(''.join(c for c in unicodedata.normalize('NFKD', str(value or ''))
-        if not unicodedata.combining(c)).casefold().split())
-
-
-def name_column():
-    column = func.lower(m.Person.name)
-    # SQLite e PostgreSQL, sem depender da extensão unaccent na instalação.
+def name_column(db):
+    if db.bind.dialect.name == 'sqlite':
+        # Uma função registrada por conexão evita dezenas de REPLACE aninhados,
+        # que excedem a pilha do parser em SQLite 3.45 usado nos E2E do CI.
+        return func.pige_name_key(m.Person.name)
+    source, target = '', ''
     for chars, replacement in [('áàâãäÁÀÂÃÄ', 'a'), ('éèêëÉÈÊË', 'e'), ('íìîïÍÌÎÏ', 'i'),
                                ('óòôõöÓÒÔÕÖ', 'o'), ('úùûüÚÙÛÜ', 'u'), ('çÇ', 'c')]:
-        for char in chars: column = func.replace(column, char, replacement)
-    return column
+        source += chars; target += replacement * len(chars)
+    # PostgreSQL nativo, sem instalar unaccent nem mudar os dados originais.
+    return func.regexp_replace(func.trim(func.translate(func.lower(m.Person.name), source, target)), r'\s+', ' ', 'g')
 
 
 def cpf_column():
@@ -46,13 +45,13 @@ def candidates(db, school_id, identity, query, student):
     if query.strip():
         q = normalized(query)
         digits = re.sub(r'\D', '', q)
-        terms.append(name_column().contains(q, autoescape=True))
+        terms.append(name_column(db).contains(q, autoescape=True))
         if digits and len(digits) >= 3: terms.append(cpf_column().contains(digits, autoescape=True))
         terms.append(func.lower(m.Person.email).contains(q, autoescape=True))
         if student: terms.append(func.lower(m.Student.number).contains(q, autoescape=True))
     else:
         if len(cpf) == 11: terms.append(cpf_column() == cpf)
-        if name: terms.append(name_column() == name)
+        if name: terms.append(name_column(db) == name)
         if email and not student: terms.append(func.lower(m.Person.email) == email)
     if not terms: return {'items': [], 'total': 0, 'truncated': False}
     stmt = stmt.where(or_(*terms))

@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import shutil
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -152,7 +153,9 @@ try:
             assert len(call('GET', '/class-groups')) == 4
             checks.append('Prévia e preparação das duas turmas pelo formulário; origem e fluxo manual preservados.')
             navigate('online')
-            page.get_by_role('button', name='Aluno sintético', exact=False).click()
+            with page.expect_response(lambda r: base+'/admissions/'+admission['id']+'/matches' in r.url) as matches_response:
+                page.get_by_role('button', name='Aluno sintético', exact=False).click()
+            assert matches_response.value.status == 200, matches_response.value.text()
             expect(page.get_by_label('Aluno existente (opcional)').locator('option')).to_have_count(2)
             expect(page.get_by_label('Responsável existente (opcional)').locator('option')).to_have_count(2)
             page.get_by_label('Aluno existente (opcional)').select_option(student['id'])
@@ -206,7 +209,7 @@ try:
             assert not errors, errors
             browser.close()
         parent.close()
-    (OUT/'result.json').write_text(json.dumps({'status':'passed','checks':checks,'page_errors':errors,'external_homologation':False},ensure_ascii=False,indent=2))
+    (OUT/'result.json').write_text(json.dumps({'status':'passed','checks':checks,'page_errors':errors,'external_homologation':False,'sqlite_version':sqlite3.sqlite_version},ensure_ascii=False,indent=2))
     print(json.dumps({'status':'passed','checks':checks,'evidence':str(OUT)},ensure_ascii=False))
 finally:
     proc.terminate()
