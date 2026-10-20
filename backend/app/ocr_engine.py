@@ -162,6 +162,8 @@ def _name_below_label(candidates):
                 if not re.fullmatch(r"[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ '\-.]+",value):continue
                 if re.search(r'\b(NOME|DOCUMENTO|IDENTIDADE|EMISSOR|FILIACAO|NASCIMENTO|REPUBLICA|VALIDADE|ASSINATURA)\b',normalized(value)):continue
                 choices.append((round(conf,1),value))
+    # Divergências entre passagens não autorizam escolher outra pessoa.
+    if len({normalized(value) for _,value in choices})>1:return None
     return max(choices,default=None)
 
 
@@ -195,6 +197,17 @@ def read_image(path: Path, page: int, directory: Path, purpose: str='identity'):
         gray=ImageOps.autocontrast(ImageOps.grayscale(original))
         if factor!=1:gray=gray.resize((round(gray.width*factor),round(gray.height*factor)),Image.Resampling.LANCZOS)
         warnings=[]
+        # OSD corrige a orientação antes de extrair os campos. A falha do OSD
+        # não impede os demais caminhos (documentos curtos têm poucos glifos).
+        orientation=directory/f'orientation-{page}.png';gray.save(orientation)
+        try:
+            detected=command(['tesseract',str(orientation),'stdout','-l','osd','--psm','0'],timeout=8).stdout.decode('utf-8',errors='replace')
+            angle=re.search(r'Rotate: (90|180|270)\b',detected)
+            confidence=re.search(r'Orientation confidence: ([0-9.]+)',detected)
+            if angle and confidence and float(confidence.group(1))>=5:
+                gray=gray.rotate(-int(angle.group(1)),expand=True)
+                warnings.append('Orientação da imagem corrigida automaticamente. Confira os campos.')
+        except (subprocess.CalledProcessError,subprocess.TimeoutExpired):pass
         if min(source_size)<700:warnings.append('Imagem pequena: use o PDF original ou uma foto mais próxima para melhorar a leitura.')
     candidates=[]
     # Não trata um documento com retrato, duas colunas e QR como um parágrafo.
@@ -208,7 +221,7 @@ def read_image(path: Path, page: int, directory: Path, purpose: str='identity'):
     proposals=_proposals(candidates,purpose)
     # Fotografias sem EXIF e páginas giradas: uma passagem por orientação,
     # escolhida pelo conteúdo reconhecido, dentro do mesmo limite do worker.
-    if not proposals and max(c['confidence'] for c in candidates)<60:
+    if not expected.issubset({r['field'] for r in proposals}) and max(c['confidence'] for c in candidates)<70:
         rotations=[]
         for angle in (90,270,180):
             rotated=gray.rotate(angle,expand=True)
@@ -216,8 +229,10 @@ def read_image(path: Path, page: int, directory: Path, purpose: str='identity'):
             rows=_proposals([candidate],purpose)
             if rows:rotations.append((len(rows),candidate['confidence'],rotated,candidate,rows))
         if rotations:
-            _,_,gray,candidate,proposals=max(rotations,key=lambda item:(item[0],item[1]))
-            candidates=[candidate]
+            count,conf,rotated,candidate,rows=max(rotations,key=lambda item:(item[0],item[1]))
+            if (count,conf)>(len(proposals),max(c['confidence'] for c in candidates)):
+                gray,proposals,candidates=rotated,rows,[candidate]
+                warnings.append('Orientação da imagem corrigida automaticamente. Confira os campos.')
     best=max(candidates,key=lambda c:(len(suggestions(c['text'],purpose,c['confidence'])),c['confidence']))
     return {'number':page,'width':gray.width,'height':gray.height,'source':'tesseract',
         'text':best['text'],'tokens':best['tokens'],'warnings':warnings,'suggestions':proposals,
@@ -284,7 +299,7 @@ def extract(path: Path, mime: str, purpose: str, directory: Path):
     if not fields:warnings.append('Não foi possível identificar campos com segurança. Envie o documento original ou preencha manualmente.')
     if not text.strip():warnings.append('Nenhum texto legível. Fotografe novamente ou preencha manualmente.')
     # Um resultado sem sugestões é uma tentativa concluída, não uma falha muda.
-    return {'engine':'tesseract-5/poppler','schema_version':2,'purpose':purpose,'text':text,'pages':pages,
+    return {'engine':'tesseract-5/poppler','schema_version':3,'purpose':purpose,'text':text,'pages':pages,
         'confidence':confidence,'suggestions':fields,'warnings':warnings,
         'quality':'fields_found' if fields else 'needs_better_source',
         'requires_review':True,'document_authenticity_verified':False}

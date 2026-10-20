@@ -184,14 +184,17 @@ def approve(id:str,data:s.Approval,db:DB,user:Actor,school:Scope,request:Request
     from .config import settings
     import hashlib
     for item in db.scalars(select(m.AdmissionAttachment).where(m.AdmissionAttachment.admission_id==obj.id,m.AdmissionAttachment.active.is_(True),m.AdmissionAttachment.review_status!='rejected')):
-        root=settings().storage_path.resolve();path=(root/item.storage_key).resolve()
-        if not path.is_relative_to(root) or not path.is_file():fail(409,'Anexo indisponível: '+item.original_name)
-        raw=path.read_bytes()
+        from .storage import read_bytes
+        try:raw=read_bytes(item)
+        except (FileNotFoundError,KeyError):fail(409,'Anexo indisponível: '+item.original_name)
         if hashlib.sha256(raw).hexdigest()!=item.sha256:fail(409,'Anexo com integridade inválida.')
         stored=write_file(db,school.id,user.id,item.original_name,item.mime_type,raw)
         doc=m.StudentDocument(school_id=school.id,student_id=student.id,document_type_id=item.document_type_id,file_id=stored.id,status=item.review_status,validated_by=user.id if item.review_status=='validated' else None,notes='Importado da inscrição '+obj.number+'; '+item.review_note)
         db.add(doc);db.flush();item.student_document_id=doc.id
     obj.status='approved';obj.student_id=student.id;obj.enrollment_id=enrollment.id;obj.class_group_id=group.id;obj.reviewed_by=user.id;obj.version+=1
+    obj.contract_signing_order='applicant_first'
+    from .admission_reservations import start
+    start(db,obj,campaign)
     if campaign.contract_template_id:
         obj.contract_template_id=template.id
         obj.contract_template_version=revision.version_number
@@ -210,12 +213,25 @@ def finalize(id:str,data:s.FinalizeAdmission,db:DB,user:Actor,school:Scope,reque
     if obj.status=='enrolled':return admission_output(db,obj,False)
     check_version(obj,data.version)
     if obj.status!='approved' or not obj.enrollment_id:fail(409,'Aprove a inscrição antes da efetivação.')
+    from .admission_reservations import gate
+    gate(db,obj.enrollment_id)
     payment_gate(db,school.id,obj.enrollment_id)
     contract_gate(db,school.id,obj.enrollment_id)
     from .enrollments import movement
     enrollment=scoped(db,m.Enrollment,obj.enrollment_id,school.id)
+    from .enrollments import activation_validation
     if enrollment.status!='active':
-        movement(enrollment.id,schemas.MovementInput(version=enrollment.version,action='activate',reason=data.reason),db,user,school,request)
+        activation_validation(db,school,enrollment,scoped(db,m.ClassGroup,enrollment.class_group_id,school.id),institution_required=False)
+    if obj.contract_signing_order=='applicant_first' and obj.contract_template_id:
+        require(user,'documents.generate')
+        if user.role not in {'admin','direction'}:fail(403,'A conclusão com assinatura A1 exige direção ou administração.')
+        from .contract_signatures import auto_sign_issued_document
+        contract=db.scalar(select(m.IssuedDocument).where(m.IssuedDocument.enrollment_id==enrollment.id,
+            m.IssuedDocument.template_id==obj.contract_template_id,
+            m.IssuedDocument.template_version==str(obj.contract_template_version)).order_by(m.IssuedDocument.created_at.desc()).limit(1))
+        auto_sign_issued_document(db,contract,user.id,request)
+    if enrollment.status!='active':
+        movement(enrollment.id,schemas.MovementInput(version=enrollment.version,action='reactivate' if enrollment.status=='cancelled' else 'activate',reason=data.reason),db,user,school,request)
     # Comprovante persistido: a família recebe exatamente o documento emitido.
     from .documents import issue
     issue(obj.student_id,schemas.IssueInput(kind='enrollment_receipt',enrollment_id=enrollment.id),db,user,school,request)
@@ -239,7 +255,7 @@ def payment_gate(db,school_id,enrollment_id):
         fail(409,'Pagamento obrigatório ainda não recebido/conciliado. Confirmado não equivale a recebido.')
 
 
-def contract_gate(db, school_id, enrollment_id):
+def contract_gate(db, school_id, enrollment_id, institution_required=False):
     """O contrato vinculante é a revisão imutável fixada ao aprovar a inscrição."""
     admission=db.scalar(select(m.Admission).where(
         m.Admission.school_id==school_id,m.Admission.enrollment_id==enrollment_id))
@@ -260,5 +276,65 @@ def contract_gate(db, school_id, enrollment_id):
     guardian=db.get(m.Person,enrollment.financial_person_id) if enrollment.financial_person_id else None
     if not guardian or not guardian.cpf:
         fail(409,'Confirme o CPF do responsável financeiro antes da assinatura do contrato.')
+    if institution_required and admission.contract_signing_order=='applicant_first':
+        from .contract_signatures import _company_revision
+        if not _company_revision(db,issued):fail(409,'Conclua a inscrição online para aplicar a assinatura A1 institucional final.')
     if not contract_signature_ready(db,issued,guardian.cpf):
         fail(409,'A matrícula aguarda assinatura validada da escola e do responsável no contrato.')
+
+
+@router.post('/admissions/{id}/reservation')
+def renew_reservation(id:str,data:s.FinalizeAdmission,db:DB,user:Actor,school:Scope,request:Request):
+    require(user,'admissions.write');require(user,'enrollments.write');lock_school(db,school.id)
+    obj=scoped(db,m.Admission,id,school.id);check_version(obj,data.version)
+    if obj.status!='approved' or not obj.enrollment_id:fail(409,'Somente inscrições aprovadas podem reservar vagas.')
+    from .admission_reservations import start, state
+    from .registry import occupancy
+    enrollment=scoped(db,m.Enrollment,obj.enrollment_id,school.id)
+    group=valid_group(db,db.get(m.AdmissionCampaign,obj.campaign_id),obj.class_group_id)
+    if enrollment.status not in ('draft','cancelled'):fail(409,'A matrícula não está em preparação ou cancelada para revisão.')
+    if state(obj) in ('held','paid'):fail(409,'A reserva ainda está válida.')
+    if occupancy(db,group.id,enrollment.id)>=group.capacity:fail(409,'Turma sem vagas. Não foi possível renovar a reserva.')
+    start(db,obj,db.get(m.AdmissionCampaign,obj.campaign_id),reviewed=True)
+    obj.version+=1
+    add_message(db,obj,'Reserva de vaga revista pela Secretaria. Confira o prazo para pagamento.','reservation',user=user)
+    audit(db,request,user,'admission.reservation_renewed',obj,school.id,{'reason':data.reason})
+    db.flush();return admission_output(db,obj,False)
+
+
+@router.post('/admissions/{id}/contract-revision')
+def revise_contract(id:str,data:s.ContractRevisionInput,db:DB,user:Actor,school:Scope,request:Request):
+    require(user,'admissions.write');require(user,'documents.generate')
+    if user.role not in {'admin','direction'}:fail(403,'A revisão do contrato vinculado exige direção ou administração.')
+    lock_school(db,school.id);obj=scoped(db,m.Admission,id,school.id)
+    if obj.status!='approved' or not obj.enrollment_id or not obj.contract_template_id or not obj.contract_template_version:
+        fail(409,'Revise o contrato antes da efetivação; documentos de matrículas concluídas exigem tratamento próprio.')
+    enrollment=scoped(db,m.Enrollment,obj.enrollment_id,school.id)
+    if enrollment.status not in ('draft','cancelled'):fail(409,'O vínculo acadêmico já saiu da etapa de preparação.')
+    if obj.contract_template_version==data.template_version:return admission_output(db,obj,False)
+    check_version(obj,data.version)
+    template=scoped(db,m.DocumentTemplate,obj.contract_template_id,school.id)
+    if not template.active or not template.require_signature or template.version!=data.template_version:
+        fail(409,'Selecione a revisão atual de um modelo ativo que exija assinatura.')
+    if template.academic_year_id and template.academic_year_id!=enrollment.academic_year_id:
+        fail(409,'A nova revisão não corresponde ao ano letivo da matrícula.')
+    if data.template_version<obj.contract_template_version:fail(409,'A revisão contratual não pode retroceder.')
+    revision=db.scalar(select(m.DocumentTemplateRevision).where(
+        m.DocumentTemplateRevision.template_id==template.id,m.DocumentTemplateRevision.school_id==school.id,
+        m.DocumentTemplateRevision.version_number==data.template_version))
+    if not revision:fail(409,'A revisão imutável do modelo está indisponível.')
+    issued=db.scalar(select(m.IssuedDocument).where(m.IssuedDocument.school_id==school.id,
+        m.IssuedDocument.enrollment_id==enrollment.id,m.IssuedDocument.template_id==template.id,
+        m.IssuedDocument.template_version==str(data.template_version)).limit(1))
+    if issued and issued.signature_status!='unsigned':
+        fail(409,'Esta revisão já recebeu assinatura fora deste fluxo. Crie outra revisão para iniciar um reenvio inequívoco.')
+    before={'version':obj.contract_template_version,'sha256':obj.contract_template_revision_sha256}
+    obj.contract_template_version=revision.version_number;obj.contract_template_revision_sha256=revision.sha256
+    obj.contract_signing_order='applicant_first';obj.reviewed_by=user.id;obj.version+=1
+    add_message(db,obj,'O contrato foi corrigido pela escola. Aguarde a nova via e assine novamente o PDF disponibilizado. '+data.reason,
+        'contract_revision',user=user)
+    audit(db,request,user,'admission.contract_revision_changed',obj,school.id,
+        {'before':before,'after':{'version':revision.version_number,'sha256':revision.sha256},'reason':data.reason})
+    admission_notification(db,obj,'O contrato da sua inscrição foi atualizado. Confira a nova via e as orientações da escola.',
+        'contract-revision-'+str(revision.version_number))
+    db.flush();return admission_output(db,obj,False)

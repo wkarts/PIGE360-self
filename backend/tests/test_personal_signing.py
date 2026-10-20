@@ -42,6 +42,9 @@ def signing_case(online, tmp_path, monkeypatch):
     admission = approve(o, submit(o, draft(o)))
     from app import models as m
     with SessionLocal() as db:
+        # Regressão dos contratos anteriores à jornada família-primeiro.
+        db.get(m.Admission,admission['id']).contract_signing_order='school_first'
+        db.commit()
         company = db.get(m.Company, api.school['company_id'])
         cnpj = ''.join(x for x in (company.document or '') if x.isdigit()) or '12345678000190'
     school_cert, school_pfx = certificate('Escola assinatura', '2.16.76.1.3.3', cnpj)

@@ -56,7 +56,8 @@ def verify_manifest(api, release, loader=load_manifest, aliases=False):
     require(manifest.get('version') == tag and manifest.get('commit') == target,
             'Manifesto difere da tag/SHA publicado')
     images = manifest.get('images', {})
-    require(set(images) == set(IMAGES), 'Manifesto não contém exatamente as três imagens PIGE')
+    expected=IMAGES[:3] if parse(tag)<=(0,12,1) else IMAGES
+    require(set(images) == set(expected), 'Manifesto não contém o conjunto de imagens PIGE da versão')
     for image, digest in images.items():
         import re
         require(isinstance(digest, str) and re.fullmatch(r'sha256:[0-9a-f]{64}', digest), 'Digest inválido')

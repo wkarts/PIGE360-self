@@ -82,9 +82,13 @@ def apply_remote(db,charge,payment,source):
     except Exception:raise IntegrationFailure('BANK_INVALID_AMOUNT')
     if amount!=charge.amount:raise IntegrationFailure('BANK_VALUE_MISMATCH')
     if payment.get('billingType') not in (None,charge.billing_type,'RECEIVED_IN_CASH'):raise IntegrationFailure('BANK_TYPE_MISMATCH')
+    lock_school(db,charge.school_id)
     old=charge.status
     state='cancelled' if payment.get('deleted') else STATUS.get(payment.get('status'),'awaiting_review')
     if payment.get('billingType')=='RECEIVED_IN_CASH' and state=='received':state='received_external'
+    # Uma observação antiga de pendência não desfaz um recebimento conciliado.
+    if old in ('received','received_external') and state in ('pending','confirmed','overdue'):
+        return charge
     charge.remote_payment_id=str(payment['id']);charge.remote_customer_id=str(payment.get('customer') or charge.remote_customer_id)
     charge.status=state;charge.last_synced_at=now();charge.version+=1
     charge.invoice_url=safe_invoice_url(payment.get('invoiceUrl',''))
@@ -97,6 +101,8 @@ def apply_remote(db,charge,payment,source):
         from .integration_core import admission_notification
         admission=db.get(m.Admission,charge.admission_id)
         if admission:admission_notification(db,admission,'Há uma atualização na cobrança vinculada à sua inscrição.','bank-'+charge.id+'-'+state+'-'+str(charge.version))
+    from .admission_reservations import payment_changed
+    payment_changed(db,charge)
     return charge
 
 def payer_for(db,school,data):
@@ -268,6 +274,8 @@ def manual_receipt(id:str,data:s.ManualReceipt,db:DB,user:Actor,school:Scope,req
     obj.status='received_external';obj.version+=1
     details={'amount':format(data.amount,'.2f'),'paid_on':data.paid_on.isoformat(),'payment_method':data.payment_method,'reference':data.reference,'actor_id':user.id}
     db.add(m.BankEvent(school_id=school.id,charge_id=obj.id,source='manual_receipt',previous_status=old,status=obj.status,details=details))
+    from .admission_reservations import payment_changed
+    payment_changed(db,obj)
     audit(db,request,user,'bank.charge.manual_received',obj,school.id,details)
     return charge_output(obj)
 

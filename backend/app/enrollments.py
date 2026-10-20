@@ -35,6 +35,10 @@ def check_group(db, group, school_id):
     require_available(db, group)
     if not group.active:
         fail(409, 'A turma está inativa.')
+    for model,ident in ((m.Unit,group.unit_id),(m.Grade,group.grade_id),(m.Shift,group.shift_id)):
+        target=scoped(db,model,ident,school_id)
+        require_available(db,target)
+        if not target.active:fail(409,'A estrutura acadêmica da turma contém cadastro inativo.')
     year = scoped(db, m.AcademicYear, group.academic_year_id, school_id)
     require_available(db, year)
     if year.status != 'active':
@@ -101,13 +105,15 @@ def enrollment_detail(enrollment_id: str, db: DB, user: Actor, school: Scope):
     return {**enrollment_output(db, obj), 'checklist': checklist(db, school.id, obj.student_id, group.grade_id),
             'history': [output(e) for e in db.scalars(select(m.EnrollmentEvent).where(m.EnrollmentEvent.enrollment_id == obj.id).order_by(m.EnrollmentEvent.created_at.desc()))]}
 
-def activation_validation(db, school, obj, group):
+def activation_validation(db, school, obj, group, institution_required=True):
     # A regra vale também nas rotas administrativas antigas, não apenas no portal.
     from .admissions import payment_gate, contract_gate
+    from .admission_reservations import gate
+    gate(db, obj.id)
     payment_gate(db, school.id, obj.id)
-    contract_gate(db, school.id, obj.id)
+    contract_gate(db, school.id, obj.id, institution_required=institution_required)
     from .documents import checklist
-    if occupancy(db, group.id) >= group.capacity and obj.status not in ('active','suspended'):
+    if occupancy(db, group.id, obj.id) >= group.capacity and obj.status not in ('active','suspended'):
         fail(409, 'Não há vagas disponíveis nesta turma.')
     student = db.get(m.Student, obj.student_id)
     if student.status != 'active': fail(409, 'O aluno está arquivado.')
@@ -133,6 +139,8 @@ def movement(enrollment_id: str, data: s.MovementInput, db: DB, user: Actor, sch
         activation_validation(db, school, obj, group)
         obj.activation_key = f'{school.id}:{obj.student_id}:{obj.academic_year_id}'
         obj.status = 'active'
+        admission = db.scalar(select(m.Admission).where(m.Admission.enrollment_id == obj.id))
+        if admission and admission.reservation_status != 'none': admission.reservation_status = 'consumed'
     elif data.action == 'change_class':
         if not data.class_group_id or data.class_group_id == group.id:
             fail(422, 'Selecione uma turma de destino diferente.')
@@ -148,6 +156,8 @@ def movement(enrollment_id: str, data: s.MovementInput, db: DB, user: Actor, sch
     else:
         obj.status = {'suspend':'suspended', 'transfer':'transferred', 'cancel':'cancelled', 'complete':'completed'}[data.action]
         if obj.status in ('cancelled','transferred'):
+            admission = db.scalar(select(m.Admission).where(m.Admission.enrollment_id == obj.id))
+            if admission and admission.reservation_status != 'none': admission.reservation_status = 'released'
             obj.activation_key = None
     obj.version += 1; db.flush()
     event(db, request, user, obj, data.action, data.reason, before)
@@ -193,6 +203,9 @@ def edit_draft(enrollment_id: str, data: s.DraftEnrollmentEdit, db: DB, user: Ac
         fail(422, 'A edição preserva o ano letivo. Para outro período, cancele o rascunho e crie uma nova matrícula.')
     if scoped(db, m.Student, obj.student_id, school.id).status != 'active':
         fail(409, 'O aluno está arquivado.')
+    admission=db.scalar(select(m.Admission).where(m.Admission.enrollment_id==obj.id))
+    if admission and admission.status=='approved' and group.id!=obj.class_group_id:
+        fail(409,'A turma da inscrição aprovada está vinculada à reserva e ao contrato. Revise a inscrição antes de alterar a oferta.')
     before = output(obj)
     obj.class_group_id = group.id
     obj.enrolled_on = data.enrolled_on

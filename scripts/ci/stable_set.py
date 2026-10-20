@@ -10,7 +10,7 @@ from promote import inspect
 from version import parse
 
 IMAGES = ('ghcr.io/wkarts/pige360-self', 'ghcr.io/wkarts/pige360-self-mail-agent',
-          'ghcr.io/wkarts/pige360-self-sogo')
+          'ghcr.io/wkarts/pige360-self-sogo','ghcr.io/wkarts/pige360-self-website','ghcr.io/wkarts/pige360-self-portal')
 
 
 def revision(ref):
@@ -80,5 +80,5 @@ def promote_set(images, version, target, manifest_path=None):
 
 if __name__ == '__main__':
     images = {os.environ[name]: os.environ[digest] for name, digest in
-              (('IMAGE', 'DIGEST'), ('MAIL_AGENT_IMAGE', 'MAIL_AGENT_DIGEST'), ('SOGO_IMAGE', 'SOGO_DIGEST'))}
+              (('IMAGE', 'DIGEST'), ('MAIL_AGENT_IMAGE', 'MAIL_AGENT_DIGEST'), ('SOGO_IMAGE', 'SOGO_DIGEST'), ('WEBSITE_IMAGE','WEBSITE_DIGEST'),('PORTAL_IMAGE','PORTAL_DIGEST'))}
     promote_set(images, os.environ['VERSION'], os.environ['TARGET_SHA'], 'release/images.json')

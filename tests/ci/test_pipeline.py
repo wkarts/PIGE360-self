@@ -84,7 +84,7 @@ class CleanupTests(unittest.TestCase):
         self.assertTrue((ROOT/'backend/migrations').is_dir())
         for name in ('docker','dockge','portainer','cloudpanel'):
             text=(ROOT/'deploy'/name/'compose.yaml').read_text()
-            self.assertEqual(text.count('build:'),2)
+            self.assertEqual(text.count('build:'),4)
             self.assertIn('context: ../../services/mail-agent',text)
             self.assertIn('context: ../../services/sogo',text)
     def test_npm_lock_matches_package(self):

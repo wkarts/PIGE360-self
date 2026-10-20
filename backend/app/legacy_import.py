@@ -1562,16 +1562,25 @@ def apply_import(db: DB, user: Actor, school: Scope, request: Request,
                                 source_system="school_desktop_suite", imported_by=user.id,
                                 summary={"status": "processing", "source_record_count": preview_result["source_record_count"]})
         db.add(run); db.flush()
+        progress=db.info.get('import_progress',lambda *args:None)
+        progress('media')
         counts: Counter[str] = Counter()
         entity_map: dict[tuple[str, str], tuple[str, str, str | None]] = {}
         imported_media, basenames = _import_media(source, db, school.id, user, run, counts, entity_map)
+        progress('people',counts)
         source_person, source_student = _import_person_tables(source, db, school.id, user,
                                                               imported_media, basenames, counts, entity_map)
+        progress('guardians',counts)
         _import_guardian_links(source, db, school.id, source_person, source_student, counts, entity_map)
+        progress('academic',counts)
         academic = _import_academic(source, db, school.id, counts, entity_map)
+        progress('enrollments',counts)
         _import_enrollments(source, db, school.id, user, source_student, academic, counts, entity_map)
+        progress('documents',counts)
         _import_student_documents(source, db, school.id, source_student, imported_media, basenames, counts, entity_map)
+        progress('inactive_users',counts)
         _import_inactive_users(source, db, school.id, user, imported_media, basenames, counts, entity_map)
+        progress('archive',counts)
         archive_batch: list[dict[str, Any]] = []
         for table in source.tables:
             for index, row in enumerate(source.rows(table)):
@@ -1592,6 +1601,7 @@ def apply_import(db: DB, user: Actor, school: Scope, request: Request,
                 if len(archive_batch) >= ARCHIVE_BATCH_SIZE:
                     db.execute(insert(m.LegacyImportRecord), archive_batch)
                     archive_batch.clear()
+                    progress('archive',counts)
                 counts["source_records_archived"] += 1
         if archive_batch:
             db.execute(insert(m.LegacyImportRecord), archive_batch)

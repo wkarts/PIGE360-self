@@ -19,8 +19,9 @@ namespace PigeCommunity {
     const parts=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Bahia',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(value));
     return parts.replace(' ','T');
   }
+  interface Website {version?:number;enabled:boolean;theme:string;headline:string;introduction:string;about:string;public_url:string;portal_url:string;notice:string}
   export const component={props:['schoolId','permissions','publicMode','portalMode','request','compact'],render:PigeRenders.community,setup(props:Props){
-    const s=Vue.reactive({busy:false,error:'',notice:'',items:[] as Post[],page:1,total:0,q:'',kind:'',status:'',upcoming:false,selected:null as Post|null,editing:false,discard:false,deleteConfirm:false,initial:'',form:empty()});
+    const s=Vue.reactive({website:{enabled:false,theme:'horizon',headline:'',introduction:'',about:'',public_url:'',portal_url:'',notice:''} as Website,websiteOpen:false,busy:false,error:'',notice:'',items:[] as Post[],page:1,total:0,q:'',kind:'',status:'',upcoming:false,selected:null as Post|null,editing:false,discard:false,deleteConfirm:false,initial:'',form:empty()});
     const manage=()=>!props.publicMode&&!props.portalMode&&Boolean(props.permissions?.includes('schools.manage'));
     const endpoint=()=>props.portalMode?'/portal/community-feed':props.publicMode?'/public/schools/'+props.schoolId+'/community-feed':'/schools/'+props.schoolId+(manage()?'/community-posts':'/community-feed');
     const transport=(path:string,options?:RequestInit)=>(props.request||request)(path,options);
@@ -30,6 +31,8 @@ namespace PigeCommunity {
       const params=new URLSearchParams({page:String(s.page),page_size:props.compact?'4':'12',q:s.q,kind:s.kind,...(manage()?{status:s.status}:{upcoming:String(s.upcoming)})});
       const result=await transport(endpoint()+'?'+params) as Page;s.items=result.items;s.total=result.total;
     }
+    async function loadWebsite():Promise<void>{if(manage()&&!props.compact){const data=await transport('/schools/'+props.schoolId+'/website') as {configuration:Website|null};if(data.configuration){const c=data.configuration;s.website={version:c.version,enabled:c.enabled,theme:c.theme,headline:c.headline,introduction:c.introduction,about:c.about,public_url:c.public_url,portal_url:c.portal_url,notice:c.notice};}}}
+    async function saveWebsite():Promise<void>{await run(async()=>{await transport('/schools/'+props.schoolId+'/website',{method:'PUT',body:JSON.stringify(s.website)});await loadWebsite();s.notice='Configuração do site salva. Somente publicações destinadas ao público aparecem no site.';});}
     async function search():Promise<void>{s.page=1;await run(load);}
     async function page(delta:number):Promise<void>{s.page+=delta;await run(load);}
     function open(post:Post):void{s.selected=post;s.error='';}
@@ -48,7 +51,7 @@ namespace PigeCommunity {
     const scheduled=(post:Post)=>post.status==='published'&&Boolean(post.publish_at)&&new Date(post.publish_at as string)>new Date();
     const expired=(post:Post)=>Boolean(post.expires_at)&&new Date(post.expires_at as string)<=new Date();
     const paragraphs=(value:string)=>value.split(/\n\s*\n/).filter(Boolean);
-    Vue.onMounted(()=>{void run(load);});
-    return {s,props,manage,run,load,search,page,open,edit,closeEditor,save,remove,date,audienceLabels,statusLabels,scheduled,expired,paragraphs};
+    Vue.onMounted(()=>{void run(async()=>{await load();await loadWebsite();});});
+    return {s,props,manage,run,load,saveWebsite,search,page,open,edit,closeEditor,save,remove,date,audienceLabels,statusLabels,scheduled,expired,paragraphs};
   }};
 }

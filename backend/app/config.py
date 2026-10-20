@@ -1,3 +1,5 @@
+import json
+import re
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -8,7 +10,27 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
     app_name: str = 'PIGE360 Self'
-    app_version: str = '0.10.0'
+    app_version: str = ''
+    @model_validator(mode='after')
+    def resolve_application_version(self):
+        # APP_VERSION explícito identifica a imagem imutável e sempre prevalece.
+        if self.app_version:return self
+        try:
+            manifest=json.loads((self.frontend_path/'build-info.json').read_text())
+            version=manifest.get('version','')
+            if (manifest.get('product')=='PIGE360 Self'
+                and manifest.get('pipeline')=='typescript-vue-precompiled'
+                and isinstance(version,str) and re.fullmatch(r'\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?',version)):
+                self.app_version=version;return self
+        except (OSError,ValueError,AttributeError):pass
+        try:
+            version=(Path(__file__).resolve().parents[2]/'VERSION').read_text().strip()
+            if re.fullmatch(r'\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?',version):
+                self.app_version=version;return self
+        except OSError:pass
+        self.app_version='unknown'
+        return self
+
     app_env: str = 'production'
     app_url: str = 'http://localhost:58080'
     app_secret_key: str
@@ -31,7 +53,7 @@ class Settings(BaseSettings):
     embed_allowed_origins: str = ''
     access_token_minutes: int = 15
     refresh_token_days: int = 7
-    max_upload_mb: int = 10
+    max_upload_mb: int = 16
     max_photo_mb: int = 5
     legacy_import_max_mb: int = 128
     portability_enabled: bool = False
@@ -46,6 +68,10 @@ class Settings(BaseSettings):
     connect_api_key: str = ''
     connect_allowed_hosts: str = ''
     connect_allow_private: bool = False
+    restore_max_upload_mb: int = 1024
+    invitation_hours: int = 24
+    portal_public_url: str = ''
+    portal_internal_token: str = ''
     portal_session_hours: int = 12
     portal_max_files: int = 20
     portal_max_storage_mb: int = 50
@@ -55,6 +81,7 @@ class Settings(BaseSettings):
     smtp_password: str = ''
     smtp_from: str = ''
     smtp_security: str = 'starttls'
+    website_internal_token: str = ''
     sogo_upstream_url: str = ''
     mail_agent_url: str = ''
     mail_agent_shared_key: str = ''
@@ -63,12 +90,23 @@ class Settings(BaseSettings):
     rabbitmq_url: str = ''
     worker_poll_seconds: int = 5
     bank_reconcile_interval_seconds: int = 900
-    ocr_max_upload_mb: int = 8
+    ocr_max_upload_mb: int = 16
     ocr_retention_hours: int = 24
     ocr_timeout_seconds: int = 120
 
     @model_validator(mode='after')
     def validate_runtime(self):
+        if not 1<=self.restore_max_upload_mb<=4096:raise ValueError('Limite de restauração deve estar entre 1 e 4096 MiB.')
+        if self.portal_internal_token and len(self.portal_internal_token.encode())<32:
+            raise ValueError('PORTAL_INTERNAL_TOKEN exige pelo menos 32 bytes.')
+        if self.portal_public_url:
+            if self.portal_public_url.rstrip('/')==self.app_url.rstrip('/'):raise ValueError('Portal e gestor devem usar origens distintas.')
+            portal=urlsplit(self.portal_public_url)
+            if portal.scheme not in {'https','http'} or not portal.hostname or portal.username or portal.password or portal.path not in ('','/') or portal.query or portal.fragment:
+                raise ValueError('PORTAL_PUBLIC_URL exige uma origem exata HTTP(S).')
+            if self.app_env=='production' and portal.hostname not in {'localhost','127.0.0.1'}:
+                if portal.scheme!='https' or not self.cookie_secure:raise ValueError('Portal público exige HTTPS e COOKIE_SECURE=true.')
+        if not 1 <= self.invitation_hours <= 168:raise ValueError('INVITATION_HOURS deve estar entre 1 e 168.')
         if not 1 <= self.ocr_max_upload_mb <= 16 or not 1 <= self.ocr_retention_hours <= 168 or not 30 <= self.ocr_timeout_seconds <= 180:
             raise ValueError('Limites OCR inválidos: 1–16 MB, retenção 1–168 horas e timeout 30–180 segundos.')
         from .embedding import origins

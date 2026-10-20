@@ -21,10 +21,8 @@ RESULT_LABELS = {
 
 def own_profile_students(db, user, school_id=''):
     """Exige vínculo explícito: igualdade de e-mail nunca autoriza acesso pedagógico."""
-    require(user, 'profile.self')
     if user.role not in ('student', 'guardian'):
         fail(403, 'Este espaço é destinado a estudantes e responsáveis vinculados.')
-    require(user, 'student.self.read' if user.role == 'student' else 'guardian.self.read')
     from .profiles import school_ids, allowed_school
     active_id = getattr(user, '_active_school_id', None)
     if school_id and active_id and school_id != active_id:
@@ -32,6 +30,10 @@ def own_profile_students(db, user, school_id=''):
     if school_id:
         allowed_school(db, user, school_id)
     schools = school_ids(db, user)
+    # Resolve even the implicit single-school context before consulting effective
+    # permissions. Omitting X-School-ID must never fall back to the base role.
+    require(user, 'profile.self')
+    require(user, 'student.self.read' if user.role == 'student' else 'guardian.self.read')
     if not schools or not user.person_id:
         return []
     person = db.scalar(select(m.Person).where(

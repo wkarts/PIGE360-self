@@ -50,6 +50,7 @@ class DeployConfigTest(unittest.TestCase):
                     self.assertIn('LEGACY_IMPORT_MAX_MB=128', content)
                     self.assertIn('SIGNATURE_TRUST_ROOTS_DIR=/data/trust-roots', content)
                     self.assertIn('EMBED_ALLOWED_ORIGINS=', content)
+                    self.assertRegex(content,r'PORTAL_INTERNAL_TOKEN=[A-Za-z0-9_-]{64}')
                     if channel == 'local':
                         self.assertIn(f'APP_IMAGE=pige360-self:{version}', content)
                     else:
@@ -78,10 +79,26 @@ class DeployConfigTest(unittest.TestCase):
                 self.assertIn('LEGACY_IMPORT_MAX_MB=128\n', content)
                 self.assertIn('SIGNATURE_TRUST_ROOTS_DIR=/data/trust-roots\n', content)
                 self.assertIn('COMPOSE_PROFILES=\n', content)
+                self.assertNotIn('COMPOSE_PROJECT_NAME=', content)
                 backups = list(path.parent.glob('.env.backup-*'))
                 self.assertEqual(len(backups), 1)
                 self.assertEqual(backups[0].stat().st_mode & 0o777, 0o600)
                 self.assertIn('APP_IMAGE=pige360-self:0.3.0', backups[0].read_text())
+
+    def test_upgrade_preserves_explicit_project_identity(self):
+        path=self.root/'deploy/docker/.env.production'
+        path.write_text('COMPOSE_PROJECT_NAME=existing-school\nAPP_SECRET_KEY=KEEP\nPOSTGRES_PASSWORD=KEEP_DB\n')
+        self.run_script('prepare-upgrade.py','--env-file','deploy/docker/.env.production')
+        self.assertEqual([line for line in path.read_text().splitlines() if line.startswith('COMPOSE_PROJECT_NAME=')],['COMPOSE_PROJECT_NAME=existing-school'])
+
+    def test_upgrade_generates_portal_token_once_and_preserves_it(self):
+        path=self.root/'deploy/docker/.env.production'
+        path.write_text('APP_SECRET_KEY=KEEP\nPOSTGRES_PASSWORD=KEEP_DB\n')
+        self.run_script('prepare-upgrade.py','--env-file','deploy/docker/.env.production')
+        token=next(line for line in path.read_text().splitlines() if line.startswith('PORTAL_INTERNAL_TOKEN='))
+        self.assertRegex(token,r'^PORTAL_INTERNAL_TOKEN=[A-Za-z0-9_-]{64}$')
+        self.run_script('prepare-upgrade.py','--env-file','deploy/docker/.env.production')
+        self.assertIn(token+'\n',path.read_text())
 
     def test_visual_deployer_creates_isolated_stack_and_preserves_existing_one(self):
         spec = importlib.util.spec_from_file_location('deployer', self.root / 'scripts' / 'deployer.py')

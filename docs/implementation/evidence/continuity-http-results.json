@@ -1,0 +1,18 @@
+{
+  "checks": [
+    "Cadastro pela UI cria usuário, vínculo, convite e outbox sem senha inicial",
+    "SMTP TLS capturador aceita convite em User.email e preserva o domínio público configurado",
+    "Convite consumido pela UI, login correto, dois dependentes, deep link e refresh em portal próprio responsivo",
+    "Proxy bloqueia API administrativa, origem estranha e dados fora da superfície privada",
+    "Logout revoga sessão e refresh não restaura acesso encerrado",
+    "Aluno acessa somente seu perfil; responsável passa de dois dependentes para um e nenhum após revogações ativas",
+    "Três modelos do site servem conteúdo aprovado pela API interna autenticada sem mensagens privadas",
+    "Indisponibilidade da API produz falha explícita nos serviços independentes"
+  ],
+  "page_errors": [],
+  "external_email_sent": false,
+  "data": "synthetic",
+  "api": "http://127.0.0.1:34263",
+  "portal": "http://127.0.0.1:57055",
+  "website": "http://127.0.0.1:48491"
+}

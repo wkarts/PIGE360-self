@@ -184,9 +184,15 @@ def check_version(obj, expected: int):
     if obj.version != expected:
         fail(409, 'O registro foi alterado por outro usuário. Recarregue antes de salvar.')
 
+def allowed_request_origin(origin,path):
+    if origin.rstrip('/')==settings().app_url.rstrip('/'):return True
+    portal=settings().portal_public_url.rstrip('/')
+    if not portal or origin.rstrip('/')!=portal:return False
+    return path.startswith(('/api/v1/portal/','/api/v1/family/','/api/v1/profile/learning','/api/v1/invitations/','/api/v1/auth/'))
+
 def request_csrf(request: Request):
     if request.headers.get('X-CSRF-Protection') != '1':
         fail(403, 'Cabeçalho de proteção CSRF ausente.')
     origin = request.headers.get('origin')
-    if origin and origin.rstrip('/') != settings().app_url.rstrip('/'):
+    if origin and not allowed_request_origin(origin,request.url.path):
         fail(403, 'Origem não autorizada.')

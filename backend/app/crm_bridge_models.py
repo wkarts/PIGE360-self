@@ -1,6 +1,6 @@
 """Dedicated bridge journal: native BankCharge and admission states are untouched."""
 from datetime import datetime
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from .db import Base, Record, now
 
@@ -35,3 +35,15 @@ class CRMBridgeObservation(Record, Base):
     payload_hash: Mapped[str] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(24))
     __table_args__ = (UniqueConstraint('connection_id', 'event_id', name='uq_crm_bridge_event'),)
+
+
+class CRMBridgeConnection(Record,Base):
+    __tablename__='crm_bridge_connections'
+    school_id:Mapped[str]=mapped_column(ForeignKey('schools.id'))
+    base_url:Mapped[str]=mapped_column(String(500))
+    issuer_id:Mapped[str]=mapped_column(String(19))
+    account_id:Mapped[str]=mapped_column(String(128))
+    environment:Mapped[str]=mapped_column(String(16),default='sandbox')
+    enabled:Mapped[bool]=mapped_column(Boolean,default=False)
+    encrypted_secret:Mapped[str]=mapped_column(Text)
+    __table_args__=(UniqueConstraint('school_id',name='uq_crm_bridge_connection_school'),)

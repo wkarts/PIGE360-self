@@ -478,19 +478,41 @@ td .link-button { text-align: left; }
   .modal .assist-query input, .modal .assist-query select { font-size: 16px; }
 }
 
-/* E-mail institucional acompanha o mesmo padrão dos módulos operacionais. */
-.mailcow-page { display: grid; gap: 20px; }
-.webmail-view { display:grid; gap:14px; min-width:0; }
-.webmail-header { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:18px 22px; background:var(--surface,#fff); border:1px solid var(--line,#dce2e8); border-top:4px solid var(--webmail-primary,var(--primary)); border-radius:16px; box-shadow:0 8px 28px rgba(20,31,48,.06); }
-.webmail-brand { display:flex; align-items:center; gap:14px; min-width:0; }
-.webmail-brand img { width:54px; height:54px; object-fit:contain; }
-.webmail-brand .eyebrow { margin:0 0 4px; color:var(--webmail-secondary,var(--muted)); }
-.webmail-brand h2 { margin:0; }
-.webmail-frame { display:block; width:100%; height:min(76vh,920px); min-height:560px; border:1px solid var(--line,#dce2e8); border-radius:14px; background:#fff; }
-@media(max-width:760px) {
-  .webmail-header { align-items:flex-start; flex-direction:column; padding:16px; }
-  .webmail-header .actions { display:grid; width:100%; grid-template-columns:1fr; }
-  .webmail-frame { height:calc(100dvh - 260px); min-height:440px; border-radius:10px; }
+/* E-mail integrado: preserva a navegação institucional e ocupa o espaço restante. */
+.mailcow-page { display:grid; gap:20px; }
+.webmail-view { position:relative; display:flex; flex:1 1 0; flex-direction:column; width:100%; min-width:0; min-height:0; overflow:hidden; background:var(--surface,#fff); }
+.webmail-frame { display:block; flex:1 1 0; width:100%; height:100%; min-width:0; min-height:0; border:0; background:#fff; }
+.main-column.webmail-layout { display:flex; flex-direction:column; flex:1 1 auto; height:100dvh; min-height:0; overflow:hidden; }
+.webmail-layout .topbar { position:relative; flex:0 0 72px; height:72px; }
+.webmail-layout .main-content { display:flex; flex:1 1 auto; flex-direction:column; max-width:none; width:100%; min-width:0; min-height:0; margin:0; padding:0; overflow:hidden; }
+.webmail-layout .page-header, .webmail-layout .loading-strip { display:none; }
+.webmail-layout .webmail-view { flex:1 1 0; }
+.webmail-layout .webmail-frame { flex:1 1 0; }
+.webmail-loading, .webmail-error { position:absolute; z-index:3; inset:0; display:flex; align-items:center; justify-content:center; padding:24px; background:var(--surface,#fff); color:var(--ink,#183243); text-align:center; }
+.webmail-loading { gap:12px; font-size:14px; }
+.webmail-spinner { width:22px; height:22px; border:2px solid var(--border,#dce2e8); border-top-color:var(--primary,#006d77); border-radius:50%; animation:webmail-spin .75s linear infinite; }
+@keyframes webmail-spin { to { transform:rotate(360deg); } }
+.webmail-error > div { max-width:480px; display:grid; justify-items:center; gap:12px; }
+.webmail-error strong { font-size:16px; }
+.webmail-error p { margin:0; color:var(--muted,#657786); font-size:13px; line-height:1.6; overflow-wrap:anywhere; }
+.webmail-preferences { display:grid; gap:18px; }
+.webmail-preference-choice { display:grid; gap:8px; max-width:520px; color:var(--ink); font-size:13px; font-weight:600; }
+.webmail-preference-choice select, .webmail-default select { width:min(100%,520px); min-height:44px; padding:8px 12px; border:1px solid var(--border); border-radius:8px; background:var(--surface,#fff); color:var(--ink); font:inherit; }
+.webmail-default label { display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:13px; }
+.webmail-fallback { flex:1 1 0; min-width:0; min-height:0; overflow:auto; }
+.webmail-layout .webmail-fallback { width:100%; }
+@media (max-width: 800px) {
+  .main-column.webmail-layout { margin-left:0; width:100%; height:100dvh; }
+  .webmail-layout .topbar { flex-basis:64px; height:64px; min-height:64px; padding:8px 14px; }
+  .webmail-layout .main-content { padding:0; }
+  .webmail-layout .webmail-view { width:100%; min-height:0; }
+  .webmail-layout .webmail-frame { min-height:0; border-radius:0; }
+}
+@media (max-width: 470px) {
+  .webmail-layout .topbar { gap:8px; padding:6px 9px; }
+  .webmail-layout .school-switch select { max-width:min(55vw,220px); font-size:12px; }
+  .webmail-layout .topbar-actions { gap:6px; }
+  .webmail-preference-choice, .webmail-preference-choice select { width:100%; }
 }
 .mailcow-page > .x-heading, .mailcow-page > .x-card, .mailcow-page > .alert { margin: 0; }
 .mailcow-page > .x-heading > div:first-child > p:not(.eyebrow) { color: var(--muted); font-size: 13px; }

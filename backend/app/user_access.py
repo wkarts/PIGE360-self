@@ -96,7 +96,12 @@ def account_access(db, sid, user_id, lock=False):
 
 def scoped_output(db, obj, access):
     profile = db.get(SchoolAccessProfile, access.access_profile_id) if access.access_profile_id else None
-    return {'id': obj.id, 'name': obj.name, 'email': obj.email, 'role': obj.role,
+    from .user_invitations import info
+    from .mailcow import SchoolMailbox,mailbox_output
+    box=db.scalar(select(SchoolMailbox).where(SchoolMailbox.user_id==obj.id,SchoolMailbox.school_id==access.school_id))
+    details=mailbox_output(db,box) if box else None
+    mailbox={key:details[key] for key in ('address','status','job_status','attempts','error_code','error_message')} if details else None
+    return {**({'mailbox':mailbox} if mailbox else {}),'invitation':info(db,obj.id,access.school_id),'id': obj.id, 'name': obj.name, 'email': obj.email, 'role': obj.role,
             'role_label': ROLE_LABELS.get(obj.role, obj.role), 'person_id': obj.person_id,
             'active': obj.active and access.active and not access.archived_at and (not profile or profile.active),
             'account_active': obj.active, 'access_active': access.active,
@@ -132,9 +137,16 @@ def create_in_school(data, db, user, request, school):
         if not person or person.school_id != school.id:
             fail(422, 'A pessoa vinculada não pertence à instituição ativa.')
     email = str(data.email).lower()
-    if db.scalar(select(User.id).where(User.email == email)):
-        fail(409, 'Não foi possível criar este acesso. Confira o e-mail ou solicite a revisão ao administrador.')
-    obj = User(name=data.name, email=email, password_hash=hash_password(data.password), role=data.role, person_id=data.person_id)
+    existing=db.scalar(select(User).where(User.email==email).with_for_update())
+    if existing:
+        if db.get(SchoolAccess,(existing.id,school.id)) or not existing.active or existing.role!=data.role or existing.person_id!=data.person_id or data.create_mailbox:
+            fail(409,'Não foi possível criar este acesso. Confira o e-mail ou solicite a revisão ao administrador.')
+        access=SchoolAccess(user_id=existing.id,school_id=school.id,access_profile_id=data.access_profile_id)
+        db.add(access);db.flush()
+        audit(db,request,user,'users.school_access_added',existing,school.id)
+        return {**scoped_output(db,existing,access),'existing_account':True}
+
+    obj = User(name=data.name, email=email, password_hash=hash_password(data.password or __import__('secrets').token_urlsafe(48)), role=data.role, person_id=data.person_id)
     db.add(obj); db.flush()
     access = SchoolAccess(user_id=obj.id, school_id=school.id, access_profile_id=data.access_profile_id)
     db.add(access); db.flush()
@@ -146,6 +158,8 @@ def create_in_school(data, db, user, request, school):
             fail(422, 'Selecione a instituição ativa para criar o e-mail.')
         from .mailcow import queue_mailbox, mailbox_output
         mailbox = queue_mailbox(db, school.id, obj, data.mailbox_local_part, data.mailbox_quota_mb)
+    from .user_invitations import issue
+    issue(db,obj,school)
     audit(db, request, user, 'users.created', obj, school.id, details={'role': obj.role, 'access_profile_id': access.access_profile_id})
     result = scoped_output(db, obj, access)
     if mailbox:
@@ -193,6 +207,9 @@ def edit_in_school(user_id, data, db, user, request, school):
         person = db.get(Person, data.person_id)
         if not person or person.school_id != school.id:
             fail(422, 'A pessoa vinculada não pertence à instituição ativa.')
+    if not data.active or data.role!=obj.role or data.access_profile_id!=access.access_profile_id:
+        from .user_invitations import revoke_access
+        revoke_access(db,obj.id,school.id)
     obj.name, obj.role, obj.person_id = data.name, data.role, data.person_id
     obj.version += 1
     access.active, access.access_profile_id = data.active, data.access_profile_id
@@ -214,7 +231,7 @@ def account_dependencies(db, obj, sid):
     # Inspeção das referências reais de todos os módulos registrados; não apenas
     # dos cadastros conhecidos pela tela. Sessões e perfil próprio são descartáveis.
     for table in Base.metadata.tables.values():
-        if table.name in {'school_access', 'auth_sessions', 'user_profiles'}:
+        if table.name in {'school_access', 'auth_sessions', 'user_profiles','user_invitations'}:
             continue
         for column in table.columns:
             if any(fk.target_fullname == 'users.id' for fk in column.foreign_keys):
@@ -250,6 +267,9 @@ def lifecycle(user_id: str, data: AccessAction, db: DB, user: Actor, scope: Scop
         guard_removal(db, user, obj, access, scope.id)
     if action in {'delete_access', 'delete_account'} and data.confirmation != obj.email:
         fail(422, 'Digite o e-mail do usuário para confirmar a exclusão definitiva.')
+    if action in {'deactivate','archive','delete_access','delete_account'}:
+        from .user_invitations import revoke_access
+        revoke_access(db,obj.id,scope.id)
     if action in {'activate', 'restore'}:
         if not obj.active:
             other = db.scalar(select(SchoolAccess.user_id).where(SchoolAccess.user_id == obj.id, SchoolAccess.school_id != scope.id).limit(1))
@@ -275,6 +295,9 @@ def lifecycle(user_id: str, data: AccessAction, db: DB, user: Actor, scope: Scop
         db.execute(delete(MFARecovery).where(MFARecovery.subject == subject))
         db.execute(delete(MFAChallenge).where(MFAChallenge.subject == subject))
         db.execute(delete(MFACredential).where(MFACredential.subject == subject))
+        from .user_invitations import UserInvitation,revoke
+        for invite in db.scalars(select(UserInvitation).where(UserInvitation.user_id==obj.id)):revoke(db,invite)
+        db.execute(delete(UserInvitation).where(UserInvitation.user_id==obj.id))
         db.execute(delete(AuthSession).where(AuthSession.user_id == obj.id))
         db.execute(delete(UserProfile).where(UserProfile.user_id == obj.id))
         db.delete(access); db.flush()
@@ -363,6 +386,9 @@ def profile_edit(profile_id: str, data: ProfileInput, db: DB, user: Actor, scope
     if assigned and data.base_role != obj.base_role:
         fail(409, 'Remova os vínculos deste perfil antes de mudar seu perfil base.')
     before = {'permissions': obj.permissions, 'active': obj.active, 'base_role': obj.base_role}
+    if not data.active:
+        from .user_invitations import revoke_access
+        for access in db.scalars(select(SchoolAccess).where(SchoolAccess.access_profile_id==obj.id)):revoke_access(db,access.user_id,scope.id)
     obj.name, obj.description, obj.base_role = data.name.strip(), data.description.strip(), data.base_role
     obj.permissions, obj.active = sorted(set(data.permissions)), data.active
     obj.version += 1

@@ -38,20 +38,18 @@ def test_campaign_contract_revision_and_activation_gate(online, tmp_path, monkey
     old=api.get('/document-templates/'+template['id']+'/revisions/'+str(a['contract_template_version']))
     assert 'Contrato escolar para' in old['content']['body']
     assert old['sha256']==a['contract_template_revision_sha256']
-    # Sem certificado A1 configurado a emissão falha fechada e não cria PDF inseguro.
-    api.post('/document-templates/'+template['id']+'/issue',{
-        'enrollment_id':a['enrollment_id'],'template_version':a['contract_template_version']},409)
-    assert api.get('/students/'+a['student_id']+'/documents')['issued']==[]
+    # A família recebe o contrato antes de existir A1 institucional configurado.
+    issued=api.post('/document-templates/'+template['id']+'/issue',{
+        'enrollment_id':a['enrollment_id'],'template_version':a['contract_template_version']})
+    assert issued['signature_status']=='unsigned'
+    unsigned=pc(o,'GET',f"/admissions/{a['id']}/issued/{issued['id']}").content
+    assert unsigned.startswith(b'%PDF-')
     assert api.post('/admissions/'+a['id']+'/finalize',{'version':a['version'],'reason':'Verificação final.'},409)
     enrollment=api.get('/enrollments/'+a['enrollment_id'])
     api.move(enrollment,'activate',409)
+    api.post(f"/issued-documents/{issued['id']}/sign/a1",{},409)
     unknown=str(uuid.uuid4())
     assert pc(o,'GET',f"/admissions/{a['id']}/issued/{unknown}",status=404)
-    response=o['parent'].post('/api/v1/portal/admissions/'+a['id']+'/issued/'+unknown+'/external-signature',
-                              headers=CSRF,files={'file':('contrato.pdf',b'%PDF-1.4\n','application/pdf')})
-    assert response.status_code==404
-    assert pc(o,'GET','/admissions/'+a['id'])['contract']['issued_document_id'] is None
-
     from app.config import settings
     from app.db import SessionLocal
     from app import models as m
@@ -65,16 +63,8 @@ def test_campaign_contract_revision_and_activation_gate(online, tmp_path, monkey
     for index,cert in enumerate((school_cert,guardian_cert)):
         (roots/f'root-{index}.pem').write_bytes(cert.public_bytes(serialization.Encoding.PEM))
     monkeypatch.setattr(settings(),'signature_trust_roots_dir',roots)
-    configured=api.client.put(api.base+'/signing-certificate/a1',headers=api.headers,
-        files={'file':('escola.p12',school_pfx)},data={'password':'senha-teste'})
-    assert configured.status_code==200,configured.text
-    issued=api.post('/document-templates/'+template['id']+'/issue',{
-        'enrollment_id':a['enrollment_id'],'template_version':a['contract_template_version']})
-    assert issued['signature_status']=='company_signed'
-    signed_by_school=pc(o,'GET',f"/admissions/{a['id']}/issued/{issued['id']}").content
-    assert signed_by_school.startswith(b'%PDF-')
-    assert pc(o,'GET','/admissions/'+a['id'])['contract']['issued_document_id']==issued['id']
-    signed_by_guardian=sign_pdf_pfx(signed_by_school,guardian_pfx,'senha-teste','Responsavel')
+    # A primeira assinatura é externa, aplicada sobre os bytes originais.
+    signed_by_guardian=sign_pdf_pfx(unsigned,guardian_pfx,'senha-teste','Responsavel')
     received=pc(o,'POST',f"/admissions/{a['id']}/issued/{issued['id']}/external-signature",
         files={'file':('contrato-assinado.pdf',signed_by_guardian,'application/pdf')})
     assert received['signature_status']=='pending_validation'
@@ -83,6 +73,62 @@ def test_campaign_contract_revision_and_activation_gate(online, tmp_path, monkey
         headers=api.headers,data={'signer_cpf':CPF,'validation_reference':'ITI-TEST-PORTAL-001'},
         files={'report':('relatorio-validar.pdf',blank_pdf(),'application/pdf')})
     assert reviewed.status_code==200,reviewed.text
+    # Nem a matrícula nem o contrato ficam concluídos se o A1 estiver ausente.
+    api.move(api.get('/enrollments/'+a['enrollment_id']),'activate',409)
+    api.post('/admissions/'+a['id']+'/finalize',{'version':a['version'],'reason':'A1 ainda ausente.'},409)
+    assert api.get('/admissions/'+a['id'])['enrollment']['status']=='draft'
+    configured=api.client.put(api.base+'/signing-certificate/a1',headers=api.headers,
+        files={'file':('escola.p12',school_pfx)},data={'password':'senha-teste'})
+    assert configured.status_code==200,configured.text
     completed=api.post('/admissions/'+a['id']+'/finalize',{'version':a['version'],'reason':'Assinaturas conferidas.'},200)
     assert completed['status']=='enrolled' and completed['enrollment']['status']=='active'
-    assert pc(o,'GET',f"/admissions/{a['id']}/issued/{issued['id']}").content==signed_by_guardian
+    final=pc(o,'GET',f"/admissions/{a['id']}/issued/{issued['id']}").content
+    assert final.startswith(signed_by_guardian) and len(final)>len(signed_by_guardian)
+    verification=api.get(f"/issued-documents/{issued['id']}/signatures")
+    assert verification['cryptographic_valid'] and len(verification['signatures'])==2
+    assert [x['source'] for x in verification['revisions']]==['external_portal','company_a1']
+    repeated=api.post('/admissions/'+a['id']+'/finalize',{'version':a['version'],'reason':'Repetição idempotente.'},200)
+    assert repeated['status']=='enrolled'
+    assert pc(o,'GET',f"/admissions/{a['id']}/issued/{issued['id']}").content==final
+
+
+def test_contract_correction_requires_new_revision_and_keeps_signed_history(online,tmp_path,monkeypatch):
+    from app.config import settings
+    from app.pdf_signing import sign_pdf_pfx
+    o=online;api=o['api']
+    template=api.post('/document-templates',{'name':'Contrato para correção','kind':'educational_contract',
+        'academic_year_id':o['cat']['year']['id'],'body':'Primeira via de {{aluno.nome}} com {{escola.nome}}.','require_signature':True})
+    campaign=o['campaign'];keys=('slug','title','instructions','privacy_notice','terms_version','class_group_ids',
+        'opens_on','closes_on','active','require_verified_contact','require_documents','require_payment_before_enrollment')
+    api.patch('/admission-campaigns/'+campaign['id'],{**{k:campaign[k] for k in keys},
+        'version':campaign['version'],'contract_template_id':template['id']})
+    a=approve(o,submit(o,draft(o)))
+    issued=api.post('/document-templates/'+template['id']+'/issue',{'enrollment_id':a['enrollment_id'],
+        'template_version':a['contract_template_version']})
+    cert,pfx=certificate('Responsável sintético','2.16.76.1.3.1','01011990'+CPF)
+    roots=tmp_path/'roots';roots.mkdir();(roots/'root.pem').write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    monkeypatch.setattr(settings(),'signature_trust_roots_dir',roots)
+    original=pc(o,'GET',f"/admissions/{a['id']}/issued/{issued['id']}").content
+    signed=sign_pdf_pfx(original,pfx,'senha-teste','Responsavel')
+    pc(o,'POST',f"/admissions/{a['id']}/issued/{issued['id']}/external-signature",
+        files={'file':('contrato.pdf',signed,'application/pdf')})
+    assert issued['id'] in [x['document_id'] for x in api.get('/issued-documents/signatures/pending')['items']]
+    updated=api.patch('/document-templates/'+template['id'],{'version':template['version'],
+        'name':template['name'],'kind':template['kind'],'academic_year_id':template['academic_year_id'],
+        'require_signature':True,'body':'Redação corrigida de {{aluno.nome}} com {{escola.nome}}.'})
+    request={'version':a['version'],'template_version':updated['version'],'reason':'Correção de conteúdo contratual conferida pela Direção.'}
+    revised=api.post('/admissions/'+a['id']+'/contract-revision',request,200)
+    assert revised['contract_template_version']==updated['version']
+    assert revised['contract']['issued_document_id'] is None
+    assert api.post('/admissions/'+a['id']+'/contract-revision',request,200)['version']==revised['version']
+    assert issued['id'] not in [x['document_id'] for x in api.get('/issued-documents/signatures/pending')['items']]
+    assert pc(o,'GET',f"/admissions/{a['id']}/issued/{issued['id']}").content==signed
+    pc(o,'POST',f"/admissions/{a['id']}/issued/{issued['id']}/external-signature",
+        files={'file':('contrato.pdf',signed,'application/pdf')},status=404)
+    next_document=api.post('/document-templates/'+template['id']+'/issue',{'enrollment_id':a['enrollment_id'],
+        'template_version':updated['version']})
+    assert next_document['id']!=issued['id'] and next_document['signature_status']=='unsigned'
+    pc(o,'POST',f"/admissions/{a['id']}/issued/{next_document['id']}/external-signature",
+        files={'file':('contrato-antigo.pdf',signed,'application/pdf')},status=422)
+    api.post('/admissions/'+a['id']+'/finalize',{'version':revised['version'],'reason':'A via nova ainda não recebeu assinatura.'},409)
+    assert len(api.get('/admissions/'+a['id'])['issued_documents'])==2

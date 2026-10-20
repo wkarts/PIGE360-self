@@ -11,7 +11,7 @@ from cryptography import x509 as cryptography_x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.serialization import pkcs12
 from fastapi import APIRouter, File, Form, Header, Request, UploadFile
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func, select
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, cast, func, select
 from sqlalchemy.orm import Mapped, mapped_column
 
 from . import models as m
@@ -129,8 +129,13 @@ def _company_revision(db, issued):
     ).limit(1))
 
 
+def applicant_first(issued):
+    return (issued.snapshot or {}).get('signing_order') == 'applicant_first'
+
+
 def latest_signed_file(db, issued):
-    row = _company_revision(db, issued) if issued.signature_status == 'rejected' else _latest(db, issued)
+    row = (None if applicant_first(issued) else _company_revision(db, issued)) if issued.signature_status == 'rejected' else _latest(db, issued)
+
     return db.get(m.FileRecord, row.file_id) if row else db.get(m.FileRecord, issued.file_id)
 
 
@@ -148,7 +153,10 @@ def _read_verified(file_record):
 
 def _store_revision(db, issued, pdf, actor_id, request, *, source, operation_key, signer_cpf=''):
     previous = _latest(db, issued)
-    base = (_company_revision(db, issued) if source == 'external_portal' and
+    if applicant_first(issued):
+        base = previous if source == 'company_a1' else None
+    else:
+        base = (_company_revision(db, issued) if source == 'external_portal' and
             issued.signature_status == 'rejected' else previous)
     parent = db.get(m.FileRecord, base.file_id if base else issued.file_id)
     original = _read_verified(parent)
@@ -162,13 +170,18 @@ def _store_revision(db, issued, pdf, actor_id, request, *, source, operation_key
     required = (base.signature_count if base else 0) + 1
     if len(result['signatures']) != required:
         fail(422, 'Envie o PDF com exatamente uma nova assinatura, preservando as anteriores.')
-    if previous:
-        if source == 'company_a1':
-            fail(409, 'O contrato já foi assinado pela escola.')
-        if previous.source != 'company_a1' and issued.signature_status != 'rejected':
-            fail(409, 'O contrato já recebeu assinatura externa.')
-    elif source != 'company_a1':
-        fail(409, 'A escola deve assinar o contrato antes do responsável.')
+    if applicant_first(issued):
+        if source=='company_a1':
+            if not previous or previous.source!='external_portal' or issued.signature_status!='verified':
+                fail(409,'A assinatura do responsável deve ser conferida antes da assinatura institucional final.')
+        elif previous and issued.signature_status!='rejected':
+            fail(409,'O contrato já recebeu assinatura externa.')
+    else:
+        if previous:
+            if source=='company_a1':fail(409,'O contrato já foi assinado pela escola.')
+            if previous.source!='company_a1' and issued.signature_status!='rejected':
+                fail(409,'O contrato já recebeu assinatura externa.')
+        elif source!='company_a1':fail(409,'A escola deve assinar o contrato antes do responsável.')
     signer = result['signatures'][-1]
     user = db.get(m.User, actor_id)
     file = write_file(db, issued.school_id, user.id if user else issued.created_by,
@@ -183,7 +196,7 @@ def _store_revision(db, issued, pdf, actor_id, request, *, source, operation_key
         signer_cpf=signer_cpf,
     )
     db.add(revision)
-    issued.signature_status = 'company_signed' if source == 'company_a1' else 'pending_validation'
+    issued.signature_status = ('verified' if applicant_first(issued) else 'company_signed') if source == 'company_a1' else 'pending_validation'
     issued.version += 1
     db.flush()
     if request is not None:
@@ -196,8 +209,12 @@ def _store_revision(db, issued, pdf, actor_id, request, *, source, operation_key
 
 def auto_sign_issued_document(db, issued, actor_id, request):
     """Emite assinatura A1 antes de entregar o contrato ao responsável."""
-    if _latest(db, issued):
+    if _company_revision(db,issued):
+        return _company_revision(db,issued)
+    if _latest(db, issued) and not applicant_first(issued):
         fail(409, 'O contrato já tem uma revisão assinada.')
+    if applicant_first(issued) and (not _latest(db,issued) or issued.signature_status!='verified'):
+        fail(409,'Confira a assinatura do responsável antes da conclusão.')
     configured = _certificate(db, issued.school_id)
     if configured is None:
         fail(409, 'Configure o certificado A1 da escola antes de emitir este contrato.')
@@ -210,7 +227,7 @@ def auto_sign_issued_document(db, issued, actor_id, request):
     expiry = configured.expires_at.replace(tzinfo=UTC) if configured.expires_at.tzinfo is None else configured.expires_at
     if expiry <= now():
         fail(409, 'O certificado A1 da escola expirou. Atualize-o antes da emissão.')
-    source = _read_verified(db.get(m.FileRecord, issued.file_id))
+    source = _read_verified(latest_signed_file(db,issued))
     try:
         signed = sign_pdf_pfx(source, pfx, password, f'Escola_{issued.id.replace("-", "")[:16]}')
     except InvalidPdfSignature as exc:
@@ -240,9 +257,9 @@ def submit_external_signature(db, issued, signed_pdf, actor_id, request,
         if reused:
             fail(409, 'Esta chave de idempotência foi usada com outro PDF.')
     previous = _latest(db, document)
-    if not previous or not _company_revision(db, document):
+    if not applicant_first(document) and (not previous or not _company_revision(db, document)):
         fail(409, 'A escola deve assinar o PDF antes do responsável.')
-    if previous.source != 'company_a1' and document.signature_status != 'rejected':
+    if previous and previous.source != 'company_a1' and document.signature_status != 'rejected':
         fail(409, 'A assinatura enviada já está em análise ou validada.')
     if len(signed_pdf) > settings().max_upload_mb * 1024 * 1024:
         fail(413, 'PDF assinado acima do limite configurado.')
@@ -266,12 +283,12 @@ def submit_external_signature(db, issued, signed_pdf, actor_id, request,
 
 def verify_document_signatures(db, issued):
     file = latest_signed_file(db, issued)
-    row = _company_revision(db, issued) if issued.signature_status == 'rejected' else _latest(db, issued)
+    row = (None if applicant_first(issued) else _company_revision(db, issued)) if issued.signature_status == 'rejected' else _latest(db, issued)
     if not row:
         return {'file_id': issued.file_id, 'signature_valid': None,
                 'cryptographic_valid': None, 'trust_status': 'unsigned', 'signatures': []}
-    parent = _company_revision(db, issued) if row.source == 'external_portal' else None
-    parent_file = db.get(m.FileRecord, parent.file_id if parent else issued.file_id)
+    parent_file = db.scalar(select(m.FileRecord).where(m.FileRecord.school_id==issued.school_id,
+        m.FileRecord.sha256==row.previous_sha256).limit(1))
     if not file or not parent_file or row.sha256 != file.sha256 or row.previous_sha256 != parent_file.sha256:
         return {'file_id': row.file_id, 'signature_valid': False,
                 'cryptographic_valid': False, 'trust_status': 'revision_chain_invalid', 'signatures': []}
@@ -298,18 +315,21 @@ def verify_document_signatures(db, issued):
 def contract_signature_ready(db, issued, expected_signer_cpf) -> bool:
     """Gate da matrícula: PDF atual íntegro e conferência externa documentada."""
     row = _latest(db, issued)
-    if (
-        row is None or row.source != 'external_portal'
-        or issued.signature_status != 'verified' or not row.validated_by
-        or not row.validation_evidence_file_id
-        or row.signer_cpf != _digits(expected_signer_cpf)
-    ):
+    external = db.scalar(select(IssuedDocumentSignature).where(
+        IssuedDocumentSignature.issued_document_id==issued.id,
+        IssuedDocumentSignature.source=='external_portal',
+        IssuedDocumentSignature.rejection_reason=='').order_by(
+            IssuedDocumentSignature.created_at.desc(),IssuedDocumentSignature.id.desc()).limit(1))
+    if (row is None or external is None or issued.signature_status!='verified'
+        or not external.validated_by or not external.validation_evidence_file_id
+        or external.signer_cpf!=_digits(expected_signer_cpf)):
         return False
+    if not applicant_first(issued) and row.source!='external_portal':return False
     try:
-        proof = db.get(m.FileRecord, row.validation_evidence_file_id)
-        _read_verified(proof)
-        checked = verify_document_signatures(db, issued)
-        return bool(checked['signature_valid'] and len(checked['signatures']) == row.signature_count == 2)
+        _read_verified(db.get(m.FileRecord,external.validation_evidence_file_id))
+        checked=verify_document_signatures(db,issued)
+        expected=1 if applicant_first(issued) and row.source=='external_portal' else 2
+        return bool(checked['signature_valid'] and len(checked['signatures'])==row.signature_count==expected)
     except Exception:
         return False
 
@@ -401,8 +421,12 @@ def pending_signatures(db: DB, user: Actor, school: Scope,
     require(user, 'documents.validate')
     if not 1 <= limit <= 100 or not 0 <= offset <= 10000:
         fail(422, 'Paginação inválida.')
+    superseded=select(m.Admission.id).where(m.Admission.school_id==school.id,
+        m.Admission.enrollment_id==m.IssuedDocument.enrollment_id,
+        m.Admission.contract_template_id==m.IssuedDocument.template_id,
+        cast(m.Admission.contract_template_version,String)!=m.IssuedDocument.template_version).exists()
     filters = (m.IssuedDocument.school_id == school.id,
-               m.IssuedDocument.signature_status == 'pending_validation')
+               m.IssuedDocument.signature_status == 'pending_validation',~superseded)
     total = db.scalar(select(func.count()).select_from(m.IssuedDocument).where(*filters))
     rows = db.execute(select(m.IssuedDocument, m.Person.name).join(
         m.Student, m.Student.id == m.IssuedDocument.student_id
@@ -444,6 +468,8 @@ def sign_school_document(document_id: str, db: DB, user: Actor, school: Scope, r
         fail(403, 'Somente direção ou administração pode assinar em nome da escola.')
     lock_school(db, school.id)
     issued = scoped(db, m.IssuedDocument, document_id, school.id)
+    if applicant_first(issued):
+        fail(409,'A assinatura institucional deste contrato ocorre ao efetivar a matrícula.')
     previous = _company_revision(db, issued)
     if previous:
         return {'document_id': issued.id, 'signature_status': issued.signature_status,
@@ -548,4 +574,4 @@ def reject_external_signature(document_id: str, db: DB, user: Actor, school: Sco
     audit(db, request, user, 'contract.signature_rejected', revision, school.id,
           {'pdf_sha256': revision.sha256, 'reason': revision.rejection_reason})
     return {'document_id': issued.id, 'signature_status': 'rejected',
-            'download_file_id': _company_revision(db, issued).file_id}
+            'download_file_id': latest_signed_file(db, issued).id}
