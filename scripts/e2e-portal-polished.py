@@ -254,7 +254,7 @@ try:
         familyPage.get_by_label('Senha').fill(password)
         familyPage.get_by_role('button',name='Entrar',exact=True).click()
         expect(familyPage.get_by_role('heading',name='Olá, Mariana Almeida — Teste.')).to_be_visible()
-        expect(familyPage.get_by_role('heading',name='Lucas Almeida — Teste')).to_be_visible()
+        expect(familyPage.get_by_label('Aluno')).to_have_value(student_id)
         familyPage.get_by_role('button',name='Financeiro').click()
         expect(familyPage.get_by_role('heading',name='Financeiro de Lucas Almeida — Teste')).to_be_visible()
         expect(familyPage.get_by_text('Seu vínculo não autoriza a consulta financeira.',exact=False)).to_have_count(0)
