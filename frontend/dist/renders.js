@@ -11945,7 +11945,7 @@ var _Vue=Vue; var PigeRenders={academicPreparation:function render(_ctx, _cache)
                   type: "checkbox",
                   "onUpdate:modelValue": $event => ((s.website.enabled) = $event)
                 }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, s.website.enabled]]), _createTextVNode("Publicar site institucional")]),
-                _createElementVNode("p", null, "O domínio deve apontar para o serviço do site. Notícias e eventos aparecem somente quando publicados para o público. Mensagens privadas permanecem nos portais autenticados."),
+                _createElementVNode("p", null, "Esta configuração pertence à unidade escolar selecionada no sistema. O serviço associa cada publicação ao domínio cadastrado, sem exigir um school_id fixo no servidor. O domínio deve apontar para o serviço do site. Notícias e eventos aparecem somente quando publicados para o público. Mensagens privadas permanecem nos portais autenticados."),
                 _createElementVNode("button", { class: "btn btn-primary" }, "Salvar site"),
                 (s.website.enabled&&s.website.public_url)
                   ? (_openBlock(), _createElementBlock("a", {

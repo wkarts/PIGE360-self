@@ -1,9 +1,12 @@
 """Site público independente. Apenas GET para API interna e ativos de marca."""
 import html
+import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 import re
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, build_opener, ProxyHandler, HTTPRedirectHandler
@@ -12,18 +15,37 @@ from urllib.parse import urlsplit, parse_qs
 ORIGIN=os.environ.get('PIGE_INTERNAL_URL','http://app:8000').rstrip('/')
 SCHOOL=os.environ.get('WEBSITE_SCHOOL_ID','')
 TOKEN=os.environ.get('WEBSITE_INTERNAL_TOKEN','')
+logger=logging.getLogger('pige360.website')
 
 
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):return None
 
 
-def fetch(path,limit=2*1024*1024):
+def fetch(path,limit=2*1024*1024,host=''):
     # O navegador nunca recebe a origem interna nem cookies/sessões do gestor.
-    with build_opener(ProxyHandler({}),NoRedirect()).open(Request(ORIGIN+path,headers={'Host':'localhost','Accept':'application/json',**({'X-Website-Key':TOKEN} if TOKEN else {})}),timeout=8) as response:
+    headers={'Host':'localhost','Accept':'application/json'}
+    if TOKEN:headers['X-Website-Key']=TOKEN
+    if host:
+        if len(host)>255 or any(ord(char)<33 or ord(char)>126 for char in host):raise ValueError('Domínio inválido')
+        headers['X-Website-Host']=host
+    with build_opener(ProxyHandler({}),NoRedirect()).open(Request(ORIGIN+path,headers=headers),timeout=8) as response:
         data=response.read(limit+1)
         if len(data)>limit:raise ValueError('Resposta acima do limite')
         return data,response.headers.get('Content-Type','application/octet-stream')
+
+
+def error_page(status,message,request_id):
+    safe=html.escape(message,quote=True)
+    body=('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">'
+          '<meta name="viewport" content="width=device-width,initial-scale=1">'
+          '<title>Site institucional</title><style>'
+          'body{margin:0;padding:24px;background:#f7f8f5;color:#263746;font:16px/1.6 system-ui,sans-serif}'
+          'main{box-sizing:border-box;width:min(100%,680px);margin:12vh auto;padding:clamp(20px,5vw,40px);'
+          'background:#fff;border:1px solid #d9dfd9;border-radius:12px}h1{font-size:clamp(24px,6vw,34px);line-height:1.2}'
+          'p,small{overflow-wrap:anywhere}</style></head><body><main role="alert"><h1>Site institucional indisponível</h1>'
+          f'<p>{safe}</p><small>Código de atendimento: {request_id}</small></main></body></html>').encode()
+    return body
 
 
 def render(data):
@@ -51,11 +73,39 @@ def render(data):
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,*_):pass
 
+    def respond(self,status,body,mime,request_id,headers=()):
+        self.send_response(status)
+        self.send_header('Content-Type',mime)
+        self.send_header('Content-Length',str(len(body)))
+        self.send_header('Cache-Control','no-store')
+        self.send_header('X-Content-Type-Options','nosniff')
+        self.send_header('X-Request-ID',request_id)
+        self.send_header('Content-Security-Policy',"default-src 'none'; img-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+        self.send_header('Referrer-Policy','strict-origin-when-cross-origin')
+        for key,value in headers:self.send_header(key,value)
+        self.end_headers();self.wfile.write(body)
+
+    def fail(self,status,message,category,request_id,upstream_status=0):
+        host=self.headers.get('Host','')
+        host_fingerprint=hashlib.sha256(host.encode('utf-8','replace')).hexdigest()[:12]
+        path=urlsplit(self.path).path
+        route='website' if path=='/' else 'readiness' if path=='/health/ready' else 'public_asset'
+        logger.warning('website_request_failed category=%s status=%s upstream_status=%s route=%s request_id=%s host_fingerprint=%s',
+                       category,status,upstream_status,route,request_id,host_fingerprint)
+        self.respond(status,error_page(status,message,request_id),'text/html; charset=utf-8',request_id)
+
     def do_GET(self):
+        request_id=uuid.uuid4().hex[:12]
         try:
             parsed=urlsplit(self.path);path=parsed.path
             if '%' in path or '..' in path or '\\' in path or self.path.startswith('//'):self.send_error(400);return
-            if path=='/health/ready':body=b'ok';mime='text/plain'
+            if path=='/health/live':body=b'{"status":"live"}';mime='application/json; charset=utf-8'
+            elif path=='/health/ready':
+                payload,_=fetch('/health/ready')
+                ready=json.loads(payload)
+                if not isinstance(ready,dict):raise TypeError('Resposta de readiness inválida')
+                if ready.get('status')!='ready':raise RuntimeError('upstream_not_ready')
+                body=b'{"status":"ready"}';mime='application/json; charset=utf-8'
             elif path=='/site.css':body=Path(__file__).with_name('site.css').read_bytes();mime='text/css'
             elif path=='/manifest.webmanifest':body,mime=fetch('/manifest.webmanifest?surface=website')
             elif re.fullmatch(r'/api/v1/institution/(?:assets/[0-9a-f]{64}\.(?:png|ttf|woff2)|theme.css|icon.png)',path):
@@ -64,16 +114,31 @@ class Handler(BaseHTTPRequestHandler):
                 body,mime=fetch(self.path)
             elif path=='/':
                 if SCHOOL and not re.fullmatch(r'[0-9a-f-]{36}',SCHOOL):raise ValueError('Escola inválida')
-                path=f'/api/v1/public/schools/{SCHOOL}/website' if SCHOOL else '/api/v1/public/website'
-                if TOKEN:path='/api/v1/internal/website'+('?school_id='+SCHOOL if SCHOOL else '')
-                body=render(json.loads(fetch(path)[0])).encode();mime='text/html; charset=utf-8'
+                if SCHOOL:
+                    upstream_path=f'/api/v1/internal/website?school_id={SCHOOL}' if TOKEN else f'/api/v1/public/schools/{SCHOOL}/website'
+                    payload,_=fetch(upstream_path)
+                else:
+                    upstream_path='/api/v1/internal/website/by-host' if TOKEN else '/api/v1/public/website/by-host'
+                    payload,_=fetch(upstream_path,host=self.headers.get('Host',''))
+                body=render(json.loads(payload)).encode();mime='text/html; charset=utf-8'
             else:self.send_error(404);return
-            self.send_response(200)
-            self.send_header('Content-Type',mime);self.send_header('Content-Length',str(len(body)))
-            self.send_header('Cache-Control','no-store');self.send_header('X-Content-Type-Options','nosniff')
-            self.send_header('Content-Security-Policy',"default-src 'none'; img-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
-            self.send_header('Referrer-Policy','strict-origin-when-cross-origin');self.end_headers();self.wfile.write(body)
-        except (HTTPError,URLError,ValueError,KeyError):self.send_error(503,'Site temporariamente indisponivel')
+            self.respond(200,body,mime,request_id)
+        except HTTPError as error:
+            if error.code==404 and path=='/':
+                self.fail(404,'Este domínio ainda não está associado a um site publicado da escola.','domain_not_published',request_id,error.code)
+            elif error.code==409:
+                self.fail(409,'A configuração deste domínio precisa ser revisada pela escola.','domain_conflict',request_id,error.code)
+            elif error.code==400:
+                self.fail(400,'O domínio informado não é válido.','invalid_domain',request_id,error.code)
+            else:self.fail(503,'O site está temporariamente indisponível. Tente novamente em instantes.','upstream_http_error',request_id,error.code)
+        except (URLError,TimeoutError,OSError):
+            self.fail(503,'O site está temporariamente indisponível. Tente novamente em instantes.','upstream_unavailable',request_id)
+        except (json.JSONDecodeError,KeyError,TypeError,AttributeError,IndexError,UnicodeDecodeError):
+            self.fail(502,'A publicação não pôde ser carregada com a resposta atual.','invalid_upstream_payload',request_id)
+        except RuntimeError:
+            self.fail(503,'O site está temporariamente indisponível. Tente novamente em instantes.','upstream_not_ready',request_id)
+        except ValueError:
+            self.fail(503,'A configuração do site precisa ser revisada pela escola.','invalid_site_configuration',request_id)
 
 
-if __name__=='__main__':ThreadingHTTPServer(('0.0.0.0',8080),Handler).serve_forever()
+if __name__=='__main__':ThreadingHTTPServer(('0.0.0.0',int(os.environ.get('PORT','8080'))),Handler).serve_forever()

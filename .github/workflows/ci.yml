@@ -146,6 +146,7 @@ jobs:
           python scripts/e2e-user-profiles.py
           python scripts/e2e-whatsapp-scope.py
           python scripts/e2e-camera.py
+          PIGE_E2E_EVIDENCE_DIR=ci-evidence/site-portal python scripts/e2e-portal-polished.py
           python scripts/e2e-support.py
           python scripts/e2e-school-operations.py
           python scripts/e2e-assisted.py

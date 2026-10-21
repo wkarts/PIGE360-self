@@ -1,5 +1,7 @@
 """Publicação institucional: somente conteúdo público aprovado, sem dados acadêmicos."""
 from typing import Literal
+import ipaddress
+import re
 from urllib.parse import urlsplit
 from fastapi import APIRouter, Request
 from pydantic import Field, field_validator
@@ -14,6 +16,60 @@ from .security import Actor, DB, Scope, check_version, fail, lock_school, requir
 from .school_community import SchoolCommunityPost, visible_query, post_output
 
 router=APIRouter(prefix='/api/v1',tags=['Site institucional'])
+
+
+def normalized_authority(value:str,default_port:int=443):
+    """Normalize a Host header or HTTPS origin without accepting URL paths."""
+    if not isinstance(value,str) or not value or len(value)>255 or value!=value.strip() or value.endswith(':'):return None
+    try:
+        parsed=urlsplit('//'+value)
+        if parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password:return None
+        host=parsed.hostname
+        if not host:return None
+        host=host.rstrip('.').encode('idna').decode('ascii').lower()
+        port=parsed.port
+        if port is None:port=default_port
+        if not 1<=port<=65535:return None
+        try:host=ipaddress.ip_address(host).compressed
+        except ValueError:
+            labels=host.split('.')
+            if not labels or any(not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?',label) for label in labels):return None
+        return host,port
+    except (UnicodeError,ValueError):return None
+
+
+def public_origin(value:str):
+    try:
+        url=urlsplit(value)
+        if (url.scheme.lower()!='https' or not url.netloc or url.path not in ('','/')
+            or url.query or url.fragment or url.username or url.password):return None
+        return normalized_authority(url.netloc)
+    except ValueError:return None
+
+
+def website_for_host(db,host:str):
+    requested=normalized_authority(host)
+    if not requested:fail(400,'Domínio público inválido.')
+    rows=list(db.scalars(select(SchoolWebsite).join(m.School).where(
+        SchoolWebsite.enabled.is_(True),m.School.active.is_(True))))
+    matches=[row for row in rows if public_origin(row.public_url)==requested]
+    if not matches:fail(404,'Nenhum site publicado está associado a este domínio.')
+    if len(matches)>1:fail(409,'O domínio está associado a mais de uma escola.')
+    return site_data(db,matches[0])
+
+
+def website_host_header(request:Request):
+    values=request.headers.getlist('x-website-host')
+    if len(values)!=1:fail(400,'Informe um único domínio de site.')
+    return values[0]
+
+
+def authorize_website_service(request:Request):
+    import secrets
+    from .config import settings
+    token=settings().website_internal_token
+    if not token or not secrets.compare_digest(request.headers.get('X-Website-Key',''),token):
+        fail(403,'Serviço não autorizado.')
 
 
 class SchoolWebsite(Record,Base):
@@ -40,12 +96,24 @@ class WebsiteInput(Input):
     portal_url:str=Field(default='',max_length=500)
     notice:str=Field(default='',max_length=1000)
 
-    @field_validator('public_url','portal_url')
+    @field_validator('public_url')
     @classmethod
-    def safe_url(cls,value):
+    def public_url_origin(cls,value):
         if not value:return ''
-        url=urlsplit(value)
-        if url.scheme!='https' or not url.hostname or url.username or url.password or url.fragment:
+        if not public_origin(value):
+            raise ValueError('Informe somente a origem HTTPS do domínio público, sem caminho ou parâmetros.')
+        return value.rstrip('/')
+
+    @field_validator('portal_url')
+    @classmethod
+    def safe_portal_url(cls,value):
+        if not value:return ''
+        try:
+            url=urlsplit(value)
+            port=url.port
+        except ValueError:
+            raise ValueError('Informe uma URL HTTPS pública, sem credenciais ou fragmentos.') from None
+        if url.scheme!='https' or not url.hostname or url.username or url.password or url.fragment or (port is not None and not 1<=port<=65535):
             raise ValueError('Informe uma URL HTTPS pública, sem credenciais ou fragmentos.')
         return value.rstrip('/')
 
@@ -68,6 +136,12 @@ def configure(data:WebsiteInput,db:DB,user:Actor,school:Scope,request:Request):
         if data.version is not None:fail(409,'A configuração do site não existe.')
         row=SchoolWebsite(school_id=school.id);db.add(row)
     if data.enabled and (not data.headline or not data.public_url):fail(422,'Informe chamada principal e domínio público antes de publicar o site.')
+    target=public_origin(data.public_url) if data.enabled else None
+    if target:
+        candidates=db.scalars(select(SchoolWebsite).join(m.School).where(
+            SchoolWebsite.school_id!=school.id,SchoolWebsite.enabled.is_(True),m.School.active.is_(True)))
+        if any(public_origin(item.public_url)==target for item in candidates):
+            fail(409,'Este domínio já está associado a outra escola ativa.')
     for key,value in data.model_dump(exclude={'version'}).items():setattr(row,key,value)
     if row.id:row.version+=1
     db.flush();audit(db,request,user,'website.configured',row,school.id,{'enabled':row.enabled,'theme':row.theme})
@@ -97,10 +171,18 @@ def default_site(db:DB):
     return site_data(db,rows[0])
 
 
+@router.get('/public/website/by-host')
+def public_site_by_host(db:DB,request:Request):
+    return website_for_host(db,website_host_header(request))
+
+
+@router.get('/internal/website/by-host')
+def internal_site_by_host(db:DB,request:Request):
+    authorize_website_service(request)
+    return website_for_host(db,website_host_header(request))
+
+
 @router.get('/internal/website')
 def internal_site(db:DB,request:Request,school_id:str=''):
-    import secrets
-    from .config import settings
-    token=settings().website_internal_token
-    if not token or not secrets.compare_digest(request.headers.get('X-Website-Key',''),token):fail(403,'Serviço não autorizado.')
+    authorize_website_service(request)
     return published(school_id,db) if school_id else default_site(db)

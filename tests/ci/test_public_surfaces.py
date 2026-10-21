@@ -1,10 +1,15 @@
 """Contrato do proxy e white-label das superfícies sem Docker ou rede externa."""
 import importlib.util
+import io
 import json
 from pathlib import Path
 import re
 import subprocess
+import threading
 import unittest
+from http.server import ThreadingHTTPServer
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -24,6 +29,12 @@ IDENTITY={'display_name':'Colégio & Horizonte','short_name':'Horizonte','primar
 
 
 class SurfaceTests(unittest.TestCase):
+    def serve_website(self):
+        server=ThreadingHTTPServer(('127.0.0.1',0),website.Handler)
+        thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        self.addCleanup(lambda:(server.shutdown(),server.server_close(),thread.join(timeout=2)))
+        return f'http://127.0.0.1:{server.server_port}'
+
     def test_first_access_script_survives_refresh_without_javascript_storage(self):
         subprocess.run(['node',str(ROOT/'tests/ci/first-access-session.mjs')],check=True,capture_output=True,text=True)
 
@@ -82,6 +93,62 @@ class SurfaceTests(unittest.TestCase):
         data['identity']={**IDENTITY,'logo_url':'https://third-party.example/track.png','display_name':'<script>bad</script>'}
         self.assertNotIn('<script>bad</script>',website.render(data))
         self.assertNotIn('track.png',website.render(data))
+
+    def test_website_selects_the_school_from_the_public_host(self):
+        data={'school':{'name':'Escola de Teste','address':'Endereço sintético','phone':'','email':''},
+            'identity':IDENTITY,'website':{'theme':'campus','headline':'Publicação por domínio','introduction':'Teste sintético',
+            'about':'','notice':'','portal_url':''},'posts':[]}
+        calls=[]
+        def fake_fetch(path,limit=2*1024*1024,host=''):
+            calls.append((path,host));return json.dumps(data).encode(),'application/json'
+        base=self.serve_website()
+        with patch.object(website,'SCHOOL',''),patch.object(website,'TOKEN','synthetic-website-token'),patch.object(website,'fetch',side_effect=fake_fetch):
+            request=Request(base+'/',headers={'Host':'Site-A.Example.Test:443'})
+            with urlopen(request,timeout=3) as response:
+                body=response.read().decode();self.assertEqual(response.status,200)
+                self.assertEqual(len(response.headers['X-Request-ID']),12)
+                self.assertIn('Publicação por domínio',body)
+                self.assertEqual(response.headers['Content-Security-Policy'].split(';')[0],"default-src 'none'")
+        self.assertEqual(calls,[('/api/v1/internal/website/by-host','Site-A.Example.Test:443')])
+
+    def test_website_keeps_the_legacy_explicit_school_override(self):
+        data={'school':{'name':'Escola legada de teste','address':'Endereço sintético','phone':'','email':''},
+            'identity':IDENTITY,'website':{'theme':'horizon','headline':'Compatibilidade legada','introduction':'Teste',
+            'about':'','notice':'','portal_url':''},'posts':[]}
+        calls=[]
+        def fake_fetch(path,limit=2*1024*1024,host=''):
+            calls.append((path,host));return json.dumps(data).encode(),'application/json'
+        base=self.serve_website()
+        school_id='11111111-2222-4333-8444-555555555555'
+        with patch.object(website,'SCHOOL',school_id),patch.object(website,'TOKEN','synthetic-website-token'),patch.object(website,'fetch',side_effect=fake_fetch):
+            with urlopen(base+'/',timeout=3) as response:
+                self.assertEqual(response.status,200)
+                self.assertIn('Compatibilidade legada',response.read().decode())
+        self.assertEqual(calls,[(f'/api/v1/internal/website?school_id={school_id}','')])
+
+    def test_website_readiness_probes_api_and_live_check_does_not(self):
+        base=self.serve_website()
+        with patch.object(website,'fetch',side_effect=URLError('synthetic connection failure')) as probe:
+            with self.assertRaises(HTTPError) as failed:urlopen(base+'/health/ready',timeout=3)
+            self.assertEqual(failed.exception.code,503)
+            self.assertNotIn('high load',failed.exception.read().decode().lower())
+            self.assertEqual(urlopen(base+'/health/live',timeout=3).status,200)
+            probe.assert_called_once_with('/health/ready')
+
+    def test_website_does_not_turn_missing_publication_into_a_fake_load_error(self):
+        base=self.serve_website()
+        error=HTTPError('http://app/api/v1/public/website/by-host',404,'not published',{},io.BytesIO(b'private internal detail'))
+        with patch.object(website,'SCHOOL',''),patch.object(website,'TOKEN',''),patch.object(website,'fetch',side_effect=error):
+            with self.assertLogs('pige360.website',level='WARNING') as captured:
+                with self.assertRaises(HTTPError) as failed:urlopen(Request(base+'/',headers={'Host':'missing.example.test'}),timeout=3)
+        body=failed.exception.read().decode()
+        self.assertEqual(failed.exception.code,404)
+        self.assertIn('não está associado',body)
+        self.assertNotIn('private internal detail',body)
+        self.assertNotIn('high load',body.lower())
+        self.assertIn('category=domain_not_published',captured.output[0])
+        self.assertIn('upstream_status=404',captured.output[0])
+        self.assertNotIn('missing.example.test',captured.output[0])
 
     def test_portal_does_not_forward_administrative_routes(self):
         self.assertFalse(portal.allowed('/api/v1/backups','GET'))
