@@ -187,6 +187,19 @@ try:
         post('/students/'+student_id+'/guardians',{'person_id':guardian['id'],'relationship':'Mãe','legal':True,'financial':True})
         response=client.post('/api/v1/users',headers=headers,json={'name':'Mariana Almeida — Teste','email':'responsavel-escolar@example.com','password':password,'role':'guardian','school_ids':[school['id']],'person_id':guardian['id']})
         assert response.status_code==201,response.text
+        student_login=client.post('/api/v1/auth/login',json={'email':'aluno@example.com','password':password});assert student_login.status_code==200,student_login.text
+        student_headers={'Authorization':'Bearer '+student_login.json()['access_token']}
+        student_context=client.get('/api/v1/family/context',headers=student_headers)
+        assert student_context.status_code==200 and student_context.json()['students'][0]['financial_authorized'] is False,student_context.text
+        student_charges=client.get('/api/v1/family/students/'+student_id+'/charges',headers=student_headers)
+        assert student_charges.status_code==403,student_charges.text
+        guardian_login=client.post('/api/v1/auth/login',json={'email':'responsavel-escolar@example.com','password':password});assert guardian_login.status_code==200,guardian_login.text
+        guardian_headers={'Authorization':'Bearer '+guardian_login.json()['access_token']}
+        guardian_context=client.get('/api/v1/family/context',headers=guardian_headers)
+        assert guardian_context.status_code==200 and guardian_context.json()['students'][0]['financial_authorized'] is True,guardian_context.text
+        guardian_charges=client.get('/api/v1/family/students/'+student_id+'/charges',headers=guardian_headers)
+        assert guardian_charges.status_code==200,guardian_charges.text
+        record('API bloqueia financeiro para aluno e permite apenas ao responsável com vínculo financeiro ativo')
         studentContext=browser.new_context(viewport={'width':1366,'height':950},locale='pt-BR',accept_downloads=True)
         studentPage=studentContext.new_page();studentPage.on('pageerror',lambda e:errors.append('aluno: '+str(e)));page=studentPage
         studentPage.goto(URL);studentPage.get_by_label('E-mail',exact=True).fill('aluno@example.com');studentPage.get_by_label('Senha',exact=True).fill(password);studentPage.get_by_role('button',name='Entrar na aplicação').click()
@@ -227,7 +240,7 @@ try:
         expect(familyPage.get_by_role('button',name='Boletim e matrículas')).to_be_visible()
         familyPage.get_by_role('button',name='Documentos').click();expect(familyPage.get_by_role('heading',name='Documentos de Lucas Almeida — Teste')).to_be_visible()
         familyPage.get_by_role('button',name='Financeiro').click();expect(familyPage.get_by_role('heading',name='Financeiro de Lucas Almeida — Teste')).to_be_visible()
-        expect(familyPage.get_by_text('Seu vínculo não autoriza a consulta financeira.',exact=True)).to_be_visible()
+        expect(familyPage.get_by_text('Seu vínculo não autoriza a consulta financeira.',exact=False)).to_be_visible()
         familyPage.get_by_role('button',name='Boletim e matrículas').click();expect(familyPage.locator('.learning-workspace table')).to_contain_text('Matemática')
         record('Portal independente autentica aluno, renova sessão e navega entre boletim, documentos e financeiro')
         for width in (320,360,390,768,1024,1440):
@@ -244,7 +257,7 @@ try:
         expect(familyPage.get_by_role('heading',name='Lucas Almeida — Teste')).to_be_visible()
         familyPage.get_by_role('button',name='Financeiro').click()
         expect(familyPage.get_by_role('heading',name='Financeiro de Lucas Almeida — Teste')).to_be_visible()
-        expect(familyPage.get_by_text('Seu vínculo não autoriza a consulta financeira.',exact=True)).to_have_count(0)
+        expect(familyPage.get_by_text('Seu vínculo não autoriza a consulta financeira.',exact=False)).to_have_count(0)
         familyPage.get_by_role('button',name='Documentos').click()
         expect(familyPage.get_by_role('heading',name='Documentos de Lucas Almeida — Teste')).to_be_visible()
         check_family_viewport(320,740,'guardian-320')
