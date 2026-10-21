@@ -111,20 +111,41 @@ class SurfaceTests(unittest.TestCase):
                 self.assertEqual(response.headers['Content-Security-Policy'].split(';')[0],"default-src 'none'")
         self.assertEqual(calls,[('/api/v1/internal/website/by-host','Site-A.Example.Test:443')])
 
-    def test_website_keeps_the_legacy_explicit_school_override(self):
+    def test_public_host_takes_priority_over_a_stale_legacy_school_id(self):
+        data={'school':{'name':'Escola correta por domínio','address':'Endereço sintético','phone':'','email':''},
+            'identity':IDENTITY,'website':{'theme':'campus','headline':'Domínio prevalece','introduction':'Teste',
+            'about':'','notice':'','portal_url':''},'posts':[]}
+        calls=[]
+        def fake_fetch(path,limit=2*1024*1024,host=''):
+            calls.append((path,host));return json.dumps(data).encode(),'application/json'
+        base=self.serve_website()
+        stale_id='11111111-2222-4333-8444-555555555555'
+        with patch.object(website,'SCHOOL',stale_id),patch.object(website,'TOKEN','synthetic-website-token'),patch.object(website,'fetch',side_effect=fake_fetch):
+            with urlopen(Request(base+'/',headers={'Host':'site-a.example.test'}),timeout=3) as response:
+                body=response.read().decode()
+                self.assertEqual(response.status,200)
+                self.assertIn('Domínio prevalece',body)
+        self.assertEqual(calls,[('/api/v1/internal/website/by-host','site-a.example.test')])
+
+    def test_website_keeps_the_legacy_school_fallback(self):
         data={'school':{'name':'Escola legada de teste','address':'Endereço sintético','phone':'','email':''},
             'identity':IDENTITY,'website':{'theme':'horizon','headline':'Compatibilidade legada','introduction':'Teste',
             'about':'','notice':'','portal_url':''},'posts':[]}
         calls=[]
         def fake_fetch(path,limit=2*1024*1024,host=''):
-            calls.append((path,host));return json.dumps(data).encode(),'application/json'
+            calls.append((path,host))
+            if path.endswith('/by-host'):
+                raise HTTPError('http://app/api/v1/internal/website/by-host',404,'not published',{},io.BytesIO(b''))
+            return json.dumps(data).encode(),'application/json'
         base=self.serve_website()
         school_id='11111111-2222-4333-8444-555555555555'
         with patch.object(website,'SCHOOL',school_id),patch.object(website,'TOKEN','synthetic-website-token'),patch.object(website,'fetch',side_effect=fake_fetch):
             with urlopen(base+'/',timeout=3) as response:
                 self.assertEqual(response.status,200)
                 self.assertIn('Compatibilidade legada',response.read().decode())
-        self.assertEqual(calls,[(f'/api/v1/internal/website?school_id={school_id}','')])
+        self.assertEqual(calls[0][0],'/api/v1/internal/website/by-host')
+        self.assertTrue(calls[0][1])
+        self.assertEqual(calls[1],(f'/api/v1/internal/website?school_id={school_id}',''))
 
     def test_website_readiness_probes_api_and_live_check_does_not(self):
         base=self.serve_website()

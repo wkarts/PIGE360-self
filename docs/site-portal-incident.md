@@ -10,7 +10,7 @@ Não houve acesso ao banco, ambiente CloudPanel, logs do container ou digest imp
 
 - Resolução exata por `Host` contra a origem HTTPS de `public_url` em cada escola ativa e publicada; origem repetida retorna conflito, host desconhecido retorna 404 e nenhuma escola é escolhida implicitamente.
 - Rota interna por domínio autenticada com `WEBSITE_INTERNAL_TOKEN`, além da rota pública que retorna somente conteúdo já aprovado como público.
-- `WEBSITE_SCHOOL_ID` continua como opção de compatibilidade; a configuração vazia usa o domínio, e a tela administrativa explica que a publicação pertence à unidade selecionada no sistema.
+- A origem HTTPS do Host é sempre consultada primeiro, mesmo se houver `WEBSITE_SCHOOL_ID` antigo. Esse ID fica como fallback de compatibilidade para instalação de escola única sem domínio cadastrado; assim ele não pode sobrepor a escola associada ao domínio público correto.
 - Readiness do site verifica a readiness da API. Erros HTTP têm mensagem pública segura e log sanitizado com categoria, status upstream, rota lógica e ID de atendimento.
 - CSS do portal da família reforça encolhimento, quebra de nomes e links longos, alvos de toque, formulários e navegação em telas estreitas.
 

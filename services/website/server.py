@@ -113,13 +113,15 @@ class Handler(BaseHTTPRequestHandler):
                 if len(parsed.query)>100 or any(key not in {'size','v'} or len(values)!=1 or not values[0].isdigit() for key,values in params.items()):self.send_error(400);return
                 body,mime=fetch(self.path)
             elif path=='/':
-                if SCHOOL and not re.fullmatch(r'[0-9a-f-]{36}',SCHOOL):raise ValueError('Escola inválida')
-                if SCHOOL:
+                upstream_path='/api/v1/internal/website/by-host' if TOKEN else '/api/v1/public/website/by-host'
+                try:
+                    payload,_=fetch(upstream_path,host=self.headers.get('Host',''))
+                except HTTPError as error:
+                    # Resolve the public Host first. Keep the old school-ID behavior only
+                    # for installations that have not yet registered this domain.
+                    if error.code!=404 or not SCHOOL or not re.fullmatch(r'[0-9a-f-]{36}',SCHOOL):raise
                     upstream_path=f'/api/v1/internal/website?school_id={SCHOOL}' if TOKEN else f'/api/v1/public/schools/{SCHOOL}/website'
                     payload,_=fetch(upstream_path)
-                else:
-                    upstream_path='/api/v1/internal/website/by-host' if TOKEN else '/api/v1/public/website/by-host'
-                    payload,_=fetch(upstream_path,host=self.headers.get('Host',''))
                 body=render(json.loads(payload)).encode();mime='text/html; charset=utf-8'
             else:self.send_error(404);return
             self.respond(200,body,mime,request_id)

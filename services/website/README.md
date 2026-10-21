@@ -2,7 +2,7 @@
 
 O serviço atende o domínio recebido pelo reverse proxy e carrega somente a publicação pública daquela escola. Cadastre a origem HTTPS do site em **Gestão → Comunidade → Site institucional**, com a unidade escolar correta selecionada no sistema. `public_url` deve conter apenas a origem, por exemplo `https://escola.exemplo.com.br`; caminhos, parâmetros e fragmentos não são aceitos. A API impede publicar o mesmo domínio em duas escolas ativas.
 
-Quando `WEBSITE_SCHOOL_ID` estiver vazio, o serviço envia o `Host` recebido à API interna e resolve a escola pela origem configurada. Domínio desconhecido recebe 404; conflito de configuração recebe 409. A seleção não escolhe uma escola arbitrariamente. `WEBSITE_SCHOOL_ID` continua disponível como substituição legada para uma instalação de escola única; enquanto estiver preenchido, o domínio não seleciona a publicação.
+O serviço sempre envia o `Host` recebido à API e tenta resolver a escola pela origem configurada. Domínio desconhecido recebe 404; conflito de configuração recebe 409. A seleção não escolhe uma escola arbitrariamente. `WEBSITE_SCHOOL_ID` continua disponível como fallback legado para uma instalação de escola única, usado somente se o Host não tiver publicação associada. Assim um ID antigo não sobrepõe o domínio correto; após validar a origem, deixe a variável vazia para tornar a configuração explícita.
 
 `WEBSITE_INTERNAL_TOKEN` é opcional para compatibilidade. Quando configurado, o site usa a rota interna autenticada; mantenha o valor correspondente no app e no serviço, sem expô-lo ao navegador. A seleção por domínio retorna apenas conteúdo já publicado como público.
 
