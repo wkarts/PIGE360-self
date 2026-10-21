@@ -37,6 +37,8 @@ def trust_roots(directory: Path | None) -> list[x509.Certificate]:
             if pem.detect(data):
                 for _, _, cert_data in pem.unarmor(data, multiple=True):
                     result.append(x509.Certificate.load(cert_data))
+                    if len(result) > 30:
+                        raise InvalidPdfSignature('Repositório de certificados de confiança acima do limite.')
             else:
                 result.append(x509.Certificate.load(data))
         except (ValueError, TypeError) as exc:

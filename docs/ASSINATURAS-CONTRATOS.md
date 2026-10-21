@@ -3,7 +3,7 @@
 ## Preparação da instalação
 
 1. Configure `INTEGRATION_ENCRYPTION_KEY` com uma chave Fernet estável, por exemplo a saída de `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. Faça cópia segura da chave: perdê-la impede a leitura dos certificados A1 já cadastrados. Ela não é o arquivo do certificado.
-2. Coloque **somente certificados das ACs Raiz da ICP-Brasil** (`.pem`, `.crt`, `.cer` ou `.der`) em `data-documents/trust-roots/` junto ao `compose.yaml`. Os exemplos de instalação montam `data-documents/` em `/data`, e a aplicação lê `/data/trust-roots` por padrão. Pode-se definir `SIGNATURE_TRUST_ROOTS_DIR` para outro caminho já acessível pelo processo. Obtenha e confira as versões atuais no [repositório oficial do ITI](https://www.gov.br/iti/pt-br/assuntos/repositorio/repositorio-ac-raiz). Não coloque chaves privadas nesse diretório.
+2. As raízes públicas ICP-Brasil v5/v12 acompanham a aplicação. Não há instalação manual para PFX/P12 com cadeia intermediária completa dessas raízes. O diretório `data-documents/trust-roots/` (montado em `/data/trust-roots`, configurável por `SIGNATURE_TRUST_ROOTS_DIR`) continua disponível para raízes adicionais conferidas pelo administrador. Nunca coloque chaves privadas ali. Veja [procedência, cobertura e atualização](ICP-BRASIL-TRUST.md).
 3. Na escola, a direção/administração envia o A1 `.pfx`/`.p12` e senha em **Certificado A1**. O servidor testa a chave privada, validade, CNPJ (quando cadastrado) e cadeia contra as raízes configuradas. O arquivo e a senha são guardados cifrados no banco; os endpoints de leitura nunca os retornam. Rotacione antes de expirar.
 
 ## Fluxo de cada contrato

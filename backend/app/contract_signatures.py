@@ -20,7 +20,8 @@ from .config import settings
 from .db import Base, Record, now
 from .documents import validate_upload, write_file
 from .integration_core import IntegrationFailure, seal, unseal
-from .pdf_signing import InvalidPdfSignature, inspect_signatures, sign_pdf_pfx, trust_roots
+from .pdf_signing import InvalidPdfSignature, inspect_signatures, sign_pdf_pfx
+from .signature_trust import signature_trust_roots
 from .security import Actor, DB, Scope, fail, lock_school, require, scoped
 from .storage import read_bytes
 
@@ -105,7 +106,7 @@ def _signer_cpf(cert: cryptography_x509.Certificate) -> str:
 def _roots():
     directory = settings().signature_trust_roots_dir
     try:
-        return trust_roots(directory)
+        return signature_trust_roots(directory)
     except InvalidPdfSignature:
         fail(503, 'Âncoras de confiança da assinatura inválidas. Consulte o administrador.')
 
@@ -183,6 +184,8 @@ def _store_revision(db, issued, pdf, actor_id, request, *, source, operation_key
                 fail(409,'O contrato já recebeu assinatura externa.')
         elif source!='company_a1':fail(409,'A escola deve assinar o contrato antes do responsável.')
     signer = result['signatures'][-1]
+    if source == 'company_a1' and not signer['chain_trusted']:
+        fail(422, 'O certificado institucional não pertence à cadeia de confiança disponível.')
     user = db.get(m.User, actor_id)
     file = write_file(db, issued.school_id, user.id if user else issued.created_by,
                       f'contrato-{issued.id}-assinado-{required}.pdf',
@@ -360,7 +363,7 @@ def configure_a1(db: DB, user: Actor, school: Scope, request: Request,
         fail(422, 'CNPJ do certificado não corresponde à mantenedora.')
     roots = _roots()
     if not roots:
-        fail(503, 'Instale as âncoras de confiança oficiais da ICP-Brasil antes de configurar o A1.')
+        fail(503, 'Pacote de confiança ICP-Brasil indisponível. Atualize a aplicação.')
     from reportlab.pdfgen import canvas
     probe = io.BytesIO()
     page = canvas.Canvas(probe)
