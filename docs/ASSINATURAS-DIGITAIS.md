@@ -1,6 +1,6 @@
 # Assinaturas digitais
 
-O menu **Assinaturas** reúne o certificado da escola, os documentos emitidos que aguardam assinatura e a conferência dos contratos recebidos. O certificado A1 da mantenedora é configurado em PFX/P12; chave e senha ficam criptografadas no servidor com `INTEGRATION_ENCRYPTION_KEY`, sem retorno pela API. A configuração exige certificado vigente, CNPJ correspondente e cadeia de confiança instalada em `SIGNATURE_TRUST_ROOTS_DIR`.
+O menu **Assinaturas** reúne o certificado da escola, os documentos emitidos que aguardam assinatura e a conferência dos contratos recebidos. O certificado A1 da mantenedora é configurado em PFX/P12; chave e senha ficam criptografadas no servidor com `INTEGRATION_ENCRYPTION_KEY`, sem retorno pela API. A configuração exige certificado vigente, CNPJ correspondente e cadeia de confiança verificável. As raízes oficiais ICP-Brasil v5/v12 já acompanham a aplicação: para PFX/P12 com a cadeia intermediária completa dessas raízes, basta o arquivo e a senha. `SIGNATURE_TRUST_ROOTS_DIR` fica disponível para âncoras adicionais administradas. Veja [origem, cobertura e atualização do pacote](ICP-BRASIL-TRUST.md).
 
 ## Documentos da escola
 

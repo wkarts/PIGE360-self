@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-10-21",
+  "source_index": "https://www.gov.br/iti/pt-br/assuntos/repositorio/repositorio-ac-raiz",
+  "fingerprint_evidence": {
+    "url": "https://www.gov.br/iti/pt-br/assuntos/comite-gestor/extratos-de-auditoria/WebTrust_for_CA_C.pdf",
+    "sha256_file": "57dba40940181f4ea7ea4d9c319fedf94168a0944ade7441aadf67fffb658979",
+    "pages": [
+      7,
+      8
+    ]
+  },
+  "certificates": [
+    {
+      "file": "ICP-Brasilv5.pem",
+      "sha256_der": "caa53fc6091c6951887c976e378f6ef89aa6377c55d97b6475422b71ed7e9b17",
+      "subject": "CN=Autoridade Certificadora Raiz Brasileira v5,OU=Instituto Nacional de Tecnologia da Informacao - ITI,O=ICP-Brasil,C=BR",
+      "not_before": "2016-03-02T13:01:38+00:00",
+      "not_after": "2029-03-02T23:59:38+00:00",
+      "source_url": "http://acraiz.icpbrasil.gov.br/credenciadas/RAIZ/ICP-Brasilv5.crt",
+      "authentication": "DER SHA-256 matches the fingerprint published in the ITI HTTPS audit report; HTTP alone is not trusted."
+    },
+    {
+      "file": "ICP-Brasilv12.pem",
+      "sha256_der": "d8478e37ce19c690cf657381e68fe600e4e1a042536830f06847e03e554c4b01",
+      "subject": "CN=Autoridade Certificadora Raiz Brasileira v12,OU=Instituto Nacional de Tecnologia da Informacao - ITI,O=ICP-Brasil,C=BR",
+      "not_before": "2024-10-22T14:41:24+00:00",
+      "not_after": "2037-10-22T12:00:24+00:00",
+      "source_url": "http://acraiz.icpbrasil.gov.br/credenciadas/RAIZ/ICP-Brasilv12.crt",
+      "authentication": "DER SHA-256 matches the fingerprint published in the ITI HTTPS audit report; HTTP alone is not trusted."
+    }
+  ]
+}

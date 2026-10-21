@@ -1,12 +1,14 @@
 """Contrato da campanha congela revisão e impede efetivação sem assinatura."""
 import uuid
 import re
+import pytest
 from cryptography.hazmat.primitives import serialization
 from test_online import online, draft, submit, approve, pc, CSRF, CPF
 from test_contract_signatures import certificate, blank_pdf
 
 
-def test_campaign_contract_revision_and_activation_gate(online, tmp_path, monkeypatch):
+@pytest.mark.parametrize('guardian_trusted', [True, False])
+def test_campaign_contract_revision_and_activation_gate(online, tmp_path, monkeypatch, guardian_trusted):
     o=online
     api=o['api']
     template=api.post('/document-templates',{
@@ -60,7 +62,9 @@ def test_campaign_contract_revision_and_activation_gate(online, tmp_path, monkey
     school_cert, school_pfx=certificate('Escola Teste','2.16.76.1.3.3',cnpj)
     guardian_cert, guardian_pfx=certificate('Responsável Teste','2.16.76.1.3.1','01011990'+CPF)
     roots=tmp_path/'roots';roots.mkdir()
-    for index,cert in enumerate((school_cert,guardian_cert)):
+    # Conferência externa continua válida mesmo sem confiar localmente na CA do responsável.
+    trusted_certificates=(school_cert,guardian_cert) if guardian_trusted else (school_cert,)
+    for index,cert in enumerate(trusted_certificates):
         (roots/f'root-{index}.pem').write_bytes(cert.public_bytes(serialization.Encoding.PEM))
     monkeypatch.setattr(settings(),'signature_trust_roots_dir',roots)
     # A primeira assinatura é externa, aplicada sobre os bytes originais.
@@ -86,6 +90,9 @@ def test_campaign_contract_revision_and_activation_gate(online, tmp_path, monkey
     assert final.startswith(signed_by_guardian) and len(final)>len(signed_by_guardian)
     verification=api.get(f"/issued-documents/{issued['id']}/signatures")
     assert verification['cryptographic_valid'] and len(verification['signatures'])==2
+    assert verification['signatures'][0]['chain_trusted'] is guardian_trusted
+    assert verification['signatures'][1]['chain_trusted'] is True
+    assert verification['trust_status']==('chain_trusted_offline' if guardian_trusted else 'pending_authoritative_validation')
     assert [x['source'] for x in verification['revisions']]==['external_portal','company_a1']
     repeated=api.post('/admissions/'+a['id']+'/finalize',{'version':a['version'],'reason':'Repetição idempotente.'},200)
     assert repeated['status']=='enrolled'
