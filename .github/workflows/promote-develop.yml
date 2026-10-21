@@ -6,6 +6,9 @@ on:
       node_ref: {type: string, required: true}
       python_ref: {type: string, required: true}
       postgres_ref: {type: string, required: true}
+    secrets:
+      promotion_app_private_key:
+        required: false
 permissions:
   contents: read
 jobs:
@@ -33,10 +36,27 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Selecionar autenticação da promoção
+        id: auth
+        env:
+          PROMOTION_APP_CLIENT_ID: ${{ vars.PROMOTION_APP_CLIENT_ID }}
+          PROMOTION_APP_PRIVATE_KEY: ${{ secrets.promotion_app_private_key }}
+        run: python scripts/ci/promotion_auth.py
+      - name: Criar token restrito e temporário da App
+        id: app-token
+        if: steps.auth.outputs.mode == 'app'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ vars.PROMOTION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.promotion_app_private_key }}
+          owner: wkarts
+          repositories: PIGE360-self
+          permission-contents: read
+          permission-pull-requests: write
       - name: Criar ou reconciliar a única PR develop para main
         id: prepare
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.auth.outputs.mode == 'legacy' && secrets.GITHUB_TOKEN || steps.app-token.outputs.token }}
           EXPECTED_HEAD: ${{ inputs.sha }}
         run: python scripts/ci/auto_promotion.py prepare
   tests:

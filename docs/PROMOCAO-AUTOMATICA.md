@@ -6,6 +6,8 @@ Após um push/merge em `develop`, o pipeline oficial testa o commit, constrói o
 
 O incremento automático é `patch`. Se já houver uma PR válida com título `release(minor): ...` ou `release(major): ...`, o título, o incremento e a descrição humanos são preservados. Uma PR em rascunho, conflitante ou inválida interrompe a promoção com erro visível. O fluxo nunca aprova reviews nem altera proteção de branch.
 
+A criação de novas PRs pode usar uma [GitHub App restrita](PROMOTION-GITHUB-APP.md) para evitar o gate específico do `GITHUB_TOKEN`. Sem configuração, o modo legado continua com aviso; configuração parcial ou falha da App interrompe sem fallback. A PR de suporte não instala nem configura a App.
+
 ## Sequência executada
 
 1. `develop-image.yml`: `version → bases → tests → publish`, mantendo as verificações existentes de PostgreSQL, Chromium, Docker, Windows e smoke dos três artefatos.
@@ -25,7 +27,7 @@ O `GITHUB_TOKEN` não dispara normalmente workflows de eventos produzidos por el
 
 - o CI da promoção é uma chamada explícita `workflow_call`, independente de aprovação do evento da PR;
 - a release é um `workflow_dispatch` explícito, que pode ser disparado pelo token;
-- não existe `pull_request_target`, PAT, App token, secret novo, autoaprovação nem workflow recursivo;
+- não existe `pull_request_target`, PAT, autoaprovação nem workflow recursivo; opcionalmente, somente a criação/reconciliação da PR usa uma GitHub App restrita;
 - o CI normal de PRs humanas continua existindo;
 - se uma proteção exigir especificamente um check de PR aguardando aprovação, a promoção para e exige a ação humana necessária. Não fabrica status nem contorna essa exigência.
 
@@ -52,7 +54,7 @@ Fontes oficiais:
 
 O job chamador `promote` concede o teto necessário aos jobs reutilizáveis; cada job reduz suas permissões. Checkouts dos jobs de orquestração usam `persist-credentials: false`. O código testado não recebe token de escrita durante o CI da composição.
 
-A opção de repositório “Allow GitHub Actions to create and approve pull requests” precisa permitir criação de PR com `GITHUB_TOKEN`. Essa configuração não é alterada por este código e sua disponibilidade não foi presumida. Uma recusa HTTP 403 apresenta o bloqueio exato. Qualquer ajuste de configuração ou credencial exige autorização específica do responsável. Nenhum PAT ou secret adicional é requerido.
+No modo legado, a opção de repositório “Allow GitHub Actions to create and approve pull requests” precisa permitir criação de PR com `GITHUB_TOKEN`. Essa configuração não é alterada por este código e sua disponibilidade não foi presumida. Uma recusa HTTP 403 apresenta o bloqueio exato. Qualquer ajuste de configuração ou credencial exige autorização específica do responsável. Nenhum PAT é usado. O modo legado não requer secret adicional; o modo App requer Client ID e chave privada conforme o guia vinculado.
 
 O merge normal continua sujeito às regras atuais do GitHub, inclusive reviews, checks e filas obrigatórias. Se o repositório não permitir o método merge, ele falha sem substituir por squash/rebase. Não é criado acesso persistente extra.
 
