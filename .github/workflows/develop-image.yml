@@ -59,3 +59,5 @@ jobs:
       node_ref: ${{ needs.bases.outputs.node_ref }}
       python_ref: ${{ needs.bases.outputs.python_ref }}
       postgres_ref: ${{ needs.bases.outputs.postgres_ref }}
+    secrets:
+      promotion_app_private_key: ${{ secrets.PROMOTION_APP_PRIVATE_KEY }}

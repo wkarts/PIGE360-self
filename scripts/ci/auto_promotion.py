@@ -34,7 +34,8 @@ class NoRedirect(HTTPRedirectHandler):
 class GitHub:
     def __init__(self):
         require(os.environ.get('GITHUB_REPOSITORY') == REPOSITORY, 'Repositório fora do escopo')
-        self.token = os.environ['GH_TOKEN']
+        self.token = os.environ.get('GH_TOKEN', '')
+        require(bool(self.token.strip()), 'Token da promoção ausente; operação interrompida sem fallback')
 
     def api(self, path, method='GET', data=None):
         # Sem redirects nem endpoints fornecidos por PRs. O token só vai ao GitHub.
@@ -54,6 +55,7 @@ class GitHub:
             message = error.read().decode('utf-8', errors='replace')[:1000]
             if method == 'POST' and path == '/pulls' and error.code == 403:
                 raise RuntimeError('GitHub recusou criar a PR. Verifique a permissão '
+                                   'da GitHub App (Pull requests: write e Contents: read), ou, no modo legado, '
                                    '“Allow GitHub Actions to create and approve pull requests”. '
                                    'Nenhuma configuração foi alterada. ' + message) from error
             raise RuntimeError(f'GitHub {method} {path}: HTTP {error.code}: {message}') from error
