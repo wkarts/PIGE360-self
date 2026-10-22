@@ -18,6 +18,7 @@ class AdmissionCampaign(Record, Scoped, Base):
     opens_on: Mapped[date] = mapped_column(Date)
     closes_on: Mapped[date] = mapped_column(Date)
     active: Mapped[bool] = mapped_column(Boolean, default=False)
+    show_student_portal_button: Mapped[bool] = mapped_column(Boolean, default=True, server_default='true')
     require_verified_contact: Mapped[bool] = mapped_column(Boolean, default=True)
     require_documents: Mapped[bool] = mapped_column(Boolean, default=False)
     require_payment_before_enrollment: Mapped[bool] = mapped_column(Boolean, default=False)

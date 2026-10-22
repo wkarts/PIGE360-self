@@ -73,3 +73,4 @@ execFileSync(process.execPath,[path.join(root,'tests/api-download.mjs')],{stdio:
 execFileSync(process.execPath,[path.join(root,'tests/active-school.mjs')],{stdio:'inherit'});
 execFileSync(process.execPath,[path.join(root,'tests/email-flow.mjs')],{stdio:'inherit'});
 console.log('PWA compilada:',hash);
+execFileSync(process.execPath,[path.join(root,'tests/website-editor-flow.mjs')],{stdio:'inherit'});

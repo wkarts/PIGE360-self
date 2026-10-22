@@ -114,7 +114,7 @@ def campaign_output(db,obj):
         y=db.get(m.AcademicYear,g.academic_year_id)
         if y.status!='active':continue
         groups.append({'id':g.id,'name':g.name,'grade':db.get(m.Grade,g.grade_id).name,'shift':db.get(m.Shift,g.shift_id).name,'year':y.name,'unit':db.get(m.Unit,g.unit_id).name,'vacancies':max(0,g.capacity-occupancy(db,g.id))})
-    return {**output(obj),'school_name':school.name,'school_phone':school.phone,'school_email':school.email,'groups':groups,'accepting':obj.active and obj.opens_on<=today()<=obj.closes_on and bool(groups)}
+    return {**output(obj),'student_portal_url':settings().portal_public_url.rstrip('/')+'/family.html' if settings().portal_public_url else '/family.html','school_name':school.name,'school_phone':school.phone,'school_email':school.email,'groups':groups,'accepting':obj.active and obj.opens_on<=today()<=obj.closes_on and bool(groups)}
 
 def document_types(db,admission):
     group=db.get(m.ClassGroup,admission.class_group_id)

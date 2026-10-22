@@ -5,7 +5,7 @@ import re
 
 from fastapi import APIRouter, Query, Request
 from pydantic import Field, field_validator, model_validator
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, Text, func, or_, select
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, Text, JSON, func, or_, select
 from sqlalchemy.orm import Mapped, mapped_column
 
 from . import models as m
@@ -14,6 +14,7 @@ from .db import Base, Record, now
 from .portal import Parent
 from .profiles import allowed_school
 from .schemas import Input
+from .website_design import WebsiteImage
 from .security import Actor, DB, Scope, check_version, fail, lock_school, require, scoped, utc
 
 router=APIRouter(prefix='/api/v1',tags=['Notícias e eventos da escola'])
@@ -22,6 +23,7 @@ AUDIENCES=('public','authenticated','students','guardians','teachers')
 
 class SchoolCommunityPost(Record,m.Scoped,Base):
     __tablename__='school_community_posts'
+    image:Mapped[dict|None]=mapped_column(JSON,nullable=True)
     title:Mapped[str]=mapped_column(String(160))
     summary:Mapped[str]=mapped_column(String(400),default='')
     content:Mapped[str]=mapped_column(Text)
@@ -48,6 +50,7 @@ class SchoolCommunityPost(Record,m.Scoped,Base):
 
 
 class PostInput(Input):
+    image:WebsiteImage|None=None
     title:str=Field(min_length=3,max_length=160)
     summary:str=Field(default='',max_length=400)
     content:str=Field(min_length=10,max_length=16000)
@@ -93,7 +96,7 @@ class PostUpdate(PostInput):
 
 
 def post_output(row,manage=False):
-    data={key:getattr(row,key) for key in ('id','school_id','title','summary','content','kind','audience','pinned','publish_at','expires_at','event_start','event_end','location')}
+    data={key:getattr(row,key) for key in ('id','school_id','title','summary','content','kind','audience','pinned','publish_at','expires_at','event_start','event_end','location','image')}
     for key in ('publish_at','expires_at','event_start','event_end'):
         if data[key] is not None:data[key]=utc(data[key])
     if manage:
@@ -152,6 +155,8 @@ def manage_posts(db:DB,user:Actor,school:Scope,q:str=Query('',max_length=160),ki
 @router.post('/schools/{school_id}/community-posts',status_code=201)
 def create_post(data:PostInput,db:DB,user:Actor,school:Scope,request:Request):
     require(user,'schools.manage');lock_school(db,school.id)
+    from .school_website import check_asset_ownership
+    check_asset_ownership(db,school.id,data.image.model_dump() if data.image else {})
     row=SchoolCommunityPost(school_id=school.id,created_by=user.id,updated_by=user.id,**data.model_dump())
     db.add(row);db.flush();audit(db,request,user,'community.created',row,school.id,{'kind':row.kind,'audience':row.audience,'status':row.status})
     return post_output(row,True)
@@ -161,7 +166,10 @@ def create_post(data:PostInput,db:DB,user:Actor,school:Scope,request:Request):
 def update_post(id:str,data:PostUpdate,db:DB,user:Actor,school:Scope,request:Request):
     require(user,'schools.manage');lock_school(db,school.id)
     row=scoped(db,SchoolCommunityPost,id,school.id);check_version(row,data.version)
-    for key,value in data.model_dump(exclude={'version'}).items():setattr(row,key,value)
+    from .school_website import check_asset_ownership
+    if 'image' in data.model_fields_set:check_asset_ownership(db,school.id,data.image.model_dump() if data.image else {})
+    omitted={'version'} | ({'image'} if 'image' not in data.model_fields_set else set())
+    for key,value in data.model_dump(exclude=omitted).items():setattr(row,key,value)
     row.version+=1;row.updated_by=user.id
     audit(db,request,user,'community.updated',row,school.id,{'kind':row.kind,'audience':row.audience,'status':row.status})
     return post_output(row,True)

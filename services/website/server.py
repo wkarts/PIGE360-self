@@ -16,6 +16,10 @@ ORIGIN=os.environ.get('PIGE_INTERNAL_URL','http://app:8000').rstrip('/')
 SCHOOL=os.environ.get('WEBSITE_SCHOOL_ID','')
 TOKEN=os.environ.get('WEBSITE_INTERNAL_TOKEN','')
 logger=logging.getLogger('pige360.website')
+RESERVED_PAGES={'api','assets','online','portal','family','index','health','robots','sitemap','admin','login','logout','site','manifest','institution'}
+
+def page_path(path):
+    return bool(re.fullmatch(r'/[a-z][a-z0-9-]{0,59}',path)) and path[1:] not in RESERVED_PAGES
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -81,7 +85,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control','no-store')
         self.send_header('X-Content-Type-Options','nosniff')
         self.send_header('X-Request-ID',request_id)
-        self.send_header('Content-Security-Policy',"default-src 'none'; img-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+        self.send_header('Content-Security-Policy',"default-src 'none'; img-src 'self' https:; style-src 'self' 'unsafe-inline'; font-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
         self.send_header('Referrer-Policy','strict-origin-when-cross-origin')
         for key,value in headers:self.send_header(key,value)
         self.end_headers();self.wfile.write(body)
@@ -90,7 +94,7 @@ class Handler(BaseHTTPRequestHandler):
         host=self.headers.get('Host','')
         host_fingerprint=hashlib.sha256(host.encode('utf-8','replace')).hexdigest()[:12]
         path=urlsplit(self.path).path
-        route='website' if path=='/' else 'readiness' if path=='/health/ready' else 'public_asset'
+        route='website' if path=='/' or page_path(path) else 'readiness' if path=='/health/ready' else 'public_asset'
         logger.warning('website_request_failed category=%s status=%s upstream_status=%s route=%s request_id=%s host_fingerprint=%s',
                        category,status,upstream_status,route,request_id,host_fingerprint)
         self.respond(status,error_page(status,message,request_id),'text/html; charset=utf-8',request_id)
@@ -113,22 +117,35 @@ class Handler(BaseHTTPRequestHandler):
                 params=parse_qs(parsed.query,keep_blank_values=True)
                 if len(parsed.query)>100 or any(key not in {'size','v'} or len(values)!=1 or not values[0].isdigit() for key,values in params.items()):self.send_error(400);return
                 body,mime=fetch(self.path)
-            elif path=='/':
+            elif re.fullmatch(r'/api/v1/public/schools/[0-9a-f-]{36}/website-assets/[0-9a-f-]{36}',path):
+                if parsed.query:self.send_error(400);return
+                body,mime=fetch(path,limit=3*1024*1024)
+                if mime!='image/png':raise ValueError('Formato de imagem inesperado')
+            elif path=='/' or page_path(path):
+                page='' if path=='/' else path[1:]
                 upstream_path='/api/v1/internal/website/by-host' if TOKEN else '/api/v1/public/website/by-host'
                 try:
-                    payload,_=fetch(upstream_path,host=self.headers.get('Host',''))
+                    payload,_=fetch(upstream_path,limit=8*1024*1024,host=self.headers.get('Host',''))
                 except HTTPError as error:
                     # Resolve the public Host first. Keep the old school-ID behavior only
                     # for installations that have not yet registered this domain.
                     if error.code!=404 or not SCHOOL or not re.fullmatch(r'[0-9a-f-]{36}',SCHOOL):raise
                     upstream_path=f'/api/v1/internal/website?school_id={SCHOOL}' if TOKEN else f'/api/v1/public/schools/{SCHOOL}/website'
-                    payload,_=fetch(upstream_path)
+                    payload,_=fetch(upstream_path,limit=8*1024*1024)
+                if page:
+                    # Resolve the domain first. A missing page must never fall back to a different school.
+                    page_url=upstream_path+('&' if '?' in upstream_path else '?')+'page='+page
+                    payload,_=fetch(page_url,limit=8*1024*1024,host=self.headers.get('Host','') if upstream_path.endswith('/by-host') else '')
                 body=render(json.loads(payload)).encode();mime='text/html; charset=utf-8'
             else:self.send_error(404);return
             self.respond(200,body,mime,request_id)
         except HTTPError as error:
             if error.code==404 and path=='/':
                 self.fail(404,'Este domínio ainda não está associado a um site publicado da escola.','domain_not_published',request_id,error.code)
+            elif error.code==404 and page_path(path):
+                self.fail(404,'Esta página não está publicada.','page_not_published',request_id,error.code)
+            elif error.code==404:
+                self.fail(404,'Imagem não publicada.','asset_not_published',request_id,error.code)
             elif error.code==409:
                 self.fail(409,'A configuração deste domínio precisa ser revisada pela escola.','domain_conflict',request_id,error.code)
             elif error.code==400:

@@ -19,6 +19,7 @@ class CampaignInput(Input):
     opens_on: date
     closes_on: date
     active: bool = False
+    show_student_portal_button: bool = True
     require_verified_contact: bool = True
     require_documents: bool = False
     require_payment_before_enrollment: bool = False

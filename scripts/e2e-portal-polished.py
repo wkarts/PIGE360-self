@@ -213,13 +213,15 @@ try:
         familyPage.on('requestfailed',lambda req:failed_requests.append({'url':req.url,'failure':req.failure,'method':req.method}))
         familyPage.on('response',lambda response:bad_responses.append((response.status,response.url)) if response.status>=400 and not (response.status==401 and response.url.endswith('/api/v1/auth/refresh')) else None)
         familyPage.goto(PORTAL_URL)
-        expect(familyPage.get_by_role('heading',name='Aprendizado e cuidado, de perto.')).to_be_visible()
+        expect(familyPage.get_by_role('heading',name='Acesse seu portal',exact=True)).to_be_visible()
         def check_family_viewport(width,height,label):
-            familyPage.set_viewport_size({'width':width,'height':height});familyPage.wait_for_timeout(80)
+            familyPage.set_viewport_size({'width':width,'height':height})
+            # Wait for the responsive drawer transition rather than measuring mid-animation.
+            familyPage.wait_for_timeout(250)
             measurement=familyPage.evaluate("""() => {
               const root=document.documentElement;
-              const outside=[...document.querySelectorAll('.family-shell input,.family-shell select,.family-shell textarea,.family-shell button,.family-shell a')]
-                .filter(el=>!el.classList.contains('skip')&&el.getClientRects().length)
+              const outside=[...document.querySelectorAll('.family-root input,.family-root select,.family-root textarea,.family-root button,.family-root a')]
+                .filter(el=>!el.classList.contains('skip')&&el.getClientRects().length&&getComputedStyle(el).visibility!=='hidden')
                 .map(el=>({tag:el.tagName,text:(el.innerText||el.getAttribute('aria-label')||'').slice(0,50),left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right}))
                 .filter(el=>el.left < -1 || el.right > root.clientWidth + 1);
               return {clientWidth:root.clientWidth,scrollWidth:root.scrollWidth,outside};
@@ -227,46 +229,84 @@ try:
             assert measurement['scrollWidth']<=measurement['clientWidth']+1,(label,measurement)
             assert not measurement['outside'],(label,measurement['outside'])
             responsive[label]={'viewport':f'{width}x{height}','document_width':measurement['scrollWidth'],'horizontal_overflow':False}
-            if label in {'login-320','family-390','family-1440','family-landscape-844','zoom-200-equivalent-720'}:
+            if label in {'login-320','login-1440','family-390','family-1440','family-landscape-844','zoom-200-equivalent-720','family-dashboard-390','family-dashboard-1440','family-menu-390'}:
                 familyPage.screenshot(path=str(OUT/f'{label}.png'),full_page=True)
+        def family_nav(name):
+            target=familyPage.locator('#family-navigation').get_by_role('button',name=name,exact=True)
+            if not target.is_visible():
+                familyPage.get_by_role('button',name='Abrir menu',exact=True).click()
+                expect(familyPage.get_by_role('button',name='Abrir menu',exact=True)).to_have_attribute('aria-expanded','true')
+            target.click()
+            expect(familyPage.locator('#family-title')).to_have_text(name)
+            expect(familyPage.locator('.family-main')).not_to_have_attribute('inert','')
+        check_family_viewport(1440,950,'login-1440')
         check_family_viewport(320,740,'login-320')
-        familyPage.get_by_label('E-mail de acesso').focus();familyPage.keyboard.press('Tab')
-        assert familyPage.evaluate("getComputedStyle(document.activeElement).outlineStyle")=='solid','Foco do teclado sem indicação visível no formulário de acesso'
-        familyPage.get_by_label('E-mail de acesso').fill('aluno@example.com')
-        familyPage.get_by_label('Senha').fill(password)
-        familyPage.get_by_role('button',name='Entrar',exact=True).click()
-        expect(familyPage.get_by_role('heading',name='Olá, Lucas Almeida — Teste.')).to_be_visible()
-        expect(familyPage.locator('.learning-workspace table')).to_contain_text('Matemática')
-        familyPage.reload();expect(familyPage.get_by_role('heading',name='Olá, Lucas Almeida — Teste.')).to_be_visible()
-        expect(familyPage.get_by_role('button',name='Boletim e matrículas')).to_be_visible()
-        familyPage.get_by_role('button',name='Documentos').click();expect(familyPage.get_by_role('heading',name='Documentos de Lucas Almeida — Teste')).to_be_visible()
-        familyPage.get_by_role('button',name='Financeiro').click();expect(familyPage.get_by_role('heading',name='Financeiro de Lucas Almeida — Teste')).to_be_visible()
+        familyPage.get_by_label('E-mail',exact=True).focus();familyPage.keyboard.press('Tab')
+        assert familyPage.evaluate("""() => {
+          const active=document.activeElement;
+          return getComputedStyle(active).outlineStyle==='solid'||
+            (active.closest('.password-control')&&getComputedStyle(active.closest('.password-control')).outlineStyle==='solid');
+        }"""),'Foco do teclado sem indicação visível no formulário de acesso'
+        familyPage.get_by_label('E-mail',exact=True).fill('aluno@example.com')
+        familyPage.get_by_label('Senha',exact=True).fill(password)
+        familyPage.get_by_role('button',name='Mostrar senha',exact=True).click()
+        expect(familyPage.get_by_label('Senha',exact=True)).to_have_attribute('type','text')
+        familyPage.get_by_role('button',name='Ocultar senha',exact=True).click()
+        familyPage.get_by_role('button',name='Entrar no portal',exact=True).click()
+        expect(familyPage.locator('#family-title')).to_have_text('Visão geral')
+        expect(familyPage.get_by_role('heading',name='Olá, Lucas.',exact=True)).to_be_visible()
+        expect(familyPage.get_by_label('Você está acompanhando',exact=True)).to_have_value(student_id)
+        familyPage.reload();expect(familyPage.locator('#family-title')).to_have_text('Visão geral')
+        expect(familyPage.get_by_role('heading',name='Olá, Lucas.',exact=True)).to_be_visible()
+        check_family_viewport(1440,950,'family-dashboard-1440')
+        check_family_viewport(390,844,'family-dashboard-390')
+        familyPage.get_by_role('button',name='Abrir menu',exact=True).click()
+        expect(familyPage.get_by_role('button',name='Fechar menu',exact=True)).to_be_focused()
+        check_family_viewport(390,844,'family-menu-390')
+        familyPage.keyboard.press('Escape')
+        expect(familyPage.get_by_role('button',name='Abrir menu',exact=True)).to_be_focused()
+        expect(familyPage.get_by_role('button',name='Abrir menu',exact=True)).to_have_attribute('aria-expanded','false')
+        family_nav('Vida acadêmica');expect(familyPage.locator('.learning-workspace table')).to_contain_text('Matemática')
+        family_nav('Documentos');expect(familyPage.get_by_role('heading',name='Documentos de Lucas Almeida — Teste')).to_be_visible()
+        family_nav('Financeiro');expect(familyPage.get_by_role('heading',name='Financeiro de Lucas Almeida — Teste')).to_be_visible()
         expect(familyPage.get_by_text('Seu vínculo não autoriza a consulta financeira.',exact=False)).to_be_visible()
-        familyPage.get_by_role('button',name='Boletim e matrículas').click();expect(familyPage.locator('.learning-workspace table')).to_contain_text('Matemática')
-        record('Portal independente autentica aluno, renova sessão e navega entre boletim, documentos e financeiro')
+        familyPage.go_back();expect(familyPage.locator('#family-title')).to_have_text('Documentos')
+        familyPage.go_forward();expect(familyPage.locator('#family-title')).to_have_text('Financeiro')
+        family_nav('Comunicados');expect(familyPage.get_by_text('Nenhuma publicação disponível.',exact=True)).to_be_visible()
+        family_nav('Agenda escolar');expect(familyPage.get_by_text('Nenhuma publicação disponível.',exact=True)).to_be_visible()
+        family_nav('Vida acadêmica');expect(familyPage.locator('.learning-workspace table')).to_contain_text('Matemática')
+        record('Portal independente autentica aluno, renova sessão, usa menu mobile/teclado e navega pelas views reais e histórico')
         for width in (320,360,390,768,1024,1440):
             check_family_viewport(width,844 if width<650 else 950,f'family-{width}')
         check_family_viewport(844,390,'family-landscape-844')
         check_family_viewport(720,900,'zoom-200-equivalent-720')
         record('Portal familiar sem rolagem horizontal nas seis larguras, paisagem e espaço CSS equivalente a zoom 200%')
-        familyPage.get_by_role('button',name='Sair',exact=True).click()
-        expect(familyPage.get_by_role('heading',name='Aprendizado e cuidado, de perto.')).to_be_visible()
-        familyPage.get_by_label('E-mail de acesso').fill('responsavel-escolar@example.com')
-        familyPage.get_by_label('Senha').fill(password)
-        familyPage.get_by_role('button',name='Entrar',exact=True).click()
-        expect(familyPage.get_by_role('heading',name='Olá, Mariana Almeida — Teste.')).to_be_visible()
-        expect(familyPage.get_by_label('Aluno')).to_have_value(student_id)
-        familyPage.get_by_role('button',name='Financeiro').click()
+        familyPage.get_by_role('button',name='Sair do portal',exact=True).click()
+        expect(familyPage.get_by_role('heading',name='Acesse seu portal',exact=True)).to_be_visible()
+        familyPage.get_by_label('E-mail',exact=True).fill('responsavel-escolar@example.com')
+        familyPage.get_by_label('Senha',exact=True).fill(password)
+        familyPage.get_by_role('button',name='Entrar no portal',exact=True).click()
+        # The current deep link is retained across sign-out/sign-in.
+        expect(familyPage.locator('#family-title')).to_have_text('Vida acadêmica')
+        expect(familyPage.get_by_label('Você está acompanhando',exact=True)).to_have_value(student_id)
+        family_nav('Visão geral');expect(familyPage.get_by_role('heading',name='Olá, Mariana.',exact=True)).to_be_visible()
+        family_nav('Financeiro')
         expect(familyPage.get_by_role('heading',name='Financeiro de Lucas Almeida — Teste')).to_be_visible()
         expect(familyPage.get_by_text('Seu vínculo não autoriza a consulta financeira.',exact=False)).to_have_count(0)
-        familyPage.get_by_role('button',name='Documentos').click()
+        family_nav('Agenda escolar')
+        familyPage.get_by_role('button',name='Reunião de famílias — Teste',exact=True).click()
+        expect(familyPage.locator('#family-post-detail')).to_be_visible()
+        expect(familyPage.locator('#family-post-detail')).to_contain_text('Encontro sintético para acompanhamento escolar')
+        familyPage.get_by_role('button',name='Fechar leitura',exact=True).click()
+        expect(familyPage.locator('#family-post-detail')).to_have_count(0)
+        family_nav('Documentos')
         expect(familyPage.get_by_role('heading',name='Documentos de Lucas Almeida — Teste')).to_be_visible()
         check_family_viewport(320,740,'guardian-320')
         check_family_viewport(390,844,'guardian-390')
         record('Responsável autenticado consulta somente o aluno vinculado e a permissão financeira correspondente')
         import importlib.util
         spec=importlib.util.spec_from_file_location('school_workflows',ROOT/'scripts/e2e-school-workflows.py');extra=importlib.util.module_from_spec(spec);spec.loader.exec_module(extra)
-        extra.verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,post,year,group)
+        extra.verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,post,year,group,WEBSITE_URL)
         assert not failed_requests,failed_requests
         assert not bad_responses,bad_responses
         assert not errors,errors

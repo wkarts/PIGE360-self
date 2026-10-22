@@ -42,9 +42,9 @@ def test_brand_inheritance_reset_and_isolation(api,client):
 
 
 def test_renderer_escapes_long_content_and_separates_actions(api):
-    for theme,marker in [('horizon','hero-art'),('editorial','editorial-cover'),('culture','culture-cover'),('campus','quick-links')]:
+    for theme,marker in [('horizon','institutional-cover'),('editorial','editorial-cover'),('culture','culture-cover'),('campus','campus-cover')]:
         preview=api.post('/website/preview',{**website('<script>alert(1)</script>','safe.example.test'),'theme':theme,'admission_url':'https://school.example.test/online.html','about':''},200)
-        assert marker in preview['html']
+        assert marker in preview['html'].split('<body', 1)[1]
         assert '<script>alert(1)</script>' not in preview['html']
         assert 'Inscrição e matrícula' in preview['html'] and 'Portal da família' in preview['html']
         assert 'class="about"' not in preview['html']
