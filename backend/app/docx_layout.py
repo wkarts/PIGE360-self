@@ -33,7 +33,7 @@ def archive(data):
                         if rel.get('TargetMode')=='External' and not rel.get('Type','').endswith('/hyperlink'):raise ValueError()
                 if name.startswith('word/'):
                     instructions=[''.join(n.text or '' for n in root.findall('.//w:instrText',NS))]+[n.get('{'+NS['w']+'}instr','') for n in root.findall('.//w:fldSimple',NS)]
-                    if root.find('.//w:altChunk',NS) is not None or any(re.search(r'\b(?:INCLUDETEXT|INCLUDEPICTURE|DDEAUTO|DDE)\b',value,re.I) for value in instructions):raise ValueError()
+                    if root.find('.//w:altChunk',NS) is not None or any(re.search(r'\b(?:INCLUDETEXT|INCLUDEPICTURE|DDEAUTO|DDE|LINK|DATABASE)\b',value,re.I) for value in instructions):raise ValueError()
         return z
     except (zipfile.BadZipFile,ET.XMLSyntaxError,ValueError,RuntimeError,KeyError):fail(422,'DOCX inválido, ativo, com referência externa não permitida ou acima do limite descompactado.')
 

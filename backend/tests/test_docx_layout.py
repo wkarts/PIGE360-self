@@ -85,7 +85,7 @@ def test_form_fields_use_private_registry_and_never_infer_image_consent(api):
 
 
 def test_simple_fields_split_instructions_and_html_import_are_rejected(api):
-    for field in ('<w:fldSimple w:instr="DDEAUTO calc command"/>','<w:r><w:instrText>DDE</w:instrText></w:r><w:r><w:instrText>AUTO calc command</w:instrText></w:r>','<w:altChunk/>'):
+    for field in ('<w:fldSimple w:instr="LINK Excel.Sheet file command"/>','<w:fldSimple w:instr="DATABASE connection"/>','<w:fldSimple w:instr="DDEAUTO calc command"/>','<w:r><w:instrText>DDE</w:instrText></w:r><w:r><w:instrText>AUTO calc command</w:instrText></w:r>','<w:altChunk/>'):
         source=io.BytesIO()
         with zipfile.ZipFile(source,'w') as z:z.writestr('word/document.xml','<w:document xmlns:w="'+NS['w']+'"><w:body><w:p>'+field+'</w:p></w:body></w:document>')
         result=api.client.post(api.base+'/document-sources/inspect',headers=api.headers,files={'file':('unsafe.docx',source.getvalue())})
