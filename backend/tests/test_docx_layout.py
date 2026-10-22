@@ -1,0 +1,92 @@
+"""Originais sintéticos: OOXML, revisão, isolamento e PDF real."""
+import hashlib
+import io
+import zipfile
+from lxml import etree
+from pypdf import PdfReader
+from app.docx_layout import suggest,mapped,fill,NS
+
+
+def document():
+    data=io.BytesIO()
+    with zipfile.ZipFile(data,'w') as z:
+        z.writestr('[Content_Types].xml','<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>')
+        z.writestr('_rels/.rels','<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>')
+        z.writestr('word/document.xml','<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>DADOS DO ALUNO — Nome: XXX</w:t></w:r><w:r><w:t>XXX</w:t></w:r></w:p><w:tbl><w:tblPr><w:tblW w:w="5000" w:type="dxa"/></w:tblPr><w:tr><w:tc><w:p><w:r><w:t>Cláusula que permanece intacta.</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr></w:body></w:document>')
+        z.writestr('word/media/preserved.bin',b'unchanged-artwork')
+    return data.getvalue()
+
+
+def test_multirun_mapping_preserves_table_style_and_media():
+    original=document();mapping=suggest(original)
+    assert mapping[0]['field']=='aluno.nome' and not mapping[0]['accepted']
+    mapping[0]['accepted']=True
+    content=fill(mapped(original,mapping),{'aluno.nome':'Aluno Sintético'})
+    with zipfile.ZipFile(io.BytesIO(content)) as z:
+        assert z.read('word/media/preserved.bin')==b'unchanged-artwork'
+        root=etree.fromstring(z.read('word/document.xml'))
+        assert root.find('.//w:b',NS) is not None and root.find('.//w:tbl',NS) is not None
+        text=''.join(root.itertext());assert 'Aluno Sintético' in text and 'XXXXXX' not in text
+
+
+def test_preserved_source_review_pdf_and_immutable_issue(api):
+    original=document()
+    imported=api.client.post(api.base+'/document-sources/inspect',headers=api.headers,files={'file':('synthetic.docx',original)})
+    assert imported.status_code==201,imported.text
+    source=imported.json();assert source['sha256']==hashlib.sha256(original).hexdigest()
+    mapping=source['suggestions'];mapping[0]['accepted']=True
+    request={'source_file_id':source['source_file_id'],'mapping':mapping}
+    prepared=api.post('/document-sources/prepare',request,200)
+    payload={**{k:prepared[k] for k in ('body','header','footer')},'name':'Ficha sintética','kind':'declaration','source_docx_file_id':source['source_file_id'],'docx_mapping':mapping,'active':True}
+    api.post('/document-templates',payload,422)
+    api.post('/document-templates',{**payload,'docx_reviewed':True,'docx_mapping':[]},422)
+    template=api.post('/document-templates',{**payload,'docx_reviewed':True})
+    catalog=api.catalogs();student=api.student('Aluno Documento Sintético',adult=True);enrollment=api.enroll(student,catalog['group'])
+    generated=api.post('/document-templates/'+template['id']+'/issue',{'enrollment_id':enrollment['id']})
+    downloaded=api.client.get(api.base+'/files/'+generated['file_id']+'/download',headers=api.headers)
+    assert 'Aluno Documento Sintético' in PdfReader(io.BytesIO(downloaded.content)).pages[0].extract_text()
+    assert api.client.get(api.base+'/files/'+source['source_file_id']+'/download',headers=api.headers).content==original
+    changed=api.patch('/document-templates/'+template['id'],{'version':template['version'],'name':'Ficha revisada'})
+    assert changed['version']>template['version']
+    assert api.client.get(api.base+'/files/'+generated['file_id']+'/download',headers=api.headers).content==downloaded.content
+    assert api.get('/document-templates/'+template['id']+'/revisions/1')['content']['source_docx_sha256']==source['sha256']
+    other=api.client.post('/api/v1/schools',headers=api.headers,json={'company_id':api.school['company_id'],'name':'Outra escola de documento'}).json()
+    assert api.client.post('/api/v1/schools/'+other['id']+'/document-sources/prepare',headers=api.headers,json=request).status_code==404
+
+
+def test_malformed_mapping_and_unsafe_archive_rejected(api):
+    result=api.client.post(api.base+'/document-sources/inspect',headers=api.headers,files={'file':('synthetic.docx',document())}).json()
+    for item in ({'accepted':True},{'accepted':True,'field':[]},{'accepted':True,'field':'aluno.nome','part':'word/document.xml','paragraph':0,'start':-2,'end':9,'original':'invalid'}):
+        assert api.client.post(api.base+'/document-sources/prepare',headers=api.headers,json={'source_file_id':result['source_file_id'],'mapping':[item]}).status_code in (409,422)
+    data=io.BytesIO()
+    with zipfile.ZipFile(data,'w') as z:
+        z.writestr('word/document.xml','<xml/>');z.writestr('word/vbaProject.bin',b'macro')
+    assert api.client.post(api.base+'/document-sources/inspect',headers=api.headers,files={'file':('macro.docx',data.getvalue())}).status_code==422
+
+
+def test_source_above_old_two_megabyte_limit_preserves_original(api):
+    data=io.BytesIO(document())
+    with zipfile.ZipFile(data,'a') as z:z.writestr('word/media/large-private-original.bin',b'X'*(3*1024*1024))
+    original=data.getvalue()
+    response=api.client.post(api.base+'/document-sources/inspect',headers=api.headers,files={'file':('large.docx',original)})
+    assert response.status_code==201,response.text
+    assert response.json()['sha256']==hashlib.sha256(original).hexdigest()
+
+
+def test_form_fields_use_private_registry_and_never_infer_image_consent(api):
+    catalog=api.catalogs();student=api.student('Aluno ficha privada',adult=True)
+    api.patch('/students/'+student['id'],{'version':student['version'],'data':{'health_plan':'Plano sintético','allergies':'Registro sintético','special_needs':'Informação conferida'}})
+    enrollment=api.enroll(student,catalog['group'])
+    template=api.post('/document-templates',{'name':'Ficha privada sintética','kind':'declaration','body':'Saúde: {{aluno.alergias}}. Imagem: {{consentimento.imagem}}.'})
+    preview=api.post('/document-templates/'+template['id']+'/preview',{'enrollment_id':enrollment['id']},200)
+    assert preview['variables']['aluno.alergias']=='Registro sintético'
+    assert preview['missing_fields']==['consentimento.imagem']
+    assert 'consentimento.imagem' not in api.client.get('/api/v1/family/context',headers=api.headers).text
+
+
+def test_simple_fields_split_instructions_and_html_import_are_rejected(api):
+    for field in ('<w:fldSimple w:instr="LINK Excel.Sheet file command"/>','<w:fldSimple w:instr="DATABASE connection"/>','<w:fldSimple w:instr="DDEAUTO calc command"/>','<w:r><w:instrText>DDE</w:instrText></w:r><w:r><w:instrText>AUTO calc command</w:instrText></w:r>','<w:altChunk/>'):
+        source=io.BytesIO()
+        with zipfile.ZipFile(source,'w') as z:z.writestr('word/document.xml','<w:document xmlns:w="'+NS['w']+'"><w:body><w:p>'+field+'</w:p></w:body></w:document>')
+        result=api.client.post(api.base+'/document-sources/inspect',headers=api.headers,files={'file':('unsafe.docx',source.getvalue())})
+        assert result.status_code==422,result.text

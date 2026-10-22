@@ -108,7 +108,7 @@ def reference_counts(db, obj):
     imported = db.scalar(select(func.count()).select_from(m.LegacyImportRecord).where(
         m.LegacyImportRecord.mapped_entity_id == obj.id)) or 0
     if imported:
-        result.append({'key': 'legacy_import', 'label': 'Referências da importação legada', 'count': imported})
+        result.append({'key': 'legacy_import', 'label': 'Referências de portabilidade', 'count': imported})
     return result, owned
 
 

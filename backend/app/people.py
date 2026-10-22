@@ -330,7 +330,7 @@ def list_teachers(
     return _profile_list(
         db, school, m.TeacherProfile, teacher_output, q, page, page_size,
         [m.Person.name, m.Person.social_name, m.Person.cpf, m.Person.phone,
-         m.Person.email, m.TeacherProfile.registration_number,
+         m.Person.email, m.TeacherProfile.registration_number,m.TeacherProfile.imported_number,
          m.TeacherProfile.professional_registration], archived,
     )
 
@@ -381,7 +381,7 @@ def list_employees(
     return _profile_list(
         db, school, m.EmployeeProfile, employee_output, q, page, page_size,
         [m.Person.name, m.Person.social_name, m.Person.cpf, m.Person.phone,
-         m.Person.email, m.EmployeeProfile.employee_number,
+         m.Person.email, m.EmployeeProfile.employee_number,m.EmployeeProfile.imported_number,
          m.EmployeeProfile.department, m.EmployeeProfile.job_title], archived,
     )
 
@@ -419,16 +419,17 @@ def update_employee(employee_id: str, data: s.Edit, db: DB, user: Actor, school:
 
 
 @router.get('/students')
-def list_students(db: DB, user: Actor, school: Scope, q: str = Query(default='', max_length=160), page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100), status: str = '', archived: ArchiveFilter = 'active'):
+def list_students(db: DB, user: Actor, school: Scope, imported_only: bool = False, q: str = Query(default='', max_length=160), page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100), status: str = '', archived: ArchiveFilter = 'active'):
     require(user, 'students.read')
     stmt = select(m.Student).join(m.Person, m.Student.person_id == m.Person.id).where(m.Student.school_id == school.id)
+    if imported_only:stmt=stmt.where(m.Student.imported_number!='')
     # O filtro legado status=archived continua encontrando alunos antigos.
     stmt = filter_archived(stmt, m.Student, 'archived' if status == 'archived' and archived == 'active' else archived)
     if q:
         like = '%' + q.replace('%', r'\%').replace('_', r'\_') + '%'
         guardian_matches = select(m.GuardianLink.student_id).join(m.Person, m.Person.id == m.GuardianLink.person_id).where(m.GuardianLink.school_id == school.id, m.GuardianLink.active.is_(True), or_(m.Person.name.ilike(like, escape='\\'), m.Person.cpf.ilike(like, escape='\\'), m.Person.phone.ilike(like, escape='\\')))
-        enrollment_matches = select(m.Enrollment.student_id).where(m.Enrollment.school_id == school.id, m.Enrollment.number.ilike(like, escape='\\'))
-        stmt = stmt.where(or_(m.Person.name.ilike(like, escape='\\'), m.Person.cpf.ilike(like, escape='\\'), m.Student.number.ilike(like, escape='\\'), m.Person.phone.ilike(like, escape='\\'), m.Student.id.in_(guardian_matches.correlate(None)), m.Student.id.in_(enrollment_matches.correlate(None))))
+        enrollment_matches = select(m.Enrollment.student_id).where(m.Enrollment.school_id == school.id, or_(m.Enrollment.number.ilike(like, escape='\\'),m.Enrollment.imported_number.ilike(like, escape='\\')))
+        stmt = stmt.where(or_(m.Person.name.ilike(like, escape='\\'), m.Person.cpf.ilike(like, escape='\\'), m.Student.number.ilike(like, escape='\\'), m.Student.imported_number.ilike(like, escape='\\'), m.Person.phone.ilike(like, escape='\\'), m.Student.id.in_(guardian_matches.correlate(None)), m.Student.id.in_(enrollment_matches.correlate(None))))
     if status:
         stmt = stmt.where(m.Student.status == status)
     total = db.scalar(select(func.count()).select_from(stmt.subquery()))

@@ -11,6 +11,8 @@ runs:
     - name: Dependências do smoke de publicação
       shell: bash
       run: |
+        # Vale também para o apt iniciado pelo instalador do Playwright.
+        sudo "$(command -v python)" scripts/ci/prepare_apt.py
         python -m pip install -r scripts/ci/requirements-smoke.txt
         python -m playwright install --with-deps chromium
     - name: Conferir runtime isolado e navegador

@@ -166,9 +166,12 @@ def create_charges(data:s.ChargeInput,db:DB,user:Actor,school:Scope,request:Requ
     return {'items':[charge_output(x) for x in results],'count':len(results),'message':'Cobranças enfileiradas; aguarde emissão pelo worker.' if conn else 'Cobranças internas registradas. Nenhuma emissão foi enviada ao banco.'}
 
 @router.get('/bank-charges')
-def charges(db:DB,user:Actor,school:Scope,status:str='',q:str=Query('',max_length=160),admission_id:str='',due_from:date|None=None,due_to:date|None=None,page:int=Query(1,ge=1),page_size:int=Query(30,ge=1,le=100)):
+def charges(db:DB,user:Actor,school:Scope,enrollment_id:str='',status:str='',q:str=Query('',max_length=160),admission_id:str='',due_from:date|None=None,due_to:date|None=None,page:int=Query(1,ge=1),page_size:int=Query(30,ge=1,le=100)):
     require(user,'banking.read')
     stmt=charge_query(school.id,status,q,admission_id,due_from,due_to)
+    if enrollment_id:
+        scoped(db,m.Enrollment,enrollment_id,school.id)
+        stmt=stmt.where(m.BankCharge.enrollment_id==enrollment_id)
     total=db.scalar(select(func.count()).select_from(stmt.subquery()))
     return {'items':[charge_output(x) for x in db.scalars(stmt.order_by(m.BankCharge.due_on,m.BankCharge.created_at).offset((page-1)*page_size).limit(page_size))],'total':total,'page':page,'page_size':page_size}
 

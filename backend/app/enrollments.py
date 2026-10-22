@@ -84,7 +84,9 @@ def list_enrollments(db: DB, user: Actor, school: Scope, status: str = '', class
         stmt = stmt.join(m.Student, m.Student.id == m.Enrollment.student_id).join(m.Person, m.Person.id == m.Student.person_id).where(or_(
             m.Person.name.icontains(q.strip(), autoescape=True),
             m.Enrollment.number.icontains(q.strip(), autoescape=True),
+            m.Enrollment.imported_number.icontains(q.strip(), autoescape=True),
             m.Student.number.icontains(q.strip(), autoescape=True),
+            m.Student.imported_number.icontains(q.strip(), autoescape=True),
         ))
     if class_group_id: stmt = stmt.where(m.Enrollment.class_group_id == class_group_id)
     if student_id: stmt = stmt.where(m.Enrollment.student_id == student_id)

@@ -342,6 +342,7 @@
           </div>
         </section>
         <reports-panel v-if="state.page==='reports'" :key="state.schoolId" :school-id="state.schoolId" :catalogs="state.catalogs"></reports-panel>
+        <enrollment-workflow @new-person="newPerson()" @new-student="newStudent()" v-if="state.page==='enrollments'&&can('enrollments.write')" :key="state.schoolId+'-enrollment-workflow'" :school-id="state.schoolId" :permissions="state.user.permissions" :role="state.user.role" />
         <school-community v-if="state.page==='community'" :key="state.schoolId" :school-id="state.schoolId" :permissions="state.user.permissions" :request="request"></school-community>
         <users-panel v-if="state.page==='users' &amp;&amp; can('users.manage')" :key="state.schoolId+':users'" :school-id="state.schoolId" :current-user-id="state.user.id" @changed="refreshAccess"></users-panel>
         <signing-panel v-if="['certificate','pending-signatures','signature-review'].includes(state.page)" :mode="state.page" :key="state.schoolId+':'+state.page" :school-id="state.schoolId" :permissions="state.user.permissions" :role="state.user.role"></signing-panel>

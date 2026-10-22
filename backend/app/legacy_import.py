@@ -29,7 +29,7 @@ from starlette.background import BackgroundTask
 
 from . import diary_models as dm
 from . import models as m
-from .common import audit
+from .common import audit, number as next_number
 from .config import settings
 from .documents import write_file
 from .security import Actor, DB, Scope, fail, lock_school
@@ -657,7 +657,7 @@ def _photo_for(source: SourcePackage, db: Session, school_id: str, actor: m.User
         if checksum not in photo_cache:
             photo_cache[checksum] = db.scalar(select(m.FileRecord).where(
                 m.FileRecord.school_id == school_id, m.FileRecord.sha256 == checksum).limit(1)) or write_file(
-                    db, school_id, actor.id, f"foto-legada-{checksum[:12]}.png", mime, data, file_kind="photo")
+                    db, school_id, actor.id, f"foto-importada-{checksum[:12]}.png", mime, data, file_kind="photo")
         counts["photos_base64_converted"] += 1
         return photo_cache[checksum]
     file_record = _media_ref(source, value, imported_media, basenames)
@@ -674,7 +674,7 @@ def _photo_for(source: SourcePackage, db: Session, school_id: str, actor: m.User
         if checksum not in photo_cache:
             photo_cache[checksum] = db.scalar(select(m.FileRecord).where(
                 m.FileRecord.school_id == school_id, m.FileRecord.sha256 == checksum).limit(1)) or write_file(
-                    db, school_id, actor.id, f"foto-legada-{checksum[:12]}.png", mime, data, file_kind="photo")
+                    db, school_id, actor.id, f"foto-importada-{checksum[:12]}.png", mime, data, file_kind="photo")
         counts["photos_base64_converted"] += 1
         return photo_cache[checksum]
     elif isinstance(value, str) and value.strip():
@@ -823,9 +823,10 @@ def _import_person_tables(source: SourcePackage, db: Session, school_id: str, ac
                     student = existing
                     counts["students_matched"] += 1
                 else:
-                    number = _safe_number("LEG", row.get("id", source_key), used_student_numbers, 32)
+                    source_number = _safe_number("LEG", row.get("id", source_key), used_student_numbers, 32)
+                    number = next_number(db, school_id, "student", "AL-")
                     student = m.Student(
-                        school_id=school_id, person_id=person.id, number=number,
+                        school_id=school_id, person_id=person.id, number=number, imported_number=source_number,
                         status="active" if _bool(row.get("ativo"), True) else "archived",
                         health_plan=_text(row.get("plano_saude"), 120),
                         allergies=_text(row.get("alergias"), 4000),
@@ -847,7 +848,8 @@ def _import_person_tables(source: SourcePackage, db: Session, school_id: str, ac
                 if not profile:
                     profile = m.TeacherProfile(
                         school_id=school_id, person_id=person.id,
-                        registration_number=_safe_number("LEG-DOC", row.get("id", source_key), set(), 40),
+                        registration_number=next_number(db,school_id,"teacher","DOC-"),
+                        imported_number=_safe_number("LEG-DOC", row.get("id", source_key), set(), 40),
                         employment_type=_employment_type(row.get("tipo_vinculo")),
                         employment_status="active" if _bool(row.get("ativo"), True) else "inactive",
                         admission_date=_parse_date(row.get("data_admissao")),
@@ -867,7 +869,8 @@ def _import_person_tables(source: SourcePackage, db: Session, school_id: str, ac
                 if not profile:
                     profile = m.EmployeeProfile(
                         school_id=school_id, person_id=person.id,
-                        employee_number=_safe_number("LEG-FUNC", row.get("id", source_key), set(), 40),
+                        employee_number=next_number(db,school_id,"employee","FUNC-"),
+                        imported_number=_safe_number("LEG-FUNC", row.get("id", source_key), set(), 40),
                         employment_type=_employment_type(row.get("tipo_vinculo")),
                         employment_status="active" if _bool(row.get("ativo"), True) else "inactive",
                         admission_date=_parse_date(row.get("data_admissao")),
@@ -1077,10 +1080,11 @@ def _import_enrollments(source: SourcePackage, db: Session, school_id: str, acto
         status = {"suspensa": "suspended", "suspenso": "suspended", "transferida": "transferred",
                   "transferido": "transferred", "cancelada": "cancelled", "cancelado": "cancelled",
                   "concluida": "completed", "concluido": "completed"}.get(original_status, "draft")
-        number = _safe_number("LEG-MAT", row.get("numero_matricula") or row.get("id", key), used_numbers, 40)
+        source_number = _safe_number("LEG-MAT", row.get("numero_matricula") or row.get("id", key), used_numbers, 40)
+        number = next_number(db,school_id,"enrollment","MAT-")
         enrollment = m.Enrollment(
             school_id=school_id, student_id=student.id, academic_year_id=group.academic_year_id,
-            class_group_id=group.id, number=number, enrolled_on=enrolled_on, status=status,
+            class_group_id=group.id, number=number, imported_number=source_number, enrolled_on=enrolled_on, status=status,
             enrollment_type={"renovacao": "renewal", "transferencia": "transfer_in", "retorno": "returning"}.get(original_status, "new"),
             origin_school="", notes=_text(row.get("observacoes"), 4000),
             external_reference=_text(row.get("numero_matricula"), 120),
@@ -1119,7 +1123,7 @@ def _import_student_documents(source: SourcePackage, db: Session, school_id: str
         if not student:
             counts["student_documents_unmapped"] += 1
             continue
-        name = _text(row.get("tipo"), 120) or "Documento legado"
+        name = _text(row.get("tipo"), 120) or "Documento importado"
         kind = _get_or_create_named(db, m.DocumentType, school_id, name, {"required": False, "active": True, "grade_id": None}, counts, "document_types")
         reference = row.get("arquivo_ref")
         file_record = _media_ref(source, reference, imported_media, basenames)

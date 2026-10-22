@@ -85,6 +85,19 @@ FIELDS = [
     ('testemunha2.nome', 'Nome da testemunha II', 'manual'),
     ('testemunha2.cpf', 'CPF da testemunha II', 'manual'),
 ]
+STUDENT_FORM_FIELDS = {
+    'plano_saude': ('health_plan','Plano de saúde'),
+    'alergias': ('allergies','Alergias informadas'),
+    'medicamentos': ('medications','Medicamentos informados'),
+    'observacoes_saude': ('health_notes','Observações de saúde'),
+    'necessidades_especificas': ('special_needs','Necessidades específicas informadas'),
+    'transporte_autorizado': ('authorized_transport','Transporte autorizado'),
+    'escola_anterior': ('previous_school','Escola anterior'),
+    'nis': ('nis','NIS do aluno'), 'sus': ('sus_card','Cartão SUS'),
+    'observacoes': ('student_notes','Observações da ficha'),
+}
+FIELDS += [('aluno.'+key,label,'cadastro') for key,(_,label) in STUDENT_FORM_FIELDS.items()]
+FIELDS += [('consentimento.imagem','Consentimento de imagem — conferir declaração expressa','manual')]
 AUTOMATIC_FIELDS = {key for key, _, source in FIELDS if source == 'cadastro'}
 PDF_LOCK = RLock()
 
@@ -106,6 +119,9 @@ class TemplateInput(BaseModel):
     valid_until: date | None = None
     active: bool = True
     require_signature: bool = False
+    source_docx_file_id: str | None = None
+    docx_mapping: list[dict] = Field(default_factory=list,max_length=500)
+    docx_reviewed: bool = False
 
     @model_validator(mode='after')
     def validate_period(self):
@@ -130,6 +146,9 @@ class TemplatePatch(BaseModel):
     valid_until: date | None = None
     active: bool | None = None
     require_signature: bool | None = None
+    source_docx_file_id: str | None = None
+    docx_mapping: list[dict] | None = None
+    docx_reviewed: bool | None = None
 
 
 class RenderInput(BaseModel):
@@ -163,6 +182,7 @@ def _save_revision(db, template: m.DocumentTemplate, actor_id: str):
     payload = {key: getattr(template, key) for key in TemplateInput.model_fields}
     for key in ('valid_from', 'valid_until'):
         payload[key] = payload[key].isoformat() if payload[key] else None
+    payload['source_docx_sha256'] = scoped(db,m.FileRecord,template.source_docx_file_id,template.school_id).sha256 if template.source_docx_file_id else None
     payload['letterhead_file_id'] = template.letterhead_file_id
     payload['letterhead_sha256'] = (
         scoped(db, m.FileRecord, template.letterhead_file_id, template.school_id).sha256
@@ -237,6 +257,7 @@ def _context(db, school: m.School, enrollment: m.Enrollment | None) -> dict[str,
     shift = scoped(db, m.Shift, group.shift_id, school.id)
     unit = scoped(db, m.Unit, group.unit_id, school.id)
     result.update(_person_values(pupil, 'aluno'))
+    result.update({'aluno.'+key:str(getattr(student,attribute) or '') for key,(attribute,_) in STUDENT_FORM_FIELDS.items()})
     result.update({
         'matricula.numero': enrollment.number or '',
         'matricula.data': _format_date(enrollment.enrolled_on),
@@ -280,15 +301,31 @@ def _render(template, values: dict[str, str]):
              'missing_fields': missing, 'template_version': template.version }
 
 
-def _render_with_context(db, school, template, enrollment, supplied):
+def _render_with_context(db, school, template, enrollment, supplied, actor=None):
     available = set(_placeholders('\n'.join((template.header, template.body, template.footer))))
+    if getattr(template,'source_docx_file_id',None):
+        from .docx_layout import mapped,archive,parts,NS as DOCX_NS
+        from lxml import etree
+        content=mapped(source_bytes(db,school.id,template.source_docx_file_id),template.docx_mapping)
+        with archive(content) as z:
+            for part in parts(z):
+                root=etree.fromstring(z.read(part))
+                for paragraph in root.findall('.//w:p',DOCX_NS):
+                    available.update(_placeholders(''.join(n.text or '' for n in paragraph.findall('.//w:t',DOCX_NS))))
+    if available & {'aluno.'+key for key in STUDENT_FORM_FIELDS}:
+        if actor is None:fail(403,'Acesso à ficha do aluno necessário para preencher estes campos.')
+        require(actor,'students.read')
     if set(supplied) - available:
         fail(422, 'A requisição contém campos que não existem neste modelo.')
     official = _context(db, school, enrollment)
     for key, value in supplied.items():
         if key in AUTOMATIC_FIELDS and official.get(key) and str(value).strip() != official[key]:
             fail(409, f'O campo {key} já possui valor cadastrado. Corrija o cadastro de origem antes de emitir.')
-    return _render(template, {**official, **supplied})
+    values={**official, **supplied}
+    result=_render(template,values)
+    result['variables']={key:str(values.get(key,'') or '').strip() for key in sorted(available)}
+    result['missing_fields']=[key for key,value in result['variables'].items() if not value]
+    return result
 
 
 def _pdf_font(db, brand):
@@ -427,9 +464,9 @@ def import_docx(db: DB, user: Actor, school: Scope, file: UploadFile = File(...)
     require(user, 'academic.write')
     if not (file.filename or '').lower().endswith('.docx'):
         fail(422, 'Envie um arquivo DOCX válido.')
-    data = file.file.read(2*1024*1024 + 1)
-    if not data or len(data) > 2*1024*1024:
-        fail(413, 'O DOCX deve ter até 2 MB.')
+    from .docx_layout import MAX_UPLOAD,archive
+    data = file.file.read(MAX_UPLOAD + 1)
+    with archive(data):pass
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             info = z.infolist()
@@ -462,6 +499,7 @@ def create_template(data: TemplateInput, db: DB, user: Actor, school: Scope, req
     require(user, 'academic.write')
     if data.academic_year_id:
         scoped(db, m.AcademicYear, data.academic_year_id, school.id)
+    validate_docx_template(db,school,data)
     obj = m.DocumentTemplate(school_id=school.id, **data.model_dump())
     db.add(obj); db.flush()
     _save_revision(db, obj, user.id)
@@ -509,6 +547,7 @@ def edit_template(template_id: str, data: TemplatePatch, db: DB, user: Actor, sc
         fail(422, 'Revise os campos e a assinatura A1 obrigatória do modelo.')
     if validated.academic_year_id:
         scoped(db, m.AcademicYear, validated.academic_year_id, school.id)
+    validate_docx_template(db,school,validated)
     for key, value in validated.model_dump().items():
         setattr(obj, key, value)
     obj.version += 1
@@ -557,7 +596,7 @@ def preview_template(template_id: str, data: RenderInput, db: DB, user: Actor, s
     require(user, 'documents.read')
     obj = _versioned_template(db, scoped(db, m.DocumentTemplate, template_id, school.id), data.template_version)
     enrollment = scoped(db, m.Enrollment, data.enrollment_id, school.id) if data.enrollment_id else None
-    return _render_with_context(db, school, obj, enrollment, data.values)
+    return _render_with_context(db, school, obj, enrollment, data.values, user)
 
 
 @router.post('/document-templates/{template_id}/preview.pdf')
@@ -565,10 +604,10 @@ def preview_pdf(template_id: str, data: RenderInput, db: DB, user: Actor, school
     require(user, 'documents.read')
     obj = _versioned_template(db, scoped(db, m.DocumentTemplate, template_id, school.id), data.template_version)
     enrollment = scoped(db, m.Enrollment, data.enrollment_id, school.id) if data.enrollment_id else None
-    preview = _render_with_context(db, school, obj, enrollment, data.values)
+    preview = _render_with_context(db, school, obj, enrollment, data.values, user)
     if obj.letterhead_file_id:
         preview['letterhead_file'] = scoped(db, m.FileRecord, obj.letterhead_file_id, school.id)
-    return Response(_pdf(db, school, obj.name, preview), media_type='application/pdf',
+    return Response(template_pdf(db, school, obj, preview), media_type='application/pdf',
                     headers={'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})
 
 
@@ -611,7 +650,7 @@ def issue_template(template_id: str, data: IssueInput, db: DB, user: Actor, scho
         fail(409, 'Esta versão já foi emitida com outros dados para a matrícula. Crie uma nova versão do modelo para reemitir.')
     if not obj.active or not _applicable(obj, enrollment):
         fail(409, 'Modelo inativo ou fora da vigência/ano letivo desta matrícula.')
-    preview = _render_with_context(db, school, obj, enrollment, data.values)
+    preview = _render_with_context(db, school, obj, enrollment, data.values, user)
     if preview['missing_fields']:
         fail(422, 'Preencha os campos pendentes: ' + ', '.join(preview['missing_fields']))
     if obj.letterhead_file_id:
@@ -619,7 +658,7 @@ def issue_template(template_id: str, data: IssueInput, db: DB, user: Actor, scho
     request_hash = hashlib.sha256(json.dumps({'template': obj.id, 'version': obj.version,
          'revision_sha256': obj.revision_sha256, 'enrollment': enrollment.id,
          'variables': preview['variables']}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-    pdf = _pdf(db, school, obj.name, preview)
+    pdf = template_pdf(db, school, obj, preview)
     stored = write_file(db, school.id, user.id, f'modelo-{obj.id}-matricula-{enrollment.number}.pdf', 'application/pdf', pdf)
     issued = m.IssuedDocument(school_id=school.id, student_id=enrollment.student_id,
                               enrollment_id=enrollment.id, kind='template', file_id=stored.id,
@@ -631,6 +670,7 @@ def issue_template(template_id: str, data: IssueInput, db: DB, user: Actor, scho
                                         'body': obj.body, 'footer': obj.footer,
                                         'variables': preview['variables'], 'request_hash': request_hash,
                                         'input_hash': input_hash,
+                                        'source_docx_file_id':getattr(obj,'source_docx_file_id',None),
                                         'pdf_sha256': stored.sha256, 'academic_year_id': enrollment.academic_year_id,
                                         'letterhead_file_id': obj.letterhead_file_id,
                                         'letterhead_sha256': preview['letterhead_file'].sha256 if obj.letterhead_file_id else None,
@@ -664,3 +704,74 @@ def verify_document(document_id: str, db: DB, user: Actor, school: Scope):
         result.update({key: value for key, value in signed.items() if key != 'integrity_valid'})
         result['signed_integrity_valid'] = signed.get('integrity_valid')
     return result
+
+
+class DocxMappingInput(BaseModel):
+    source_file_id:str
+    mapping:list[dict]=Field(default_factory=list,max_length=500)
+
+
+@router.post('/document-sources/inspect',status_code=201)
+def inspect_docx_source(db:DB,user:Actor,school:Scope,request:Request,file:UploadFile=File(...)):
+    require(user,'academic.write')
+    from .docx_layout import MAX_UPLOAD,archive,suggest
+    data=file.file.read(MAX_UPLOAD+1)
+    with archive(data):pass
+    stored=write_file(db,school.id,user.id,'original.docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document',data,file_kind='template_docx_source')
+    audit(db,request,user,'document_source.imported',stored,school.id,{'sha256':stored.sha256})
+    return {'source_file_id':stored.id,'sha256':stored.sha256,'suggestions':suggest(data),'name':Path(file.filename or 'Modelo').stem[:160]}
+
+
+def source_bytes(db,school_id,ident):
+    source=scoped(db,m.FileRecord,ident,school_id)
+    if source.file_kind!='template_docx_source':fail(422,'Selecione um original DOCX importado para modelos.')
+    data=read_bytes(source)
+    if hashlib.sha256(data).hexdigest()!=source.sha256:fail(409,'Integridade do original divergente.')
+    return data
+
+
+@router.post('/document-sources/prepare')
+def prepare_docx_source(data:DocxMappingInput,db:DB,user:Actor,school:Scope):
+    require(user,'academic.write')
+    from .docx_layout import mapped,archive
+    content=mapped(source_bytes(db,school.id,data.source_file_id),data.mapping)
+    with archive(content) as z:
+        body=_docx_part(z.read('word/document.xml'),'word/document.xml')
+        headers=[_docx_part(z.read(n),n) for n in z.namelist() if re.fullmatch(r'word/header\d+\.xml',n)]
+        footers=[_docx_part(z.read(n),n) for n in z.namelist() if re.fullmatch(r'word/footer\d+\.xml',n)]
+    # A revisão visual tem endpoint separado. Não descartar o original se a conversão falhar.
+    return {'body':body,'header':'\n'.join(headers)[:500],'footer':'\n'.join(footers)[:500],'placeholders':_placeholders(body+'\n'+'\n'.join(headers+footers))}
+
+
+@router.post('/document-sources/preview.pdf')
+def preview_docx_source(data:DocxMappingInput,db:DB,user:Actor,school:Scope):
+    require(user,'academic.write')
+    from .docx_layout import mapped,pdf
+    content=mapped(source_bytes(db,school.id,data.source_file_id),data.mapping)
+    return Response(pdf(content),media_type='application/pdf',headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
+
+
+def validate_docx_template(db,school,data):
+    if not data.source_docx_file_id:return
+    from .docx_layout import mapped,archive,pdf
+    content=mapped(source_bytes(db,school.id,data.source_docx_file_id),data.docx_mapping)
+    with archive(content) as z:
+        body=_docx_part(z.read('word/document.xml'),'word/document.xml')
+    if body.strip()!=data.body.strip():fail(422,'No modo preservar layout, o corpo vem do original e do mapeamento. Prepare novamente após revisar os campos.')
+    if data.active:
+        from .docx_layout import suggest
+        decisions={(i.get('part'),i.get('paragraph'),i.get('start'),i.get('end')):i for i in data.docx_mapping}
+        for region in suggest(source_bytes(db,school.id,data.source_docx_file_id)):
+            decision=decisions.get((region['part'],region['paragraph'],region['start'],region['end']),{})
+            if not decision.get('accepted') and not (decision.get('preserve') is True and region['confidence']!='explicit'):
+                fail(422,'Revise cada região: aprove um campo ou confirme a preservação literal antes de ativar.')
+        if not data.docx_reviewed:fail(422,'Confira todas as páginas da prévia antes de ativar o modelo.')
+        pdf(content)  # Uma falha real de renderização impede a publicação.
+
+
+def template_pdf(db,school,obj,preview):
+    if getattr(obj,'source_docx_file_id',None):
+        from .docx_layout import mapped,fill,pdf
+        original=source_bytes(db,school.id,obj.source_docx_file_id)
+        return pdf(fill(mapped(original,obj.docx_mapping),preview['variables']))
+    return _pdf(db,school,obj.name,preview)

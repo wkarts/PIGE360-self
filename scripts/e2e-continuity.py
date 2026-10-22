@@ -144,24 +144,42 @@ try:
         expect(family.locator('#institution-name')).to_have_text(brand)
         record('Primeiro acesso mantém identidade e convite após refresh sem token em URL ou armazenamento JavaScript')
         family.get_by_label('Nova senha',exact=True).fill(PASSWORD);family.get_by_label('Confirme a senha',exact=True).fill(PASSWORD);family.get_by_role('button',name='Definir senha',exact=True).click();expect(family.get_by_text('Senha definida.',exact=False)).to_be_visible()
-        family.get_by_role('link',name='Ir para o login',exact=True).click();family.get_by_label('E-mail de acesso').fill('family-access@example.com');family.get_by_label('Senha',exact=True).fill(PASSWORD);family.get_by_role('button',name='Entrar',exact=True).click();expect(family.get_by_role('heading',name='Olá, Responsável dos encontros.')).to_be_visible()
-        expect(family.locator('.family-brand')).to_contain_text(brand)
+        def family_nav(name):
+            target=family.locator('#family-navigation').get_by_role('button',name=name,exact=True)
+            if not target.is_visible():
+                family.get_by_role('button',name='Abrir menu',exact=True).click()
+                expect(family.locator('#family-menu-toggle')).to_have_attribute('aria-expanded','true')
+                expect(family.locator('.family-main')).to_have_attribute('inert','')
+                expect(family.get_by_role('button',name='Fechar menu',exact=True)).to_be_focused()
+            target.click()
+            expect(family.locator('#family-title')).to_have_text(name)
+            expect(family.locator('.family-main')).not_to_have_attribute('inert','')
+        family.get_by_role('link',name='Ir para o login',exact=True).click();family.get_by_label('E-mail',exact=True).fill('family-access@example.com');family.get_by_label('Senha',exact=True).fill(PASSWORD);family.get_by_role('button',name='Entrar no portal',exact=True).click();expect(family.get_by_role('heading',name='Olá, Responsável.',exact=True)).to_be_visible()
+        expect(family.locator('.family-header-school')).to_contain_text(brand)
         expect(family).to_have_title(brand+' · Portal do aluno e responsável')
-        family.wait_for_function('document.querySelector(".family-brand img").naturalWidth>0')
-        assert family.locator('.family-nav [aria-current=page]').evaluate('(el)=>getComputedStyle(el).backgroundColor')=='rgb(161, 34, 85)'
+        family.wait_for_function('document.querySelector(".family-sidebar-brand img").naturalWidth>0')
+        active_nav=family.locator('#family-navigation [aria-current=page]')
+        assert active_nav.evaluate('(el)=>getComputedStyle(el).color')=='rgb(161, 34, 85)'
+        assert active_nav.evaluate('''(el, primary) => {
+            const expected=document.createElement('span');expected.style.backgroundColor=`color-mix(in srgb,${primary} 10%,var(--surface,#fff))`;
+            el.append(expected);const matches=getComputedStyle(el).backgroundColor===getComputedStyle(expected).backgroundColor;
+            expected.remove();return matches;
+        }''',primary),'Menu ativo deve herdar a cor canônica com o tratamento tonal do shell'
         assert 'Georgia' in family.locator('h1').evaluate('(el)=>getComputedStyle(el).fontFamily')
         assert httpx.get(PORTAL+identity['logo_url'],trust_env=False).status_code==200
         assert httpx.get(PORTAL+'/api/v1/institution/icon.png?size=32',trust_env=False).content.startswith(b'\x89PNG')
         manifest=httpx.get(PORTAL+'/manifest.webmanifest',trust_env=False).json()
         assert manifest['name']==brand and manifest['theme_color']==primary and all('/#/' not in item['url'] for item in manifest['shortcuts'])
-        expect(family.locator('.family-heading').get_by_label('Aluno',exact=False).locator('option')).to_have_count(2)
+        expect(family.get_by_label('Você está acompanhando',exact=True).locator('option')).to_have_count(2)
+        family_nav('Vida acadêmica')
         learning=family.locator('.learning-workspace');expect(learning).to_have_attribute('aria-busy','false')
         expect(learning.get_by_label('Aluno',exact=False)).to_have_count(0)
-        family.locator('.family-heading').get_by_label('Aluno',exact=False).select_option(students[0]['id'])
+        family.get_by_label('Você está acompanhando',exact=True).select_option(students[0]['id'])
         expect(learning.locator('.learning-student-name')).to_have_text('Aluno Horizonte')
-        family.locator('.family-heading').get_by_label('Aluno',exact=False).select_option(students[1]['id'])
+        family.get_by_label('Você está acompanhando',exact=True).select_option(students[1]['id'])
         expect(learning.locator('.learning-student-name')).to_have_text('Aluna Aurora')
-        family.locator('.family-heading').get_by_label('Aluno',exact=False).select_option(students[1]['id']);family.get_by_role('button',name='Documentos',exact=True).click();family.reload();expect(family.get_by_role('heading',name=re.compile('Documentos de'))).to_be_visible()
+        family.get_by_label('Você está acompanhando',exact=True).select_option(students[1]['id']);family_nav('Documentos');family.reload();expect(family.get_by_role('heading',name='Documentos de Aluna Aurora',exact=True)).to_be_visible()
+        expect(family.get_by_label('Você está acompanhando',exact=True)).to_have_value(students[1]['id'])
         family.screenshot(path=str(OUT/'portal-desktop.png'),full_page=True)
         family.set_viewport_size({'width':390,'height':844});family.screenshot(path=str(OUT/'portal-mobile.png'),full_page=True)
         assert family.evaluate('document.documentElement.scrollWidth<=innerWidth')
@@ -169,18 +187,18 @@ try:
         assert httpx.get(PORTAL+'/api/v1/backups',trust_env=False).status_code==404
         assert httpx.post(PORTAL+'/api/v1/auth/login',headers={'Origin':'https://evil.example','X-CSRF-Protection':'1'},json={},trust_env=False).status_code==403
         record('Proxy bloqueia API administrativa, origem estranha e dados fora da superfície privada')
-        family.get_by_role('button',name='Sair',exact=True).click();expect(family.get_by_role('button',name='Entrar',exact=True)).to_be_visible();family.reload();expect(family.get_by_role('button',name='Entrar',exact=True)).to_be_visible()
+        family.get_by_role('button',name='Sair do portal',exact=True).click();expect(family.get_by_role('button',name='Entrar no portal',exact=True)).to_be_visible();family.reload();expect(family.get_by_role('button',name='Entrar no portal',exact=True)).to_be_visible()
         record('Logout revoga sessão e refresh não restaura acesso encerrado')
         student_user=call('POST','/users',{'name':'Aluno Horizonte','email':'student-access@example.com','password':PASSWORD,'role':'student','person_id':students[0]['person_id']})
-        family.get_by_label('E-mail de acesso').fill('student-access@example.com');family.get_by_label('Senha',exact=True).fill(PASSWORD);family.get_by_role('button',name='Entrar',exact=True).click()
-        expect(family.locator('.family-heading').get_by_label('Aluno',exact=False).locator('option')).to_have_count(1)
-        family.get_by_role('button',name='Financeiro',exact=True).click();expect(family.get_by_text('Seu vínculo não autoriza',exact=False)).to_be_visible()
-        family.get_by_role('button',name='Sair',exact=True).click()
-        family.get_by_label('E-mail de acesso').fill('family-access@example.com');family.get_by_label('Senha',exact=True).fill(PASSWORD);family.get_by_role('button',name='Entrar',exact=True).click()
+        family.get_by_label('E-mail',exact=True).fill('student-access@example.com');family.get_by_label('Senha',exact=True).fill(PASSWORD);family.get_by_role('button',name='Entrar no portal',exact=True).click()
+        expect(family.get_by_label('Você está acompanhando',exact=True).locator('option')).to_have_count(1)
+        family_nav('Financeiro');expect(family.get_by_text('Seu vínculo não autoriza',exact=False)).to_be_visible()
+        family.get_by_role('button',name='Sair do portal',exact=True).click()
+        family.get_by_label('E-mail',exact=True).fill('family-access@example.com');family.get_by_label('Senha',exact=True).fill(PASSWORD);family.get_by_role('button',name='Entrar no portal',exact=True).click()
         for index in [1,0]:
             call('PATCH','/students/'+students[index]['id']+'/guardians/'+links[index]['id'],{'version':links[index]['version'],'data':{'person_id':guardian['id'],'legal':True,'financial':True,'active':False}})
             family.get_by_role('button',name='Atualizar',exact=True).click()
-            if index==1:expect(family.locator('.family-heading').get_by_label('Aluno',exact=False).locator('option')).to_have_count(1)
+            if index==1:expect(family.get_by_label('Você está acompanhando',exact=True).locator('option')).to_have_count(1)
             else:expect(family.get_by_role('heading',name='Nenhum aluno disponível')).to_be_visible()
         record('Aluno acessa somente seu perfil; responsável passa de dois dependentes para um e nenhum após revogações ativas')
 
@@ -191,7 +209,7 @@ try:
         site_script="import sys;sys.path.insert(0,'services/website');from server import Handler,ThreadingHTTPServer;ThreadingHTTPServer(('127.0.0.1',int(sys.argv[1])),Handler).serve_forever()"
         spawn([sys.executable,'-c',site_script,str(SITE_PORT)],{'PIGE_INTERNAL_URL':API,'WEBSITE_SCHOOL_ID':school['id']})
         wait(SITE+'/health/ready');site=browser.new_page(viewport={'width':1280,'height':900});site.on('pageerror',lambda e:errors.append(str(e)))
-        for theme in ['horizon','editorial','campus']:
+        for theme in ['horizon','editorial','campus','culture']:
             cfg=call('GET','/website')['configuration'];call('PUT','/website',{**{k:cfg[k] for k in ['enabled','headline','introduction','about','public_url','portal_url','notice']},'version':cfg['version'],'theme':theme})
             site.goto(SITE);expect(site.get_by_role('heading',name='Educação que aproxima')).to_be_visible();expect(site.get_by_role('heading',name='Notícia aberta sintética')).to_be_visible();expect(site.get_by_text('Mensagem privada invisível')).to_have_count(0)
             expect(site).to_have_title(brand);expect(site.locator('footer strong')).to_have_text(brand)
@@ -203,7 +221,7 @@ try:
             manifest=httpx.get(SITE+'/manifest.webmanifest',trust_env=False).json()
             assert manifest['name']==brand and manifest['theme_color']==primary and manifest['display']=='browser'
             site.screenshot(path=str(OUT/('site-'+theme+'.png')),full_page=True)
-        record('Três modelos preservam layout e usam nome, logo, cores, fonte, favicon e manifest canônicos; conteúdo privado continua ausente')
+        record('Quatro modelos preservam layout e usam nome, logo, cores, fonte, favicon e manifest canônicos; conteúdo privado continua ausente')
         # Sem o núcleo, superfícies falham de forma isolada e sem sucesso fictício.
         processes[0].terminate();processes[0].wait(timeout=10)
         assert httpx.get(PORTAL+'/health/ready',trust_env=False).status_code==503
