@@ -96,3 +96,23 @@ for(const newLogin of [false,true])for(const refreshStatus of [200,401]){
  await ctx.request('/auth/me');assert.equal(authorization,newLogin?'Bearer new-token':null,'Token antigo não reaparece');
 }
 console.log('Family auth epoch: delayed refresh cannot resurrect logout, overwrite new login or replay old requests.');
+
+// Drawer focus follows DOM patching, never a CSS visibility animation or a timer.
+{
+ const css=fs.readFileSync(root+'public/family.css','utf8');
+ const mobile=css.match(/\.family-sidebar\{transform:translateX\(-100%\);([^}]+)\}/)?.[1];
+ assert.ok(mobile,'Regra mobile da gaveta existe');
+ assert.match(mobile,/transition:transform \.2s;/);
+ assert.doesNotMatch(mobile,/transition:[^;]*(visibility|all)/,'Visibilidade não pode atrasar foco inicial');
+ const {ctx,sandbox}=fixture();const focused=[];
+ sandbox.document.getElementById=id=>({focus(){focused.push(id);}});
+ ctx.openMenu();assert.equal(ctx.s.menuOpen,true);assert.equal(focused.length,0);
+ await sandbox.Vue.nextTick();assert.deepEqual(focused,['family-menu-close']);
+ ctx.closeMenu();assert.equal(ctx.s.menuOpen,false);await sandbox.Vue.nextTick();
+ assert.equal(focused.at(-1),'family-menu-toggle');
+ focused.length=0;ctx.openMenu();ctx.closeMenu();await sandbox.Vue.nextTick();
+ assert.deepEqual(focused,['family-menu-toggle'],'Abertura obsoleta não captura foco após fechamento');
+ focused.length=0;ctx.closeMenu();ctx.openMenu();await sandbox.Vue.nextTick();
+ assert.deepEqual(focused,['family-menu-close'],'Fechamento obsoleto não captura foco após reabertura');
+}
+console.log('Family drawer: immediate visibility, deferred focus and rapid open/close guards OK.');

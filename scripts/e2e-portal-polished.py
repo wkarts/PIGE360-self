@@ -28,6 +28,15 @@ def capture_browser_failure():
         yield
     except Exception:
         if page:
+            try:
+                print('Estado de foco/menu:',page.evaluate('''() => {
+                  const active=document.activeElement,nav=document.getElementById('family-navigation');
+                  const style=nav&&getComputedStyle(nav);
+                  return {active:active&&{tag:active.tagName,id:active.id,role:active.getAttribute('role'),label:active.getAttribute('aria-label')},
+                    navigation:nav&&{className:nav.className,visibility:style.visibility,transform:style.transform,transition:style.transition},
+                    mainInert:document.querySelector('.family-main')?.inert,viewport:innerWidth};
+                }'''),flush=True)
+            except Exception as diagnostic: print('Não foi possível ler o foco:',diagnostic,flush=True)
             try: print('Página ativa:',page.url,'\n',page.locator('body').inner_text()[-8000:],flush=True)
             except Exception as diagnostic: print('Não foi possível ler a página:',diagnostic,flush=True)
             try: page.screenshot(path=str(OUT/'failure.png'),full_page=True)
@@ -283,6 +292,10 @@ try:
         expect(familyPage.locator('#family-menu-toggle')).to_have_attribute('aria-expanded','true')
         expect(familyPage.locator('.family-main')).to_have_attribute('inert','')
         check_family_viewport(390,844,'family-menu-390')
+        familyPage.keyboard.press('Shift+Tab')
+        expect(familyPage.locator('#family-navigation a[href]').last).to_be_focused()
+        familyPage.keyboard.press('Tab')
+        expect(familyPage.get_by_role('button',name='Fechar menu',exact=True)).to_be_focused()
         familyPage.keyboard.press('Escape')
         expect(familyPage.get_by_role('button',name='Abrir menu',exact=True)).to_be_focused()
         expect(familyPage.get_by_role('button',name='Abrir menu',exact=True)).to_have_attribute('aria-expanded','false')

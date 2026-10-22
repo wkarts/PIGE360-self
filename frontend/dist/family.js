@@ -364,8 +364,10 @@ var PigeFamily;
     function resized() { if (window.innerWidth > 800)
         closeMenu(false); }
     function closeMenu(restore = true) { s.menuOpen = false; if (restore)
-        void Vue.nextTick(() => window.document.getElementById('family-menu-toggle')?.focus()); }
-    function openMenu() { s.menuOpen = true; void Vue.nextTick(() => window.document.getElementById('family-menu-close')?.focus()); }
+        void Vue.nextTick(() => { if (!s.menuOpen)
+            window.document.getElementById('family-menu-toggle')?.focus(); }); }
+    function openMenu() { s.menuOpen = true; void Vue.nextTick(() => { if (s.menuOpen)
+        window.document.getElementById('family-menu-close')?.focus(); }); }
     function menuKeys(event) { if (!s.menuOpen)
         return; if (event.key === 'Escape') {
         event.preventDefault();
