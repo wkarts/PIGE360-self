@@ -7,6 +7,7 @@ from app.user_invitations import UserInvitation  # noqa: F401
 from app.school_website import SchoolWebsite  # noqa: F401
 from app.backups import BackupRun, BackupTarget  # noqa: F401
 from app.crm_bridge_models import CRMBridgeRequest, CRMBridgeObservation  # noqa: F401
+from app.enrollment_batches import EnrollmentBatch  # noqa: F401
 from app.models import Base
 from app.institution import InstitutionAsset, InstitutionIdentity  # noqa: F401 — metadados dos ativos públicos
 from app.contract_signatures import SchoolSigningCertificate, IssuedDocumentSignature  # noqa: F401

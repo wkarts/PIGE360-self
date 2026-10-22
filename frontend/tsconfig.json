@@ -39,6 +39,7 @@
     "src/users.ts",
     "src/academic-preparation.ts",
     "src/notification-email.ts",
+    "src/enrollment-workflow.ts",
     "src/app.ts"
   ]
 }
