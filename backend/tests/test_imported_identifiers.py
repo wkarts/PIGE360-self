@@ -19,6 +19,7 @@ def test_normalization_preserves_origin_ids_and_search_and_is_repeatable(api):
     spec=importlib.util.spec_from_file_location('migration',Path(__file__).parents[1]/'migrations/versions/0052_imported_identifiers.py');migration=importlib.util.module_from_spec(spec);spec.loader.exec_module(migration)
     with SessionLocal.begin() as db:migration.normalize(db.connection())
     first=api.get('/students/'+student['id'])
+    assert [r['id'] for r in api.get('/students?imported_only=true')['items']]==[student['id']]
     assert first['number'].startswith('AL-') and first['person']['name']==student['person']['name']
     assert 'imported_number' not in first
     assert api.get('/students?q=LEG-42')['items'][0]['id']==student['id']

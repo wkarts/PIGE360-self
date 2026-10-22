@@ -419,9 +419,10 @@ def update_employee(employee_id: str, data: s.Edit, db: DB, user: Actor, school:
 
 
 @router.get('/students')
-def list_students(db: DB, user: Actor, school: Scope, q: str = Query(default='', max_length=160), page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100), status: str = '', archived: ArchiveFilter = 'active'):
+def list_students(db: DB, user: Actor, school: Scope, imported_only: bool = False, q: str = Query(default='', max_length=160), page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100), status: str = '', archived: ArchiveFilter = 'active'):
     require(user, 'students.read')
     stmt = select(m.Student).join(m.Person, m.Student.person_id == m.Person.id).where(m.Student.school_id == school.id)
+    if imported_only:stmt=stmt.where(m.Student.imported_number!='')
     # O filtro legado status=archived continua encontrando alunos antigos.
     stmt = filter_archived(stmt, m.Student, 'archived' if status == 'archived' and archived == 'active' else archived)
     if q:

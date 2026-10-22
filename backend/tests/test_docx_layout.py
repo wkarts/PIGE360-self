@@ -39,6 +39,7 @@ def test_preserved_source_review_pdf_and_immutable_issue(api):
     prepared=api.post('/document-sources/prepare',request,200)
     payload={**{k:prepared[k] for k in ('body','header','footer')},'name':'Ficha sintética','kind':'declaration','source_docx_file_id':source['source_file_id'],'docx_mapping':mapping,'active':True}
     api.post('/document-templates',payload,422)
+    api.post('/document-templates',{**payload,'docx_reviewed':True,'docx_mapping':[]},422)
     template=api.post('/document-templates',{**payload,'docx_reviewed':True})
     catalog=api.catalogs();student=api.student('Aluno Documento Sintético',adult=True);enrollment=api.enroll(student,catalog['group'])
     generated=api.post('/document-templates/'+template['id']+'/issue',{'enrollment_id':enrollment['id']})
@@ -61,3 +62,23 @@ def test_malformed_mapping_and_unsafe_archive_rejected(api):
     with zipfile.ZipFile(data,'w') as z:
         z.writestr('word/document.xml','<xml/>');z.writestr('word/vbaProject.bin',b'macro')
     assert api.client.post(api.base+'/document-sources/inspect',headers=api.headers,files={'file':('macro.docx',data.getvalue())}).status_code==422
+
+
+def test_source_above_old_two_megabyte_limit_preserves_original(api):
+    data=io.BytesIO(document())
+    with zipfile.ZipFile(data,'a') as z:z.writestr('word/media/large-private-original.bin',b'X'*(3*1024*1024))
+    original=data.getvalue()
+    response=api.client.post(api.base+'/document-sources/inspect',headers=api.headers,files={'file':('large.docx',original)})
+    assert response.status_code==201,response.text
+    assert response.json()['sha256']==hashlib.sha256(original).hexdigest()
+
+
+def test_form_fields_use_private_registry_and_never_infer_image_consent(api):
+    catalog=api.catalogs();student=api.student('Aluno ficha privada',adult=True)
+    api.patch('/students/'+student['id'],{'version':student['version'],'data':{'health_plan':'Plano sintético','allergies':'Registro sintético','special_needs':'Informação conferida'}})
+    enrollment=api.enroll(student,catalog['group'])
+    template=api.post('/document-templates',{'name':'Ficha privada sintética','kind':'declaration','body':'Saúde: {{aluno.alergias}}. Imagem: {{consentimento.imagem}}.'})
+    preview=api.post('/document-templates/'+template['id']+'/preview',{'enrollment_id':enrollment['id']},200)
+    assert preview['variables']['aluno.alergias']=='Registro sintético'
+    assert preview['missing_fields']==['consentimento.imagem']
+    assert 'consentimento.imagem' not in api.client.get('/api/v1/family/context',headers=api.headers).text

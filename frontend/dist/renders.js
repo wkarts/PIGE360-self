@@ -1,7 +1,7 @@
 /* Vue pré-compilado; sem eval em runtime. */
 var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) {
   with (_ctx) {
-    const { createElementVNode: _createElementVNode, toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, renderList: _renderList, Fragment: _Fragment, vModelSelect: _vModelSelect, withDirectives: _withDirectives, createTextVNode: _createTextVNode, vModelText: _vModelText, withModifiers: _withModifiers, vModelCheckbox: _vModelCheckbox, resolveComponent: _resolveComponent, createBlock: _createBlock } = _Vue
+    const { createElementVNode: _createElementVNode, toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, renderList: _renderList, Fragment: _Fragment, vModelSelect: _vModelSelect, withDirectives: _withDirectives, createTextVNode: _createTextVNode, vModelText: _vModelText, vModelCheckbox: _vModelCheckbox, withModifiers: _withModifiers, resolveComponent: _resolveComponent, createBlock: _createBlock } = _Vue
 
     const _component_contracts_panel = _resolveComponent("contracts-panel")
 
@@ -58,26 +58,39 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                       onClick: newStudent
                     }, "Cadastrar aluno neste fluxo", 8, ["onClick"]))
                   : _createCommentVNode("", true),
-                _createElementVNode("div", { class: "x-grid" }, [_createElementVNode("label", null, [_createTextVNode("Período destino"), _withDirectives(_createElementVNode("select", {
-                  "aria-label": "Período destino",
-                  "onUpdate:modelValue": $event => ((s.year) = $event),
-                  onChange: changeYear
-                }, [_createElementVNode("option", { value: "" }, "Selecione o período"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.years.filter(y=>y.status==='active'), (year) => {
-                  return (_openBlock(), _createElementBlock("option", { value: year.id }, _toDisplayString(year.name), 9, ["value"]))
-                }), 256))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, s.year]])]), _createElementVNode("label", null, [_createTextVNode("Turma para a seleção"), _withDirectives(_createElementVNode("select", {
-                  "aria-label": "Turma para a seleção",
-                  "onUpdate:modelValue": $event => ((s.group) = $event),
-                  onChange: assignGroup
-                }, [_createElementVNode("option", { value: "" }, "Selecione a turma"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(groups(), (group) => {
-                  return (_openBlock(), _createElementBlock("option", { value: group.id }, _toDisplayString(group.name), 9, ["value"]))
-                }), 256))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, s.group]])]), _createElementVNode("label", null, [_createTextVNode("Data da matrícula"), _withDirectives(_createElementVNode("input", {
-                  type: "date",
-                  "onUpdate:modelValue": $event => ((s.date) = $event)
-                }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.date]])])]),
+                _createElementVNode("div", { class: "x-grid" }, [
+                  _createElementVNode("label", null, [_createTextVNode("Período destino"), _withDirectives(_createElementVNode("select", {
+                    "aria-label": "Período destino",
+                    "onUpdate:modelValue": $event => ((s.year) = $event),
+                    onChange: changeYear
+                  }, [_createElementVNode("option", { value: "" }, "Selecione o período"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.years.filter(y=>y.status==='active'), (year) => {
+                    return (_openBlock(), _createElementBlock("option", { value: year.id }, _toDisplayString(year.name), 9, ["value"]))
+                  }), 256))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, s.year]])]),
+                  _createElementVNode("label", null, [_createTextVNode("Curso ou etapa"), _withDirectives(_createElementVNode("select", {
+                    "onUpdate:modelValue": $event => ((s.grade) = $event),
+                    onChange: $event => {s.group='';assignGroup()}
+                  }, [_createElementVNode("option", { value: "" }, "Todos os cursos e etapas"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.grades.filter(g=>g.active), (grade) => {
+                    return (_openBlock(), _createElementBlock("option", { value: grade.id }, _toDisplayString(grade.name), 9, ["value"]))
+                  }), 256))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, s.grade]])]),
+                  _createElementVNode("label", null, [_createTextVNode("Turma para a seleção"), _withDirectives(_createElementVNode("select", {
+                    "aria-label": "Turma para a seleção",
+                    "onUpdate:modelValue": $event => ((s.group) = $event),
+                    onChange: assignGroup
+                  }, [_createElementVNode("option", { value: "" }, "Selecione a turma"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(groups(), (group) => {
+                    return (_openBlock(), _createElementBlock("option", { value: group.id }, _toDisplayString(group.name), 9, ["value"]))
+                  }), 256))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, s.group]])]),
+                  _createElementVNode("label", null, [_createTextVNode("Data da matrícula"), _withDirectives(_createElementVNode("input", {
+                    type: "date",
+                    "onUpdate:modelValue": $event => ((s.date) = $event)
+                  }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.date]])])
+                ]),
                 _createElementVNode("form", {
                   onSubmit: _withModifiers($event => {s.page=1;run(search)}, ["prevent"]),
                   class: "x-filter"
-                }, [_createElementVNode("label", null, [_createTextVNode("Buscar aluno existente"), _withDirectives(_createElementVNode("input", {
+                }, [_createElementVNode("label", null, [_withDirectives(_createElementVNode("input", {
+                  type: "checkbox",
+                  "onUpdate:modelValue": $event => ((s.importedOnly) = $event)
+                }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, s.importedOnly]]), _createTextVNode("Somente alunos importados")]), _createElementVNode("label", null, [_createTextVNode("Buscar aluno existente"), _withDirectives(_createElementVNode("input", {
                   "onUpdate:modelValue": $event => ((s.q) = $event),
                   placeholder: "Nome ou código"
                 }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.q]])]), _createElementVNode("button", { class: "btn" }, "Pesquisar")], 40, ["onSubmit"]),
@@ -6606,7 +6619,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                   "onUpdate:modelValue": $event => ((s.schoolId) = $event),
                   onChange: changeSchool
                 }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.account.school_ids, (id) => {
-                  return (_openBlock(), _createElementBlock("option", { value: id }, _toDisplayString(id), 9, ["value"]))
+                  return (_openBlock(), _createElementBlock("option", { value: id }, _toDisplayString(s.schools[id]||'Instituição'), 9, ["value"]))
                 }), 256))], 40, ["disabled", "onUpdate:modelValue", "onChange"]), [[_vModelSelect, s.schoolId]])]))
               : _createCommentVNode("", true), (s.students.length)
               ? (_openBlock(), _createElementBlock("label", { key: 1 }, [_createTextVNode("Aluno"), _withDirectives(_createElementVNode("select", {
@@ -6648,7 +6661,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                         _createElementVNode("h2", null, _toDisplayString(student().name), 1),
                         _createElementVNode("p", null, "Código " + _toDisplayString(student().number), 1),
                         _createElementVNode("div", { class: "family-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(student().enrollments, (enrollment) => {
-                          return (_openBlock(), _createElementBlock("div", { key: enrollment.id }, [_createElementVNode("strong", null, _toDisplayString(enrollment.class_name), 1), _createElementVNode("p", null, _toDisplayString(enrollment.year_name) + " · " + _toDisplayString(enrollment.status), 1), _createElementVNode("span", null, "Matrícula " + _toDisplayString(enrollment.number), 1)]))
+                          return (_openBlock(), _createElementBlock("div", { key: enrollment.id }, [_createElementVNode("strong", null, _toDisplayString(enrollment.class_name), 1), _createElementVNode("p", null, _toDisplayString(enrollment.year_name) + " · " + _toDisplayString(label(enrollment.status)), 1), _createElementVNode("span", null, "Matrícula " + _toDisplayString(enrollment.number), 1)]))
                         }), 128))]),
                         (!student().enrollments.length)
                           ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Nenhuma matrícula disponível."))
@@ -6671,7 +6684,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                           return (_openBlock(), _createElementBlock("article", {
                             key: file.id,
                             class: "family-line"
-                          }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(file.type_name), 1), _createElementVNode("p", null, _toDisplayString(file.status), 1)]), (file.file_id)
+                          }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(file.type_name), 1), _createElementVNode("p", null, _toDisplayString(label(file.status)), 1)]), (file.file_id)
                             ? (_openBlock(), _createElementBlock("button", {
                                 key: 0,
                                 class: "btn",
@@ -6694,7 +6707,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                             return (_openBlock(), _createElementBlock("article", {
                               key: charge.id,
                               class: "family-line"
-                            }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(charge.description), 1), _createElementVNode("p", null, "Vencimento: " + _toDisplayString(charge.due_on) + " · " + _toDisplayString(charge.status), 1)]), _createElementVNode("strong", null, "R$ " + _toDisplayString(Number(charge.amount).toLocaleString('pt-BR',{minimumFractionDigits:2})), 1)]))
+                            }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(charge.description), 1), _createElementVNode("p", null, "Vencimento: " + _toDisplayString(charge.due_on) + " · " + _toDisplayString(label(charge.status)), 1)]), _createElementVNode("strong", null, "R$ " + _toDisplayString(Number(charge.amount).toLocaleString('pt-BR',{minimumFractionDigits:2})), 1)]))
                           }), 128)), (!s.charges.length)
                             ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Nenhuma cobrança registrada para estas matrículas."))
                             : _createCommentVNode("", true)], 64))]))
@@ -10929,22 +10942,37 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                           return (_openBlock(), _createElementBlock("article", {
                             key: item.id,
                             class: "panel"
-                          }, [_createElementVNode("p", { class: "preserve" }, _toDisplayString(item.context), 1), _createElementVNode("label", { class: "field" }, [_createTextVNode("Campo para esta região"), _withDirectives(_createElementVNode("select", {
-                            "onUpdate:modelValue": $event => ((item.field) = $event),
-                            onChange: mappingChanged
-                          }, [_createElementVNode("option", { value: "" }, "Escolha o campo"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.fields, (field) => {
-                            return (_openBlock(), _createElementBlock("option", { value: field.key }, _toDisplayString(field.label), 9, ["value"]))
-                          }), 256)), (item.field&&!state.fields.some(f=>f.key===item.field))
-                            ? (_openBlock(), _createElementBlock("option", {
-                                key: 0,
-                                value: item.field
-                              }, _toDisplayString(item.field), 9, ["value"]))
-                            : _createCommentVNode("", true)], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, item.field]])]), _createElementVNode("label", { class: "x-check" }, [_withDirectives(_createElementVNode("input", {
-                            type: "checkbox",
-                            "onUpdate:modelValue": $event => ((item.accepted) = $event),
-                            disabled: !item.field,
-                            onChange: mappingChanged
-                          }, null, 40, ["onUpdate:modelValue", "disabled", "onChange"]), [[_vModelCheckbox, item.accepted]]), _createTextVNode("Aprovar substituição desta região")])]))
+                          }, [
+                            _createElementVNode("p", { class: "preserve" }, _toDisplayString(item.context), 1),
+                            _createElementVNode("label", { class: "field" }, [_createTextVNode("Campo para esta região"), _withDirectives(_createElementVNode("select", {
+                              "aria-label": "Campo para esta região",
+                              "onUpdate:modelValue": $event => ((item.field) = $event),
+                              onChange: mappingChanged
+                            }, [_createElementVNode("option", { value: "" }, "Escolha o campo"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.fields, (field) => {
+                              return (_openBlock(), _createElementBlock("option", { value: field.key }, _toDisplayString(field.label), 9, ["value"]))
+                            }), 256)), (item.field&&!state.fields.some(f=>f.key===item.field))
+                              ? (_openBlock(), _createElementBlock("option", {
+                                  key: 0,
+                                  value: item.field
+                                }, _toDisplayString(item.field), 9, ["value"]))
+                              : _createCommentVNode("", true)], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, item.field]])]),
+                            _createElementVNode("label", { class: "x-check" }, [_withDirectives(_createElementVNode("input", {
+                              type: "checkbox",
+                              "onUpdate:modelValue": $event => ((item.accepted) = $event),
+                              disabled: !item.field,
+                              onChange: $event => {item.preserve=false;mappingChanged()}
+                            }, null, 40, ["onUpdate:modelValue", "disabled", "onChange"]), [[_vModelCheckbox, item.accepted]]), _createTextVNode("Aprovar substituição desta região")]),
+                            (item.confidence!=='explicit')
+                              ? (_openBlock(), _createElementBlock("label", {
+                                  key: 0,
+                                  class: "x-check"
+                                }, [_withDirectives(_createElementVNode("input", {
+                                  type: "checkbox",
+                                  "onUpdate:modelValue": $event => ((item.preserve) = $event),
+                                  onChange: $event => {item.accepted=false;mappingChanged()}
+                                }, null, 40, ["onUpdate:modelValue", "onChange"]), [[_vModelCheckbox, item.preserve]]), _createTextVNode("Manter esta região exatamente como no original")]))
+                              : _createCommentVNode("", true)
+                          ]))
                         }), 128)),
                         (!state.draft.docx_mapping.length)
                           ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Nenhuma lacuna reconhecida. Insira marcadores como " + _toDisplayString('{'+'{aluno.nome}'+'}') + " no Word e importe novamente se precisar de campos dinâmicos.", 1))
@@ -12492,7 +12520,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                 onClick: $event => (s.previewHtml='')
               }, "Fechar prévia", 8, ["onClick"])]), _createElementVNode("iframe", {
                 title: "Prévia privada do site",
-                sandbox: "",
+                sandbox: "allow-same-origin",
                 srcdoc: s.previewHtml,
                 style: _normalizeStyle({width:s.previewWidth,maxWidth:'100%',height:'720px',border:'1px solid #ccc'})
               }, null, 12, ["srcdoc"])]))

@@ -162,7 +162,7 @@ var PigeLearning;
 })(PigeLearning || (PigeLearning = {}));
 var PigeFamily;
 (function (PigeFamily) {
-    const s = Vue.reactive({ ready: false, busy: false, error: '', account: null, email: '', password: '', schoolId: '', section: location.pathname.includes('documents') ? 'documents' : location.pathname.includes('finance') ? 'finance' : 'academic', students: [], studentId: new URLSearchParams(location.search).get('student') || '', charges: [], financeNote: '' });
+    const s = Vue.reactive({ ready: false, busy: false, error: '', account: null, email: '', password: '', schoolId: '', schools: {}, section: location.pathname.includes('documents') ? 'documents' : location.pathname.includes('finance') ? 'finance' : 'academic', students: [], studentId: new URLSearchParams(location.search).get('student') || '', charges: [], financeNote: '' });
     let generation = 0;
     let token = '';
     let refreshing = null;
@@ -205,8 +205,9 @@ var PigeFamily;
         return; await authenticated(result); }); }
     async function logout() { await run(async () => { await request('/auth/logout', { method: 'POST' }); generation++; token = ''; s.account = null; s.students = []; s.charges = []; s.schoolId = ''; s.studentId = ''; s.financeNote = ''; PigeMFA.clear(); }); }
     async function load() { const current = ++generation; s.students = []; s.charges = []; const data = await request('/family/context'); if (current !== generation)
-        return; s.students = data.students; if (!s.students.some(x => x.id === s.studentId))
+        return; s.schools = Object.fromEntries((data.schools || []).map(x => [x.id, x.name])); s.students = data.students; if (!s.students.some(x => x.id === s.studentId))
         s.studentId = s.students[0]?.id || ''; await finance(); }
+    const label = (value) => ({ draft: 'Em preparação', active: 'Efetivada', suspended: 'Suspensa', completed: 'Concluída', pending: 'Pendente', overdue: 'Vencida', validated: 'Validado', received: 'Recebido', waived: 'Dispensado', rejected: 'Revisão necessária', expired: 'Vencido', queued: 'Em processamento', cancelled: 'Cancelada' }[value] || value);
     const student = () => s.students.find(x => x.id === s.studentId);
     async function finance() { s.charges = []; s.financeNote = ''; if (!student()?.financial_authorized)
         return; const selected = s.studentId, current = generation; const data = await request('/family/students/' + selected + '/charges'); if (selected !== s.studentId || current !== generation)
@@ -230,5 +231,5 @@ var PigeFamily;
         s.ready = true;
     } }
     function section(name) { s.section = name; history.pushState({}, '', name === 'documents' ? '/documents' : name === 'finance' ? '/finance' : '/academic'); history.replaceState({}, '', location.pathname + (s.studentId ? '?student=' + encodeURIComponent(s.studentId) : '')); }
-    Vue.createApp({ components: { 'learning-portal': PigeLearning.component }, render: PigeRenders.familyPortal, setup() { Vue.onMounted(() => { window.addEventListener('popstate', () => { s.section = location.pathname.includes('documents') ? 'documents' : location.pathname.includes('finance') ? 'finance' : 'academic'; }); PigeMFA.init(request, authenticated, logout); void start(); }); return { s, student, login, logout, changeSchool, changeStudent, document, request, download, section, run, load, mfa: PigeMFA, identity: PigeInstitution.state }; } }).mount('#family');
+    Vue.createApp({ components: { 'learning-portal': PigeLearning.component }, render: PigeRenders.familyPortal, setup() { Vue.onMounted(() => { window.addEventListener('popstate', () => { s.section = location.pathname.includes('documents') ? 'documents' : location.pathname.includes('finance') ? 'finance' : 'academic'; }); PigeMFA.init(request, authenticated, logout); void start(); }); return { s, label, student, login, logout, changeSchool, changeStudent, document, request, download, section, run, load, mfa: PigeMFA, identity: PigeInstitution.state }; } }).mount('#family');
 })(PigeFamily || (PigeFamily = {}));

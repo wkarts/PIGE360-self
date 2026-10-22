@@ -75,6 +75,7 @@ def plan(db,school,data):
             if not item.financial_person_id:row['warnings'].append('Responsável financeiro não definido; cobrança depende de vínculo válido.')
             from .registry import occupancy
             occupied=occupancy(db,group.id)
+            if occupied>=group.capacity:row['warnings'].append('Turma sem vaga para efetivação; esta simulação não reserva lugar.')
             if data.activate:
                 candidate=m.Enrollment(id='preview-only',school_id=school.id,student_id=student.id,class_group_id=group.id,academic_year_id=year.id,status='draft')
                 activation_validation(db,school,candidate,group)

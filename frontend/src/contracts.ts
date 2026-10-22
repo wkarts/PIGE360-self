@@ -1,7 +1,7 @@
 namespace PigeContracts {
   export let hasUnsavedChanges=():boolean=>false;
   type Row=PigeAPI.Row;
-  type Mapping={id:number;part:string;paragraph:number;start:number;end:number;original:string;context:string;field:string;confidence:string;required:boolean;accepted:boolean};
+  type Mapping={id:number;part:string;paragraph:number;start:number;end:number;original:string;context:string;field:string;confidence:string;required:boolean;accepted:boolean;preserve?:boolean};
   type Source={source_docx_file_id:string|null;docx_mapping:Mapping[];docx_reviewed:boolean};
   type Template=Row&Partial<Source>&{name:string;kind:string;header:string;body:string;footer:string;academic_year_id?:string|null;valid_from?:string|null;valid_until?:string|null;active:boolean;require_signature?:boolean;created_at?:string;letterhead_file_id?:string|null};
   type Field={key:string;label:string;source:string};
@@ -173,7 +173,7 @@ namespace PigeContracts {
       await PigeAPI.download(base()+'/files/'+fileId+'/download',name);
     }
     async function downloadIssued():Promise<void>{if(!state.issued)return;await run(()=>downloadIssuedFile(state.issued!,'documento-emitido.pdf'));}
-    async function activateEnrollment(id:string):Promise<void>{try{const enrollment=await PigeAPI.request<Enrollment>(base()+'/enrollments/'+id);if(!props.issuedId)state.tab='issue';await chooseEnrollment(enrollment);}catch(error){state.error=error instanceof Error?error.message:String(error);}}
+    async function activateEnrollment(id:string):Promise<void>{try{const enrollment=await PigeAPI.request<Enrollment>(base()+'/enrollments/'+id);if(state.editing)return;if(!props.issuedId)state.tab='issue';await chooseEnrollment(enrollment);}catch(error){state.error=error instanceof Error?error.message:String(error);}}
     const beforeUnload=(event:BeforeUnloadEvent)=>{if(editorDirty()){event.preventDefault();event.returnValue='';}};
     Vue.onMounted(()=>{window.addEventListener('beforeunload',beforeUnload);void load().then(()=>{if(props.enrollmentId)void activateEnrollment(props.enrollmentId);});});
     Vue.onUnmounted(()=>{window.removeEventListener('beforeunload',beforeUnload);hasUnsavedChanges=()=>false;clearLetterhead();});

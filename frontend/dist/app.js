@@ -2386,6 +2386,8 @@ var PigeContracts;
                 return; await run(() => downloadIssuedFile(state.issued, 'documento-emitido.pdf')); }
             async function activateEnrollment(id) { try {
                 const enrollment = await PigeAPI.request(base() + '/enrollments/' + id);
+                if (state.editing)
+                    return;
                 if (!props.issuedId)
                     state.tab = 'issue';
                 await chooseEnrollment(enrollment);
@@ -3492,7 +3494,7 @@ var PigeNotificationEmail;
 var PigeEnrollmentWorkflow;
 (function (PigeEnrollmentWorkflow) {
     PigeEnrollmentWorkflow.component = { props: ['schoolId', 'permissions', 'role'], emits: ['new-student', 'new-person'], components: { 'contracts-panel': PigeContracts.component }, render: PigeRenders.enrollmentWorkflow, setup(props, { emit }) {
-            const s = Vue.reactive({ open: false, busy: false, error: '', notice: '', mode: 'single', step: 1, year: '', group: '', date: '', q: '', page: 1, total: 0, years: [], groups: [], students: [], selected: [], guardians: [], plan: null, batches: [], batch: null, key: PigeOnline.newId(), confirmed: false, finance: { amount: '', installments: 1, due: '', description: '', required: false }, charges: [], financialSaved: false, current: null, documents: [], personQuery: '', persons: [], link: { person_id: '', relationship: '', legal: true, financial: true, active: true }, collectionMode: 'manual', billingType: 'PIX', receiptCharge: null, receipt: { amount: '', paid_on: '', payment_method: 'pix', reference: '', client_key: '' } });
+            const s = Vue.reactive({ open: false, busy: false, error: '', notice: '', mode: 'single', step: 1, year: '', grade: '', grades: [], importedOnly: false, group: '', date: '', q: '', page: 1, total: 0, years: [], groups: [], students: [], selected: [], guardians: [], plan: null, batches: [], batch: null, key: PigeOnline.newId(), confirmed: false, finance: { amount: '', installments: 1, due: '', description: '', required: false }, charges: [], financialSaved: false, current: null, documents: [], personQuery: '', persons: [], link: { person_id: '', relationship: '', legal: true, financial: true, active: true }, collectionMode: 'manual', billingType: 'PIX', receiptCharge: null, receipt: { amount: '', paid_on: '', payment_method: 'pix', reference: '', client_key: '' } });
             const base = () => '/schools/' + props.schoolId;
             const can = (permission) => props.permissions.includes(permission);
             async function run(fn) { if (s.busy)
@@ -3505,13 +3507,13 @@ var PigeEnrollmentWorkflow;
             finally {
                 s.busy = false;
             } }
-            const groups = () => s.groups.filter(g => g.active && g.academic_year_id === s.year);
+            const groups = () => s.groups.filter(g => g.active && g.academic_year_id === s.year && (!s.grade || g.grade_id === s.grade));
             const enrollment = () => s.batch?.results.find(r => r.status === 'completed')?.enrollment_id || '';
             const payload = () => ({ academic_year_id: s.year, enrolled_on: s.date, activate: false, items: s.selected.map(row => ({ student_id: row.id, class_group_id: row.group, financial_person_id: row.financial || null })) });
             async function history() { s.batches = (await PigeAPI.request(base() + '/enrollment-batches')).items; }
-            async function search() { const data = await PigeAPI.request(base() + '/students?page_size=15&page=' + s.page + '&q=' + encodeURIComponent(s.q)); s.students = data.items; s.total = data.total; }
-            async function start(mode) { await run(async () => { s.mode = mode; s.open = true; s.step = 1; s.batch = null; s.plan = null; s.confirmed = false; s.selected = []; s.year = ''; s.group = ''; s.date = ''; s.key = PigeOnline.newId(); s.financialSaved = false; s.charges = []; s.finance = { amount: '', installments: 1, due: '', description: '', required: false }; const [years, groups] = await Promise.all([PigeAPI.request(base() + '/academic-years'), PigeAPI.request(base() + '/class-groups')]); s.years = years; s.groups = groups; await search(); await history(); }); }
-            function changeYear() { s.group = ''; s.plan = null; s.selected.forEach(row => row.group = ''); }
+            async function search() { const data = await PigeAPI.request(base() + '/students?imported_only=' + s.importedOnly + '&page_size=15&page=' + s.page + '&q=' + encodeURIComponent(s.q)); s.students = data.items; s.total = data.total; }
+            async function start(mode) { await run(async () => { s.mode = mode; s.open = true; s.step = 1; s.batch = null; s.plan = null; s.confirmed = false; s.selected = []; s.year = ''; s.group = ''; s.date = ''; s.key = PigeOnline.newId(); s.financialSaved = false; s.charges = []; s.finance = { amount: '', installments: 1, due: '', description: '', required: false }; const [years, groups, grades] = await Promise.all([PigeAPI.request(base() + '/academic-years'), PigeAPI.request(base() + '/class-groups'), PigeAPI.request(base() + '/grades')]); s.years = years; s.groups = groups; s.grades = grades; s.grade = ''; await search(); await history(); }); }
+            function changeYear() { s.group = ''; s.grade = ''; s.plan = null; s.selected.forEach(row => row.group = ''); }
             function assignGroup() { s.selected.forEach(row => row.group = s.group); s.plan = null; }
             async function select(student) { await run(async () => { if (s.selected.some(r => r.id === student.id)) {
                 s.selected = s.selected.filter(r => r.id !== student.id);
@@ -3545,7 +3547,13 @@ var PigeEnrollmentWorkflow;
             async function hydrate() { if (!enrollment())
                 return; s.current = await PigeAPI.request(base() + '/enrollments/' + enrollment()); if (can('banking.read')) {
                 s.charges = (await PigeAPI.request(base() + '/bank-charges?enrollment_id=' + enrollment() + '&page_size=100')).items;
-                s.financialSaved = s.charges.some(c => String(c.client_key).startsWith('enrollment-workflow-' + s.batch.id));
+                const own = s.charges.filter(c => String(c.client_key).startsWith('enrollment-workflow-' + s.batch.id));
+                s.financialSaved = own.length > 0;
+                if (own.length) {
+                    const first = own[0];
+                    s.finance = { amount: String(first.amount), due: String(first.due_on), installments: own.length, description: String(first.description), required: Boolean(first.required_for_enrollment) };
+                    s.collectionMode = String(first.collection_mode);
+                }
             } if (can('documents.read')) {
                 s.documents = (await PigeAPI.request(base() + '/students/' + s.current.student_id + '/documents')).issued.filter(d => d.enrollment_id === enrollment());
             } }
@@ -3566,7 +3574,7 @@ var PigeEnrollmentWorkflow;
 var PigeUI;
 (function (PigeUI) {
     const text = (value) => value === null || value === undefined ? '' : String(value);
-    const statusLabels = { active: 'Ativo', archived: 'Arquivado', draft: 'Rascunho', suspended: 'Suspenso', transferred: 'Transferido', cancelled: 'Cancelado', completed: 'Concluído', pending: 'Pendente', received: 'Recebido', validated: 'Validado', rejected: 'Rejeitado', expired: 'Vencido', waived: 'Dispensado', open: 'Aberto', in_progress: 'Em atendimento', waiting: 'Aguardando', closed: 'Fechado', admin: 'Administrador', direction: 'Direção', coordination: 'Coordenação', secretary: 'Secretaria', teacher: 'Professor', student: 'Aluno', guardian: 'Responsável', viewer: 'Consulta', leave: 'Afastado', inactive: 'Inativo', clt: 'CLT', public: 'Serviço público', temporary: 'Temporário', substitute: 'Substituto', intern: 'Estágio', outsourced: 'Terceirizado', other: 'Outro' };
+    const statusLabels = { legacy_import: 'Portabilidade', active: 'Ativo', archived: 'Arquivado', draft: 'Rascunho', suspended: 'Suspenso', transferred: 'Transferido', cancelled: 'Cancelado', completed: 'Concluído', pending: 'Pendente', received: 'Recebido', validated: 'Validado', rejected: 'Rejeitado', expired: 'Vencido', waived: 'Dispensado', open: 'Aberto', in_progress: 'Em atendimento', waiting: 'Aguardando', closed: 'Fechado', admin: 'Administrador', direction: 'Direção', coordination: 'Coordenação', secretary: 'Secretaria', teacher: 'Professor', student: 'Aluno', guardian: 'Responsável', viewer: 'Consulta', leave: 'Afastado', inactive: 'Inativo', clt: 'CLT', public: 'Serviço público', temporary: 'Temporário', substitute: 'Substituto', intern: 'Estágio', outsourced: 'Terceirizado', other: 'Outro' };
     const catalogLabels = { 'units': 'Unidades', 'academic-years': 'Anos letivos', 'grades': 'Séries e etapas', 'shifts': 'Turnos', 'class-groups': 'Turmas', 'document-types': 'Tipos de documento' };
     const registryPages = ['people', 'students', 'teachers', 'employees', 'guardians', 'suppliers', 'providers', 'customers', 'partners'];
     const businessTypes = { suppliers: { code: 'supplier', singular: 'fornecedor', category: 'Categoria de fornecimento' }, providers: { code: 'service_provider', singular: 'prestador de serviços', category: 'Especialidade / serviço' }, customers: { code: 'customer', singular: 'cliente', category: 'Categoria do cliente' }, partners: { code: 'partner', singular: 'sócio', category: 'Vínculo societário' } };

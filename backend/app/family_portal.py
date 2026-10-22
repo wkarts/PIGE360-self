@@ -35,7 +35,8 @@ def context(db:DB,user:Actor):
         item=student_summary(db,student,student.school_id,include_documents=True)
         item['financial_authorized']=may_finance(db,user,student)
         result.append(item)
-    return {'role':user.role,'name':user.name,'students':result,'note':'Inscrição online utiliza a conta de inscrição já existente. Não compartilha automaticamente sua senha de acesso escolar.'}
+    schools=db.execute(select(m.School.id,m.School.name).join(m.SchoolAccess,m.SchoolAccess.school_id==m.School.id).where(m.SchoolAccess.user_id==user.id,m.SchoolAccess.active.is_(True),m.SchoolAccess.archived_at.is_(None),m.School.active.is_(True)).order_by(m.School.name)).all()
+    return {'schools':[{'id':ident,'name':name} for ident,name in schools],'role':user.role,'name':user.name,'students':result,'note':'Inscrição online utiliza a conta de inscrição já existente. Não compartilha automaticamente sua senha de acesso escolar.'}
 
 
 @router.get('/students/{student_id}/charges')

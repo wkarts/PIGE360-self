@@ -1,6 +1,8 @@
 # Site institucional e portal: diagnóstico e validação
 
-## Origem do 503
+## Histórico do 503
+
+Atualização de 22/10/2026: o usuário esclareceu que o site ainda não havia sido publicado. Esse caso é tratado como “Site em preparação” (404), distinto de falha técnica (503). A observação histórica abaixo não comprova pane de infraestrutura.
 
 Na consulta pública somente de leitura em 21/10/2026, o domínio do portal respondeu HTTP 200 e a página do site respondeu HTTP 503. A API do site estava saudável, mas `GET /api/v1/public/website` respondeu HTTP 404. No código de `develop` consultado, a seleção padrão exige exatamente uma publicação habilitada de escola ativa; o serviço do site convertia qualquer 404 upstream em “temporariamente indisponível” (503). Portanto, a falha observada não demonstra sobrecarga: a requisição pública da API que reproduz a seleção padrão falhou com 404, e o handler mascarava a falha de configuração como 503.
 
@@ -14,7 +16,7 @@ Não houve acesso ao banco, ambiente CloudPanel, logs do container ou digest imp
 - Readiness do site verifica a readiness da API. Erros HTTP têm mensagem pública segura e log sanitizado com categoria, status upstream, rota lógica e ID de atendimento.
 - CSS do portal da família reforça encolhimento, quebra de nomes e links longos, alvos de toque, formulários e navegação em telas estreitas.
 
-Não há migração nem mudança de esquema. O E2E usa SQLite descartável e dados fictícios; produção, volumes, contas, documentos, segredos e configuração não são tocados.
+A correção inicial não alterava o esquema. A continuação desta PR inclui as migrations 0048–0052, detalhadas em [pr67-workflows.md](pr67-workflows.md). O E2E usa SQLite descartável e dados fictícios; produção, volumes, contas, documentos, segredos e configuração não são tocados.
 
 ## Testes
 
@@ -24,4 +26,4 @@ O runner local não tem Firefox ou WebKit instalados; o workflow do repositório
 
 ## Implantação e rollback
 
-Esta PR não faz merge nem deploy. Após aprovação e merge, a implantação depende de autorização específica. Antes dela, confirme que `public_url` contém a origem `https://ww2.colegionavegantessaj.com.br` na escola correta, que a instância ainda usa `WEBSITE_SCHOOL_ID` compatível ou vazio, e que tokens correspondem sem copiá-los para evidência. Preserve o projeto Compose e os volumes atuais. Para rollback, restaure a imagem/tag anterior e a variável de seleção que estava efetiva; nenhuma operação destrutiva de banco é necessária.
+Esta PR não faz merge nem deploy. Após aprovação e merge, a implantação depende de autorização específica. Antes dela, confirme que `public_url` contém a origem HTTPS do domínio configurado para a instalação na escola correta, que a instância ainda usa `WEBSITE_SCHOOL_ID` compatível ou vazio, e que tokens correspondem sem copiá-los para evidência. Preserve o projeto Compose e os volumes atuais. Para rollback, restaure a imagem/tag anterior e a variável de seleção que estava efetiva; conferindo também o plano de recuperação das novas migrations em [pr67-workflows.md](pr67-workflows.md).
