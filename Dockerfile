@@ -44,6 +44,7 @@ COPY scripts/pg-tools.sh /usr/local/bin/pg_dump
 COPY scripts/pg-tools.sh /usr/local/bin/pg_restore
 RUN chmod 755 /usr/local/bin/pg_dump /usr/local/bin/pg_restore && pg_dump --version && pg_restore --version
 COPY backend/requirements.txt ./requirements.txt
+RUN if ! command -v soffice >/dev/null; then apt-get update && apt-get install -y --no-install-recommends libreoffice-writer && rm -rf /var/lib/apt/lists/*; fi
 RUN if ! command -v tesseract >/dev/null || ! command -v pdftoppm >/dev/null || ! tesseract --list-langs 2>/dev/null | grep -qx por; then apt-get update && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-por tesseract-ocr-eng poppler-utils && rm -rf /var/lib/apt/lists/*; fi
 RUN if [ ! -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf ]; then apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core && rm -rf /var/lib/apt/lists/*; fi
 RUN if ! cmp -s requirements.txt /opt/pige360/requirements.txt; then \

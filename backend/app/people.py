@@ -330,7 +330,7 @@ def list_teachers(
     return _profile_list(
         db, school, m.TeacherProfile, teacher_output, q, page, page_size,
         [m.Person.name, m.Person.social_name, m.Person.cpf, m.Person.phone,
-         m.Person.email, m.TeacherProfile.registration_number,
+         m.Person.email, m.TeacherProfile.registration_number,m.TeacherProfile.imported_number,
          m.TeacherProfile.professional_registration], archived,
     )
 
@@ -381,7 +381,7 @@ def list_employees(
     return _profile_list(
         db, school, m.EmployeeProfile, employee_output, q, page, page_size,
         [m.Person.name, m.Person.social_name, m.Person.cpf, m.Person.phone,
-         m.Person.email, m.EmployeeProfile.employee_number,
+         m.Person.email, m.EmployeeProfile.employee_number,m.EmployeeProfile.imported_number,
          m.EmployeeProfile.department, m.EmployeeProfile.job_title], archived,
     )
 
@@ -427,8 +427,8 @@ def list_students(db: DB, user: Actor, school: Scope, q: str = Query(default='',
     if q:
         like = '%' + q.replace('%', r'\%').replace('_', r'\_') + '%'
         guardian_matches = select(m.GuardianLink.student_id).join(m.Person, m.Person.id == m.GuardianLink.person_id).where(m.GuardianLink.school_id == school.id, m.GuardianLink.active.is_(True), or_(m.Person.name.ilike(like, escape='\\'), m.Person.cpf.ilike(like, escape='\\'), m.Person.phone.ilike(like, escape='\\')))
-        enrollment_matches = select(m.Enrollment.student_id).where(m.Enrollment.school_id == school.id, m.Enrollment.number.ilike(like, escape='\\'))
-        stmt = stmt.where(or_(m.Person.name.ilike(like, escape='\\'), m.Person.cpf.ilike(like, escape='\\'), m.Student.number.ilike(like, escape='\\'), m.Person.phone.ilike(like, escape='\\'), m.Student.id.in_(guardian_matches.correlate(None)), m.Student.id.in_(enrollment_matches.correlate(None))))
+        enrollment_matches = select(m.Enrollment.student_id).where(m.Enrollment.school_id == school.id, or_(m.Enrollment.number.ilike(like, escape='\\'),m.Enrollment.imported_number.ilike(like, escape='\\')))
+        stmt = stmt.where(or_(m.Person.name.ilike(like, escape='\\'), m.Person.cpf.ilike(like, escape='\\'), m.Student.number.ilike(like, escape='\\'), m.Student.imported_number.ilike(like, escape='\\'), m.Person.phone.ilike(like, escape='\\'), m.Student.id.in_(guardian_matches.correlate(None)), m.Student.id.in_(enrollment_matches.correlate(None))))
     if status:
         stmt = stmt.where(m.Student.status == status)
     total = db.scalar(select(func.count()).select_from(stmt.subquery()))

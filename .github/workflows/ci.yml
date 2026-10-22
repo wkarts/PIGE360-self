@@ -106,7 +106,7 @@ jobs:
       - name: Motor local de leitura (mesmas ferramentas da imagem)
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-por tesseract-ocr-eng poppler-utils
+          sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-por tesseract-ocr-eng poppler-utils libreoffice-writer
       - name: Dependências reproduzíveis
         run: |
           python -m pip install -r backend/requirements-dev.txt

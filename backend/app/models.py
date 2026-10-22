@@ -246,6 +246,7 @@ class Person(Record, Scoped, Base):
 class TeacherProfile(Record, Scoped, Base):
     """Dados profissionais do docente, separados de autenticação e usuário."""
     __tablename__ = 'teacher_profiles'
+    imported_number: Mapped[str] = mapped_column(String(40), default='')
     person_id: Mapped[str] = mapped_column(ForeignKey('persons.id'), unique=True)
     registration_number: Mapped[str] = mapped_column(String(40), default='')
     professional_registration: Mapped[str] = mapped_column(String(80), default='')
@@ -265,6 +266,7 @@ class TeacherProfile(Record, Scoped, Base):
 class EmployeeProfile(Record, Scoped, Base):
     """Dados funcionais do colaborador, separados de autenticação e usuário."""
     __tablename__ = 'employee_profiles'
+    imported_number: Mapped[str] = mapped_column(String(40), default='')
     person_id: Mapped[str] = mapped_column(ForeignKey('persons.id'), unique=True)
     employee_number: Mapped[str] = mapped_column(String(40), default='')
     employment_type: Mapped[str] = mapped_column(String(32), default='other')
@@ -291,6 +293,7 @@ class PersonTypeLink(Record, Scoped, Base):
 
 class Student(Record, Scoped, Base):
     __tablename__ = 'students'
+    imported_number: Mapped[str] = mapped_column(String(40), default='')
     person_id: Mapped[str] = mapped_column(ForeignKey('persons.id'), unique=True)
     number: Mapped[str] = mapped_column(String(32))
     previous_school: Mapped[str] = mapped_column(String(180), default='')
@@ -321,6 +324,7 @@ class GuardianLink(Record, Scoped, Base):
 
 class Enrollment(Record, Scoped, Base):
     __tablename__ = 'enrollments'
+    imported_number: Mapped[str] = mapped_column(String(40), default='')
     student_id: Mapped[str] = mapped_column(ForeignKey('students.id'), index=True)
     academic_year_id: Mapped[str] = mapped_column(ForeignKey('academic_years.id'))
     class_group_id: Mapped[str] = mapped_column(ForeignKey('class_groups.id'))
@@ -392,6 +396,9 @@ class DocumentTemplate(Record, Scoped, Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     require_signature: Mapped[bool] = mapped_column(Boolean, default=False)
     letterhead_file_id: Mapped[str | None] = mapped_column(ForeignKey('files.id'))
+    source_docx_file_id: Mapped[str | None] = mapped_column(ForeignKey('files.id'))
+    docx_mapping: Mapped[list] = mapped_column(JSON,default=list)
+    docx_reviewed: Mapped[bool] = mapped_column(Boolean,default=False)
     __table_args__ = (CheckConstraint('valid_until IS NULL OR valid_from IS NULL OR valid_until >= valid_from', name='template_validity'),)
 
 class DocumentTemplateRevision(Record, Scoped, Base):

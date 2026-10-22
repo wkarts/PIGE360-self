@@ -7,10 +7,12 @@ from .models import AuditEvent, Sequence, User
 def output(obj, exclude=()):
     result = {}
     for column in obj.__table__.columns:
-        if column.name in exclude:
+        if column.name in exclude or column.name == 'imported_number':
             continue
         value = getattr(obj, column.name)
         result[column.name] = value.isoformat() if isinstance(value, (date, datetime)) else value
+    if obj.__tablename__ == 'enrollment_events' and result.get('action') == 'legacy_import':
+        result['reason'] = 'Matrícula trazida pela portabilidade; situação original preservada.'
     return result
 
 def audit(db: Session, request: Request, user: User | None, action: str, obj, school_id: str | None = None, details=None):
