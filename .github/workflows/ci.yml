@@ -106,6 +106,7 @@ jobs:
       - name: Motor local de leitura (mesmas ferramentas da imagem)
         timeout-minutes: 8
         run: |
+          sudo "$(command -v python)" scripts/ci/prepare_apt.py
           sudo env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o DPkg::Lock::Timeout=120 update
           sudo env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o DPkg::Lock::Timeout=120 install -y --no-install-recommends tesseract-ocr tesseract-ocr-por tesseract-ocr-eng poppler-utils libreoffice-writer
       - name: Dependências reproduzíveis
