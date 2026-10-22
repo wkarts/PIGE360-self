@@ -14,7 +14,7 @@ from .common import audit, output
 from .db import Base, Record
 from .institution import public_identity
 from .schemas import Input
-from .website_models import catalog, ASSET_NAMES, ASSET_ROOT, ASSET_PREFIX
+from .website_models import catalog, rewrite_links, ASSET_NAMES, ASSET_ROOT, ASSET_PREFIX
 from .website_design import WebsiteDesign, RESERVED_PAGES, validate_page_links, public_design
 from .security import Actor, DB, Scope, check_version, fail, lock_school, require
 from .school_community import SchoolCommunityPost, visible_query, post_output
@@ -472,14 +472,7 @@ def apply_website_model(data:ApplyModelInput,db:DB,user:Actor,school:Scope,reque
     elif data.website.version is not None:fail(409,'Configuração inexistente. Recarregue o editor.')
     values=website_values(data.website,row,prefer_draft=True,exclude_enabled=True)
     check_asset_ownership(db,school.id,values['design'])
-    preset=next(item['website'] for item in catalog()['items'] if item['id']==data.model_id)
-    draft={**deepcopy(values),**deepcopy(preset)}
-    # Keep independent configuration and institutional pages; the chosen composition
-    # replaces only home content in a private draft. Nothing publishes here.
-    for key in ('pages','header_sticky','mobile_actions'):
-        if key in values['design']:draft['design'][key]=deepcopy(values['design'][key])
-    checked=WebsiteInput(**draft)
-    draft=website_values(checked,exclude_enabled=True)
+    draft=resolve_website_model(data.model_id,values)
     if row is None:
         row=SchoolWebsite(school_id=school.id);db.add(row)
     else:row.version+=1
@@ -500,3 +493,45 @@ def restore_website_model(data:RestoreModelInput,db:DB,user:Actor,school:Scope,r
     row.draft=values;row.model_checkpoint=None;row.version+=1
     db.flush();audit(db,request,user,'website.model_restored',row,school.id)
     return website_output(row)
+
+
+def resolve_website_model(model_id,values):
+    preset=deepcopy(next(item['website'] for item in catalog()['items'] if item['id']==model_id))
+    existing=deepcopy(values['design'].get('pages',[]))
+    used={page['slug'] for page in existing};mapping={};new_pages=[]
+    origins={page.get('model_origin'):page for page in existing if page.get('model_origin')}
+    for page in preset['design']['pages']:
+        original=page['slug'];prior=origins.get(page['model_origin'])
+        if prior:
+            if not prior.get('published',True):
+                fail(422,'A página "'+prior['title']+'" deste modelo está desativada. Revise sua inclusão antes de reaplicar; nada foi alterado.')
+            mapping['/'+original]='/'+prior['slug'];continue
+        slug=original;number=2
+        while slug in used:
+            suffix='-'+str(number);slug=original[:60-len(suffix)]+suffix;number+=1
+        used.add(slug);page['slug']=slug;mapping['/'+original]='/'+slug;new_pages.append(page)
+    if len(existing)+len(new_pages)>20:
+        fail(422,'O modelo excederia o limite de 20 páginas. Nenhum conteúdo foi alterado.')
+    preset['design']['pages']=new_pages
+    preset=rewrite_links(preset,mapping)
+    draft={**deepcopy(values),**preset}
+    draft['design']['pages']=existing+preset['design']['pages']
+    for key in ('header_sticky','mobile_actions'):
+        if key in values['design']:draft['design'][key]=values['design'][key]
+    return website_values(WebsiteInput(**draft),exclude_enabled=True)
+
+
+@router.post('/schools/{school_id}/website/preview-model')
+def preview_website_model(data:ApplyModelInput,db:DB,user:Actor,school:Scope,page:str=''):
+    require(user,'schools.manage')
+    existing=db.scalar(select(SchoolWebsite).where(SchoolWebsite.school_id==school.id))
+    if existing:
+        if data.website.version is None:fail(409,'Recarregue o editor antes de visualizar o modelo.')
+        check_version(existing,data.website.version)
+    elif data.website.version is not None:fail(409,'Configuração inexistente. Recarregue o editor.')
+    values=website_values(data.website,existing,prefer_draft=True,exclude_enabled=True)
+    check_asset_ownership(db,school.id,values['design'])
+    draft=resolve_website_model(data.model_id,values)
+    row=SchoolWebsite(school_id=school.id,enabled=False,**draft)
+    payload=site_data(db,row,preview=True,page=page)
+    return {'website':draft,'html':inline_preview_assets(db,school.id,payload)}

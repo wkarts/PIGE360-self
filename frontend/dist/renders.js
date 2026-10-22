@@ -12825,7 +12825,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                   "aria-labelledby": "site-models-title"
                 }, [
                   _createElementVNode("h3", { id: "site-models-title" }, "Quatro composições completas"),
-                  _createElementVNode("p", null, "Conheça os modelos com textos e fotografias de exemplo. A prévia não altera seu conteúdo. Aplicar um modelo substitui somente a página inicial do rascunho, após confirmação."),
+                  _createElementVNode("p", null, "Conheça os modelos com textos e fotografias de exemplo. A prévia não altera seu conteúdo. Cada modelo tem uma página inicial curta e seis páginas reais para o menu. Aplicar substitui a página inicial e o menu, acrescenta as novas páginas e preserva todas as páginas atuais — somente no rascunho, após confirmação."),
                   _createElementVNode("button", {
                     type: "button",
                     class: "btn btn-secondary",
@@ -12835,23 +12835,57 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                     ? (_openBlock(), _createElementBlock("div", {
                         key: 0,
                         class: "x-form"
-                      }, [_createElementVNode("label", null, [_createTextVNode("Composição para experimentar"), _withDirectives(_createElementVNode("select", {
-                        "aria-label": "Composição para experimentar",
-                        "onUpdate:modelValue": $event => ((s.modelChoice) = $event)
-                      }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.models, (model) => {
-                        return (_openBlock(), _createElementBlock("option", {
-                          key: model.id,
-                          value: model.id
-                        }, _toDisplayString(model.name), 9, ["value"]))
-                      }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, s.modelChoice]])]), _createElementVNode("p", null, _toDisplayString(selectedModel()?.description), 1), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
-                        type: "button",
-                        class: "btn btn-secondary",
-                        onClick: previewModel
-                      }, "Ver modelo completo sem alterar", 8, ["onClick"]), _createElementVNode("button", {
-                        type: "button",
-                        class: "btn btn-primary",
-                        onClick: applyModel
-                      }, "Aplicar e salvar rascunho com cópia original", 8, ["onClick"])])]))
+                      }, [
+                        _createElementVNode("label", null, [_createTextVNode("Composição para experimentar"), _withDirectives(_createElementVNode("select", {
+                          "aria-label": "Composição para experimentar",
+                          "onUpdate:modelValue": $event => ((s.modelChoice) = $event),
+                          onChange: clearModelPreview
+                        }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.models, (model) => {
+                          return (_openBlock(), _createElementBlock("option", {
+                            key: model.id,
+                            value: model.id
+                          }, _toDisplayString(model.name), 9, ["value"]))
+                        }), 128))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, s.modelChoice]])]),
+                        _createElementVNode("p", null, _toDisplayString(selectedModel()?.description), 1),
+                        _createElementVNode("p", null, "Primeiro gere a prévia para conferir o resultado validado pela plataforma. A prévia não grava nem publica conteúdo."),
+                        (modelReady())
+                          ? (_openBlock(), _createElementBlock("section", {
+                              key: 0,
+                              class: "panel x-card",
+                              "aria-labelledby": "model-map-title"
+                            }, [
+                              _createElementVNode("h4", { id: "model-map-title" }, "Mapa antes de aplicar"),
+                              _createElementVNode("p", null, "Início curto (" + _toDisplayString(s.resolvedModel?.design?.sections.length||0) + " blocos), " + _toDisplayString(modelNewPages().length) + " novas páginas completas e " + _toDisplayString(s.website.design?.pages.length||0) + " páginas atuais preservadas.", 1),
+                              _createElementVNode("h5", null, "Novo menu principal"),
+                              _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.resolvedModel?.design?.menu, (link) => {
+                                return (_openBlock(), _createElementBlock("li", { key: link.url }, _toDisplayString(link.label) + " → " + _toDisplayString(link.url), 1))
+                              }), 128))]),
+                              _createElementVNode("h5", null, "Páginas acrescentadas"),
+                              _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(modelNewPages(), (page) => {
+                                return (_openBlock(), _createElementBlock("li", { key: page.slug }, _toDisplayString(page.title) + " · /" + _toDisplayString(page.slug), 1))
+                              }), 128))]),
+                              (modelRenames().length)
+                                ? (_openBlock(), _createElementBlock("div", {
+                                    key: 0,
+                                    class: "alert warning"
+                                  }, [_createElementVNode("strong", null, "Endereços já existentes foram preservados."), _createElementVNode("p", null, "As novas páginas receberão outros endereços e seus links serão ajustados:"), _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(modelRenames(), (rename) => {
+                                    return (_openBlock(), _createElementBlock("li", { key: rename }, _toDisplayString(rename), 1))
+                                  }), 128))])]))
+                                : _createCommentVNode("", true),
+                              _createElementVNode("p", null, "O menu atual será substituído pelo menu do modelo. As páginas existentes continuam no rascunho; você pode incluí-las novamente no menu. A marcação de inclusão das novas páginas NÃO publica automaticamente: é preciso confirmar a ação Publicar site.")
+                            ]))
+                          : _createCommentVNode("", true),
+                        _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                          type: "button",
+                          class: "btn btn-secondary",
+                          onClick: previewModel
+                        }, "Ver modelo completo sem alterar", 8, ["onClick"]), _createElementVNode("button", {
+                          type: "button",
+                          class: "btn btn-primary",
+                          onClick: applyModel,
+                          disabled: !modelReady()
+                        }, "Aplicar páginas e menu ao rascunho", 8, ["onClick", "disabled"])])
+                      ]))
                     : _createCommentVNode("", true),
                   (s.hasModelCheckpoint)
                     ? (_openBlock(), _createElementBlock("div", {
@@ -13225,7 +13259,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                         return (_openBlock(), _createElementBlock("option", {
                           key: pageIndex,
                           value: pageIndex
-                        }, _toDisplayString(sitePage.title||sitePage.slug) + _toDisplayString(sitePage.published?'':' (fora do ar)'), 9, ["value"]))
+                        }, _toDisplayString(sitePage.title||sitePage.slug) + _toDisplayString(sitePage.published?'':' (não incluir na próxima publicação)'), 9, ["value"]))
                       }), 128))], 40, ["onUpdate:modelValue", "onChange"]), [[
                         _vModelSelect,
                         s.sitePageIndex,
@@ -13235,7 +13269,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                         type: "button",
                         class: "btn btn-secondary",
                         onClick: addSitePage,
-                        disabled: s.website.design.pages.length>=12
+                        disabled: s.website.design.pages.length>=20
                       }, "Adicionar página", 8, ["onClick", "disabled"])]),
                       (editingPage())
                         ? (_openBlock(), _createElementBlock("div", {
@@ -13255,7 +13289,12 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                             }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, editingPage().slug]])]), _createElementVNode("label", { class: "x-check" }, [_withDirectives(_createElementVNode("input", {
                               type: "checkbox",
                               "onUpdate:modelValue": $event => ((editingPage().published) = $event)
-                            }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, editingPage().published]]), _createTextVNode("Incluir página na publicação")])]),
+                            }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, editingPage().published]]), _createTextVNode("Incluir página na próxima publicação confirmada")])]),
+                            _createElementVNode("label", { class: "x-check" }, [_withDirectives(_createElementVNode("input", {
+                              type: "checkbox",
+                              "onUpdate:modelValue": $event => ((editingPage().show_contact_details) = $event)
+                            }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, editingPage().show_contact_details]]), _createTextVNode("Exibir dados de contato da escola herdados do cadastro")]),
+                            _createElementVNode("p", null, "Marcar a inclusão não coloca a página no ar automaticamente. Salve e confirme Publicar site quando estiver pronta."),
                             _createElementVNode("p", null, "Endereço: /" + _toDisplayString(editingPage().slug) + ". Nomes de serviços como api, online e portal são reservados. Ao desmarcar a publicação, retire também os links para esta página do menu e dos botões; sua URL ficará indisponível após publicar o site.", 1),
                             _createElementVNode("label", null, [_createTextVNode("Apresentação da página"), _withDirectives(_createElementVNode("textarea", {
                               "onUpdate:modelValue": $event => ((editingPage().introduction) = $event),
@@ -13687,7 +13726,18 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
             ? (_openBlock(), _createElementBlock("div", {
                 key: 1,
                 class: "website-preview"
-              }, [_createElementVNode("div", { class: "actions" }, [_createElementVNode("label", null, [_createTextVNode("Largura da prévia"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((s.previewWidth) = $event) }, [
+              }, [_createElementVNode("div", { class: "actions" }, [(s.modelPreviewActive&&modelReady())
+                ? (_openBlock(), _createElementBlock("label", { key: 0 }, [_createTextVNode("Página da prévia do modelo"), _withDirectives(_createElementVNode("select", {
+                    "onUpdate:modelValue": $event => ((s.modelPreviewPage) = $event),
+                    onChange: previewModelPage,
+                    disabled: s.busy
+                  }, [_createElementVNode("option", { value: "" }, "Início"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.resolvedModel?.design?.pages, (page) => {
+                    return (_openBlock(), _createElementBlock("option", {
+                      key: page.slug,
+                      value: page.slug
+                    }, _toDisplayString(page.title) + " · /" + _toDisplayString(page.slug), 9, ["value"]))
+                  }), 128))], 40, ["onUpdate:modelValue", "onChange", "disabled"]), [[_vModelSelect, s.modelPreviewPage]])]))
+                : _createCommentVNode("", true), _createElementVNode("label", null, [_createTextVNode("Largura da prévia"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((s.previewWidth) = $event) }, [
                 _createElementVNode("option", { value: "100%" }, "Desktop"),
                 _createElementVNode("option", { value: "768px" }, "768 px"),
                 _createElementVNode("option", { value: "390px" }, "390 px"),
@@ -13697,10 +13747,11 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                 onClick: $event => (s.previewHtml='')
               }, "Fechar prévia", 8, ["onClick"])]), _createElementVNode("iframe", {
                 title: "Prévia privada do site",
+                onLoad: bindPreviewLinks,
                 sandbox: "allow-same-origin",
                 srcdoc: s.previewHtml,
                 style: _normalizeStyle({width:s.previewWidth,maxWidth:'100%',height:'720px',border:'1px solid #ccc'})
-              }, null, 12, ["srcdoc"])]))
+              }, null, 44, ["onLoad", "srcdoc"])]))
             : _createCommentVNode("", true)]))
         : _createCommentVNode("", true),
       _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "COMUNIDADE ESCOLAR"), _createElementVNode("h2", null, _toDisplayString(props.compact?'Acontece na escola':'Notícias e agenda'), 1), (!props.compact)

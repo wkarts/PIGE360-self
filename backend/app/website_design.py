@@ -95,6 +95,8 @@ def validate_section_ids(sections):
 
 class WebsitePage(Input):
     slug:str=Field(pattern=r'^[a-z][a-z0-9-]{0,59}$')
+    model_origin:str=Field(default='',max_length=100)
+    show_contact_details:bool=False
     title:str=Field(default='',max_length=180)
     introduction:str=Field(default='',max_length=2000)
     image:WebsiteImage|None=None
@@ -151,7 +153,7 @@ class WebsiteDesign(Input):
     heading_style: Literal['inherit','editorial'] = 'inherit'
     topline: str = Field(default='', max_length=180)
     hero_caption: str = Field(default='', max_length=200)
-    pages:list[WebsitePage]=Field(default_factory=list,max_length=12)
+    pages:list[WebsitePage]=Field(default_factory=list,max_length=20)
     configured: bool = False
     header_sticky: bool = False
     mobile_actions: bool = False
@@ -169,6 +171,8 @@ class WebsiteDesign(Input):
         validate_section_ids(self.sections)
         slugs=[page.slug for page in self.pages]
         if len(set(slugs))!=len(slugs):raise ValueError('Cada página precisa de um endereço único.')
+        origins=[page.model_origin for page in self.pages if page.model_origin]
+        if len(set(origins))!=len(origins):raise ValueError('Cada página de origem do modelo só pode aparecer uma vez.')
         if len(json.dumps(self.model_dump(),ensure_ascii=False,separators=(',',':')).encode())>1024*1024:
             raise ValueError('O conteúdo total do site deve ter no máximo 1 MB. Reduza os textos ou a quantidade de blocos.')
         return self

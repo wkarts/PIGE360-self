@@ -34,10 +34,10 @@ dos mockups. Não era falha de configuração do usuário nem download de fotos.
 
 | Modelo | Estrutura |
 |---|---|
-| Institucional | Foto imersiva, faixa de pilares, etapas, história, galeria e visita |
-| Infância | Título editorial, mosaico assimétrico, jornada, rotina e famílias |
-| Projetos | Introdução, foto/painel de destaque, experiências e percurso |
-| Comunidade | Manchete + duas histórias, agenda, mais histórias e vivências |
+| Institucional | Home: foto imersiva, pilares e síntese. Páginas: escola, educação, espaços, projetos, visita e contato |
+| Infância | Home: título editorial, mosaico e síntese. Páginas: proposta, rotina, famílias, descobertas, visita e contato |
+| Projetos | Home: apresentação e síntese. Páginas: projetos, experiências, aprendizagem, escola, visita e contato |
+| Comunidade | Home: manchete + duas histórias e convite. Páginas: histórias, agenda, notícias, vivências, visita e contato |
 
 Os modelos não criam notícias reais na escola. Cartões de exemplo podem ser
 substituídos manualmente. Seções de notícias/agenda continuam usando apenas
@@ -54,7 +54,7 @@ rebuild atualiza somente hashes compartilhados desses HTMLs.
 ## Verificação visual
 
 `scripts/qa/render-site-models.py <diretório-fora-do-repositório>` gera
-quatro HTMLs autocontidos com o renderer real e uma identidade fictícia equivalente.
+quatro homes e suas 24 páginas internas autocontidas com o renderer real e uma identidade fictícia equivalente.
 Use capturas desktop e mobile desses arquivos para comparar os PNGs V2 aprovados.
 A faixa demo e fotografias genéricas são diferenças intencionais.
 
@@ -82,3 +82,30 @@ Restauração do checkpoint deve ser feita antes do downgrade se for necessária
 ## Primeira revisão de pixels da PR70
 
 A rodada39866530385 passou todos os testes, mas as capturas revelaram grids aninhados que comprimiam cartões em uma coluna, duplicação da legenda central e endereço duplicado no rodapé. Foram corrigidos os wrappers HTML, a composição explícita do rodapé e a legenda sem mutar dados. Descrições de split/CTA agora precedem os links. O Chromium passa a registrar e exigir largura útil dos grids/cards, além de não haver overflow. Nova rodada e inspeção das imagens corrigidas continuam necessárias; CI verde anterior não é aprovação visual.
+
+## Revisão de arquitetura após feedback do usuário
+
+A primeira entrega visual continuava longa e desorganizada como landing page. A revisão
+passa a usar home de síntese (até dois blocos) e seis páginas reais por modelo,
+com menu e cartões principais em `/slug`, sem apenas deslocar a página por âncoras.
+Internas têm título e conteúdo próprios, não repetem o hero/mosaico da home.
+Rodapé V2 é compacto, em fluxo; imagens internas usam proporções consistentes.
+
+`preview-model` resolve o mesmo merge de `apply-model`, sem gravar. O editor mostra
+mapa, colisões e seletor das páginas antes de permitir aplicação; links locais na
+prévia permanecem no iframe privado. Páginas anteriores são preservadas integralmente.
+Colisões ganham sufixos e todos os links novos são ajustados. `model_origin` torna
+reaplicação idempotente: conteúdo anteriormente editado é reutilizado, não substituído.
+Se uma página dessa origem estiver desativada ou o total exceder 20 páginas, a
+operação falha antes de alterar versão/checkpoint. A inclusão de uma página no
+rascunho não publica o site; continua necessária confirmação explícita.
+
+Notícias e Agenda usam publicações elegíveis reais e estado vazio quando não existem;
+não são convertidas em notícias fictícias no banco. Contato pode exibir os dados
+institucionais herdados por `show_contact_details`, editável por página.
+
+A captura de CI navega pelos seis menus de cada modelo, recarrega cada página,
+valida destinos de links e registra todas as internas em 390/1440 px, além das
+homes em 320/390/768/1440 e menus móveis: 72 PNGs. Registra altura do rodapé e
+geometria de cards/grids. A guarda de upload e retenção existentes não mudam.
+Essas capturas ainda exigem inspeção humana antes de qualquer afirmação visual.

@@ -34,7 +34,20 @@ def main():
         data={'school':{'name':'SUA ESCOLA','address':'Endereço ilustrativo — substitua no PIGE','email':'','phone':''},
               'identity':{'display_name':'SUA ESCOLA','primary_color':'#A68B52','secondary_color':'#17334B','font_family':'system'},
               'website':site,'posts':[]}
-        document=renderer.render(data)
+        variants=[('',None)]+[(page['slug'],page) for page in site['design']['pages']]
+        routes=[]
+        for slug,site_page in variants:
+            document=renderer.render({**data,**({'page':site_page} if site_page else {})})
+            for name in models.ASSET_NAMES:
+                url=models.ASSET_PREFIX+name+'.jpg'
+                encoded=base64.b64encode((models.ASSET_ROOT/(name+'.jpg')).read_bytes()).decode()
+                document=document.replace(url,'data:image/jpeg;base64,'+encoded)
+            document=re.sub(r'<link[^>]*>', '',document)
+            directory=out/site['theme']/slug
+            directory.mkdir(parents=True,exist_ok=True)
+            (directory/'index.html').write_text(document)
+            routes.append({'slug':slug,'title':site_page['title'] if site_page else site['headline']})
+        document=(out/site['theme']/'index.html').read_text()
         # Asset inlining is confined to this QA artifact; public renderer still rejects data URLs.
         for name in models.ASSET_NAMES:
             url=models.ASSET_PREFIX+name+'.jpg'
@@ -42,7 +55,7 @@ def main():
             document=document.replace(url,'data:image/jpeg;base64,'+encoded)
         document=re.sub(r'<link[^>]*>', '',document)
         path=out/(site['theme']+'.html');path.write_text(document)
-        manifest.append({'theme':site['theme'],'file':path.name,'fixture':'fictional, AI and licensed demonstration photos','widths':[390,1440]})
+        manifest.append({'theme':site['theme'],'file':path.name,'fixture':'fictional, AI and licensed demonstration photos','widths':[390,1440],'routes':routes})
     (out/'manifest.json').write_text(json.dumps(manifest,indent=2,ensure_ascii=False))
     print(json.dumps({'output':str(out),'models':len(manifest),'screenshots':'pending real browser'},ensure_ascii=False))
 

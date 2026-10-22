@@ -118,6 +118,94 @@ class CompleteModelRendererTests(unittest.TestCase):
         self.assertNotIn('DEMO EVENT MUST NOT LEAK',doc)
         for i in range(4):self.assertIn('Published '+str(i),doc)
 
+    def test_internal_pages_have_own_content_not_home_hero(self):
+        for theme in ['horizon','editorial','culture','campus']:
+            with self.subTest(theme=theme):
+                payload=data(theme,composition_version=2,hero_caption='HOME CAPTION',
+                             hero_image={'url':'https://example.com/home.jpg'},
+                             hero_gallery=[{'url':'https://example.com/mosaic.jpg','caption':'HOME MOSAIC'}],
+                             sections=[{'id':'home-card','kind':'text','title':'HOME SECTION'}],
+                             menu=[{'label':'A escola','url':'/a-escola'},{'label':'Contato','url':'/contato'}])
+                payload['page']={'title':'Nossa história','introduction':'Conheça nossa trajetória.',
+                                 'image':{'url':'https://example.com/page.jpg'},
+                                 'sections':[{'id':'history','kind':'split','title':'Uma história de encontros',
+                                              'image':{'url':'https://example.com/page.jpg'},'text':'Conteúdo institucional próprio.'}]}
+                doc=renderer.render(payload)
+                self.assertIn('composition-v2 is-internal',doc)
+                self.assertIn('<h1>Nossa história</h1>',doc)
+                self.assertIn('Conteúdo institucional próprio.',doc)
+                for text in ['src="https://example.com/home.jpg"','src="https://example.com/mosaic.jpg"',
+                             'HOME CAPTION','HOME SECTION','HOME MOSAIC','class="hero-mosaic"']:
+                    self.assertNotIn(text,doc)
+                self.assertEqual(doc.count('src="https://example.com/page.jpg"'),1)
+                self.assertIn('href="/a-escola"',doc)
+                self.assertIn('href="/contato"',doc)
+                self.assertIn('class="site-footer footer-compact"',doc)
+                self.assertIn('href="#topo">Voltar ao início',doc)
+
+    def test_contact_page_uses_institution_data_once_and_honest_empty_state(self):
+        payload=data(composition_version=2)
+        payload['school'].update(address='Rua da Escola, 10',phone='+557500000000',email='escola@example.com')
+        payload['page']={'title':'Contato','show_contact_details':True,'sections':[]}
+        doc=renderer.render(payload)
+        self.assertIn('class="contact-channels"',doc)
+        self.assertEqual(doc.count('Rua da Escola, 10'),1)
+        self.assertIn('href="tel:+557500000000"',doc)
+        self.assertIn('href="mailto:escola@example.com"',doc)
+        payload['school'].update(address='',phone='',email='')
+        empty=renderer.render(payload)
+        self.assertIn('Os canais de atendimento serão disponibilizados em breve.',empty)
+        self.assertNotIn('class="contact-channels"',empty)
+
+    def test_real_campus_catalog_pages_render_cms_feed_and_honest_empty_states(self):
+        catalog_spec=importlib.util.spec_from_file_location('website_v2_catalog',ROOT/'backend/app/website_models.py')
+        catalog_module=importlib.util.module_from_spec(catalog_spec);catalog_spec.loader.exec_module(catalog_module)
+        website=next(item['website'] for item in catalog_module.catalog()['items'] if item['id']=='campus')
+        pages={page['slug']:page for page in website['design']['pages']}
+        # These represent the already-authorized public posts selected by the API.
+        # Publication/audience filtering remains an API responsibility, not rendering.
+        posts=[{'kind':'news','title':'Notícia CMS '+str(i),'summary':'Resumo da notícia '+str(i),
+                'content':'Texto integral notícia '+str(i),'image':{'url':'https://example.com/news-'+str(i)+'.jpg'}} for i in range(4)]
+        posts += [{'kind':'event','title':'Evento CMS '+str(i),'summary':'Resumo do evento '+str(i),
+                   'content':'Texto integral evento '+str(i),'event_start':'2027-03-12T10:00:00-03:00',
+                   'location':'Local informado pela escola'} for i in range(3)]
+        for slug,kind,own,other,amount,empty in [
+            ('noticias','news','Notícia CMS','Evento CMS',4,'Novas histórias serão publicadas aqui.'),
+            ('agenda','agenda','Evento CMS','Notícia CMS',3,'Consulte a escola para os próximos encontros.')]:
+            with self.subTest(page=slug):
+                page=pages[slug]
+                self.assertEqual([section['kind'] for section in page['sections']],[kind])
+                self.assertFalse(any(section.get('items') for section in page['sections']), 'CMS pages must not carry fake card items')
+                payload=data('campus');payload.update(website=website,page=page,posts=posts)
+                doc=renderer.render(payload)
+                self.assertIn('composition-v2 is-internal',doc)
+                for i in range(amount):self.assertIn(own+' '+str(i),doc)
+                self.assertNotIn(other,doc)
+                self.assertEqual(doc.count('<details class="story-details">'),amount)
+                self.assertEqual(doc.count('<summary>Ler publicação</summary>'),amount)
+                for i in range(amount):
+                    body=('Texto integral notícia ' if kind=='news' else 'Texto integral evento ')+str(i)
+                    self.assertIn('<p>'+body+'</p>',doc)
+                if kind=='news':
+                    self.assertIn('src="https://example.com/news-0.jpg"',doc)
+                    self.assertIn('<div class="magazine-lead">',doc)
+                else:self.assertEqual(doc.count('<time datetime="2027-03-12T10:00:00-03:00">'),amount)
+                payload['posts']=[]
+                empty_doc=renderer.render(payload)
+                self.assertIn(empty,empty_doc)
+                self.assertNotIn('<article class="story ',empty_doc)
+                self.assertNotIn('<details class="story-details">',empty_doc)
+                self.assertNotIn('12 MAR · EXEMPLO',empty_doc)
+                self.assertNotIn('Pequenas atitudes, novas possibilidades.',empty_doc)
+
+    def test_compact_footer_does_not_change_legacy_composition(self):
+        legacy=renderer.render(data())
+        self.assertNotIn('class="site-footer footer-compact"',legacy)
+        self.assertIn('href="#conteudo">Voltar ao início',legacy)
+        complete=renderer.render(data(composition_version=2,footer_text='Aprender e crescer.'))
+        self.assertIn('class="site-footer footer-compact"',complete)
+        self.assertEqual(complete.count('Rua de teste'),1)
+
     def test_feature_replaces_redundant_culture_hero_photo(self):
         image={'url':'https://example.com/project.jpg'}
         doc=renderer.render(data('culture',composition_version=2,hero_image=image,sections=[{'id':'project','kind':'split','layout':'feature','image':image,'title':'Projeto'}]))

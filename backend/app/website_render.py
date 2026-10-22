@@ -165,7 +165,12 @@ def render(data):
     if page is not None:
         breadcrumb = '<a class="text-link" href="/">← Página inicial</a>'
         page_copy = f'<div class="page-copy">{breadcrumb}<h1>{escape(page.get("title"))}</h1>{paragraphs(page.get("introduction"), "lead")}</div>'
-        page_media = f'<div class="page-media">{hero_image}</div>' if hero_image else ''
+        # A page may use the same cover in its leading content block; do not
+        # repeat that large photograph above the page's own editorial layout.
+        page_image_url = (page.get('image') or {}).get('url')
+        leading_section = next((section for section in (page.get('sections') or []) if section.get('visible', True)), {})
+        repeated_cover = page_image_url and page_image_url == (leading_section.get('image') or {}).get('url')
+        page_media = f'<div class="page-media">{hero_image}</div>' if hero_image and not (composition_v2 and repeated_cover) else ''
         hero = f'<section class="hero internal-cover container">{page_copy}{page_media}</section>'
     elif theme == 'editorial':
         mosaic = gallery or ([hero_image] if hero_image else [])
@@ -194,6 +199,8 @@ def render(data):
     demonstration = '<aside class="demonstration-banner" role="status">Modelo demonstrativo — substitua textos e imagens antes de publicar.</aside>' if design.get('demonstration') else ''
     visible_sections = []
     used_ids = {'conteudo', 'contato', 'topo'}
+    if composition_v2 and page is not None and page.get('show_contact_details'):
+        used_ids.add('contato-institucional')
     for index, section in enumerate(sections[:20]):
         if not isinstance(section, dict) or section.get('visible', True) is False:
             continue
@@ -291,8 +298,23 @@ def render(data):
     contact = ''.join(f'<p>{escape(school.get(key))}</p>' for key in ('address', 'phone', 'email') if school.get(key))
     contact_section = f'<section id="contato" class="contact"><div class="container contact-inner"><div><p class="eyebrow">VAMOS CONVERSAR</p><h2>Conheça a escola de perto.</h2><address>{contact or "Entre em contato com a Secretaria."}</address></div><div class="actions">{actions}</div></div></section>'
     footer_id = ' id="contato"' if composition_v2 else ''
-    footer_contact = f'<address>{contact}</address>' if composition_v2 and contact else ''
-    footer = f'<footer{footer_id} class="site-footer"><div class="container footer-inner"><div><strong>{escape(name)}</strong>{paragraphs(design.get("footer_text"))}</div><nav aria-label="Navegação do rodapé">{navigation}</nav><div>{footer_contact}{action(secondary_action, "footer-link")}<a class="footer-link" href="#conteudo">Voltar ao início ↑</a></div></div></footer>'
+    show_page_contact = composition_v2 and page is not None and page.get('show_contact_details')
+    page_contact = ''
+    if show_page_contact:
+        contact_items = []
+        for key, label, scheme in [('address', 'Endereço', ''), ('phone', 'Telefone', 'tel:'), ('email', 'E-mail', 'mailto:')]:
+            value = str(school.get(key) or '').strip()
+            if not value:
+                continue
+            url = safe_url(scheme + value) if scheme else ''
+            display = f'<a href="{escape(url)}">{escape(value)}</a>' if url else escape(value)
+            contact_items.append(f'<div><h3>{label}</h3><p>{display}</p></div>')
+        channels = '<address class="contact-channels">' + ''.join(contact_items) + '</address>' if contact_items else '<p class="empty">Os canais de atendimento serão disponibilizados em breve.</p>'
+        page_contact = f'<section id="contato-institucional" class="content-section page-contact"><div class="container"><h2>Canais de atendimento</h2>{channels}</div></section>'
+    footer_contact = f'<address>{contact}</address>' if composition_v2 and contact and not show_page_contact else ''
+    footer_class = 'site-footer footer-compact' if composition_v2 else 'site-footer'
+    top_target = '#topo' if composition_v2 else '#conteudo'
+    footer = f'<footer{footer_id} class="{footer_class}"><div class="container footer-inner"><div><strong>{escape(name)}</strong>{paragraphs(design.get("footer_text"))}</div><nav aria-label="Navegação do rodapé">{navigation}</nav><div>{footer_contact}{action(secondary_action, "footer-link")}<a class="footer-link" href="{top_target}">Voltar ao início ↑</a></div></div></footer>'
     if composition_v2:
         # Complete compositions already contain an editable visit/contact module.
         # Keep authoritative contact details in the footer instead of duplicating a CTA section.
@@ -302,4 +324,4 @@ def render(data):
     mobile_actions = f'<nav class="mobile-actions" aria-label="Ações rápidas">{actions}</nav>' if design.get('mobile_actions') else ''
     title = f'{page.get("title", "")} · {name}' if page is not None else name
     css = Path(__file__).with_name('website.css').read_text()
-    return f'''<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{escape(title)}</title><meta name="description" content="{escape(site.get('introduction'))}"><meta name="theme-color" content="{primary}"><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/api/v1/institution/icon.png?size=180"><link rel="stylesheet" href="/api/v1/institution/theme.css"><link rel="icon" href="/api/v1/institution/icon.png?size=32"><style>{css}:root{{--brand:{primary};--ink:{secondary};--font:{font};--heading-font:{heading_font}}}</style></head><body class="{theme}{' composition-v2' if composition_v2 else ''}{' with-mobile-actions' if mobile_actions else ''}"><a class="skip" href="#conteudo">Ir para o conteúdo</a>{demonstration}{topline}{header}<main id="conteudo">{hero}{notice}{''.join(item[2] for item in visible_sections)}{contact_section}</main>{footer}{mobile_actions}</body></html>'''
+    return f'''<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{escape(title)}</title><meta name="description" content="{escape(site.get('introduction'))}"><meta name="theme-color" content="{primary}"><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/api/v1/institution/icon.png?size=180"><link rel="stylesheet" href="/api/v1/institution/theme.css"><link rel="icon" href="/api/v1/institution/icon.png?size=32"><style>{css}:root{{--brand:{primary};--ink:{secondary};--font:{font};--heading-font:{heading_font}}}</style></head><body class="{theme}{' composition-v2' if composition_v2 else ''}{' is-internal' if composition_v2 and page is not None else ''}{' with-mobile-actions' if mobile_actions else ''}"><a class="skip" href="#conteudo">Ir para o conteúdo</a>{demonstration}{topline}{header}<main id="conteudo">{hero}{notice}{''.join(item[2] for item in visible_sections)}{page_contact}{contact_section}</main>{footer}{mobile_actions}</body></html>'''
