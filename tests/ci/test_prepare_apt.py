@@ -22,10 +22,18 @@ class PrepareAptTests(unittest.TestCase):
             other = sources / 'other.list'
             other_content = 'deb [signed-by=/keys/vendor.gpg] https://packages.example.test/ubuntu noble main\n'
             other.write_text(other_content)
-            self.assertEqual(module.prepare_apt(root), 2)
+            mirrorlist = root / 'apt-mirrors.txt'
+            mirrorlist.write_text('http://azure.archive.ubuntu.com/ubuntu\tpriority:1\nhttps://archive.ubuntu.com/ubuntu\tpriority:2\n')
+            mirrors = root / 'mirrors'
+            mirrors.mkdir()
+            nested = mirrors / 'ubuntu.list'
+            nested.write_text('https://azure.archive.ubuntu.com/ubuntu/\n')
+            self.assertEqual(module.prepare_apt(root), 4)
             self.assertEqual(traditional.read_text(), 'deb [signed-by=/keys/ubuntu.gpg] https://archive.ubuntu.com/ubuntu noble main\n')
             self.assertIn('URIs: https://archive.ubuntu.com/ubuntu/\n', modern.read_text())
             self.assertIn('Suites: noble-updates\nComponents: main universe\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n', modern.read_text())
             self.assertEqual(other.read_text(), other_content)
+            self.assertEqual(mirrorlist.read_text(), 'https://archive.ubuntu.com/ubuntu\tpriority:1\nhttps://archive.ubuntu.com/ubuntu\tpriority:2\n')
+            self.assertEqual(nested.read_text(), 'https://archive.ubuntu.com/ubuntu/\n')
             self.assertEqual(module.prepare_apt(root), 0)
             self.assertIn('Acquire::https::Timeout "30";', (root / 'apt.conf.d/80-pige360-ci-network').read_text())

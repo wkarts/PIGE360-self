@@ -10,7 +10,8 @@ DPkg::Lock::Timeout "120";
 
 
 def prepare_apt(root: Path = Path('/etc/apt')) -> int:
-    paths = [root / 'sources.list', *(root / 'sources.list.d').glob('*.list'),
+    paths = [root / 'sources.list', root / 'apt-mirrors.txt',
+             *(root / 'mirrors').glob('*.list'), *(root / 'sources.list.d').glob('*.list'),
              *(root / 'sources.list.d').glob('*.sources')]
     changed = 0
     for path in paths:
