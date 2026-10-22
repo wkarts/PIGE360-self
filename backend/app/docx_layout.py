@@ -29,8 +29,11 @@ def archive(data):
                 root=ET.fromstring(content,ET.XMLParser(resolve_entities=False,no_network=True))
                 if name.endswith('.rels'):
                     for rel in root:
+                        if any(part in rel.get('Type','').lower() for part in ('vbaproject','activex','oleobject','afchunk')):raise ValueError()
                         if rel.get('TargetMode')=='External' and not rel.get('Type','').endswith('/hyperlink'):raise ValueError()
-                if name.startswith('word/') and any(re.search(r'INCLUDETEXT|INCLUDEPICTURE|DDEAUTO|DDE\s',n.text or '',re.I) for n in root.findall('.//w:instrText',NS)):raise ValueError()
+                if name.startswith('word/'):
+                    instructions=[''.join(n.text or '' for n in root.findall('.//w:instrText',NS))]+[n.get('{'+NS['w']+'}instr','') for n in root.findall('.//w:fldSimple',NS)]
+                    if root.find('.//w:altChunk',NS) is not None or any(re.search(r'\b(?:INCLUDETEXT|INCLUDEPICTURE|DDEAUTO|DDE)\b',value,re.I) for value in instructions):raise ValueError()
         return z
     except (zipfile.BadZipFile,ET.XMLSyntaxError,ValueError,RuntimeError,KeyError):fail(422,'DOCX inválido, ativo, com referência externa não permitida ou acima do limite descompactado.')
 
