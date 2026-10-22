@@ -11,6 +11,13 @@ runs:
     - name: Dependências do smoke de publicação
       shell: bash
       run: |
+        # Vale também para o apt iniciado pelo instalador do Playwright.
+        sudo tee /etc/apt/apt.conf.d/80-pige360-ci-network >/dev/null <<'APT'
+        Acquire::Retries "3";
+        Acquire::http::Timeout "30";
+        Acquire::https::Timeout "30";
+        DPkg::Lock::Timeout "120";
+        APT
         python -m pip install -r scripts/ci/requirements-smoke.txt
         python -m playwright install --with-deps chromium
     - name: Conferir runtime isolado e navegador
