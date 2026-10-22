@@ -39,6 +39,8 @@ LABEL org.opencontainers.image.title="PIGE360 Self" \
       br.com.argws.pige360.service.postgres="${POSTGRES_IMAGE}"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1 APP_VERSION=${APP_VERSION}
 WORKDIR /app/backend
+ARG DEBIAN_FRONTEND=noninteractive
+RUN printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' 'DPkg::Lock::Timeout "120";' > /etc/apt/apt.conf.d/80pige-network
 COPY --from=postgres_tools /opt/pg-tools/ /opt/pg-tools/
 COPY scripts/pg-tools.sh /usr/local/bin/pg_dump
 COPY scripts/pg-tools.sh /usr/local/bin/pg_restore

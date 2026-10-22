@@ -30,7 +30,7 @@ O catálogo inclui campos de ficha e saúde provenientes do cadastro privado, qu
 
 ### Dependência local de conversão
 
-A imagem da aplicação e o runner de CI instalam `libreoffice-writer`. Instalações próprias fora da imagem precisam de `soffice` ou `libreoffice` no PATH do backend e das fontes usadas no documento. Cada conversão usa diretório/perfil temporário, macros desabilitadas e limite de 60 segundos. Ausência do conversor retorna 503 explicativo e conserva o original. Arquivos ativos, referências externas de conteúdo, ZIP inválido, caminhos suspeitos e expansão acima de 40 MB são rejeitados. Hyperlinks não são executados.
+A imagem da aplicação e o runner de CI instalam `libreoffice-writer` em modo não interativo, com timeout de rede de 30 segundos e três retentativas. A preparação no runner tem limite de oito minutos para não bloquear silenciosamente o restante da validação. Instalações próprias fora da imagem precisam de `soffice` ou `libreoffice` no PATH do backend e das fontes usadas no documento. Cada conversão usa diretório/perfil temporário, macros desabilitadas e limite de 60 segundos. Ausência do conversor retorna 503 explicativo e conserva o original. Arquivos ativos, referências externas de conteúdo, ZIP inválido, caminhos suspeitos e expansão acima de 40 MB são rejeitados. Hyperlinks não são executados.
 
 ## Migrações propostas
 
