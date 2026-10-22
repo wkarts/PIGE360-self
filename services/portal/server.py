@@ -17,7 +17,7 @@ PUBLIC=os.environ.get('PORTAL_PUBLIC_URL','').rstrip('/')
 INTERNAL_TOKEN=os.environ.get('PORTAL_INTERNAL_TOKEN','')
 STATIC=Path(os.environ.get('FRONTEND_PATH','/portal/public')).resolve()
 MAX_BODY=20*1024*1024
-ASSETS={'family.js','family.css','portal.js','renders.js','app.css','institution-layout.css','portal.css','community.css','mfa.css','assist.css','camera.css','diagnostic-client.js','first-access.js','first-access.html','favicon.svg','icons/icon-192.png','icons/icon-512.png','vendor/vue-3.5.13.global.prod.js'}
+ASSETS={'auth.css','ui-icons.svg','family.js','family.css','portal.js','renders.js','app.css','institution-layout.css','portal.css','community.css','mfa.css','assist.css','camera.css','diagnostic-client.js','first-access.js','first-access.html','favicon.svg','icons/icon-192.png','icons/icon-512.png','vendor/vue-3.5.13.global.prod.js'}
 
 
 def proxy_networks(value):
@@ -59,6 +59,7 @@ def allowed(path,method):
     if re.fullmatch(r'/api/v1/(?:portal(?:/[^?#]*)?|family(?:/[^?#]*)?)',path):return method in {'GET','POST','PATCH','PUT','DELETE'}
     if re.fullmatch(r'/api/v1/auth/(?:login|refresh|logout|me|mfa(?:/[^?#]*)?)',path):return method in {'GET','POST'}
     if re.fullmatch(r'/api/v1/profile/learning(?:/[0-9a-f-]{36}/report.pdf)?',path):return method=='GET'
+    if re.fullmatch(r'/api/v1/schools/[0-9a-f-]{36}/community-feed',path):return method=='GET'
     if re.fullmatch(r'/api/v1/invitations/(?:inspect|accept)',path):return method=='POST'
     if re.fullmatch(r'/api/v1/mfa/(?:challenge|verify|recovery|status)(?:/[^?#]*)?',path):return method in {'GET','POST'}
     if re.fullmatch(r'/api/v1/institution/(?:identity|theme.css|icon.png|assets/[0-9a-f]{64}\.(?:png|ttf|woff2))',path):return method=='GET'

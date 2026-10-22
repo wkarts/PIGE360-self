@@ -28,6 +28,10 @@ def validate_campaign(db,school,data):
     for id in data.class_group_ids:
         group=scoped(db,m.ClassGroup,id,school.id);check_group(db,group,school.id);years.add(group.academic_year_id)
     if len(years)>1:fail(422,'Crie um processo separado para cada ano letivo.')
+    if data.academic_year_id and data.academic_year_id not in years:
+        fail(422,'As turmas devem pertencer ao período letivo selecionado.')
+    # Compatibilidade com clientes antigos: a oferta ainda deve definir um único período.
+    data.academic_year_id=next(iter(years))
     if data.contract_template_id:
         template=scoped(db,m.DocumentTemplate,data.contract_template_id,school.id)
         if not template.active or not template.require_signature:
@@ -45,9 +49,14 @@ def create_campaign(data:s.CampaignInput,db:DB,user:Actor,school:Scope,request:R
 @router.patch('/admission-campaigns/{id}')
 def edit_campaign(id:str,data:s.CampaignEdit,db:DB,user:Actor,school:Scope,request:Request):
     require(user,'admissions.manage');lock_school(db,school.id);obj=scoped(db,m.AdmissionCampaign,id,school.id);check_version(obj,data.version);validate_campaign(db,school,data)
+    if obj.academic_year_id and obj.academic_year_id!=data.academic_year_id and db.scalar(select(m.Admission.id).where(m.Admission.campaign_id==obj.id).limit(1)):
+        fail(409,'Este processo já possui inscrições. Crie outro processo para mudar o período letivo.')
     if obj.slug!=data.slug:fail(409,'O endereço público é estável; crie outro processo para trocar o endereço.')
     if obj.privacy_notice!=data.privacy_notice and obj.terms_version==data.terms_version:fail(422,'Incremente a versão dos termos ao alterar o aviso de privacidade.')
-    for key,value in data.model_dump(exclude={'version'}).items():setattr(obj,key,value)
+    # Older clients must not reset a publication's explicit visibility choice.
+    excluded={'version'}
+    if 'show_student_portal_button' not in data.model_fields_set:excluded.add('show_student_portal_button')
+    for key,value in data.model_dump(exclude=excluded).items():setattr(obj,key,value)
     obj.version+=1;audit(db,request,user,'admission_campaign.updated',obj,school.id)
     return campaign_output(db,obj)
 

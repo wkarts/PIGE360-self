@@ -1,0 +1,105 @@
+{
+  "status": "passed",
+  "mode": "http_e2e",
+  "checks": [
+    "Website e portal separados prontos contra a API interna de teste",
+    "Site separado resolve a escola pelo domínio e renderiza a publicação configurada",
+    "Domínio sem publicação retorna diagnóstico 404, sem mascarar como sobrecarga",
+    "Responsável cria conta no portal, sem usuário administrativo",
+    "Autocadastro do aluno e escolha da oferta persistidos",
+    "Upload documental privado pelo responsável",
+    "Aceites explícitos e envio de pré-matrícula pela interface",
+    "Portal responsivo a 390px, sem rolagem horizontal",
+    "Fila administrativa exibe a inscrição enviada no portal",
+    "Documento do portal validado pela Secretaria",
+    "Aprovação cria aluno, responsável e matrícula sem duplicação",
+    "Efetivação da matrícula e emissão persistida do comprovante",
+    "Responsável consulta a matrícula efetivada e baixa o documento autorizado",
+    "Responsável autoriza acesso e consulta nota, frequência e PDF do período fechado",
+    "Notícia/evento dirigido a responsáveis aparece no portal da escola",
+    "Conta bancária de homologação configurada pela interface com credencial protegida",
+    "Cobrança de mensalidade criada e enfileirada pela interface, sem simular pagamento",
+    "API bloqueia financeiro para aluno e permite apenas ao responsável com vínculo financeiro ativo",
+    "Aluno autenticado consulta apenas seu boletim no espaço pessoal",
+    "Portal independente autentica aluno, renova sessão e navega entre boletim, documentos e financeiro",
+    "Portal familiar sem rolagem horizontal nas seis larguras, paisagem e espaço CSS equivalente a zoom 200%",
+    "Responsável autenticado consulta somente o aluno vinculado e a permissão financeira correspondente",
+    "Quatro composições de site renderizadas em 320, 390, 768 e 1440 px sem overflow",
+    "Editor salva rascunho privado, apresenta prévia e publica somente por confirmação explícita",
+    "Wizard em lote busca pessoas existentes, simula e cria duas matrículas com resultado persistido",
+    "Financeiro manual registra duas parcelas reais pendentes sem baixa automática",
+    "Assistente manual cria matrícula retomável e abre contratos no contexto da matrícula",
+    "DOCX importado pela interface, campo revisado, PDF real baixado e modelo ativado após conferência",
+    "Portal independente carrega sem falhas HTTP ou erros de JavaScript",
+    "Nenhum erro de JavaScript nas novas telas exercitadas"
+  ],
+  "responsive": {
+    "login-320": {
+      "viewport": "320x740",
+      "document_width": 320,
+      "horizontal_overflow": false
+    },
+    "family-320": {
+      "viewport": "320x844",
+      "document_width": 320,
+      "horizontal_overflow": false
+    },
+    "family-360": {
+      "viewport": "360x844",
+      "document_width": 360,
+      "horizontal_overflow": false
+    },
+    "family-390": {
+      "viewport": "390x844",
+      "document_width": 390,
+      "horizontal_overflow": false
+    },
+    "family-768": {
+      "viewport": "768x950",
+      "document_width": 768,
+      "horizontal_overflow": false
+    },
+    "family-1024": {
+      "viewport": "1024x950",
+      "document_width": 1024,
+      "horizontal_overflow": false
+    },
+    "family-1440": {
+      "viewport": "1440x950",
+      "document_width": 1440,
+      "horizontal_overflow": false
+    },
+    "family-landscape-844": {
+      "viewport": "844x390",
+      "document_width": 844,
+      "horizontal_overflow": false
+    },
+    "zoom-200-equivalent-720": {
+      "viewport": "720x900",
+      "document_width": 720,
+      "horizontal_overflow": false
+    },
+    "guardian-320": {
+      "viewport": "320x740",
+      "document_width": 320,
+      "horizontal_overflow": false
+    },
+    "guardian-390": {
+      "viewport": "390x844",
+      "document_width": 390,
+      "horizontal_overflow": false
+    }
+  },
+  "errors": [],
+  "failed_requests": [],
+  "bad_responses": [],
+  "database": "SQLite descartável",
+  "remote_requests_executed": false,
+  "not_validated": [
+    "Provedores reais",
+    "PostgreSQL",
+    "Certificados e assinatura real",
+    "Entrega de código de verificação (contato sintético verificado no banco de teste)"
+  ],
+  "browser": "153.0.8010.0"
+}

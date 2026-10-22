@@ -96,7 +96,10 @@ def test_website_only_exposes_published_public_content(api,client):
     published['website']['headline']='<script>alert(1)</script>'
     for theme in ('horizon','editorial','campus'):
         published['website']['theme']=theme
-        html=module.render(published)
+        preview=api.post('/website/preview',{**data,'headline':published['website']['headline'],'theme':theme},200)
+        html=module.render({**published,'html':preview['html']})
+        fallback=module.render({key:value for key,value in published.items() if key!='html'})
+        assert '<script>' not in fallback and '&lt;script&gt;' in fallback
         assert '<script>' not in html and '&lt;script&gt;' in html
         assert f'body class="{theme}"' in html
         assert 'http://app:8000' not in html

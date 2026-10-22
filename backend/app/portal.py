@@ -106,7 +106,7 @@ def campaign_output(db,obj):
     groups=[]
     for id in obj.class_group_ids:
         g=db.get(m.ClassGroup,id)
-        if not g or g.school_id!=obj.school_id or not g.active:continue
+        if not g or g.school_id!=obj.school_id or not g.active or (obj.academic_year_id and g.academic_year_id!=obj.academic_year_id):continue
         from .enrollments import check_group
         from fastapi import HTTPException
         try:check_group(db,g,obj.school_id)
@@ -114,7 +114,7 @@ def campaign_output(db,obj):
         y=db.get(m.AcademicYear,g.academic_year_id)
         if y.status!='active':continue
         groups.append({'id':g.id,'name':g.name,'grade':db.get(m.Grade,g.grade_id).name,'shift':db.get(m.Shift,g.shift_id).name,'year':y.name,'unit':db.get(m.Unit,g.unit_id).name,'vacancies':max(0,g.capacity-occupancy(db,g.id))})
-    return {**output(obj),'school_name':school.name,'school_phone':school.phone,'school_email':school.email,'groups':groups,'accepting':obj.active and obj.opens_on<=today()<=obj.closes_on and bool(groups)}
+    return {**output(obj),'student_portal_url':settings().portal_public_url.rstrip('/')+'/family.html' if settings().portal_public_url else '/family.html','school_name':school.name,'school_phone':school.phone,'school_email':school.email,'groups':groups,'accepting':obj.active and obj.opens_on<=today()<=obj.closes_on and bool(groups)}
 
 def document_types(db,admission):
     group=db.get(m.ClassGroup,admission.class_group_id)
@@ -487,6 +487,8 @@ def valid_group(db,campaign,id):
     if id not in campaign.class_group_ids:fail(422,'Turma não oferecida neste processo.')
     group=db.get(m.ClassGroup,id)
     if not group or group.school_id!=campaign.school_id:fail(422,'Turma não encontrada.')
+    if campaign.academic_year_id and group.academic_year_id!=campaign.academic_year_id:
+        fail(422,'Esta oferta não pertence ao período letivo do processo.')
     check_group(db,group,campaign.school_id)
     return group
 

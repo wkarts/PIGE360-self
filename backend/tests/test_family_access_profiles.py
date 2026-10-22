@@ -193,3 +193,17 @@ def test_guardian_link_restrictions_apply_with_and_without_selected_school(api,f
         for path in ('/family/context','/profile/learning'):
             result=api.client.get('/api/v1'+path,headers={**headers,**selected})
             assert result.status_code==200 and result.json()['students']==[],result.text
+
+
+def test_two_children_have_independent_financial_permissions_and_revoked_access(api):
+    _,headers,first,guardian=account(api,'guardian')
+    second=api.student('Segundo filho sintético')
+    link=api.post('/students/'+second['id']+'/guardians',{'person_id':guardian['id'],'legal':True,'financial':False})
+    result=api.client.get('/api/v1/family/context',headers=headers)
+    by_id={r['id']:r for r in result.json()['students']}
+    assert by_id[first['id']]['financial_authorized'] is True
+    assert by_id[second['id']]['financial_authorized'] is False
+    assert api.client.get('/api/v1/family/students/'+second['id']+'/charges',headers=headers).status_code==403
+    api.patch('/students/'+second['id']+'/guardians/'+link['id'],{'version':link['version'],'data':{'person_id':guardian['id'],'legal':True,'financial':False,'active':False}})
+    assert second['id'] not in [r['id'] for r in api.client.get('/api/v1/family/context',headers=headers).json()['students']]
+    assert api.client.get('/api/v1/family/students/'+second['id']+'/charges',headers=headers).status_code==404

@@ -2,6 +2,7 @@
 """Portal/Secretaria reais em Chromium; PIGE_UI_BRIDGE=1 registra limitação HTTP explicitamente."""
 import base64, json, os, re, shutil, socket, sqlite3, subprocess, sys, tempfile, time
 from pathlib import Path
+from contextlib import contextmanager
 import httpx
 from playwright.sync_api import sync_playwright, expect
 from datetime import date, timedelta
@@ -9,14 +10,39 @@ ROOT=Path(__file__).resolve().parents[1]
 OUT=Path(os.getenv('PIGE_E2E_EVIDENCE_DIR',str(ROOT/'evidence/qa/online')));OUT.mkdir(parents=True,exist_ok=True)
 TEMP=Path(tempfile.mkdtemp(prefix='pige-online-e2e-'))
 shutil.copytree(ROOT/'frontend/dist',TEMP/'frontend')
-with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
-URL=f'http://127.0.0.1:{port}';password='Synthetic-Only-Password-2026!'
-env={**os.environ,'PYTHONPATH':str(ROOT/'backend'),'DATABASE_URL':'sqlite:///'+str(TEMP/'e2e.db'),'ALLOW_SQLITE':'true','APP_ENV':'test','APP_URL':URL,'ALLOWED_HOSTS':'127.0.0.1,localhost','APP_SECRET_KEY':'test-only-online-secret-key-01234567890123456789','SETUP_TOKEN':'test-only-online-setup-token-0123456789','STORAGE_PATH':str(TEMP/'files'),'FRONTEND_PATH':str(TEMP/'frontend'),'COOKIE_SECURE':'false','INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(b'0'*32).decode(),'CONNECT_ALLOWED_HOSTS':'connect.example.test'}
+def free_port():
+    with socket.socket() as sock:sock.bind(('127.0.0.1',0));return sock.getsockname()[1]
+port,website_port,portal_port=(free_port() for _ in range(3))
+URL=f'http://127.0.0.1:{port}';WEBSITE_URL=f'http://127.0.0.1:{website_port}';PORTAL_URL=f'http://127.0.0.1:{portal_port}'
+password='Synthetic-Only-Password-2026!';website_token='synthetic-website-service-token-0123456789';portal_token='synthetic-portal-service-token-0123456789'
+env={**os.environ,'PYTHONPATH':str(ROOT/'backend'),'DATABASE_URL':'sqlite:///'+str(TEMP/'e2e.db'),'ALLOW_SQLITE':'true','APP_ENV':'test','APP_URL':URL,'PORTAL_PUBLIC_URL':PORTAL_URL,'PORTAL_INTERNAL_TOKEN':portal_token,'WEBSITE_INTERNAL_TOKEN':website_token,'ALLOWED_HOSTS':'127.0.0.1,localhost','APP_SECRET_KEY':'test-only-online-secret-key-01234567890123456789','SETUP_TOKEN':'test-only-online-setup-token-0123456789','STORAGE_PATH':str(TEMP/'files'),'FRONTEND_PATH':str(TEMP/'frontend'),'COOKIE_SECURE':'false','INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(b'0'*32).decode(),'CONNECT_ALLOWED_HOSTS':'connect.example.test'}
 subprocess.run([sys.executable,'-m','alembic','upgrade','head'],cwd=ROOT/'backend',env=env,check=True)
 log=(OUT/'server.log').open('w');proc=subprocess.Popen([sys.executable,'-m','uvicorn','app.main:app','--host','127.0.0.1','--port',str(port)],cwd=ROOT/'backend',env=env,stdout=log,stderr=log)
-checks=[];errors=[];bridge=os.getenv('PIGE_UI_BRIDGE')=='1';page=None
+checks=[];errors=[];responsive={};bridge=os.getenv('PIGE_UI_BRIDGE')=='1';page=None;website_proc=None;portal_proc=None;website_log=None;portal_log=None
 
 def record(msg):checks.append(msg);print('PASS:',msg,flush=True)
+@contextmanager
+def capture_browser_failure():
+    # Runs before sync_playwright exits: the active page is still available.
+    try:
+        yield
+    except Exception:
+        if page:
+            try:
+                print('Estado de foco/menu:',page.evaluate('''() => {
+                  const active=document.activeElement,nav=document.getElementById('family-navigation');
+                  const style=nav&&getComputedStyle(nav);
+                  return {active:active&&{tag:active.tagName,id:active.id,role:active.getAttribute('role'),label:active.getAttribute('aria-label')},
+                    navigation:nav&&{className:nav.className,visibility:style.visibility,transform:style.transform,transition:style.transition},
+                    mainInert:document.querySelector('.family-main')?.inert,viewport:innerWidth};
+                }'''),flush=True)
+            except Exception as diagnostic: print('Não foi possível ler o foco:',diagnostic,flush=True)
+            try: print('Página ativa:',page.url,'\n',page.locator('body').inner_text()[-8000:],flush=True)
+            except Exception as diagnostic: print('Não foi possível ler a página:',diagnostic,flush=True)
+            try: page.screenshot(path=str(OUT/'failure.png'),full_page=True)
+            except Exception as diagnostic: print('Não foi possível capturar a página:',diagnostic,flush=True)
+        raise
+
 try:
     client=httpx.Client(base_url=URL,timeout=30)
     for _ in range(60):
@@ -24,16 +50,39 @@ try:
             if client.get('/health/ready').status_code==200:break
         except httpx.HTTPError:pass
         time.sleep(.1)
+    website_env={**env,'PORT':str(website_port),'PIGE_INTERNAL_URL':URL,'WEBSITE_SCHOOL_ID':'','WEBSITE_INTERNAL_TOKEN':website_token}
+    portal_env={**env,'PORT':str(portal_port),'PIGE_INTERNAL_URL':URL,'PORTAL_PUBLIC_URL':PORTAL_URL,'PORTAL_INTERNAL_TOKEN':portal_token}
+    website_log=(OUT/'website.log').open('w');portal_log=(OUT/'portal.log').open('w')
+    website_proc=subprocess.Popen([sys.executable,'server.py'],cwd=ROOT/'services/website',env=website_env,stdout=website_log,stderr=website_log)
+    portal_proc=subprocess.Popen([sys.executable,'server.py'],cwd=ROOT/'services/portal',env=portal_env,stdout=portal_log,stderr=portal_log)
+    for _ in range(80):
+        try:
+            if httpx.get(WEBSITE_URL+'/health/ready',timeout=1).status_code==200 and httpx.get(PORTAL_URL+'/health/ready',timeout=1).status_code==200:break
+        except httpx.HTTPError:pass
+        time.sleep(.1)
+    else:raise AssertionError('Serviços separados de website/portal não ficaram prontos')
+    record('Website e portal separados prontos contra a API interna de teste')
     r=client.post('/api/v1/setup',headers={'X-Setup-Token':env['SETUP_TOKEN']},json={'admin_name':'Secretaria — Teste','admin_email':'secretaria@example.com','admin_password':password,'company_name':'Mantenedora Exemplo — Teste','school_name':'Escola Exemplo — Dados de Teste','academic_year':2027});assert r.status_code==201,r.text
     r=client.post('/api/v1/auth/login',json={'email':'secretaria@example.com','password':password});headers={'Authorization':'Bearer '+r.json()['access_token']}
     school=client.get('/api/v1/schools',headers=headers).json()[0];base='/api/v1/schools/'+school['id']
+    site_config={'enabled':True,'theme':'campus','headline':'Site da Escola Exemplo','introduction':'Conteúdo de teste por domínio.',
+        'about':'A publicação usa somente dados fictícios.','public_url':'https://site.example.test','portal_url':'https://portal.example.test/online.html'}
+    response=client.put(base+'/website',headers=headers,json=site_config);assert response.status_code==200,response.text
+    site=httpx.get(WEBSITE_URL,headers={'Host':'site.example.test'},timeout=15)
+    assert site.status_code==200,site.text
+    assert 'Site da Escola Exemplo' in site.text
+    record('Site separado resolve a escola pelo domínio e renderiza a publicação configurada')
+    unknown_site=httpx.get(WEBSITE_URL,headers={'Host':'nao-configurado.example.test'},timeout=15)
+    assert unknown_site.status_code==404,unknown_site.text
+    assert 'high load' not in unknown_site.text.lower()
+    record('Domínio sem publicação retorna diagnóstico 404, sem mascarar como sobrecarga')
     def post(path,data):
         r=client.post(base+path,headers=headers,json=data);assert r.is_success,r.text;return r.json()
     unit=post('/units',{'name':'Unidade Centro — Teste'});year=client.get(base+'/academic-years',headers=headers).json()[0]
     grade=post('/grades',{'name':'3º Ano'});shift=post('/shifts',{'name':'Matutino'});group=post('/class-groups',{'name':'3º Ano A','unit_id':unit['id'],'academic_year_id':year['id'],'grade_id':grade['id'],'shift_id':shift['id'],'capacity':30})
     doc=post('/document-types',{'name':'Certidão de nascimento','required':True})
     campaign=post('/admission-campaigns',{'slug':'matriculas-2027-teste','title':'Matrículas 2027 — Dados de Teste','class_group_ids':[group['id']],'opens_on':str(date.today()-timedelta(days=1)),'closes_on':str(date.today()+timedelta(days=120)),'active':True,'require_verified_contact':False,'require_documents':True,'instructions':'Preencha os dados e envie os documentos. A Secretaria acompanhará cada etapa. Este processo utiliza exclusivamente dados fictícios para teste.','privacy_notice':'AMBIENTE DE TESTE. Dados fictícios utilizados para verificar cadastro, documentos e matrícula. Não inserir dados reais. A instituição responsável deve publicar seu aviso de privacidade antes do uso em produção.'})
-    with sync_playwright() as pw:
+    with sync_playwright() as pw, capture_browser_failure():
         binary=os.getenv('CHROMIUM_PATH') or (None if Path(pw.chromium.executable_path).exists() else shutil.which('chromium'))
         browser=pw.chromium.launch(headless=True,**({'executable_path':binary} if binary else {}),args=['--no-sandbox'])
         parentContext=browser.new_context(viewport={'width':1366,'height':950},locale='pt-BR',accept_downloads=True)
@@ -157,6 +206,23 @@ try:
         student_record=client.get(base+'/students/'+student_id,headers=headers).json()
         response=client.post('/api/v1/users',headers=headers,json={'name':'Lucas Almeida — Teste','email':'aluno@example.com','password':password,'role':'student','school_ids':[school['id']],'person_id':student_record['person']['id']})
         assert response.status_code==201,response.text
+        guardian=post('/persons',{'name':'Mariana Almeida — Teste','email':'responsavel-escolar@example.com','phone':'75999990000','is_guardian':True})
+        post('/students/'+student_id+'/guardians',{'person_id':guardian['id'],'relationship':'Mãe','legal':True,'financial':True})
+        response=client.post('/api/v1/users',headers=headers,json={'name':'Mariana Almeida — Teste','email':'responsavel-escolar@example.com','password':password,'role':'guardian','school_ids':[school['id']],'person_id':guardian['id']})
+        assert response.status_code==201,response.text
+        student_login=client.post('/api/v1/auth/login',json={'email':'aluno@example.com','password':password});assert student_login.status_code==200,student_login.text
+        student_headers={'Authorization':'Bearer '+student_login.json()['access_token']}
+        student_context=client.get('/api/v1/family/context',headers=student_headers)
+        assert student_context.status_code==200 and student_context.json()['students'][0]['financial_authorized'] is False,student_context.text
+        student_charges=client.get('/api/v1/family/students/'+student_id+'/charges',headers=student_headers)
+        assert student_charges.status_code==403,student_charges.text
+        guardian_login=client.post('/api/v1/auth/login',json={'email':'responsavel-escolar@example.com','password':password});assert guardian_login.status_code==200,guardian_login.text
+        guardian_headers={'Authorization':'Bearer '+guardian_login.json()['access_token']}
+        guardian_context=client.get('/api/v1/family/context',headers=guardian_headers)
+        assert guardian_context.status_code==200 and guardian_context.json()['students'][0]['financial_authorized'] is True,guardian_context.text
+        guardian_charges=client.get('/api/v1/family/students/'+student_id+'/charges',headers=guardian_headers)
+        assert guardian_charges.status_code==200,guardian_charges.text
+        record('API bloqueia financeiro para aluno e permite apenas ao responsável com vínculo financeiro ativo')
         studentContext=browser.new_context(viewport={'width':1366,'height':950},locale='pt-BR',accept_downloads=True)
         studentPage=studentContext.new_page();studentPage.on('pageerror',lambda e:errors.append('aluno: '+str(e)));page=studentPage
         studentPage.goto(URL);studentPage.get_by_label('E-mail',exact=True).fill('aluno@example.com');studentPage.get_by_label('Senha',exact=True).fill(password);studentPage.get_by_role('button',name='Entrar na aplicação').click()
@@ -164,14 +230,133 @@ try:
         expect(studentPage.locator('.learning-workspace table')).to_contain_text('8,5')
         studentPage.screenshot(path=str(OUT/'07-portal-aluno-boletim.png'),full_page=True)
         record('Aluno autenticado consulta apenas seu boletim no espaço pessoal')
+        familyContext=browser.new_context(viewport={'width':320,'height':740},locale='pt-BR')
+        familyPage=familyContext.new_page();familyPage.set_default_timeout(8000);familyPage.on('pageerror',lambda e:errors.append('portal-familia: '+str(e)));page=familyPage
+        failed_requests=[];bad_responses=[]
+        familyPage.on('requestfailed',lambda req:failed_requests.append({'url':req.url,'failure':req.failure,'method':req.method}))
+        familyPage.on('response',lambda response:bad_responses.append((response.status,response.url)) if response.status>=400 and not (response.status==401 and response.url.endswith('/api/v1/auth/refresh')) else None)
+        familyPage.goto(PORTAL_URL)
+        expect(familyPage.get_by_role('heading',name='Acesse seu portal',exact=True)).to_be_visible()
+        def check_family_viewport(width,height,label):
+            familyPage.set_viewport_size({'width':width,'height':height})
+            # Wait for the responsive drawer transition rather than measuring mid-animation.
+            familyPage.wait_for_timeout(250)
+            measurement=familyPage.evaluate("""() => {
+              const root=document.documentElement;
+              const outside=[...document.querySelectorAll('.family-root input,.family-root select,.family-root textarea,.family-root button,.family-root a')]
+                .filter(el=>!el.classList.contains('skip')&&el.getClientRects().length&&getComputedStyle(el).visibility!=='hidden')
+                .map(el=>({tag:el.tagName,text:(el.innerText||el.getAttribute('aria-label')||'').slice(0,50),left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right}))
+                .filter(el=>el.left < -1 || el.right > root.clientWidth + 1);
+              return {clientWidth:root.clientWidth,scrollWidth:root.scrollWidth,outside};
+            }""")
+            assert measurement['scrollWidth']<=measurement['clientWidth']+1,(label,measurement)
+            assert not measurement['outside'],(label,measurement['outside'])
+            responsive[label]={'viewport':f'{width}x{height}','document_width':measurement['scrollWidth'],'horizontal_overflow':False}
+            if label in {'login-320','login-1440','family-390','family-1440','family-landscape-844','zoom-200-equivalent-720','family-dashboard-390','family-dashboard-1440','family-menu-390'}:
+                familyPage.screenshot(path=str(OUT/f'{label}.png'),full_page=True)
+        def family_nav(name):
+            target=familyPage.locator('#family-navigation').get_by_role('button',name=name,exact=True)
+            if not target.is_visible():
+                familyPage.get_by_role('button',name='Abrir menu',exact=True).click()
+                # The trigger is intentionally outside the accessibility tree while main is inert.
+                expect(familyPage.locator('#family-menu-toggle')).to_have_attribute('aria-expanded','true')
+                expect(familyPage.locator('.family-main')).to_have_attribute('inert','')
+                expect(familyPage.get_by_role('button',name='Fechar menu',exact=True)).to_be_focused()
+            target.click()
+            expect(familyPage.locator('#family-title')).to_have_text(name)
+            expect(familyPage.locator('.family-main')).not_to_have_attribute('inert','')
+        check_family_viewport(1440,950,'login-1440')
+        check_family_viewport(320,740,'login-320')
+        familyPage.get_by_label('E-mail',exact=True).focus();familyPage.keyboard.press('Tab')
+        assert familyPage.evaluate("""() => {
+          const active=document.activeElement;
+          return getComputedStyle(active).outlineStyle==='solid'||
+            (active.closest('.password-control')&&getComputedStyle(active.closest('.password-control')).outlineStyle==='solid');
+        }"""),'Foco do teclado sem indicação visível no formulário de acesso'
+        familyPage.get_by_label('E-mail',exact=True).fill('aluno@example.com')
+        familyPage.get_by_label('Senha',exact=True).fill(password)
+        familyPage.get_by_role('button',name='Mostrar senha',exact=True).click()
+        expect(familyPage.get_by_label('Senha',exact=True)).to_have_attribute('type','text')
+        familyPage.get_by_role('button',name='Ocultar senha',exact=True).click()
+        familyPage.get_by_role('button',name='Entrar no portal',exact=True).click()
+        expect(familyPage.locator('#family-title')).to_have_text('Visão geral')
+        expect(familyPage.get_by_role('heading',name='Olá, Lucas.',exact=True)).to_be_visible()
+        expect(familyPage.get_by_label('Você está acompanhando',exact=True)).to_have_value(student_id)
+        expect(familyPage.get_by_role('combobox',name='Você está acompanhando',exact=True)).to_have_value(student_id)
+        familyPage.reload();expect(familyPage.locator('#family-title')).to_have_text('Visão geral')
+        expect(familyPage.get_by_role('heading',name='Olá, Lucas.',exact=True)).to_be_visible()
+        check_family_viewport(1440,950,'family-dashboard-1440')
+        check_family_viewport(390,844,'family-dashboard-390')
+        familyPage.get_by_role('button',name='Abrir menu',exact=True).click()
+        expect(familyPage.get_by_role('button',name='Fechar menu',exact=True)).to_be_focused()
+        expect(familyPage.locator('#family-menu-toggle')).to_have_attribute('aria-expanded','true')
+        expect(familyPage.locator('.family-main')).to_have_attribute('inert','')
+        check_family_viewport(390,844,'family-menu-390')
+        familyPage.keyboard.press('Shift+Tab')
+        expect(familyPage.locator('#family-navigation a[href]').last).to_be_focused()
+        familyPage.keyboard.press('Tab')
+        expect(familyPage.get_by_role('button',name='Fechar menu',exact=True)).to_be_focused()
+        familyPage.keyboard.press('Escape')
+        expect(familyPage.get_by_role('button',name='Abrir menu',exact=True)).to_be_focused()
+        expect(familyPage.get_by_role('button',name='Abrir menu',exact=True)).to_have_attribute('aria-expanded','false')
+        family_nav('Vida acadêmica');expect(familyPage.locator('.learning-workspace table')).to_contain_text('Matemática')
+        family_nav('Documentos');expect(familyPage.get_by_role('heading',name='Documentos de Lucas Almeida — Teste')).to_be_visible()
+        family_nav('Financeiro');expect(familyPage.get_by_role('heading',name='Financeiro de Lucas Almeida — Teste')).to_be_visible()
+        expect(familyPage.get_by_text('Seu vínculo não autoriza a consulta financeira.',exact=False)).to_be_visible()
+        familyPage.go_back();expect(familyPage.locator('#family-title')).to_have_text('Documentos')
+        familyPage.go_forward();expect(familyPage.locator('#family-title')).to_have_text('Financeiro')
+        family_nav('Comunicados');expect(familyPage.get_by_text('Nenhuma publicação disponível.',exact=True)).to_be_visible()
+        family_nav('Agenda escolar');expect(familyPage.get_by_text('Nenhuma publicação disponível.',exact=True)).to_be_visible()
+        family_nav('Vida acadêmica');expect(familyPage.locator('.learning-workspace table')).to_contain_text('Matemática')
+        record('Portal independente autentica aluno, renova sessão, usa menu mobile/teclado e navega pelas views reais e histórico')
+        for width in (320,360,390,768,1024,1440):
+            check_family_viewport(width,844 if width<650 else 950,f'family-{width}')
+        check_family_viewport(844,390,'family-landscape-844')
+        check_family_viewport(720,900,'zoom-200-equivalent-720')
+        record('Portal familiar sem rolagem horizontal nas seis larguras, paisagem e espaço CSS equivalente a zoom 200%')
+        familyPage.get_by_role('button',name='Sair do portal',exact=True).click()
+        expect(familyPage.get_by_role('heading',name='Acesse seu portal',exact=True)).to_be_visible()
+        familyPage.get_by_label('E-mail',exact=True).fill('responsavel-escolar@example.com')
+        familyPage.get_by_label('Senha',exact=True).fill(password)
+        familyPage.get_by_role('button',name='Entrar no portal',exact=True).click()
+        # The current deep link is retained across sign-out/sign-in.
+        expect(familyPage.locator('#family-title')).to_have_text('Vida acadêmica')
+        expect(familyPage.get_by_label('Você está acompanhando',exact=True)).to_have_value(student_id)
+        expect(familyPage.get_by_role('combobox',name='Você está acompanhando',exact=True)).to_have_value(student_id)
+        family_nav('Visão geral');expect(familyPage.get_by_role('heading',name='Olá, Mariana.',exact=True)).to_be_visible()
+        family_nav('Financeiro')
+        expect(familyPage.get_by_role('heading',name='Financeiro de Lucas Almeida — Teste')).to_be_visible()
+        expect(familyPage.get_by_text('Seu vínculo não autoriza a consulta financeira.',exact=False)).to_have_count(0)
+        family_nav('Agenda escolar')
+        familyPage.get_by_role('button',name='Reunião de famílias — Teste',exact=True).click()
+        expect(familyPage.locator('#family-post-detail')).to_be_visible()
+        expect(familyPage.locator('#family-post-detail')).to_contain_text('Encontro sintético para acompanhamento escolar')
+        familyPage.get_by_role('button',name='Fechar leitura',exact=True).click()
+        expect(familyPage.locator('#family-post-detail')).to_have_count(0)
+        family_nav('Documentos')
+        expect(familyPage.get_by_role('heading',name='Documentos de Lucas Almeida — Teste')).to_be_visible()
+        check_family_viewport(320,740,'guardian-320')
+        check_family_viewport(390,844,'guardian-390')
+        record('Responsável autenticado consulta somente o aluno vinculado e a permissão financeira correspondente')
+        import importlib.util
+        spec=importlib.util.spec_from_file_location('school_workflows',ROOT/'scripts/e2e-school-workflows.py');extra=importlib.util.module_from_spec(spec);spec.loader.exec_module(extra)
+        extra.verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,post,year,group,WEBSITE_URL)
+        assert not failed_requests,failed_requests
+        assert not bad_responses,bad_responses
+        assert not errors,errors
+        record('Portal independente carrega sem falhas HTTP ou erros de JavaScript')
         assert not errors,errors;record('Nenhum erro de JavaScript nas novas telas exercitadas')
-        result={'status':'passed','mode':'ui_api_bridge' if bridge else 'http_e2e','checks':checks,'errors':errors,'database':'SQLite descartável','remote_requests_executed':False,'not_validated':['Navegação HTTP nativa','Cookies do navegador','CSP em navegação','Instalação PWA','Provedores reais','PostgreSQL'] if bridge else ['Provedores reais','PostgreSQL','Certificados e assinatura real','Entrega de código de verificação (contato sintético verificado no banco de teste)'],'browser':browser.version}
+        result={'status':'passed','mode':'ui_api_bridge' if bridge else 'http_e2e','checks':checks,'responsive':responsive,'errors':errors,'failed_requests':failed_requests,'bad_responses':bad_responses,'database':'SQLite descartável','remote_requests_executed':False,'not_validated':['Navegação HTTP nativa','Cookies do navegador','CSP em navegação','Instalação PWA','Provedores reais','PostgreSQL'] if bridge else ['Provedores reais','PostgreSQL','Certificados e assinatura real','Entrega de código de verificação (contato sintético verificado no banco de teste)'],'browser':browser.version}
         (OUT/'results.json').write_text(json.dumps(result,ensure_ascii=False,indent=2));print(json.dumps(result,ensure_ascii=False));browser.close()
 except Exception:
     (OUT/'results.json').write_text(json.dumps({'status':'failed','checks':checks,'errors':errors},ensure_ascii=False,indent=2))
-    if page:
-        try:page.screenshot(path=str(OUT/'failure.png'),full_page=True);print(page.locator('body').inner_text()[-5000:])
-        except Exception:pass
     raise
 finally:
-    proc.terminate();proc.wait(timeout=10);log.close();shutil.rmtree(TEMP,ignore_errors=True)
+    for child in (website_proc,portal_proc,proc):
+        if child and child.poll() is None:child.terminate()
+        if child:
+            try:child.wait(timeout=10)
+            except subprocess.TimeoutExpired:child.kill();child.wait(timeout=5)
+    for stream in (website_log,portal_log,log):
+        if stream:stream.close()
+    shutil.rmtree(TEMP,ignore_errors=True)
