@@ -149,9 +149,7 @@ jobs:
         env:
           WEBSITE_IMAGE: ${{ steps.names.outputs.website }}@${{ steps.build-website.outputs.digest }}
         run: |
-          docker run -d --name pige-website-smoke -p 127.0.0.1:58082:8080 "$WEBSITE_IMAGE"
-          trap 'docker rm -f pige-website-smoke' EXIT
-          curl -fsS --retry 20 --retry-all-errors --retry-delay 1 http://127.0.0.1:58082/health/ready
+          bash scripts/ci/website-isolated-smoke.sh "$WEBSITE_IMAGE"
       - name: Smoke integrado da stack com gestor, site e portal publicados
         env:
           IMAGE: ${{ steps.names.outputs.image }}
