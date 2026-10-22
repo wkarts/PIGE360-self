@@ -43,12 +43,13 @@ def error_page(status,message,request_id):
           'body{margin:0;padding:24px;background:#f7f8f5;color:#263746;font:16px/1.6 system-ui,sans-serif}'
           'main{box-sizing:border-box;width:min(100%,680px);margin:12vh auto;padding:clamp(20px,5vw,40px);'
           'background:#fff;border:1px solid #d9dfd9;border-radius:12px}h1{font-size:clamp(24px,6vw,34px);line-height:1.2}'
-          'p,small{overflow-wrap:anywhere}</style></head><body><main role="alert"><h1>Site institucional indisponível</h1>'
+          'p,small{overflow-wrap:anywhere}</style></head><body><main role="alert"><h1>'+('Site em preparação' if status==404 else 'Site institucional indisponível')+'</h1>'
           f'<p>{safe}</p><small>Código de atendimento: {request_id}</small></main></body></html>').encode()
     return body
 
 
 def render(data):
+    if isinstance(data.get('html'),str):return data['html']
     e=lambda value:html.escape(str(value or ''),quote=True)
     school,site,identity=data['school'],data['website'],data['identity']
     name=identity.get('display_name') or school['name']

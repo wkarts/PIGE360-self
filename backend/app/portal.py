@@ -106,7 +106,7 @@ def campaign_output(db,obj):
     groups=[]
     for id in obj.class_group_ids:
         g=db.get(m.ClassGroup,id)
-        if not g or g.school_id!=obj.school_id or not g.active:continue
+        if not g or g.school_id!=obj.school_id or not g.active or (obj.academic_year_id and g.academic_year_id!=obj.academic_year_id):continue
         from .enrollments import check_group
         from fastapi import HTTPException
         try:check_group(db,g,obj.school_id)
@@ -487,6 +487,8 @@ def valid_group(db,campaign,id):
     if id not in campaign.class_group_ids:fail(422,'Turma não oferecida neste processo.')
     group=db.get(m.ClassGroup,id)
     if not group or group.school_id!=campaign.school_id:fail(422,'Turma não encontrada.')
+    if campaign.academic_year_id and group.academic_year_id!=campaign.academic_year_id:
+        fail(422,'Esta oferta não pertence ao período letivo do processo.')
     check_group(db,group,campaign.school_id)
     return group
 

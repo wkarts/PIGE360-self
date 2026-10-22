@@ -19,9 +19,9 @@ namespace PigeCommunity {
     const parts=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Bahia',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(value));
     return parts.replace(' ','T');
   }
-  interface Website {version?:number;enabled:boolean;theme:string;headline:string;introduction:string;about:string;public_url:string;portal_url:string;notice:string}
+  interface Website {admission_url?:string;brand?:{display_name:string;primary_color:string;secondary_color:string;font_family:string};draft?:Record<string,unknown>|null;published_version?:number;version?:number;enabled:boolean;theme:string;headline:string;introduction:string;about:string;public_url:string;portal_url:string;notice:string}
   export const component={props:['schoolId','permissions','publicMode','portalMode','request','compact'],render:PigeRenders.community,setup(props:Props){
-    const s=Vue.reactive({website:{enabled:false,theme:'horizon',headline:'',introduction:'',about:'',public_url:'',portal_url:'',notice:''} as Website,websiteOpen:false,busy:false,error:'',notice:'',items:[] as Post[],page:1,total:0,q:'',kind:'',status:'',upcoming:false,selected:null as Post|null,editing:false,discard:false,deleteConfirm:false,initial:'',form:empty()});
+    const s=Vue.reactive({previewHtml:'',previewWidth:'100%',publishedVersion:0,publishedUrl:'',published:false,hasDraft:false,website:{enabled:false,theme:'horizon',headline:'',introduction:'',about:'',public_url:'',portal_url:'',notice:'',admission_url:'',brand:{display_name:'',primary_color:'',secondary_color:'',font_family:''}} as Website,websiteOpen:false,busy:false,error:'',notice:'',items:[] as Post[],page:1,total:0,q:'',kind:'',status:'',upcoming:false,selected:null as Post|null,editing:false,discard:false,deleteConfirm:false,initial:'',form:empty()});
     const manage=()=>!props.publicMode&&!props.portalMode&&Boolean(props.permissions?.includes('schools.manage'));
     const endpoint=()=>props.portalMode?'/portal/community-feed':props.publicMode?'/public/schools/'+props.schoolId+'/community-feed':'/schools/'+props.schoolId+(manage()?'/community-posts':'/community-feed');
     const transport=(path:string,options?:RequestInit)=>(props.request||request)(path,options);
@@ -31,8 +31,13 @@ namespace PigeCommunity {
       const params=new URLSearchParams({page:String(s.page),page_size:props.compact?'4':'12',q:s.q,kind:s.kind,...(manage()?{status:s.status}:{upcoming:String(s.upcoming)})});
       const result=await transport(endpoint()+'?'+params) as Page;s.items=result.items;s.total=result.total;
     }
-    async function loadWebsite():Promise<void>{if(manage()&&!props.compact){const data=await transport('/schools/'+props.schoolId+'/website') as {configuration:Website|null};if(data.configuration){const c=data.configuration;s.website={version:c.version,enabled:c.enabled,theme:c.theme,headline:c.headline,introduction:c.introduction,about:c.about,public_url:c.public_url,portal_url:c.portal_url,notice:c.notice};}}}
-    async function saveWebsite():Promise<void>{await run(async()=>{await transport('/schools/'+props.schoolId+'/website',{method:'PUT',body:JSON.stringify(s.website)});await loadWebsite();s.notice='Configuração do site salva. Somente publicações destinadas ao público aparecem no site.';});}
+    async function loadWebsite():Promise<void>{if(manage()&&!props.compact){const data=await transport('/schools/'+props.schoolId+'/website') as {configuration:Website|null};if(data.configuration){const c=data.configuration;s.published=c.enabled;s.publishedVersion=c.published_version||0;s.publishedUrl=c.public_url;s.hasDraft=Boolean(c.draft);s.website={...s.website,...c,...(c.draft||{}),version:c.version};s.website.brand={display_name:'',primary_color:'',secondary_color:'',font_family:'',...s.website.brand};}}}
+    function websitePayload():Website{const {version,enabled,theme,headline,introduction,about,public_url,portal_url,notice,admission_url,brand}=s.website;return {version,enabled,theme,headline,introduction,about,public_url,portal_url,notice,admission_url,brand};}
+    function editorialCheck():void{if(/^(https?:\/\/|www\.)/i.test(s.website.headline.trim()))throw new Error('Use um título na chamada principal. Informe a URL no endereço do botão.');}
+    async function saveWebsite():Promise<void>{await run(async()=>{await transport('/schools/'+props.schoolId+'/website/draft',{method:'PUT',body:JSON.stringify(websitePayload())});await loadWebsite();s.notice='Rascunho salvo. A versão pública permanece a mesma até você publicar.';});}
+    async function publishWebsite():Promise<void>{if(!window.confirm('Publicar este conteúdo no site da escola?'))return;await run(async()=>{editorialCheck();await transport('/schools/'+props.schoolId+'/website/draft',{method:'PUT',body:JSON.stringify(websitePayload())});await loadWebsite();await transport('/schools/'+props.schoolId+'/website/publish',{method:'POST',body:JSON.stringify({version:s.website.version})});await loadWebsite();s.notice='Site publicado com sucesso.';});}
+    async function previewWebsite():Promise<void>{await run(async()=>{editorialCheck();const result=await transport('/schools/'+props.schoolId+'/website/preview',{method:'POST',body:JSON.stringify(websitePayload())}) as {html:string};s.previewHtml=result.html;});}
+    async function unpublishWebsite():Promise<void>{if(!window.confirm('Retirar o site do ar? O conteúdo será preservado em rascunho.'))return;await run(async()=>{const draft=websitePayload();await transport('/schools/'+props.schoolId+'/website',{method:'PUT',body:JSON.stringify({...draft,enabled:false})});await loadWebsite();await transport('/schools/'+props.schoolId+'/website/draft',{method:'PUT',body:JSON.stringify({...draft,version:s.website.version})});await loadWebsite();s.notice='Site retirado da publicação. Rascunho preservado.';});}
     async function search():Promise<void>{s.page=1;await run(load);}
     async function page(delta:number):Promise<void>{s.page+=delta;await run(load);}
     function open(post:Post):void{s.selected=post;s.error='';}
@@ -52,6 +57,6 @@ namespace PigeCommunity {
     const expired=(post:Post)=>Boolean(post.expires_at)&&new Date(post.expires_at as string)<=new Date();
     const paragraphs=(value:string)=>value.split(/\n\s*\n/).filter(Boolean);
     Vue.onMounted(()=>{void run(async()=>{await load();await loadWebsite();});});
-    return {s,props,manage,run,load,saveWebsite,search,page,open,edit,closeEditor,save,remove,date,audienceLabels,statusLabels,scheduled,expired,paragraphs};
+    return {s,props,manage,run,load,saveWebsite,publishWebsite,previewWebsite,unpublishWebsite,search,page,open,edit,closeEditor,save,remove,date,audienceLabels,statusLabels,scheduled,expired,paragraphs};
   }};
 }

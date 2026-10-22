@@ -13,6 +13,7 @@ class AdmissionCampaign(Record, Scoped, Base):
     instructions: Mapped[str] = mapped_column(Text, default='')
     privacy_notice: Mapped[str] = mapped_column(Text)
     terms_version: Mapped[str] = mapped_column(String(40), default='1')
+    academic_year_id: Mapped[str | None] = mapped_column(ForeignKey('academic_years.id'))
     class_group_ids: Mapped[list] = mapped_column(JSON, default=list)
     opens_on: Mapped[date] = mapped_column(Date)
     closes_on: Mapped[date] = mapped_column(Date)

@@ -305,7 +305,7 @@ sandbox.PigeAPI.post=async(path,payload)=>{
 };
 await expansion.load();expansion.newCampaign();
 await expansion.saveCampaign();assert.equal(campaignSaved,null,'Sem turma, o processo não deve ser enviado');assert.match(expansion.s.error,/Selecione pelo menos uma turma/);
-Object.assign(expansion.s.campaignForm,{title:'Matrículas 2027',slug:'matriculas-2027',opens_on:'2027-01-01',closes_on:'2027-03-31'});
+Object.assign(expansion.s.campaignForm,{academic_year_id:'year-2027',title:'Matrículas 2027',slug:'matriculas-2027',opens_on:'2027-01-01',closes_on:'2027-03-31'});
 expansion.s.campaignForm.class_group_ids=['group-2027'];expansion.s.campaignForm.contract_template_id='template-contract';
 await expansion.saveCampaign();assert.equal(campaignSaved.contract_template_id,'template-contract');
 expansion.s.selected=admission;

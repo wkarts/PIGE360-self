@@ -5,7 +5,7 @@ import re
 from urllib.parse import urlsplit
 from fastapi import APIRouter, Request
 from pydantic import Field, field_validator
-from sqlalchemy import Boolean, ForeignKey, String, Text, select
+from sqlalchemy import Boolean, ForeignKey, String, Text, JSON, Integer, select
 from sqlalchemy.orm import Mapped, mapped_column
 from . import models as m
 from .common import audit, output
@@ -83,18 +83,31 @@ class SchoolWebsite(Record,Base):
     public_url:Mapped[str]=mapped_column(String(500),default='')
     portal_url:Mapped[str]=mapped_column(String(500),default='')
     notice:Mapped[str]=mapped_column(String(1000),default='')
+    admission_url:Mapped[str]=mapped_column(String(500),default='')
+    brand:Mapped[dict]=mapped_column(JSON,default=dict)
+    draft:Mapped[dict|None]=mapped_column(JSON,nullable=True)
+    published_version:Mapped[int]=mapped_column(Integer,default=0)
+
+
+class WebsiteBrand(Input):
+    display_name:str=Field(default='',max_length=180)
+    primary_color:str=Field(default='',pattern=r'^(#[0-9a-fA-F]{6})?$')
+    secondary_color:str=Field(default='',pattern=r'^(#[0-9a-fA-F]{6})?$')
+    font_family:Literal['','system','serif','sans']=''
 
 
 class WebsiteInput(Input):
     version:int|None=Field(default=None,ge=1)
     enabled:bool=False
-    theme:Literal['horizon','editorial','campus']='horizon'
+    theme:Literal['horizon','editorial','campus','culture']='horizon'
     headline:str=Field(default='',max_length=180)
     introduction:str=Field(default='',max_length=500)
     about:str=Field(default='',max_length=10000)
     public_url:str=Field(default='',max_length=500)
     portal_url:str=Field(default='',max_length=500)
     notice:str=Field(default='',max_length=1000)
+    admission_url:str=Field(default='',max_length=500)
+    brand:WebsiteBrand=Field(default_factory=WebsiteBrand)
 
     @field_validator('public_url')
     @classmethod
@@ -104,7 +117,7 @@ class WebsiteInput(Input):
             raise ValueError('Informe somente a origem HTTPS do domínio público, sem caminho ou parâmetros.')
         return value.rstrip('/')
 
-    @field_validator('portal_url')
+    @field_validator('portal_url','admission_url')
     @classmethod
     def safe_portal_url(cls,value):
         if not value:return ''
@@ -122,7 +135,7 @@ class WebsiteInput(Input):
 def read_settings(db:DB,user:Actor,school:Scope):
     require(user,'schools.manage')
     row=db.scalar(select(SchoolWebsite).where(SchoolWebsite.school_id==school.id))
-    return {'configuration':output(row) if row else None,'themes':['horizon','editorial','campus']}
+    return {'configuration':output(row) if row else None,'themes':['horizon','editorial','campus','culture']}
 
 
 @router.put('/schools/{school_id}/website')
@@ -135,7 +148,8 @@ def configure(data:WebsiteInput,db:DB,user:Actor,school:Scope,request:Request):
     else:
         if data.version is not None:fail(409,'A configuração do site não existe.')
         row=SchoolWebsite(school_id=school.id);db.add(row)
-    if data.enabled and (not data.headline or not data.public_url):fail(422,'Informe chamada principal e domínio público antes de publicar o site.')
+    if data.enabled and re.match(r'^(?:https?://|www\.)',data.headline.strip(),re.I):fail(422,'A chamada principal deve ser um título. Informe o endereço no campo de destino do botão.')
+    if data.enabled and (not data.headline.strip() or not data.public_url):fail(422,'Informe chamada principal e domínio público antes de publicar o site.')
     target=public_origin(data.public_url) if data.enabled else None
     if target:
         candidates=db.scalars(select(SchoolWebsite).join(m.School).where(
@@ -144,17 +158,25 @@ def configure(data:WebsiteInput,db:DB,user:Actor,school:Scope,request:Request):
             fail(409,'Este domínio já está associado a outra escola ativa.')
     for key,value in data.model_dump(exclude={'version'}).items():setattr(row,key,value)
     if row.id:row.version+=1
+    db.flush()
+    row.published_version=row.version if row.enabled else 0
+    row.draft=None
     db.flush();audit(db,request,user,'website.configured',row,school.id,{'enabled':row.enabled,'theme':row.theme})
     return output(row)
 
 
-def site_data(db,row):
+def site_data(db,row,preview=False):
     school=db.get(m.School,row.school_id)
-    if not row.enabled or not school or not school.active:fail(404,'Site não publicado.')
+    if (not preview and not row.enabled) or not school or not school.active:fail(404,'Site não publicado.')
     posts=list(db.scalars(visible_query(school.id,['public']).order_by(SchoolCommunityPost.pinned.desc(),SchoolCommunityPost.publish_at.desc()).limit(100)))
-    return {'school':{'id':school.id,'name':school.name,'address':school.address,'phone':school.phone,'email':school.email},
-        'identity':public_identity(db),'website':{key:getattr(row,key) for key in ('theme','headline','introduction','about','public_url','portal_url','notice')},
+    identity=public_identity(db)
+    identity.update({key:value for key,value in (row.brand or {}).items() if value})
+    payload={'school':{'id':school.id,'name':school.name,'address':school.address,'phone':school.phone,'email':school.email},
+        'identity':identity,'website':{key:getattr(row,key) for key in ('theme','headline','introduction','about','public_url','portal_url','notice','admission_url')},
         'posts':[post_output(post) for post in sorted(posts,key=lambda p:(p.pinned,p.publish_at),reverse=True)]}
+    from .website_render import render
+    payload['html']=render(payload)
+    return payload
 
 
 @router.get('/public/schools/{school_id}/website')
@@ -186,3 +208,39 @@ def internal_site_by_host(db:DB,request:Request):
 def internal_site(db:DB,request:Request,school_id:str=''):
     authorize_website_service(request)
     return published(school_id,db) if school_id else default_site(db)
+
+
+@router.put('/schools/{school_id}/website/draft')
+def save_draft(data:WebsiteInput,db:DB,user:Actor,school:Scope,request:Request):
+    require(user,'schools.manage');lock_school(db,school.id)
+    row=db.scalar(select(SchoolWebsite).where(SchoolWebsite.school_id==school.id))
+    if row:
+        if data.version is None:fail(409,'Recarregue o rascunho antes de salvar.')
+        check_version(row,data.version)
+        row.version+=1
+    else:
+        if data.version is not None:fail(409,'Rascunho inexistente. Recarregue a página.')
+        row=SchoolWebsite(school_id=school.id);db.add(row)
+    row.draft=data.model_dump(exclude={'version','enabled'})
+    db.flush();audit(db,request,user,'website.draft_saved',row,school.id)
+    return output(row)
+
+
+class PublicationInput(Input):
+    version:int=Field(ge=1)
+
+
+@router.post('/schools/{school_id}/website/publish')
+def publish_draft(data:PublicationInput,db:DB,user:Actor,school:Scope,request:Request):
+    require(user,'schools.manage');lock_school(db,school.id)
+    row=db.scalar(select(SchoolWebsite).where(SchoolWebsite.school_id==school.id))
+    if not row or not row.draft:fail(409,'Salve um rascunho antes de publicar.')
+    check_version(row,data.version)
+    return configure(WebsiteInput(**row.draft,enabled=True,version=row.version),db,user,school,request)
+
+
+@router.post('/schools/{school_id}/website/preview')
+def preview_draft(data:WebsiteInput,db:DB,user:Actor,school:Scope):
+    require(user,'schools.manage')
+    row=SchoolWebsite(school_id=school.id,**data.model_dump(exclude={'version'}))
+    return {'html':site_data(db,row,preview=True)['html']}
