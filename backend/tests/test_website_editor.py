@@ -48,3 +48,14 @@ def test_renderer_escapes_long_content_and_separates_actions(api):
         assert '<script>alert(1)</script>' not in preview['html']
         assert 'Inscrição e matrícula' in preview['html'] and 'Portal da família' in preview['html']
         assert 'class="about"' not in preview['html']
+
+
+def test_unpublish_preserves_unsaved_draft_atomically(api,client):
+    config=website('Publicação preservada','unpublish.example.test')
+    row=api.call('PUT','/website',config)
+    result=api.post('/website/unpublish',{**config,'version':row['version'],'headline':'Alteração não publicada'},200)
+    assert not result['enabled'] and result['draft']['headline']=='Alteração não publicada'
+    assert result['headline']=='Publicação preservada'
+    assert client.get('/api/v1/public/schools/'+api.school['id']+'/website').status_code==404
+    api.post('/website/publish',{'version':result['version']},200)
+    assert client.get('/api/v1/public/schools/'+api.school['id']+'/website').json()['website']['headline']=='Alteração não publicada'

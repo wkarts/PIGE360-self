@@ -42,12 +42,12 @@ try:
     r=client.post('/api/v1/setup',headers={'X-Setup-Token':env['SETUP_TOKEN']},json={'admin_name':'Secretaria — Teste','admin_email':'secretaria@example.com','admin_password':password,'company_name':'Mantenedora Exemplo — Teste','school_name':'Escola Exemplo — Dados de Teste','academic_year':2027});assert r.status_code==201,r.text
     r=client.post('/api/v1/auth/login',json={'email':'secretaria@example.com','password':password});headers={'Authorization':'Bearer '+r.json()['access_token']}
     school=client.get('/api/v1/schools',headers=headers).json()[0];base='/api/v1/schools/'+school['id']
-    site_config={'enabled':True,'theme':'campus','headline':'Site sintético do Colégio Navegantes','introduction':'Conteúdo de teste por domínio.',
+    site_config={'enabled':True,'theme':'campus','headline':'Site da Escola Exemplo','introduction':'Conteúdo de teste por domínio.',
         'about':'A publicação usa somente dados fictícios.','public_url':'https://site.example.test','portal_url':'https://portal.example.test/online.html'}
     response=client.put(base+'/website',headers=headers,json=site_config);assert response.status_code==200,response.text
     site=httpx.get(WEBSITE_URL,headers={'Host':'site.example.test'},timeout=15)
     assert site.status_code==200,site.text
-    assert 'Site sintético do Colégio Navegantes' in site.text
+    assert 'Site da Escola Exemplo' in site.text
     record('Site separado resolve a escola pelo domínio e renderiza a publicação configurada')
     unknown_site=httpx.get(WEBSITE_URL,headers={'Host':'nao-configurado.example.test'},timeout=15)
     assert unknown_site.status_code==404,unknown_site.text
@@ -210,7 +210,7 @@ try:
         familyContext=browser.new_context(viewport={'width':320,'height':740},locale='pt-BR')
         familyPage=familyContext.new_page();familyPage.set_default_timeout(8000);familyPage.on('pageerror',lambda e:errors.append('portal-familia: '+str(e)));page=familyPage
         failed_requests=[];bad_responses=[]
-        familyPage.on('requestfailed',lambda req:failed_requests.append(req.url))
+        familyPage.on('requestfailed',lambda req:failed_requests.append({'url':req.url,'failure':req.failure,'method':req.method}))
         familyPage.on('response',lambda response:bad_responses.append((response.status,response.url)) if response.status>=400 and not (response.status==401 and response.url.endswith('/api/v1/auth/refresh')) else None)
         familyPage.goto(PORTAL_URL)
         expect(familyPage.get_by_role('heading',name='Aprendizado e cuidado, de perto.')).to_be_visible()
@@ -236,6 +236,7 @@ try:
         familyPage.get_by_label('Senha').fill(password)
         familyPage.get_by_role('button',name='Entrar',exact=True).click()
         expect(familyPage.get_by_role('heading',name='Olá, Lucas Almeida — Teste.')).to_be_visible()
+        expect(familyPage.locator('.learning-workspace table')).to_contain_text('Matemática')
         familyPage.reload();expect(familyPage.get_by_role('heading',name='Olá, Lucas Almeida — Teste.')).to_be_visible()
         expect(familyPage.get_by_role('button',name='Boletim e matrículas')).to_be_visible()
         familyPage.get_by_role('button',name='Documentos').click();expect(familyPage.get_by_role('heading',name='Documentos de Lucas Almeida — Teste')).to_be_visible()
@@ -263,6 +264,9 @@ try:
         check_family_viewport(320,740,'guardian-320')
         check_family_viewport(390,844,'guardian-390')
         record('Responsável autenticado consulta somente o aluno vinculado e a permissão financeira correspondente')
+        import importlib.util
+        spec=importlib.util.spec_from_file_location('school_workflows',ROOT/'scripts/e2e-school-workflows.py');extra=importlib.util.module_from_spec(spec);spec.loader.exec_module(extra)
+        extra.verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,post,year,group)
         assert not failed_requests,failed_requests
         assert not bad_responses,bad_responses
         assert not errors,errors

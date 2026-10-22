@@ -163,6 +163,7 @@ var PigeLearning;
 var PigeFamily;
 (function (PigeFamily) {
     const s = Vue.reactive({ ready: false, busy: false, error: '', account: null, email: '', password: '', schoolId: '', section: location.pathname.includes('documents') ? 'documents' : location.pathname.includes('finance') ? 'finance' : 'academic', students: [], studentId: new URLSearchParams(location.search).get('student') || '', charges: [], financeNote: '' });
+    let generation = 0;
     let token = '';
     let refreshing = null;
     async function raw(path, options = {}) { const headers = new Headers(options.headers); headers.set('X-CSRF-Protection', '1'); if (token)
@@ -170,13 +171,14 @@ var PigeFamily;
         headers.set('X-School-Id', s.schoolId); if (options.body)
         headers.set('Content-Type', 'application/json'); return fetch('/api/v1' + path, { ...options, headers, credentials: 'same-origin', cache: 'no-store' }); }
     async function renew() { if (!refreshing)
-        refreshing = (async () => { const r = await raw('/auth/refresh', { method: 'POST' }); if (!r.ok) {
+        refreshing = (async () => { const r = await raw('/auth/refresh', { method: 'POST' }); const data = await r.json(); if (!r.ok) {
             token = '';
             s.account = null;
             s.students = [];
             throw new Error('Sua sessão expirou. Entre novamente.');
-        } const data = await r.json(); token = data.access_token; s.account = data.user; })().finally(() => { refreshing = null; }); await refreshing; }
+        } token = data.access_token; s.account = data.user; })().finally(() => { refreshing = null; }); await refreshing; }
     async function response(path, options = {}) { let r = await raw(path, options); if (r.status === 401 && token) {
+        await r.arrayBuffer();
         await renew();
         r = await raw(path, options);
     } if (!r.ok) {
@@ -201,12 +203,14 @@ var PigeFamily;
     async function authenticated(data) { token = String(data.access_token || ''); s.account = data.user; s.password = ''; s.schoolId = s.account.school_ids[0] || ''; await load(); }
     async function login() { await run(async () => { const result = await request('/auth/login', { method: 'POST', body: JSON.stringify({ email: s.email, password: s.password }) }); s.password = ''; if (await PigeMFA.accept(result))
         return; await authenticated(result); }); }
-    async function logout() { await run(async () => { await request('/auth/logout', { method: 'POST' }); await raw('/portal/logout', { method: 'POST' }).catch(() => { }); token = ''; s.account = null; s.students = []; s.charges = []; PigeMFA.clear(); }); }
-    async function load() { s.students = []; s.charges = []; const data = await request('/family/context'); s.students = data.students; if (!s.students.some(x => x.id === s.studentId))
+    async function logout() { await run(async () => { await request('/auth/logout', { method: 'POST' }); generation++; token = ''; s.account = null; s.students = []; s.charges = []; s.schoolId = ''; s.studentId = ''; s.financeNote = ''; PigeMFA.clear(); }); }
+    async function load() { const current = ++generation; s.students = []; s.charges = []; const data = await request('/family/context'); if (current !== generation)
+        return; s.students = data.students; if (!s.students.some(x => x.id === s.studentId))
         s.studentId = s.students[0]?.id || ''; await finance(); }
     const student = () => s.students.find(x => x.id === s.studentId);
     async function finance() { s.charges = []; s.financeNote = ''; if (!student()?.financial_authorized)
-        return; const data = await request('/family/students/' + s.studentId + '/charges'); s.charges = data.items; s.financeNote = data.note; }
+        return; const selected = s.studentId, current = generation; const data = await request('/family/students/' + selected + '/charges'); if (selected !== s.studentId || current !== generation)
+        return; s.charges = data.items; s.financeNote = data.note; }
     async function changeStudent() { history.replaceState({}, '', location.pathname + '?student=' + encodeURIComponent(s.studentId)); await run(finance); }
     async function changeSchool() { await run(load); }
     async function download(path, filename) { const r = await response(path); const url = URL.createObjectURL(await r.blob()); const a = window.document.createElement('a'); a.href = url; a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
@@ -218,7 +222,10 @@ var PigeFamily;
             await load();
         }
     }
-    catch { }
+    catch (e) {
+        if (s.account)
+            s.error = e instanceof Error ? e.message : 'Não foi possível carregar seus dados.';
+    }
     finally {
         s.ready = true;
     } }

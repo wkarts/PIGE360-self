@@ -244,3 +244,15 @@ def preview_draft(data:WebsiteInput,db:DB,user:Actor,school:Scope):
     require(user,'schools.manage')
     row=SchoolWebsite(school_id=school.id,**data.model_dump(exclude={'version'}))
     return {'html':site_data(db,row,preview=True)['html']}
+
+
+@router.post('/schools/{school_id}/website/unpublish')
+def unpublish(data:WebsiteInput,db:DB,user:Actor,school:Scope,request:Request):
+    require(user,'schools.manage');lock_school(db,school.id)
+    row=db.scalar(select(SchoolWebsite).where(SchoolWebsite.school_id==school.id))
+    if not row or data.version is None:fail(409,'Recarregue a configuração antes de retirar a publicação.')
+    check_version(row,data.version)
+    row.draft=data.model_dump(exclude={'version','enabled'})
+    row.enabled=False;row.version+=1
+    db.flush();audit(db,request,user,'website.unpublished',row,school.id)
+    return output(row)
