@@ -32,6 +32,13 @@ const account={id:'guardian',name:'Responsável Teste',role:'guardian',school_id
  ctx.s.passwordVisible=true;tree=render();assert.equal(nodes(tree).find(n=>n.props?.id==='family-password').props.type,'text');
  ctx.mfa.state.challenge='challenge';tree=render();assert.equal(nodes(tree).filter(n=>n.type==='form').length,0,'Login não concorre com desafio MFA');
  assert.match(text(tree),/Confirme seu acesso/);ctx.mfa.state.challenge='';ctx.s.account=account;ctx.s.students=[student('a')];ctx.s.studentId='a';
+ tree=render();
+ for(const [id,label] of [['family-student','Você está acompanhando'],['family-school','Instituição']]){
+  const control=nodes(tree).find(n=>n.type==='select'&&n.props?.id===id);
+  const caption=nodes(tree).find(n=>n.type==='label'&&n.props?.for===id);
+  assert.ok(control,'Seletor possui ID de associação');assert.equal(text(caption),label,'Nome do seletor não incorpora opções');
+  assert.equal(nodes(caption).some(n=>n.type==='select'),false,'Label explícito separado das opções');
+ }
  for(const name of ['overview','students','academic','documents','finance','agenda','news','support']){ctx.s.section=name;tree=render();assert.ok(nodes(tree).find(n=>n.props?.id==='family-navigation'));assert.ok(nodes(tree).find(n=>n.props?.['aria-current']==='page'));}
  ctx.s.section='overview';ctx.s.students=[student('a',false)];assert.match(text(render()),/Restrito/);assert.doesNotMatch(text(render()),/98%|Mariana|Lucas/);
  ctx.s.financeError='falha';ctx.s.students=[student('a')];assert.match(text(render()),/Indisponível/);ctx.s.contextError=true;assert.match(text(render()),/Não foi possível carregar seu vínculo/);

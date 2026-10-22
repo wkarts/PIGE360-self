@@ -2,6 +2,7 @@
 """Portal/Secretaria reais em Chromium; PIGE_UI_BRIDGE=1 registra limitação HTTP explicitamente."""
 import base64, json, os, re, shutil, socket, sqlite3, subprocess, sys, tempfile, time
 from pathlib import Path
+from contextlib import contextmanager
 import httpx
 from playwright.sync_api import sync_playwright, expect
 from datetime import date, timedelta
@@ -20,6 +21,19 @@ log=(OUT/'server.log').open('w');proc=subprocess.Popen([sys.executable,'-m','uvi
 checks=[];errors=[];responsive={};bridge=os.getenv('PIGE_UI_BRIDGE')=='1';page=None;website_proc=None;portal_proc=None;website_log=None;portal_log=None
 
 def record(msg):checks.append(msg);print('PASS:',msg,flush=True)
+@contextmanager
+def capture_browser_failure():
+    # Runs before sync_playwright exits: the active page is still available.
+    try:
+        yield
+    except Exception:
+        if page:
+            try: print('Página ativa:',page.url,'\n',page.locator('body').inner_text()[-8000:],flush=True)
+            except Exception as diagnostic: print('Não foi possível ler a página:',diagnostic,flush=True)
+            try: page.screenshot(path=str(OUT/'failure.png'),full_page=True)
+            except Exception as diagnostic: print('Não foi possível capturar a página:',diagnostic,flush=True)
+        raise
+
 try:
     client=httpx.Client(base_url=URL,timeout=30)
     for _ in range(60):
@@ -59,7 +73,7 @@ try:
     grade=post('/grades',{'name':'3º Ano'});shift=post('/shifts',{'name':'Matutino'});group=post('/class-groups',{'name':'3º Ano A','unit_id':unit['id'],'academic_year_id':year['id'],'grade_id':grade['id'],'shift_id':shift['id'],'capacity':30})
     doc=post('/document-types',{'name':'Certidão de nascimento','required':True})
     campaign=post('/admission-campaigns',{'slug':'matriculas-2027-teste','title':'Matrículas 2027 — Dados de Teste','class_group_ids':[group['id']],'opens_on':str(date.today()-timedelta(days=1)),'closes_on':str(date.today()+timedelta(days=120)),'active':True,'require_verified_contact':False,'require_documents':True,'instructions':'Preencha os dados e envie os documentos. A Secretaria acompanhará cada etapa. Este processo utiliza exclusivamente dados fictícios para teste.','privacy_notice':'AMBIENTE DE TESTE. Dados fictícios utilizados para verificar cadastro, documentos e matrícula. Não inserir dados reais. A instituição responsável deve publicar seu aviso de privacidade antes do uso em produção.'})
-    with sync_playwright() as pw:
+    with sync_playwright() as pw, capture_browser_failure():
         binary=os.getenv('CHROMIUM_PATH') or (None if Path(pw.chromium.executable_path).exists() else shutil.which('chromium'))
         browser=pw.chromium.launch(headless=True,**({'executable_path':binary} if binary else {}),args=['--no-sandbox'])
         parentContext=browser.new_context(viewport={'width':1366,'height':950},locale='pt-BR',accept_downloads=True)
@@ -235,7 +249,10 @@ try:
             target=familyPage.locator('#family-navigation').get_by_role('button',name=name,exact=True)
             if not target.is_visible():
                 familyPage.get_by_role('button',name='Abrir menu',exact=True).click()
-                expect(familyPage.get_by_role('button',name='Abrir menu',exact=True)).to_have_attribute('aria-expanded','true')
+                # The trigger is intentionally outside the accessibility tree while main is inert.
+                expect(familyPage.locator('#family-menu-toggle')).to_have_attribute('aria-expanded','true')
+                expect(familyPage.locator('.family-main')).to_have_attribute('inert','')
+                expect(familyPage.get_by_role('button',name='Fechar menu',exact=True)).to_be_focused()
             target.click()
             expect(familyPage.locator('#family-title')).to_have_text(name)
             expect(familyPage.locator('.family-main')).not_to_have_attribute('inert','')
@@ -256,12 +273,15 @@ try:
         expect(familyPage.locator('#family-title')).to_have_text('Visão geral')
         expect(familyPage.get_by_role('heading',name='Olá, Lucas.',exact=True)).to_be_visible()
         expect(familyPage.get_by_label('Você está acompanhando',exact=True)).to_have_value(student_id)
+        expect(familyPage.get_by_role('combobox',name='Você está acompanhando',exact=True)).to_have_value(student_id)
         familyPage.reload();expect(familyPage.locator('#family-title')).to_have_text('Visão geral')
         expect(familyPage.get_by_role('heading',name='Olá, Lucas.',exact=True)).to_be_visible()
         check_family_viewport(1440,950,'family-dashboard-1440')
         check_family_viewport(390,844,'family-dashboard-390')
         familyPage.get_by_role('button',name='Abrir menu',exact=True).click()
         expect(familyPage.get_by_role('button',name='Fechar menu',exact=True)).to_be_focused()
+        expect(familyPage.locator('#family-menu-toggle')).to_have_attribute('aria-expanded','true')
+        expect(familyPage.locator('.family-main')).to_have_attribute('inert','')
         check_family_viewport(390,844,'family-menu-390')
         familyPage.keyboard.press('Escape')
         expect(familyPage.get_by_role('button',name='Abrir menu',exact=True)).to_be_focused()
@@ -289,6 +309,7 @@ try:
         # The current deep link is retained across sign-out/sign-in.
         expect(familyPage.locator('#family-title')).to_have_text('Vida acadêmica')
         expect(familyPage.get_by_label('Você está acompanhando',exact=True)).to_have_value(student_id)
+        expect(familyPage.get_by_role('combobox',name='Você está acompanhando',exact=True)).to_have_value(student_id)
         family_nav('Visão geral');expect(familyPage.get_by_role('heading',name='Olá, Mariana.',exact=True)).to_be_visible()
         family_nav('Financeiro')
         expect(familyPage.get_by_role('heading',name='Financeiro de Lucas Almeida — Teste')).to_be_visible()
@@ -316,9 +337,6 @@ try:
         (OUT/'results.json').write_text(json.dumps(result,ensure_ascii=False,indent=2));print(json.dumps(result,ensure_ascii=False));browser.close()
 except Exception:
     (OUT/'results.json').write_text(json.dumps({'status':'failed','checks':checks,'errors':errors},ensure_ascii=False,indent=2))
-    if page:
-        try:page.screenshot(path=str(OUT/'failure.png'),full_page=True);print(page.locator('body').inner_text()[-5000:])
-        except Exception:pass
     raise
 finally:
     for child in (website_proc,portal_proc,proc):

@@ -30,7 +30,10 @@
       <main id="family-content" class="family-content">
         <div class="family-heading"><div><p class="family-breadcrumb">Portal da família / {{title()}}</p><h1 id="family-title" tabindex="-1">{{title()}}</h1></div><button class="btn btn-secondary" type="button" @click="run(load)" :disabled="s.busy">{{s.busy?'Atualizando…':'Atualizar'}}</button></div>
         <p v-if="s.error" class="alert error" role="alert">{{s.error}}</p><p v-if="s.busy" class="loading-strip" role="status">Atualizando os dados do portal…</p>
-        <div class="family-context"><label v-if="s.account.school_ids.length>1" class="field">Instituição<select v-model="s.schoolId" @change="changeSchool" :disabled="s.busy"><option v-for="id in s.account.school_ids" :key="id" :value="id">{{s.schools[id]||id}}</option></select></label><label v-if="s.students.length" class="field">Você está acompanhando<select v-model="s.studentId" @change="changeStudent" :disabled="s.busy"><option v-for="item in s.students" :key="item.id" :value="item.id">{{item.name}}</option></select></label></div>
+        <div class="family-context">
+          <div v-if="s.account.school_ids.length>1" class="field"><label for="family-school">Instituição</label><select id="family-school" v-model="s.schoolId" @change="changeSchool" :disabled="s.busy"><option v-for="id in s.account.school_ids" :key="id" :value="id">{{s.schools[id]||id}}</option></select></div>
+          <div v-if="s.students.length" class="field"><label for="family-student">Você está acompanhando</label><select id="family-student" v-model="s.studentId" @change="changeStudent" :disabled="s.busy"><option v-for="item in s.students" :key="item.id" :value="item.id">{{item.name}}</option></select></div>
+        </div>
         <section v-if="s.contextError" class="panel family-empty"><h2>Não foi possível carregar seu vínculo</h2><p>Confira a instituição selecionada e tente atualizar. Se o problema continuar, procure a secretaria.</p></section>
         <template v-else>
           <section v-if="s.section==='overview'" class="family-overview">

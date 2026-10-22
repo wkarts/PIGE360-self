@@ -6750,10 +6750,11 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                 }, "Atualizando os dados do portal…"))
               : _createCommentVNode("", true),
             _createElementVNode("div", { class: "family-context" }, [(s.account.school_ids.length>1)
-              ? (_openBlock(), _createElementBlock("label", {
+              ? (_openBlock(), _createElementBlock("div", {
                   key: 0,
                   class: "field"
-                }, [_createTextVNode("Instituição"), _withDirectives(_createElementVNode("select", {
+                }, [_createElementVNode("label", { for: "family-school" }, "Instituição"), _withDirectives(_createElementVNode("select", {
+                  id: "family-school",
                   "onUpdate:modelValue": $event => ((s.schoolId) = $event),
                   onChange: changeSchool,
                   disabled: s.busy
@@ -6764,10 +6765,11 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                   }, _toDisplayString(s.schools[id]||id), 9, ["value"]))
                 }), 128))], 40, ["onUpdate:modelValue", "onChange", "disabled"]), [[_vModelSelect, s.schoolId]])]))
               : _createCommentVNode("", true), (s.students.length)
-              ? (_openBlock(), _createElementBlock("label", {
+              ? (_openBlock(), _createElementBlock("div", {
                   key: 1,
                   class: "field"
-                }, [_createTextVNode("Você está acompanhando"), _withDirectives(_createElementVNode("select", {
+                }, [_createElementVNode("label", { for: "family-student" }, "Você está acompanhando"), _withDirectives(_createElementVNode("select", {
+                  id: "family-student",
                   "onUpdate:modelValue": $event => ((s.studentId) = $event),
                   onChange: changeStudent,
                   disabled: s.busy
