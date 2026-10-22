@@ -19,8 +19,9 @@ dos mockups. Não era falha de configuração do usuário nem download de fotos.
   textos, imagens, menus e blocos da página inicial: a interface explica isso.
   A cópia permanece após recarregar. Aplicações consecutivas preservam a primeira
   cópia até restauração; restaurar salva o rascunho e limpa o checkpoint atomicamente.
-- Os exemplos usam seis fotografias fictícias geradas por IA, não fotos nem
-  dados de uma escola cliente. As datas também são exemplos. São editáveis.
+- Os exemplos usam seis fotografias fictícias geradas por IA e uma foto infantil
+  licenciada de Senjuti Kundu/Unsplash, já presente no mockup aprovado e creditada
+  em site_model_assets/README.md. Não são fotos nem dados de uma escola cliente. As datas também são exemplos. São editáveis.
 - `design.demonstration` identifica exemplos. Publicá-los exige confirmação
   explícita e mantém faixa demonstrativa; imagens do catálogo impedem retirar
   silenciosamente essa identificação. Publicação via PUT legado tem o mesmo guard.
@@ -46,7 +47,7 @@ publicações públicas elegíveis da plataforma, nunca rascunhos privados.
 
 Migração 0055 adiciona checkpoint editorial nullable, sem seeds, alteração de branding
 ou conteúdo automático em escolas existentes. Assets demonstrativos
-limitados a seis nomes JPG; servidor não aceita caminhos arbitrários. Prévia
+limitados a sete nomes JPG; servidor não aceita caminhos arbitrários. Prévia
 incorpora imagens em data URI. Portal/login e matrícula não são alterados;
 rebuild atualiza somente hashes compartilhados desses HTMLs.
 
@@ -77,3 +78,7 @@ O CI PostgreSQL/Chromium permanece a confirmação integrada necessária.
 
 Downgrade 0055 remove apenas o checkpoint; site publicado e rascunho sobrevivem.
 Restauração do checkpoint deve ser feita antes do downgrade se for necessária.
+
+## Primeira revisão de pixels da PR70
+
+A rodada39866530385 passou todos os testes, mas as capturas revelaram grids aninhados que comprimiam cartões em uma coluna, duplicação da legenda central e endereço duplicado no rodapé. Foram corrigidos os wrappers HTML, a composição explícita do rodapé e a legenda sem mutar dados. Descrições de split/CTA agora precedem os links. O Chromium passa a registrar e exigir largura útil dos grids/cards, além de não haver overflow. Nova rodada e inspeção das imagens corrigidas continuam necessárias; CI verde anterior não é aprovação visual.

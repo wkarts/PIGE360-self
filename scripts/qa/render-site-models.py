@@ -2,7 +2,7 @@
 """Render self-contained public-model fixtures for screenshot review, never publish.
 
 Usage: python scripts/qa/render-site-models.py /path/outside/repository
-Uses generic generated demonstration photos and fictional identity, not tenant data.
+Uses generic generated/licensed demonstration photos and fictional identity, not tenant data.
 """
 import argparse
 import base64
@@ -42,7 +42,7 @@ def main():
             document=document.replace(url,'data:image/jpeg;base64,'+encoded)
         document=re.sub(r'<link[^>]*>', '',document)
         path=out/(site['theme']+'.html');path.write_text(document)
-        manifest.append({'theme':site['theme'],'file':path.name,'fixture':'fictional, AI demonstration photos','widths':[390,1440]})
+        manifest.append({'theme':site['theme'],'file':path.name,'fixture':'fictional, AI and licensed demonstration photos','widths':[390,1440]})
     (out/'manifest.json').write_text(json.dumps(manifest,indent=2,ensure_ascii=False))
     print(json.dumps({'output':str(out),'models':len(manifest),'screenshots':'pending real browser'},ensure_ascii=False))
 

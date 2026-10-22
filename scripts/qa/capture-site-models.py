@@ -34,12 +34,29 @@ def main():
                         assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth'),f'{theme}/{width}: horizontal overflow'
                         assert not errors,errors
                         page.screenshot(path=str(args.output/f'{theme}-{width}.png'),full_page=True)
+                        # No-overflow alone misses a grid collapsed inside its first column.
+                        # Keep the screenshot even when a geometric regression fails below.
+                        assert page.locator('.items-grid .items-grid').count()==0,f'{theme}/{width}: nested content grid'
+                        geometry=page.evaluate("""() => [...document.querySelectorAll('.content-section')].flatMap(section=>{
+                            const grid=section.querySelector('.section-inner > .items-grid');
+                            if(!grid || !grid.getBoundingClientRect().width)return [];
+                            return [{section:section.className,width:grid.getBoundingClientRect().width,
+                                available:grid.parentElement.getBoundingClientRect().width,
+                                cards:[...grid.children].filter(x=>x.matches('.content-item')).map(x=>x.getBoundingClientRect().width)}];
+                        })""")
+                        for group in geometry:
+                            split=theme=='culture' and 'section-steps' in group['section'] and width>760
+                            dates='layout-dates' in group['section'] and width>1100
+                            minimum=.40 if split else .65 if dates else .95
+                            assert group['width']>=minimum*group['available'],f'{theme}/{width}: collapsed grid {group}'
+                            if width>=768:
+                                assert all(card>=120 for card in group['cards']),f'{theme}/{width}: unreadably narrow cards {group}'
                         if width<761:
                             toggle=page.locator('.mobile-menu summary');toggle.click()
                             assert page.locator('.mobile-menu').get_attribute('open') is not None
                             page.screenshot(path=str(args.output/f'{theme}-{width}-menu.png'))
                             toggle.click()
-                        results.append({'theme':theme,'width':width,'images':page.locator('img').count(),'height':page.evaluate('document.documentElement.scrollHeight'),'errors':errors})
+                        results.append({'theme':theme,'width':width,'images':page.locator('img').count(),'height':page.evaluate('document.documentElement.scrollHeight'),'geometry':geometry,'errors':errors})
                         page.close()
             finally:browser.close()
     (args.output/'measurements.json').write_text(json.dumps(results,indent=2))

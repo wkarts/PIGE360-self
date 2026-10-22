@@ -121,7 +121,7 @@ class Handler(BaseHTTPRequestHandler):
                 if parsed.query:self.send_error(400);return
                 body,mime=fetch(path,limit=3*1024*1024)
                 if mime!='image/png':raise ValueError('Formato de imagem inesperado')
-            elif re.fullmatch(r'/api/v1/public/website-model-assets/(?:garden|community|library|theatre|lab|sport)\.jpg',path):
+            elif re.fullmatch(r'/api/v1/public/website-model-assets/(?:garden|community|library|theatre|lab|sport|preschool)\.jpg',path):
                 if parsed.query:self.send_error(400);return
                 body,mime=fetch(path,limit=3*1024*1024)
                 if mime!='image/jpeg':raise ValueError('Formato de imagem inesperado')

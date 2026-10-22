@@ -1,12 +1,14 @@
 """Versioned demonstration compositions. Reading the catalog never changes a school."""
 from pathlib import Path
 
-ASSET_NAMES=frozenset({'garden','community','library','theatre','lab','sport'})
+ASSET_NAMES=frozenset({'garden','community','library','theatre','lab','sport','preschool'})
 ASSET_ROOT=Path(__file__).with_name('site_model_assets')
 ASSET_PREFIX='/api/v1/public/website-model-assets/'
 
 
 def image(name,caption=''):
+    if name=='preschool':
+        return {'url':ASSET_PREFIX+name+'.jpg','alt':'Fotografia ilustrativa de infância: criança brincando com tinta. Senjuti Kundu / Unsplash. Não representa alunos desta escola.','caption':caption,'focal_x':50,'focal_y':50}
     return {'url':ASSET_PREFIX+name+'.jpg','alt':caption or 'Ilustração gerada por IA: '+{'garden':'grupo cultivando uma horta','community':'encontro de famílias na escola','library':'estudantes compartilhando uma leitura','theatre':'grupo em apresentação teatral','lab':'estudantes construindo um circuito','sport':'estudantes jogando basquete'}[name],
             'caption':caption,'focal_x':50,'focal_y':50}
 
@@ -48,7 +50,7 @@ def catalog():
         section('vivencias','split','Cada talento encontra seu espaço.','Arte, movimento e convivência fazem parte de uma formação que valoriza muitas maneiras de ser.',layout='spotlight',photo='theatre',eyebrow='Cultura que aproxima',action=link('Explore as vivências','#contato')),
         section('visita','cta','Vamos conversar?','Conheça a escola e compartilhe suas perguntas.',action=link('Fale com a escola','#contato'))]
     values=[('horizon','Institucional','Fotografia imersiva, pilares, etapas, espaços e convite.','Um mundo de possibilidades começa aqui.','Uma formação que conecta conhecimento, autonomia e cuidado em cada descoberta.',horizon,'lab',[]),
-            ('editorial','Infância','Mosaico de três imagens, jornada, rotina e parceria com famílias.','A infância merece tempo. E um mundo para descobrir.','Acolher cada criança. Respeitar cada ritmo. Aprender brincando.',editorial,None,[image('garden','Criar com liberdade'),image('library','Pequenos gestos. Grandes descobertas.'),image('lab','Descobrir em companhia')]),
+            ('editorial','Infância','Mosaico de três imagens, jornada, rotina e parceria com famílias.','A infância merece tempo. E um mundo para descobrir.','Acolher cada criança. Respeitar cada ritmo. Aprender brincando.',editorial,None,[image('garden','Criar com liberdade'),image('preschool','Pequenos gestos. Grandes descobertas.'),image('community','Descobrir em companhia')]),
             ('culture','Projetos','Projeto principal, experiências, percurso e convite.','Grandes ideias começam com boas perguntas.','Um jeito de aprender que conecta curiosidade, investigação e experiências do mundo real.',culture,None,[]),
             ('campus','Comunidade','Manchete e histórias secundárias, agenda e vivências.','Nossa escola, em movimento.','Histórias de quem aprende, cria e faz parte.',campus,None,[])]
     return {'items':[{'id':key,'name':name,'description':desc,'demonstration_notice':'Modelo demonstrativo: textos, datas e fotografias geradas por IA são exemplos, não fatos da escola. Revise e substitua antes de publicar.',

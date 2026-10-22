@@ -24,7 +24,7 @@ class AssetProxyTests(unittest.TestCase):
 
     def test_demo_catalog_assets_have_narrow_jpeg_proxy(self):
         with patch.object(website,'fetch',return_value=(b'jpeg fixture','image/jpeg')) as fetch:
-            for name in ['garden','community','library','theatre','lab','sport']:
+            for name in ['garden','community','library','theatre','lab','sport','preschool']:
                 path='/api/v1/public/website-model-assets/'+name+'.jpg'
                 with urlopen(self.base+path) as response:self.assertEqual(response.read(),b'jpeg fixture')
                 fetch.assert_called_with(path,limit=3*1024*1024)

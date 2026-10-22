@@ -146,7 +146,11 @@ def render(data):
             return ''
         caption = image.get('caption', '') if isinstance(image, dict) else ''
         return f'<figure class="captioned-photo">{media}<figcaption>{escape(caption)}</figcaption></figure>' if composition_v2 else media
-    gallery = [captioned(item, eager=True) for item in (design.get('hero_gallery') or [])[:3]]
+    # The overall hero caption can also be stored on its central photograph.
+    # Render that exact text once, below the mosaic, including on small screens.
+    gallery = [captioned({**item, 'caption': ''} if composition_v2 and isinstance(item, dict)
+                         and item.get('caption') == design.get('hero_caption') else item, eager=True)
+               for item in (design.get('hero_gallery') or [])[:3]]
     gallery = [item for item in gallery if item]
     posts = [post for post in data.get('posts', []) if isinstance(post, dict)]
     news_posts = [_post(post) for post in posts if post.get('kind') != 'event']
@@ -200,11 +204,14 @@ def render(data):
                 section_id += '-bloco'
         used_ids.add(section_id)
         kind = section.get('kind') if section.get('kind') in SECTION_KINDS else 'text'
+        deferred_action = composition_v2 and (kind in {'split', 'cta'} or (theme == 'culture' and kind == 'steps'))
+        section_action = action(section.get('action'), 'button' if kind == 'cta' and composition_v2 else 'text-link')
         eyebrow = f'<p class="eyebrow">{escape(section["eyebrow"])}</p>' if section.get('eyebrow') else ''
-        heading = f'<div class="section-heading"><div>{eyebrow}<h2>{escape(section.get("title"))}</h2></div>{action(section.get("action"))}</div>'
+        heading = f'<div class="section-heading"><div>{eyebrow}<h2>{escape(section.get("title"))}</h2></div>{"" if deferred_action else section_action}</div>'
         if composition_v2 and not section.get('title') and not eyebrow and not action(section.get('action')):
             heading = ''
         text = paragraphs(section.get('text'), 'section-intro')
+        trailing_action = section_action if deferred_action else ''
         media = captioned(section.get('image'))
         layout = section.get('layout', 'default') if composition_v2 else 'default'
         if layout not in {'default','pillars','feature','quote','magazine','dates','spotlight'}:
@@ -217,7 +224,7 @@ def render(data):
             item_body = f'{captioned(item.get("image"))}<div class="item-copy">{item_eyebrow}<h3>{escape(item.get("title"))}</h3>{paragraphs(item.get("text"))}{action(item.get("action"))}</div>'
             step = f'<span class="step-number">{number:02}</span>' if kind == 'steps' or (composition_v2 and kind == 'split' and layout == 'default') else ''
             items.append(f'<article class="content-item">{step}{item_body}</article>')
-        content_items = '<div class="items-grid">'+''.join(items)+'</div>' if composition_v2 and items else ''.join(items)
+        content_items = ''.join(items)
         if layout == 'magazine' and kind not in {'news', 'agenda'}:
             lead = f'<div class="composition-lead">{items[0]}</div>' if items else ''
             sides = f'<div class="composition-secondary">{"".join(items[1:3])}</div>' if len(items)>1 else ''
@@ -239,11 +246,16 @@ def render(data):
             content = f'<div class="split-media">{media}</div><div class="split-copy">{feature_heading}{text}<div class="items-grid">{"".join(items)}</div>{action(section.get("action"), "button")}</div>'
         elif kind == 'split' and layout == 'quote':
             quote = f'<blockquote class="family-quote">{"".join(items)}</blockquote>' if items else ''
-            content = f'<div class="split-media">{media}{quote}</div><div class="split-copy">{heading}{text}</div>'
+            content = f'<div class="split-media">{media}{quote}</div><div class="split-copy">{heading}{text}{trailing_action}</div>'
         elif kind == 'split':
-            content = f'<div class="split-media">{media}</div><div class="split-copy">{heading}{text}{content_items}</div>' if media else f'<div class="split-copy">{heading}{text}{content_items}</div>'
+            # Split routines need one grid wrapper; card-like sections add their own below.
+            if composition_v2 and items:
+                content_items = f'<div class="items-grid">{content_items}</div>'
+            content = f'<div class="split-media">{media}</div><div class="split-copy">{heading}{text}{content_items}{trailing_action}</div>' if media else f'<div class="split-copy">{heading}{text}{content_items}{trailing_action}</div>'
         elif kind == 'cta':
-            content = f'{media}<div>{heading}{text}</div>'
+            content = f'{media}<div>{heading}{text}{trailing_action}</div>'
+        elif composition_v2 and theme == 'culture' and kind == 'steps':
+            content = f'<div class="process-copy">{heading}{text}{trailing_action}</div><div class="items-grid">{content_items}</div>'
         elif kind == 'text':
             content = f'{heading}<div class="prose">{text}</div>{media}'
         else:
@@ -278,11 +290,12 @@ def render(data):
     notice = f'<aside class="notice container" role="status">{escape(site["notice"])}</aside>' if site.get('notice') else ''
     contact = ''.join(f'<p>{escape(school.get(key))}</p>' for key in ('address', 'phone', 'email') if school.get(key))
     contact_section = f'<section id="contato" class="contact"><div class="container contact-inner"><div><p class="eyebrow">VAMOS CONVERSAR</p><h2>Conheça a escola de perto.</h2><address>{contact or "Entre em contato com a Secretaria."}</address></div><div class="actions">{actions}</div></div></section>'
-    footer = f'<footer class="site-footer"><div class="container footer-inner"><div><strong>{escape(name)}</strong>{paragraphs(design.get("footer_text"))}</div><nav aria-label="Navegação do rodapé">{navigation}</nav><div>{action(secondary_action, "footer-link")}<a class="footer-link" href="#conteudo">Voltar ao início ↑</a></div></div></footer>'
+    footer_id = ' id="contato"' if composition_v2 else ''
+    footer_contact = f'<address>{contact}</address>' if composition_v2 and contact else ''
+    footer = f'<footer{footer_id} class="site-footer"><div class="container footer-inner"><div><strong>{escape(name)}</strong>{paragraphs(design.get("footer_text"))}</div><nav aria-label="Navegação do rodapé">{navigation}</nav><div>{footer_contact}{action(secondary_action, "footer-link")}<a class="footer-link" href="#conteudo">Voltar ao início ↑</a></div></div></footer>'
     if composition_v2:
         # Complete compositions already contain an editable visit/contact module.
         # Keep authoritative contact details in the footer instead of duplicating a CTA section.
-        footer = footer.replace('<footer class="site-footer">', '<footer id="contato" class="site-footer">').replace('<div>'+action(secondary_action, "footer-link"), '<div><address>'+contact+'</address>'+action(secondary_action, "footer-link"))
         contact_section = ''
     heading_style = design.get('heading_style') if composition_v2 else 'inherit'
     heading_font = 'Georgia,serif' if heading_style == 'editorial' and brand.get('font_family', 'system') == 'system' else font

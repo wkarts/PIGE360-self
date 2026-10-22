@@ -1,5 +1,6 @@
 """Complete model renderers are opt-in and retain institution-owned identity."""
 import importlib.util
+from html.parser import HTMLParser
 from pathlib import Path
 import unittest
 ROOT=Path(__file__).resolve().parents[2]
@@ -19,6 +20,61 @@ class CompleteModelRendererTests(unittest.TestCase):
         self.assertNotIn('<section id="contato"',new)
         self.assertIn('<footer id="contato"',new)
         self.assertIn('Rua de teste',new)
+
+    def test_card_grids_are_single_level_with_three_direct_items(self):
+        # A nested three-column grid shrinks all cards into the first third of the
+        # intended row. Actual geometric coverage is also asserted in Chromium QA.
+        class GridStructure(HTMLParser):
+            def __init__(self):
+                super().__init__();self.divs=[];self.grids=[]
+            def handle_starttag(self, tag, attrs):
+                attrs=dict(attrs)
+                if tag=='div':
+                    is_grid='items-grid' in attrs.get('class','').split()
+                    if is_grid:
+                        assert not any(frame is not None for frame in self.divs), 'Nested editorial grid'
+                        self.grids.append(0)
+                    self.divs.append(len(self.grids)-1 if is_grid else None)
+                if tag=='article' and 'content-item' in attrs.get('class','').split():
+                    assert self.divs and self.divs[-1] is not None, 'Item is not a direct grid child'
+                    self.grids[self.divs[-1]]+=1
+            def handle_endtag(self,tag):
+                if tag=='div':self.divs.pop()
+        for theme,kind,layout in [('horizon','cards','pillars'),('horizon','cards','default'),
+                                  ('horizon','gallery','default'),('editorial','steps','default'),
+                                  ('culture','steps','default'),('campus','cards','dates'),
+                                  ('editorial','split','default')]:
+            with self.subTest(theme=theme,kind=kind,layout=layout):
+                section={'id':'row','kind':kind,'layout':layout,'items':[{'title':str(i)} for i in range(3)]}
+                parser=GridStructure();parser.feed(renderer.render(data(theme,composition_version=2,sections=[section])))
+                self.assertEqual(parser.grids,[3])
+
+    def test_footer_contact_is_single_even_without_secondary_action(self):
+        for secondary in [None, {'label':'Portal','url':'https://example.com/portal'}]:
+            doc=renderer.render(data(composition_version=2,secondary_action=secondary))
+            self.assertEqual(doc.count('Rua de teste'),1)
+            self.assertEqual(doc.count('<address>'),1)
+
+    def test_split_and_cta_keep_description_before_action(self):
+        for theme,kind,layout in [('horizon','split','default'),('editorial','split','quote'),
+                                  ('campus','split','spotlight'),('editorial','cta','default'),
+                                  ('culture','steps','default')]:
+            with self.subTest(theme=theme,kind=kind,layout=layout):
+                section={'id':'ordered','kind':kind,'layout':layout,'title':'Título do bloco',
+                         'text':'Leia primeiro esta descrição.','action':{'label':'Depois avance','url':'#contato'}}
+                doc=renderer.render(data(theme,composition_version=2,sections=[section]))
+                self.assertLess(doc.index('Leia primeiro esta descrição.'),doc.index('Depois avance'))
+                self.assertEqual(doc.count('Depois avance'),1)
+
+    def test_editorial_mosaic_does_not_duplicate_overall_caption(self):
+        caption='Pequenos gestos. Grandes descobertas.'
+        gallery=[{'url':'https://example.com/a.jpg','caption':'Legenda própria'},
+                 {'url':'https://example.com/b.jpg','caption':caption}]
+        doc=renderer.render(data('editorial',composition_version=2,hero_caption=caption,hero_gallery=gallery))
+        self.assertEqual(doc.count(caption),1)
+        self.assertIn('<p class="hero-caption">'+caption+'</p>',doc)
+        self.assertIn('<figcaption>Legenda própria</figcaption>',doc)
+        self.assertEqual(gallery[1]['caption'],caption,'Rendering must not mutate persisted design')
 
     def test_demo_banner_escaped_captions_and_brand(self):
         doc=renderer.render(data('editorial',composition_version=2,demonstration=True,heading_style='editorial',hero_caption='<script>x</script>',hero_gallery=[{'url':'https://example.com/a.jpg','caption':'<b>Foto</b>'}]))
