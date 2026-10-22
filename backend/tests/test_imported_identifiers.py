@@ -16,6 +16,7 @@ def test_normalization_preserves_origin_ids_and_search_and_is_repeatable(api):
             db.get(cls,ident).number=code
             db.add(m.LegacyImportRecord(run_id=run.id,source_table='alunos' if cls==m.Student else 'matriculas',source_key='42',mapped_entity_type=cls.__name__,mapped_entity_id=ident,record_data={'id':42,'origin':'unchanged'}))
         db.get(m.Student,untouched['id']).number='LEG-user-code'
+        db.add(m.LegacyImportRecord(run_id=run.id,source_table='alunos',source_key='43',mapped_entity_type='Student',mapped_entity_id=untouched['id'],record_data={'id':43}))
     spec=importlib.util.spec_from_file_location('migration',Path(__file__).parents[1]/'migrations/versions/0052_imported_identifiers.py');migration=importlib.util.module_from_spec(spec);spec.loader.exec_module(migration)
     with SessionLocal.begin() as db:migration.normalize(db.connection())
     first=api.get('/students/'+student['id'])

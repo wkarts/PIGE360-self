@@ -40,7 +40,7 @@ A imagem da aplicação e o runner de CI instalam `libreoffice-writer`. Instala�
 | 0049 | rascunho JSON, versão publicada, ação de inscrição e marca do site | Conteúdo publicado existente permanece habilitado e preservado |
 | 0050 | tabela `enrollment_batches`, escola/autor, payload/resultados e chave única por escola | Não cria pessoas, matrícula, cobrança ou documento durante a migration |
 | 0051 | original DOCX, mapeamento JSON e confirmação de revisão em modelos | Modelos textuais e documentos já emitidos continuam válidos |
-| 0052 | alias `imported_number` em alunos/matrículas/perfis | Normaliza apenas códigos técnicos de entidades comprovadamente mapeadas; IDs, FKs, documentos históricos e arquivos de origem não mudam |
+| 0052 | alias `imported_number` em alunos/matrículas/perfis | Normaliza apenas códigos que correspondam ao algoritmo original e à chave/ID de origem de entidades comprovadamente mapeadas; IDs, FKs, documentos históricos e arquivos de origem não mudam |
 
 0052 não procura nem substitui palavras em nomes livres. Busca por código antigo continua funcionando. Novas importações recebem códigos operacionais comuns. Relatórios, seletores, documentos novos e portal usam o mesmo código operacional. Códigos históricos em PDFs assinados não são alterados. Metadados técnicos permanecem nas áreas autorizadas de portabilidade/auditoria.
 
