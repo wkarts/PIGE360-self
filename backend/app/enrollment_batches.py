@@ -67,7 +67,7 @@ def plan(db,school,data):
             seen.add(item.student_id)
             existing=db.scalar(select(m.Enrollment).where(m.Enrollment.activation_key==f'{school.id}:{student.id}:{year.id}'))
             if existing:fail(409,'Já existe matrícula neste período. Retome a matrícula existente.')
-            links=list(db.scalars(select(m.GuardianLink).where(m.GuardianLink.student_id==student.id,m.GuardianLink.school_id==school.id,m.GuardianLink.active.is_(True))))
+            links=list(db.scalars(select(m.GuardianLink).where(m.GuardianLink.student_id==student.id,m.GuardianLink.school_id==school.id,m.GuardianLink.active.is_(True)).order_by(m.GuardianLink.id)))
             if item.financial_person_id:
                 scoped(db,m.Person,item.financial_person_id,school.id)
                 if item.financial_person_id!=student.person_id and not any(g.person_id==item.financial_person_id and g.financial for g in links):fail(422,'Responsável financeiro sem vínculo ativo.')
@@ -155,6 +155,8 @@ def cancel(id:str,db:DB,user:Actor,school:Scope,request:Request):
     row=scoped(db,EnrollmentBatch,id,school.id)
     if row.status=='completed':fail(409,'Lote concluído. Movimentações devem ser feitas nas matrículas individuais.')
     if row.status!='cancelled':
+        previous={item['index']:item for item in row.results}
+        row.results=[previous[index] if previous.get(index,{}).get('status')=='completed' else {'index':index,'student_id':item['student_id'],'status':'cancelled','reason':'Item cancelado pelo operador; nenhuma matrícula criada por este item.','previous_reason':previous.get(index,{}).get('reason','')} for index,item in enumerate(row.payload['items'])]
         row.status='cancelled';row.version+=1;db.flush()
         audit(db,request,user,'enrollment_batch.cancelled',row,school.id,{'preserved':len([r for r in row.results if r['status']=='completed'])})
     return output(row)
@@ -173,5 +175,5 @@ def export_result(id:str,db:DB,user:Actor,school:Scope):
     for item in row.results:
         student=scoped(db,m.Student,item['student_id'],school.id);person=scoped(db,m.Person,student.person_id,school.id)
         enrollment=scoped(db,m.Enrollment,item['enrollment_id'],school.id) if item.get('enrollment_id') else None
-        writer.writerow([item['index']+1,cell(person.name),enrollment.number if enrollment else '',{'completed':'Concluído','failed':'Pendente'}.get(item['status'],item['status']),cell(item.get('reason',''))])
+        writer.writerow([item['index']+1,cell(person.name),enrollment.number if enrollment else '',{'completed':'Concluído','failed':'Pendente','cancelled':'Cancelado'}.get(item['status'],item['status']),cell(item.get('reason',''))])
     return Response('\ufeff'+out.getvalue(),media_type='text/csv',headers={'Content-Disposition':'attachment; filename="resultado-matriculas.csv"','Cache-Control':'no-store'})

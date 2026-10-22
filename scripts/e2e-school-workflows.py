@@ -65,6 +65,8 @@ def verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,pos
     expect(workflow.get_by_role('button',name='4. Financeiro',exact=True)).to_be_visible()
     workflow.get_by_role('button',name='4. Financeiro',exact=True).click()
     workflow.get_by_label('Valor por parcela',exact=True).fill('123.45')
+    workflow.get_by_label('Quantidade de parcelas',exact=True).fill('1.5')
+    expect(workflow.get_by_text('Total: —',exact=False)).to_be_visible()
     workflow.get_by_label('Quantidade de parcelas',exact=True).fill('2')
     workflow.get_by_label('Primeiro vencimento',exact=True).fill('2027-02-10')
     workflow.get_by_label('Descrição',exact=True).fill('Mensalidade sintética')

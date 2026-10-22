@@ -54,6 +54,10 @@ def test_partial_failure_rolls_back_item_and_retry_preserves_success(api):
     assert result['results'][0]['status']=='failed'
     assert result['results'][1]['status']=='completed'
     before=counts();api.post('/enrollment-batches/'+job['id']+'/process',{},200);assert counts()==before
+    cancelled=api.post('/enrollment-batches/'+job['id']+'/cancel',{},200)
+    assert cancelled['results'][1]==result['results'][1]
+    api.post('/enrollment-batches/'+job['id']+'/process',{},409)
+    assert counts()==before
 
 
 def test_explicit_activation_reuses_existing_rules(api):
@@ -71,5 +75,8 @@ def test_cancel_and_export_keep_completed_items(api):
     job=api.post('/enrollment-batches',{**payload,'preview_hash':plan['preview_hash'],'client_key':'synthetic-cancellation-001'})
     api.post('/enrollment-batches/'+job['id']+'/cancel',{},200)
     api.post('/enrollment-batches/'+job['id']+'/process',{},409)
-    assert api.get('/enrollment-batches/'+job['id'])['status']=='cancelled'
-    assert api.get('/enrollment-batches/'+job['id']+'/result.csv').status_code==200
+    cancelled=api.get('/enrollment-batches/'+job['id'])
+    assert cancelled['status']=='cancelled'
+    assert len(cancelled['results'])==2 and all(row['status']=='cancelled' for row in cancelled['results'])
+    exported=api.get('/enrollment-batches/'+job['id']+'/result.csv')
+    assert exported.status_code==200 and exported.text.count('Cancelado')==2
