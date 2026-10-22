@@ -22,6 +22,20 @@ class AssetProxyTests(unittest.TestCase):
         self.base=f'http://127.0.0.1:{server.server_port}'
         self.path='/api/v1/public/schools/11111111-2222-4333-8444-555555555555/website-assets/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
 
+    def test_demo_catalog_assets_have_narrow_jpeg_proxy(self):
+        with patch.object(website,'fetch',return_value=(b'jpeg fixture','image/jpeg')) as fetch:
+            for name in ['garden','community','library','theatre','lab','sport']:
+                path='/api/v1/public/website-model-assets/'+name+'.jpg'
+                with urlopen(self.base+path) as response:self.assertEqual(response.read(),b'jpeg fixture')
+                fetch.assert_called_with(path,limit=3*1024*1024)
+            fetch.reset_mock()
+            for path in ['/api/v1/public/website-model-assets/private.jpg','/api/v1/public/website-model-assets/garden.jpg?x=1','/api/v1/public/website-model-assets/garden.png']:
+                with self.assertRaises(HTTPError):urlopen(self.base+path)
+            fetch.assert_not_called()
+        with patch.object(website,'fetch',return_value=(b'unsafe','text/html')):
+            with self.assertRaises(HTTPError) as error:urlopen(self.base+'/api/v1/public/website-model-assets/lab.jpg')
+            self.assertEqual(error.exception.code,503)
+
     def test_only_png_public_route_is_forwarded(self):
         with patch.object(website,'fetch',return_value=(b'\x89PNGsynthetic','image/png')) as fetch:
             with urlopen(self.base+self.path) as response:

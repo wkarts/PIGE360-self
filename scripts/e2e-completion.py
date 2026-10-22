@@ -147,7 +147,7 @@ try:
         for theme in ('horizon','editorial','culture','campus'):
             public_path='/api/v1/public/schools/'+school['id']+'/website'
             before=client.get(public_path)
-            admin.get_by_label('Modelo visual').select_option(theme)
+            admin.get_by_label('Estilo do conteúdo existente (não aplica composição)',exact=True).select_option(theme)
             admin.get_by_role('button',name='Salvar rascunho',exact=True).click()
             expect(admin.get_by_text('Rascunho salvo.',exact=False)).to_be_visible()
             unchanged=client.get(public_path)

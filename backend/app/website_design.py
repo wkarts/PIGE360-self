@@ -43,6 +43,7 @@ def safe_url(value: str, image: bool = False) -> str:
 class WebsiteImage(Input):
     url: str = Field(default='', max_length=1000)
     alt: str = Field(default='', max_length=200)
+    caption: str = Field(default='', max_length=200)
     focal_x: float = Field(default=50, ge=0, le=100, allow_inf_nan=False)
     focal_y: float = Field(default=50, ge=0, le=100, allow_inf_nan=False)
 
@@ -63,6 +64,7 @@ class WebsiteLink(Input):
 
 
 class WebsiteItem(Input):
+    eyebrow: str = Field(default='', max_length=120)
     title: str = Field(default='', max_length=180)
     text: str = Field(default='', max_length=2000)
     image: WebsiteImage | None = None
@@ -72,6 +74,7 @@ class WebsiteItem(Input):
 class WebsiteSection(Input):
     id: str = Field(pattern=r'^[a-z][a-z0-9-]{0,59}$')
     kind: Literal['cards', 'split', 'gallery', 'steps', 'cta', 'news', 'agenda', 'text']
+    layout: Literal['default','pillars','feature','quote','magazine','dates','spotlight'] = 'default'
     visible: bool = True
     eyebrow: str = Field(default='', max_length=120)
     title: str = Field(default='', max_length=180)
@@ -143,6 +146,11 @@ def validate_page_links(design):
 
 
 class WebsiteDesign(Input):
+    composition_version: Literal[1,2] = 1
+    demonstration: bool = False
+    heading_style: Literal['inherit','editorial'] = 'inherit'
+    topline: str = Field(default='', max_length=180)
+    hero_caption: str = Field(default='', max_length=200)
     pages:list[WebsitePage]=Field(default_factory=list,max_length=12)
     configured: bool = False
     header_sticky: bool = False

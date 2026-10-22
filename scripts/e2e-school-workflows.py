@@ -41,7 +41,30 @@ def verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,pos
     admin.goto(URL+'/#/community')
     expect(admin.get_by_role('heading',name='Site institucional',exact=True)).to_be_visible()
     admin.get_by_role('button',name='Configurar site',exact=True).click()
-    admin.get_by_role('button',name='Preparar estrutura do modelo selecionado',exact=True).click()
+    public_path='/api/v1/public/schools/'+base.split('/')[-1]+'/website'
+    original_public=client.get(public_path).json()
+    admin.get_by_role('button',name='Carregar modelos completos',exact=True).click()
+    admin.get_by_label('Composição para experimentar',exact=True).select_option('editorial')
+    admin.get_by_role('button',name='Ver modelo completo sem alterar',exact=True).click()
+    expect(admin.frame_locator('iframe[title="Prévia privada do site"]').locator('.demonstration-banner')).to_be_visible()
+    assert client.get(public_path).json()==original_public
+    admin.once('dialog',lambda dialog:dialog.accept())
+    admin.get_by_role('button',name='Aplicar e salvar rascunho com cópia original',exact=True).click()
+    expect(admin.get_by_text('Modelo demonstrativo salvo em rascunho',exact=False)).to_be_visible()
+    stored=client.get(base+'/website',headers=headers).json()['configuration']
+    assert stored['has_checkpoint'] is True and stored['draft']['design']['composition_version']==2
+    assert 'model_checkpoint' not in stored
+    assert client.get(public_path).json()==original_public
+    admin.screenshot(path=str(OUT/'website-model-editor-applied.png'),full_page=True)
+    admin.reload()
+    admin.get_by_role('button',name='Configurar site',exact=True).click()
+    expect(admin.get_by_role('button',name='Restaurar cópia original',exact=True)).to_be_visible()
+    admin.once('dialog',lambda dialog:dialog.accept())
+    admin.get_by_role('button',name='Restaurar cópia original',exact=True).click()
+    expect(admin.get_by_text('Cópia original restaurada e salva no rascunho.',exact=True)).to_be_visible()
+    assert client.get(base+'/website',headers=headers).json()['configuration']['has_checkpoint'] is False
+    assert client.get(public_path).json()==original_public
+    record('Catálogo completo: prévia privada, aplicação em rascunho, checkpoint durável após reload e restauração sem publicar')
     admin.get_by_label('Manter cabeçalho no topo durante a rolagem',exact=True).check()
     admin.get_by_label('Exibir barra de ações no celular',exact=True).uncheck()
     admin.get_by_label('Chamada principal',exact=True).fill('Rascunho privado em revisão')

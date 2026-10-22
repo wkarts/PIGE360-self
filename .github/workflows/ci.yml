@@ -131,6 +131,7 @@ jobs:
       - name: E2E HTTP no Chromium (sem bridge)
         run: |
           python -m playwright install --with-deps chromium
+          python scripts/qa/capture-site-models.py
           python scripts/e2e.py
           python scripts/e2e-online.py
           python scripts/e2e-management.py
