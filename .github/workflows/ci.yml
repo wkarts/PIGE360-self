@@ -189,7 +189,9 @@ jobs:
             --build-arg APP_VERSION="$(cat VERSION)" --build-arg SOURCE_REVISION="$(git rev-parse HEAD)" \
             -t pige360-website:ci services/website
           docker run -d --name pige360-website-ci -p 127.0.0.1:58082:8080 pige360-website:ci
-          curl -fsS --retry 20 --retry-all-errors --retry-delay 1 http://127.0.0.1:58082/health/ready
+          curl -fsS --retry 20 --retry-all-errors --retry-delay 1 http://127.0.0.1:58082/health/live
+          # Sem API, o processo está vivo, mas não pode servir conteúdo real.
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:58082/health/ready)" = 503
           docker rm -f pige360-website-ci
           docker build --build-arg NODE_BASE_IMAGE="$NODE_BASE_IMAGE" --build-arg PYTHON_BASE_IMAGE="$PYTHON_BASE_IMAGE" \
             --build-arg APP_VERSION="$(cat VERSION)" --build-arg SOURCE_REVISION="$(git rev-parse HEAD)" \

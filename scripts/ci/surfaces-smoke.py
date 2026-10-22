@@ -25,6 +25,9 @@ response=client.put(base+'/website',headers=headers,json={'enabled':True,'theme'
 assert response.is_success,response.text
 response=client.post(base+'/community-posts',headers=headers,json={'title':'Publicação Docker visível','content':'Conteúdo aprovado via API interna.','audience':'public','status':'published'});assert response.is_success,response.text
 response=client.post(base+'/community-posts',headers=headers,json={'title':'Publicação privada nunca visível','content':'Conteúdo privado para os responsáveis autorizados.','audience':'guardians','status':'published'});assert response.is_success,response.text
+for path in ('/health/live','/health/ready'):
+    response=httpx.get('http://127.0.0.1:58082'+path,trust_env=False)
+    assert response.status_code==200,(path,response.status_code,response.text)
 site=httpx.get('http://127.0.0.1:58082/',trust_env=False);assert site.is_success,site.text
 assert 'Site integrado no Docker' in site.text and 'Publicação Docker visível' in site.text and 'Publicação privada nunca visível' not in site.text
 assert httpx.get('http://127.0.0.1:58083/',trust_env=False).status_code==200
