@@ -18,7 +18,10 @@ def test_reserved_or_invalid_slug_rejected(slug):
 
 def test_duplicate_and_aggregate_bounds():
     with pytest.raises(ValidationError):WebsiteDesign(pages=[page(),page()])
-    with pytest.raises(ValidationError):WebsiteDesign(pages=[page('pagina-'+str(i)) for i in range(13)])
+    with pytest.raises(ValidationError,match='origem'):
+        WebsiteDesign(pages=[{**page('one'),'model_origin':'horizon:escola'},{**page('two'),'model_origin':'horizon:escola'}])
+    assert len(WebsiteDesign(pages=[page('pagina-'+str(i)) for i in range(20)]).pages)==20
+    with pytest.raises(ValidationError):WebsiteDesign(pages=[page('pagina-'+str(i)) for i in range(21)])
     pages=[{**page('pagina-'+str(i)),'sections':[{'id':'secao-'+str(j),'kind':'text','text':'x'*10000} for j in range(20)]} for i in range(6)]
     with pytest.raises(ValidationError,match='1 MB'):WebsiteDesign(pages=pages)
 

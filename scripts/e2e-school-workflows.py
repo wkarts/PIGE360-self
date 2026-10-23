@@ -41,7 +41,73 @@ def verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,pos
     admin.goto(URL+'/#/community')
     expect(admin.get_by_role('heading',name='Site institucional',exact=True)).to_be_visible()
     admin.get_by_role('button',name='Configurar site',exact=True).click()
-    admin.get_by_role('button',name='Preparar estrutura do modelo selecionado',exact=True).click()
+    public_path='/api/v1/public/schools/'+base.split('/')[-1]+'/website'
+    original_public=client.get(public_path).json()
+    admin.get_by_role('button',name='Carregar modelos completos',exact=True).click()
+    admin.get_by_label('Composição para experimentar',exact=True).select_option('editorial')
+    before_model_preview=client.get(base+'/website',headers=headers).json()['configuration']
+    with admin.expect_response(lambda response:response.url.endswith('/website/preview-model') and response.request.method=='POST') as model_response:
+        admin.get_by_role('button',name='Ver modelo completo sem alterar',exact=True).click()
+    assert model_response.value.status==200
+    resolved_model=model_response.value.json()['website']
+    model_pages=[item for item in resolved_model['design']['pages'] if item.get('model_origin','').startswith('editorial:')]
+    assert len(model_pages)==6 and len(resolved_model['design']['sections'])<=2
+    preview=admin.frame_locator('iframe[title="Prévia privada do site"]')
+    expect(preview.locator('.demonstration-banner')).to_be_visible()
+    expect(preview.locator('h1')).to_have_text(resolved_model['headline'])
+    model_map=admin.locator('section[aria-labelledby="model-map-title"]')
+    expect(model_map).to_be_visible()
+    assert len(resolved_model['design']['menu'])==6
+    for link in resolved_model['design']['menu']:
+        expect(model_map.get_by_text(link['label']+' → '+link['url'],exact=True)).to_be_visible()
+        assert link['url'] in {'/'+item['slug'] for item in model_pages}
+    # Clicking a local menu link inside srcdoc must remain in private preview,
+    # rather than navigate the application domain to a nonexistent public route.
+    first_page=model_pages[0]
+    with admin.expect_response(lambda response:response.url.endswith('/website/preview?page='+first_page['slug']) and response.request.method=='POST') as menu_response:
+        preview.locator('nav a[href="/'+first_page['slug']+'"]:visible').first.click()
+    assert menu_response.value.status==200
+    expect(preview.locator('h1')).to_have_text(first_page['title'])
+    assert client.get(base+'/website',headers=headers).json()['configuration']==before_model_preview
+    assert client.get(public_path).json()==original_public
+    # Return home so the subsequent selector loop changes each option, including
+    # the first internal page, and therefore triggers its change handler.
+    with admin.expect_response(lambda response:response.url.endswith('/website/preview') and response.request.method=='POST') as menu_home_response:
+        preview.locator('a[href="/"]:visible').first.click()
+    assert menu_home_response.value.status==200
+    expect(preview.locator('h1')).to_have_text(resolved_model['headline'])
+    # The model selector renders every real internal page without applying or saving.
+    preview_selector=admin.get_by_label('Página da prévia do modelo',exact=True)
+    for item in model_pages:
+        with admin.expect_response(lambda response,slug=item['slug']:response.url.endswith('/website/preview?page='+slug) and response.request.method=='POST') as page_response:
+            preview_selector.select_option(item['slug'])
+        assert page_response.value.status==200
+        expect(preview.locator('h1')).to_have_text(item['title'])
+        assert client.get(base+'/website',headers=headers).json()['configuration']==before_model_preview
+        assert client.get(public_path).json()==original_public
+    with admin.expect_response(lambda response:response.url.endswith('/website/preview') and response.request.method=='POST') as home_response:
+        preview_selector.select_option('')
+    assert home_response.value.status==200
+    expect(preview.locator('h1')).to_have_text(resolved_model['headline'])
+    assert client.get(base+'/website',headers=headers).json()['configuration']==before_model_preview
+    assert client.get(public_path).json()==original_public
+    admin.once('dialog',lambda dialog:dialog.accept())
+    admin.get_by_role('button',name='Aplicar páginas e menu ao rascunho',exact=True).click()
+    expect(admin.get_by_text('Página inicial, novas páginas e menu salvos somente em rascunho.',exact=False)).to_be_visible()
+    stored=client.get(base+'/website',headers=headers).json()['configuration']
+    assert stored['has_checkpoint'] is True and stored['draft']['design']['composition_version']==2
+    assert 'model_checkpoint' not in stored
+    assert client.get(public_path).json()==original_public
+    admin.screenshot(path=str(OUT/'website-model-editor-applied.png'),full_page=True)
+    admin.reload()
+    admin.get_by_role('button',name='Configurar site',exact=True).click()
+    expect(admin.get_by_role('button',name='Restaurar cópia original',exact=True)).to_be_visible()
+    admin.once('dialog',lambda dialog:dialog.accept())
+    admin.get_by_role('button',name='Restaurar cópia original',exact=True).click()
+    expect(admin.get_by_text('Cópia original restaurada e salva no rascunho.',exact=True)).to_be_visible()
+    assert client.get(base+'/website',headers=headers).json()['configuration']['has_checkpoint'] is False
+    assert client.get(public_path).json()==original_public
+    record('Catálogo completo: mapa de seis páginas, prévia privada da home curta e das seis páginas sem gravar, aplicação em rascunho, checkpoint durável após reload e restauração sem publicar')
     admin.get_by_label('Manter cabeçalho no topo durante a rolagem',exact=True).check()
     admin.get_by_label('Exibir barra de ações no celular',exact=True).uncheck()
     admin.get_by_label('Chamada principal',exact=True).fill('Rascunho privado em revisão')

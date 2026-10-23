@@ -106,6 +106,7 @@ def render(data):
     school, site, brand = data['school'], dict(data['website']), data['identity']
     home_design = site.get('design') or {}
     design = dict(home_design)
+    composition_v2 = design.get('composition_version') == 2
     page = data.get('page') if isinstance(data.get('page'), dict) else None
     if page is not None:
         site.update(headline=page.get('title', ''), introduction=page.get('introduction', ''), about='', notice='')
@@ -139,7 +140,17 @@ def render(data):
     actions = action(primary_action, 'button') + action(secondary_action, 'button secondary')
     hero_copy = f'<div class="hero-copy"><p class="eyebrow">{escape(design.get("eyebrow"))}</p><h1>{escape(site.get("headline"))}</h1>{paragraphs(site.get("introduction"), "lead")}<div class="actions">{actions}</div></div>'
     hero_image = picture(design.get('hero_image'), 'hero-photo', eager=True)
-    gallery = [picture(item, eager=True) for item in (design.get('hero_gallery') or [])[:3]]
+    def captioned(image, css='', eager=False):
+        media = picture(image, css, eager)
+        if not media:
+            return ''
+        caption = image.get('caption', '') if isinstance(image, dict) else ''
+        return f'<figure class="captioned-photo">{media}<figcaption>{escape(caption)}</figcaption></figure>' if composition_v2 else media
+    # The overall hero caption can also be stored on its central photograph.
+    # Render that exact text once, below the mosaic, including on small screens.
+    gallery = [captioned({**item, 'caption': ''} if composition_v2 and isinstance(item, dict)
+                         and item.get('caption') == design.get('hero_caption') else item, eager=True)
+               for item in (design.get('hero_gallery') or [])[:3]]
     gallery = [item for item in gallery if item]
     posts = [post for post in data.get('posts', []) if isinstance(post, dict)]
     news_posts = [_post(post) for post in posts if post.get('kind') != 'event']
@@ -154,19 +165,24 @@ def render(data):
     if page is not None:
         breadcrumb = '<a class="text-link" href="/">← Página inicial</a>'
         page_copy = f'<div class="page-copy">{breadcrumb}<h1>{escape(page.get("title"))}</h1>{paragraphs(page.get("introduction"), "lead")}</div>'
-        page_media = f'<div class="page-media">{hero_image}</div>' if hero_image else ''
+        # A page may use the same cover in its leading content block; do not
+        # repeat that large photograph above the page's own editorial layout.
+        page_image_url = (page.get('image') or {}).get('url')
+        leading_section = next((section for section in (page.get('sections') or []) if section.get('visible', True)), {})
+        repeated_cover = page_image_url and page_image_url == (leading_section.get('image') or {}).get('url')
+        page_media = f'<div class="page-media">{hero_image}</div>' if hero_image and not (composition_v2 and repeated_cover) else ''
         hero = f'<section class="hero internal-cover container">{page_copy}{page_media}</section>'
     elif theme == 'editorial':
         mosaic = gallery or ([hero_image] if hero_image else [])
         hero = f'<section class="hero editorial-cover"><div class="container">{hero_copy}<div class="hero-mosaic">{"".join(mosaic)}</div></div></section>'
     elif theme == 'culture':
-        project_cover = f'<div class="project-cover">{hero_image}</div>' if hero_image else ''
+        project_cover = f'<div class="project-cover">{hero_image}</div>' if hero_image and not composition_v2 else ''
         hero = f'<section class="hero culture-cover container">{hero_copy}{project_cover}</section>'
     elif theme == 'campus':
         # Magazine composition: title above a leading image and companion stories.
         companions = ''.join(f'<figure>{picture(item, eager=True)}<figcaption>{escape(item.get("alt"))}</figcaption></figure>' for item in (design.get('hero_gallery') or [])[:2] if safe_url(item.get('url'), image=True))
         side_images = f'<aside class="quick-links">{companions}</aside>' if companions else ''
-        magazine_cover = f'<div class="magazine-cover"><div>{hero_image}</div>{side_images}</div>' if hero_image or side_images else ''
+        magazine_cover = f'<div class="magazine-cover"><div>{hero_image}</div>{side_images}</div>' if (hero_image or side_images) and not composition_v2 else ''
         hero = f'<section class="hero campus-cover container">{hero_copy}{magazine_cover}</section>'
     else:
         hero = f'<section class="hero institutional-cover {"has-photo" if hero_image else "no-photo"}"><div class="hero-art">{hero_image}</div><div class="container">{hero_copy}</div></section>'
@@ -177,8 +193,14 @@ def render(data):
     if not sections_configured:
         sections = ([{'id': 'escola', 'kind': 'text', 'title': 'Nossa escola', 'text': site.get('about', '')}] if site.get('about') else [])
         sections += [{'id': 'novidades', 'kind': 'news', 'title': 'Histórias da escola'}, {'id': 'agenda', 'kind': 'agenda', 'title': 'Próximos encontros'}]
+    if composition_v2 and not page and design.get('hero_caption'):
+        caption = f'<p class="hero-caption">{escape(design["hero_caption"])}</p>'
+        hero = hero.rsplit('</section>', 1)[0] + '<div class="container hero-caption-wrap">' + caption + '</div></section>'
+    demonstration = '<aside class="demonstration-banner" role="status">Modelo demonstrativo — substitua textos e imagens antes de publicar.</aside>' if design.get('demonstration') else ''
     visible_sections = []
     used_ids = {'conteudo', 'contato', 'topo'}
+    if composition_v2 and page is not None and page.get('show_contact_details'):
+        used_ids.add('contato-institucional')
     for index, section in enumerate(sections[:20]):
         if not isinstance(section, dict) or section.get('visible', True) is False:
             continue
@@ -189,33 +211,63 @@ def render(data):
                 section_id += '-bloco'
         used_ids.add(section_id)
         kind = section.get('kind') if section.get('kind') in SECTION_KINDS else 'text'
+        deferred_action = composition_v2 and (kind in {'split', 'cta'} or (theme == 'culture' and kind == 'steps'))
+        section_action = action(section.get('action'), 'button' if kind == 'cta' and composition_v2 else 'text-link')
         eyebrow = f'<p class="eyebrow">{escape(section["eyebrow"])}</p>' if section.get('eyebrow') else ''
-        heading = f'<div class="section-heading"><div>{eyebrow}<h2>{escape(section.get("title"))}</h2></div>{action(section.get("action"))}</div>'
+        heading = f'<div class="section-heading"><div>{eyebrow}<h2>{escape(section.get("title"))}</h2></div>{"" if deferred_action else section_action}</div>'
+        if composition_v2 and not section.get('title') and not eyebrow and not action(section.get('action')):
+            heading = ''
         text = paragraphs(section.get('text'), 'section-intro')
-        media = picture(section.get('image'))
+        trailing_action = section_action if deferred_action else ''
+        media = captioned(section.get('image'))
+        layout = section.get('layout', 'default') if composition_v2 else 'default'
+        if layout not in {'default','pillars','feature','quote','magazine','dates','spotlight'}:
+            layout = 'default'
         items = []
         for number, item in enumerate((section.get('items') or [])[:12], 1):
             if not isinstance(item, dict):
                 continue
-            item_body = f'{picture(item.get("image"))}<div class="item-copy"><h3>{escape(item.get("title"))}</h3>{paragraphs(item.get("text"))}{action(item.get("action"))}</div>'
-            step = f'<span class="step-number">{number:02}</span>' if kind == 'steps' else ''
+            item_eyebrow = f'<p class="eyebrow">{escape(item.get("eyebrow"))}</p>' if composition_v2 and item.get('eyebrow') else ''
+            item_body = f'{captioned(item.get("image"))}<div class="item-copy">{item_eyebrow}<h3>{escape(item.get("title"))}</h3>{paragraphs(item.get("text"))}{action(item.get("action"))}</div>'
+            step = f'<span class="step-number">{number:02}</span>' if kind == 'steps' or (composition_v2 and kind == 'split' and layout == 'default') else ''
             items.append(f'<article class="content-item">{step}{item_body}</article>')
         content_items = ''.join(items)
-        if kind in {'news', 'agenda'}:
+        if layout == 'magazine' and kind not in {'news', 'agenda'}:
+            lead = f'<div class="composition-lead">{items[0]}</div>' if items else ''
+            sides = f'<div class="composition-secondary">{"".join(items[1:3])}</div>' if len(items)>1 else ''
+            rest = f'<div class="composition-more">{"".join(items[3:])}</div>' if len(items)>3 else ''
+            content = f'{heading}{text}<div class="composition-magazine">{lead}{sides}{rest}</div>'
+        elif kind in {'news', 'agenda'}:
             contents = news if kind == 'news' else agenda
+            if kind == 'news' and layout == 'magazine' and theme != 'campus' and news_posts:
+                lead = f'<div class="magazine-lead">{news_posts[0]}</div>'
+                sides = '<div class="magazine-secondary">' + ''.join(news_posts[1:3]) + '</div>' if len(news_posts)>1 else ''
+                rest = '<div class="magazine-more">' + ''.join(news_posts[3:]) + '</div>' if len(news_posts)>3 else ''
+                contents = f'<div class="magazine-news">{lead}{sides}{rest}</div>'
             empty = 'Novas histórias serão publicadas aqui.' if kind == 'news' else 'Consulte a escola para os próximos encontros.'
             contents = contents or f'<p class="empty">{empty}</p>'
             grid = 'news-grid' if kind == 'news' else 'agenda-grid'
             content = f'{heading}{text}<div class="{grid}">{contents}</div>'
+        elif kind == 'split' and layout == 'feature':
+            feature_heading = f'<div class="section-heading"><div>{eyebrow}<h2>{escape(section.get("title"))}</h2></div></div>'
+            content = f'<div class="split-media">{media}</div><div class="split-copy">{feature_heading}{text}<div class="items-grid">{"".join(items)}</div>{action(section.get("action"), "button")}</div>'
+        elif kind == 'split' and layout == 'quote':
+            quote = f'<blockquote class="family-quote">{"".join(items)}</blockquote>' if items else ''
+            content = f'<div class="split-media">{media}{quote}</div><div class="split-copy">{heading}{text}{trailing_action}</div>'
         elif kind == 'split':
-            content = f'<div class="split-media">{media}</div><div class="split-copy">{heading}{text}{content_items}</div>' if media else f'<div class="split-copy">{heading}{text}{content_items}</div>'
+            # Split routines need one grid wrapper; card-like sections add their own below.
+            if composition_v2 and items:
+                content_items = f'<div class="items-grid">{content_items}</div>'
+            content = f'<div class="split-media">{media}</div><div class="split-copy">{heading}{text}{content_items}{trailing_action}</div>' if media else f'<div class="split-copy">{heading}{text}{content_items}{trailing_action}</div>'
         elif kind == 'cta':
-            content = f'{media}<div>{heading}{text}</div>'
+            content = f'{media}<div>{heading}{text}{trailing_action}</div>'
+        elif composition_v2 and theme == 'culture' and kind == 'steps':
+            content = f'<div class="process-copy">{heading}{text}{trailing_action}</div><div class="items-grid">{content_items}</div>'
         elif kind == 'text':
             content = f'{heading}<div class="prose">{text}</div>{media}'
         else:
             content = f'{heading}{text}{media}<div class="items-grid">{content_items}</div>'
-        visible_sections.append((section_id, section.get('title', ''), f'<section id="{section_id}" class="content-section section-{kind}"><div class="container section-inner">{content}</div></section>'))
+        visible_sections.append((section_id, section.get('title', ''), f'<section id="{section_id}" class="content-section section-{kind} layout-{layout}"><div class="container section-inner">{content}</div></section>'))
     menu = [dict(item) for item in (home_design.get('menu') or [])[:8] if isinstance(item, dict)]
     if not menu:
         if page is None:
@@ -241,11 +293,35 @@ def render(data):
     desktop_nav = f'<nav class="desktop-nav" aria-label="Navegação principal">{navigation}</nav>'
     mobile_nav = f'<details class="mobile-menu"><summary aria-label="Abrir ou fechar menu"><span aria-hidden="true">☰</span> Menu</summary><nav aria-label="Navegação móvel">{navigation}{action(secondary_action, "nav-link")}</nav></details>'
     header = f'<header id="topo" class="site-header {"is-sticky" if design.get("header_sticky") else ""}"><div class="container header-inner"><a class="wordmark" href="/">{logo}<span>{escape(name)}</span></a>{desktop_nav}<div class="header-action">{action(primary_action, "button")}</div>{mobile_nav}</div></header>'
+    topline = f'<div class="site-topline"><div class="container"><span>{escape(design.get("topline"))}</span>{action(secondary_action, "topline-link")}</div></div>' if composition_v2 and design.get('topline') else ''
     notice = f'<aside class="notice container" role="status">{escape(site["notice"])}</aside>' if site.get('notice') else ''
     contact = ''.join(f'<p>{escape(school.get(key))}</p>' for key in ('address', 'phone', 'email') if school.get(key))
     contact_section = f'<section id="contato" class="contact"><div class="container contact-inner"><div><p class="eyebrow">VAMOS CONVERSAR</p><h2>Conheça a escola de perto.</h2><address>{contact or "Entre em contato com a Secretaria."}</address></div><div class="actions">{actions}</div></div></section>'
-    footer = f'<footer class="site-footer"><div class="container footer-inner"><div><strong>{escape(name)}</strong>{paragraphs(design.get("footer_text"))}</div><nav aria-label="Navegação do rodapé">{navigation}</nav><div>{action(secondary_action, "footer-link")}<a class="footer-link" href="#conteudo">Voltar ao início ↑</a></div></div></footer>'
+    footer_id = ' id="contato"' if composition_v2 else ''
+    show_page_contact = composition_v2 and page is not None and page.get('show_contact_details')
+    page_contact = ''
+    if show_page_contact:
+        contact_items = []
+        for key, label, scheme in [('address', 'Endereço', ''), ('phone', 'Telefone', 'tel:'), ('email', 'E-mail', 'mailto:')]:
+            value = str(school.get(key) or '').strip()
+            if not value:
+                continue
+            url = safe_url(scheme + value) if scheme else ''
+            display = f'<a href="{escape(url)}">{escape(value)}</a>' if url else escape(value)
+            contact_items.append(f'<div><h3>{label}</h3><p>{display}</p></div>')
+        channels = '<address class="contact-channels">' + ''.join(contact_items) + '</address>' if contact_items else '<p class="empty">Os canais de atendimento serão disponibilizados em breve.</p>'
+        page_contact = f'<section id="contato-institucional" class="content-section page-contact"><div class="container"><h2>Canais de atendimento</h2>{channels}</div></section>'
+    footer_contact = f'<address>{contact}</address>' if composition_v2 and contact and not show_page_contact else ''
+    footer_class = 'site-footer footer-compact' if composition_v2 else 'site-footer'
+    top_target = '#topo' if composition_v2 else '#conteudo'
+    footer = f'<footer{footer_id} class="{footer_class}"><div class="container footer-inner"><div><strong>{escape(name)}</strong>{paragraphs(design.get("footer_text"))}</div><nav aria-label="Navegação do rodapé">{navigation}</nav><div>{footer_contact}{action(secondary_action, "footer-link")}<a class="footer-link" href="{top_target}">Voltar ao início ↑</a></div></div></footer>'
+    if composition_v2:
+        # Complete compositions already contain an editable visit/contact module.
+        # Keep authoritative contact details in the footer instead of duplicating a CTA section.
+        contact_section = ''
+    heading_style = design.get('heading_style') if composition_v2 else 'inherit'
+    heading_font = 'Georgia,serif' if heading_style == 'editorial' and brand.get('font_family', 'system') == 'system' else font
     mobile_actions = f'<nav class="mobile-actions" aria-label="Ações rápidas">{actions}</nav>' if design.get('mobile_actions') else ''
     title = f'{page.get("title", "")} · {name}' if page is not None else name
     css = Path(__file__).with_name('website.css').read_text()
-    return f'''<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{escape(title)}</title><meta name="description" content="{escape(site.get('introduction'))}"><meta name="theme-color" content="{primary}"><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/api/v1/institution/icon.png?size=180"><link rel="stylesheet" href="/api/v1/institution/theme.css"><link rel="icon" href="/api/v1/institution/icon.png?size=32"><style>{css}:root{{--brand:{primary};--ink:{secondary};--font:{font}}}</style></head><body class="{theme}{' with-mobile-actions' if mobile_actions else ''}"><a class="skip" href="#conteudo">Ir para o conteúdo</a>{header}<main id="conteudo">{hero}{notice}{''.join(item[2] for item in visible_sections)}{contact_section}</main>{footer}{mobile_actions}</body></html>'''
+    return f'''<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{escape(title)}</title><meta name="description" content="{escape(site.get('introduction'))}"><meta name="theme-color" content="{primary}"><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/api/v1/institution/icon.png?size=180"><link rel="stylesheet" href="/api/v1/institution/theme.css"><link rel="icon" href="/api/v1/institution/icon.png?size=32"><style>{css}:root{{--brand:{primary};--ink:{secondary};--font:{font};--heading-font:{heading_font}}}</style></head><body class="{theme}{' composition-v2' if composition_v2 else ''}{' is-internal' if composition_v2 and page is not None else ''}{' with-mobile-actions' if mobile_actions else ''}"><a class="skip" href="#conteudo">Ir para o conteúdo</a>{demonstration}{topline}{header}<main id="conteudo">{hero}{notice}{page_contact}{''.join(item[2] for item in visible_sections)}{contact_section}</main>{footer}{mobile_actions}</body></html>'''
