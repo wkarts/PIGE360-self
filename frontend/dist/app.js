@@ -2868,6 +2868,42 @@ var PigeCommunity;
             finally {
                 s.busy = false;
             } }
+            let previewEpoch = 0;
+            let previewController = null;
+            function closePreview() {
+                s.previewHtml = '';
+                s.modelPreviewActive = false;
+                if (previewController) {
+                    const controller = previewController;
+                    previewController = null;
+                    previewEpoch++;
+                    controller.abort();
+                    s.busy = false;
+                }
+            }
+            async function runPreview(action) {
+                if (s.busy)
+                    return;
+                const epoch = ++previewEpoch, controller = new AbortController();
+                previewController = controller;
+                const current = () => previewEpoch === epoch && previewController === controller;
+                s.busy = true;
+                s.error = '';
+                s.notice = '';
+                try {
+                    await action(controller.signal, current);
+                }
+                catch (error) {
+                    if (current() && !controller.signal.aborted)
+                        s.error = error instanceof Error ? error.message : String(error);
+                }
+                finally {
+                    if (current()) {
+                        previewController = null;
+                        s.busy = false;
+                    }
+                }
+            }
             async function load() {
                 if (!props.schoolId && !props.portalMode)
                     return;
@@ -2917,11 +2953,13 @@ var PigeCommunity;
             async function previewModel() { if (!selectedModel()) {
                 s.error = 'Carregue e escolha um modelo completo.';
                 return;
-            } await run(async () => { clearModelPreview(); const input = modelInput(); const result = await transport('/schools/' + props.schoolId + '/website/preview-model', { method: 'POST', body: input }); s.resolvedModel = result.website; s.modelPreviewInput = input; s.modelPreviewActive = true; s.previewHtml = result.html; s.notice = 'Prévia sem gravação: confira a página inicial curta, cada página interna e o mapa do menu antes de aplicar. Nenhum campo do seu rascunho foi alterado.'; }); }
+            } await runPreview(async (signal, current) => { clearModelPreview(); const input = modelInput(); const result = await transport('/schools/' + props.schoolId + '/website/preview-model', { method: 'POST', signal, body: input }); if (!current())
+                return; s.resolvedModel = result.website; s.modelPreviewInput = input; s.modelPreviewActive = true; s.previewHtml = result.html; s.notice = 'Prévia sem gravação: confira a página inicial curta, cada página interna e o mapa do menu antes de aplicar. Nenhum campo do seu rascunho foi alterado.'; }); }
             async function previewModelPage() { if (!modelReady()) {
                 s.error = 'O conteúdo ou modelo mudou. Gere novamente a prévia completa antes de escolher uma página.';
                 return;
-            } await run(async () => { const result = await transport('/schools/' + props.schoolId + '/website/preview' + (s.modelPreviewPage ? '?page=' + encodeURIComponent(s.modelPreviewPage) : ''), { method: 'POST', body: JSON.stringify(s.resolvedModel) }); s.modelPreviewActive = true; s.previewHtml = result.html; }); }
+            } await runPreview(async (signal, current) => { const result = await transport('/schools/' + props.schoolId + '/website/preview' + (s.modelPreviewPage ? '?page=' + encodeURIComponent(s.modelPreviewPage) : ''), { method: 'POST', signal, body: JSON.stringify(s.resolvedModel) }); if (!current())
+                return; s.modelPreviewActive = true; s.previewHtml = result.html; }); }
             function bindPreviewLinks(event) {
                 let document;
                 try {
@@ -2990,7 +3028,8 @@ var PigeCommunity;
                 return;
             } if (!window.confirm(s.website.design?.demonstration ? 'Publicar EXEMPLOS DEMONSTRATIVOS com identificação visível?' : 'Publicar este conteúdo no site da escola?'))
                 return; await run(async () => { editorialCheck(); await transport('/schools/' + props.schoolId + '/website/draft', { method: 'PUT', body: JSON.stringify(websitePayload()) }); await loadWebsite(); await transport('/schools/' + props.schoolId + '/website/publish', { method: 'POST', body: JSON.stringify({ version: s.website.version, confirm_demonstration: s.demoConfirmed }) }); await loadWebsite(); s.notice = 'Site publicado com sucesso.'; }); }
-            async function previewWebsite() { await run(async () => { s.modelPreviewActive = false; editorialCheck(); const result = await transport('/schools/' + props.schoolId + '/website/preview' + (editingPage() ? '?page=' + encodeURIComponent(editingPage().slug) : ''), { method: 'POST', body: JSON.stringify(websitePayload()) }); s.previewHtml = result.html; }); }
+            async function previewWebsite() { await runPreview(async (signal, current) => { s.modelPreviewActive = false; editorialCheck(); const result = await transport('/schools/' + props.schoolId + '/website/preview' + (editingPage() ? '?page=' + encodeURIComponent(editingPage().slug) : ''), { method: 'POST', signal, body: JSON.stringify(websitePayload()) }); if (!current())
+                return; s.previewHtml = result.html; }); }
             async function unpublishWebsite() { if (!window.confirm('Retirar o site do ar? O conteúdo será preservado em rascunho.'))
                 return; await run(async () => { await transport('/schools/' + props.schoolId + '/website/unpublish', { method: 'POST', body: JSON.stringify(websitePayload()) }); await loadWebsite(); s.notice = 'Site retirado da publicação. Rascunho preservado.'; }); }
             async function search() { s.page = 1; await run(load); }
@@ -3027,7 +3066,7 @@ var PigeCommunity;
             const expired = (post) => Boolean(post.expires_at) && new Date(post.expires_at) <= new Date();
             const paragraphs = (value) => value.split(/\n\s*\n/).filter(Boolean);
             Vue.onMounted(() => { void run(async () => { await load(); await loadWebsite(); }); });
-            return { s, props, manage, run, load, toggleWebsite, loadSiteAssets, removeSiteAsset, uploadSiteImage, move, removeSiteItem, addSection, loadSiteModels, selectedModel, modelReady, clearModelPreview, modelNewPages, modelRenames, previewModel, previewModelPage, bindPreviewLinks, applyModel, restoreModelCheckpoint, markDemoReplaced, editingPage, contentSections, selectSitePage, addSitePage, moveSitePage, removeSitePage, addPageToMenu, inheritBrand, newImage, newLink, newItem, sectionLabels, saveWebsite, publishWebsite, previewWebsite, unpublishWebsite, search, page, open, edit, closeEditor, save, remove, date, audienceLabels, statusLabels, scheduled, expired, paragraphs };
+            return { s, props, manage, run, load, toggleWebsite, loadSiteAssets, removeSiteAsset, uploadSiteImage, move, removeSiteItem, addSection, loadSiteModels, selectedModel, modelReady, clearModelPreview, modelNewPages, modelRenames, previewModel, previewModelPage, bindPreviewLinks, closePreview, applyModel, restoreModelCheckpoint, markDemoReplaced, editingPage, contentSections, selectSitePage, addSitePage, moveSitePage, removeSitePage, addPageToMenu, inheritBrand, newImage, newLink, newItem, sectionLabels, saveWebsite, publishWebsite, previewWebsite, unpublishWebsite, search, page, open, edit, closeEditor, save, remove, date, audienceLabels, statusLabels, scheduled, expired, paragraphs };
         } };
 })(PigeCommunity || (PigeCommunity = {}));
 var PigeMailcow;

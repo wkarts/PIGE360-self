@@ -72,4 +72,28 @@ assert.equal(reloaded.s.website.theme,'editorial');assert.equal(reloaded.s.hasMo
 await reloaded.restoreModelCheckpoint();assert.equal(reloaded.s.website.headline,'Preservado após recarregar');assert.equal(reloaded.s.hasModelCheckpoint,false);
 sandbox.Vue.onMounted=()=>{};for(const access of [{publicMode:true},{portalMode:true},{permissions:[]}]){const reader=sandbox.PigeCommunity.component.setup({schoolId:'school-test',permissions:['schools.manage'],request,...access});assert.equal(reader.manage(),false);assert.equal(reader.s.websiteOpen,false);sandbox.PigeRenders.community.call(reader,reader,[]);}
 assert.equal(calls.filter(c=>c.url.endsWith('/publish')).length,0,'Editing, complete-model application, restoration and draft save never publish');
+// A transport may ignore AbortSignal: late results/errors must still be discarded.
+const pending=[];
+const race=sandbox.PigeCommunity.component.setup({schoolId:'preview-race',permissions:['schools.manage'],request:(url,options)=>new Promise((resolve,reject)=>pending.push({url,options,resolve,reject}))});
+race.s.previewHtml='<h1>Current</h1>';
+function findClosePreview(node){
+ if(!node||typeof node!=='object')return null;
+ if(node.type==='button'&&node.children==='Fechar prévia')return node;
+ for(const child of Array.isArray(node.children)?node.children:[]){const match=findClosePreview(child);if(match)return match;}
+ return null;
+}
+const renderRace=()=>sandbox.PigeRenders.community.call(race,race,[]);
+const firstPreview=race.previewWebsite();assert.equal(race.s.busy,true);
+const closeButton=findClosePreview(renderRace());assert.ok(closeButton);assert.notEqual(closeButton.props.disabled,true);
+closeButton.props.onClick();assert.equal(pending[0].options.signal.aborted,true);assert.equal(race.s.previewHtml,'');assert.equal(race.s.busy,false);
+pending[0].resolve({html:'<h1>Late closed response</h1>'});await firstPreview;assert.equal(race.s.previewHtml,'');
+const oldPreview=race.previewWebsite();race.closePreview();const newPreview=race.previewWebsite();
+assert.equal(race.s.busy,true);pending[1].resolve({html:'<h1>Old response during new request</h1>'});await oldPreview;
+assert.equal(race.s.previewHtml,'');assert.equal(race.s.busy,true,'Old finally must not unlock the new preview');
+pending[2].resolve({html:'<h1>New preview</h1>'});await newPreview;assert.equal(race.s.previewHtml,'<h1>New preview</h1>');assert.equal(race.s.busy,false);
+const failedOld=race.previewWebsite();race.closePreview();const newer=race.previewWebsite();pending[4].resolve({html:'<h1>Latest preview</h1>'});await newer;
+pending[3].reject(Error('Stale failure'));await failedOld;assert.equal(race.s.error,'');assert.equal(race.s.previewHtml,'<h1>Latest preview</h1>');
+const olderSuccess=race.previewWebsite();race.closePreview();const newestSuccess=race.previewWebsite();pending[6].resolve({html:'<h1>Newest completed preview</h1>'});await newestSuccess;
+pending[5].resolve({html:'<h1>Too late old success</h1>'});await olderSuccess;assert.equal(race.s.previewHtml,'<h1>Newest completed preview</h1>');assert.equal(race.s.busy,false);
+let finishNonPreview;const nonPreview=race.run(()=>new Promise(resolve=>{finishNonPreview=resolve;}));race.closePreview();assert.equal(race.s.busy,true,'Close must not unlock save/apply/restore or another non-preview operation');finishNonPreview();await nonPreview;assert.equal(race.s.busy,false);
 console.log('Website editor: four models, independent pages, sections, order, photo focus, persistence, preview, cancel and no implicit publish OK.');

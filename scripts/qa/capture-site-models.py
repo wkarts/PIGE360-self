@@ -38,6 +38,13 @@ def inspect_page(page,theme,width,slug,output):
         minimum=.40 if split else .65 if dates else .95
         assert group['width']>=minimum*group['available'],f'{name}: collapsed grid {group}'
         if width>=768:assert all(card>=120 for card in group['cards']),f'{name}: unreadably narrow cards {group}'
+    secondary_text=page.evaluate("""() => [...document.querySelectorAll(
+        '.composition-secondary .item-copy, .magazine-secondary .story h3'
+    )].map(node=>({width:node.getBoundingClientRect().width,text:node.textContent.trim()}))""")
+    if width==768:
+        if theme=='campus' and not slug:
+            assert len(secondary_text)>=2,f'{name}: missing secondary story geometry'
+        assert all(column['width']>=180 for column in secondary_text),f'{name}: unreadably narrow secondary text {secondary_text}'
     footer=page.locator('.site-footer').bounding_box()
     assert footer and footer['height']<=350,f'{name}: oversized fixture footer {footer}'
     assert footer['y']+footer['height']>=page.viewport_size['height']-1,f'{name}: blank canvas below footer'
@@ -47,7 +54,7 @@ def inspect_page(page,theme,width,slug,output):
     else:
         assert page.locator('.content-section').count()<=2,name+': home is not a summary'
     return {'theme':theme,'route':'/'+slug,'width':width,'images':page.locator('img').count(),
-            'height':page.evaluate('document.documentElement.scrollHeight'),'footer_height':footer['height'],'geometry':geometry}
+            'height':page.evaluate('document.documentElement.scrollHeight'),'footer_height':footer['height'],'geometry':geometry,'secondary_text':secondary_text}
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)

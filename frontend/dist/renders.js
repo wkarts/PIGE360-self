@@ -13745,7 +13745,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                 _createElementVNode("option", { value: "320px" }, "320 px")
               ], 8, ["onUpdate:modelValue"]), [[_vModelSelect, s.previewWidth]])]), _createElementVNode("button", {
                 class: "btn",
-                onClick: $event => (s.previewHtml='')
+                onClick: closePreview
               }, "Fechar prévia", 8, ["onClick"])]), _createElementVNode("iframe", {
                 title: "Prévia privada do site",
                 onLoad: bindPreviewLinks,

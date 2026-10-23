@@ -38,6 +38,20 @@ namespace PigeCommunity {
     const endpoint=()=>props.portalMode?'/portal/community-feed':props.publicMode?'/public/schools/'+props.schoolId+'/community-feed':'/schools/'+props.schoolId+(manage()?'/community-posts':'/community-feed');
     const transport=(path:string,options?:RequestInit)=>(props.request||request)(path,options);
     async function run(action:()=>Promise<void>):Promise<void>{if(s.busy)return;s.busy=true;s.error='';s.notice='';try{await action();}catch(error){s.error=error instanceof Error?error.message:String(error);}finally{s.busy=false;}}
+    let previewEpoch=0;
+    let previewController:AbortController|null=null;
+    function closePreview():void{
+      s.previewHtml='';s.modelPreviewActive=false;
+      if(previewController){const controller=previewController;previewController=null;previewEpoch++;controller.abort();s.busy=false;}
+    }
+    async function runPreview(action:(signal:AbortSignal,current:()=>boolean)=>Promise<void>):Promise<void>{
+      if(s.busy)return;
+      const epoch=++previewEpoch,controller=new AbortController();previewController=controller;
+      const current=()=>previewEpoch===epoch&&previewController===controller;
+      s.busy=true;s.error='';s.notice='';
+      try{await action(controller.signal,current);}catch(error){if(current()&&!controller.signal.aborted)s.error=error instanceof Error?error.message:String(error);}
+      finally{if(current()){previewController=null;s.busy=false;}}
+    }
     async function load():Promise<void>{
       if(!props.schoolId&&!props.portalMode)return;
       const params=new URLSearchParams({page:String(s.page),page_size:props.compact?'4':'12',q:s.q,kind:s.kind,...(manage()?{status:s.status}:{upcoming:String(s.upcoming)})});
@@ -58,8 +72,8 @@ namespace PigeCommunity {
     function clearModelPreview():void{s.resolvedModel=null;s.modelPreviewInput='';s.modelPreviewPage='';s.modelPreviewActive=false;s.previewHtml='';}
     function modelNewPages():SitePage[]{const existing=new Set(s.website.design?.pages.map(page=>page.slug)||[]);return s.resolvedModel?.design?.pages.filter(page=>!existing.has(page.slug))||[];}
     function modelRenames():string[]{const proposed=selectedModel()?.website.design?.menu||[];const resolved=s.resolvedModel?.design?.menu||[];return proposed.flatMap((link,index)=>resolved[index]&&link.url!==resolved[index].url?[link.url+' → '+resolved[index].url]:[]);}
-    async function previewModel():Promise<void>{if(!selectedModel()){s.error='Carregue e escolha um modelo completo.';return;}await run(async()=>{clearModelPreview();const input=modelInput();const result=await transport('/schools/'+props.schoolId+'/website/preview-model',{method:'POST',body:input}) as {website:Website;html:string};s.resolvedModel=result.website;s.modelPreviewInput=input;s.modelPreviewActive=true;s.previewHtml=result.html;s.notice='Prévia sem gravação: confira a página inicial curta, cada página interna e o mapa do menu antes de aplicar. Nenhum campo do seu rascunho foi alterado.';});}
-    async function previewModelPage():Promise<void>{if(!modelReady()){s.error='O conteúdo ou modelo mudou. Gere novamente a prévia completa antes de escolher uma página.';return;}await run(async()=>{const result=await transport('/schools/'+props.schoolId+'/website/preview'+(s.modelPreviewPage?'?page='+encodeURIComponent(s.modelPreviewPage):''),{method:'POST',body:JSON.stringify(s.resolvedModel)}) as {html:string};s.modelPreviewActive=true;s.previewHtml=result.html;});}
+    async function previewModel():Promise<void>{if(!selectedModel()){s.error='Carregue e escolha um modelo completo.';return;}await runPreview(async(signal,current)=>{clearModelPreview();const input=modelInput();const result=await transport('/schools/'+props.schoolId+'/website/preview-model',{method:'POST',signal,body:input}) as {website:Website;html:string};if(!current())return;s.resolvedModel=result.website;s.modelPreviewInput=input;s.modelPreviewActive=true;s.previewHtml=result.html;s.notice='Prévia sem gravação: confira a página inicial curta, cada página interna e o mapa do menu antes de aplicar. Nenhum campo do seu rascunho foi alterado.';});}
+    async function previewModelPage():Promise<void>{if(!modelReady()){s.error='O conteúdo ou modelo mudou. Gere novamente a prévia completa antes de escolher uma página.';return;}await runPreview(async(signal,current)=>{const result=await transport('/schools/'+props.schoolId+'/website/preview'+(s.modelPreviewPage?'?page='+encodeURIComponent(s.modelPreviewPage):''),{method:'POST',signal,body:JSON.stringify(s.resolvedModel)}) as {html:string};if(!current())return;s.modelPreviewActive=true;s.previewHtml=result.html;});}
     function bindPreviewLinks(event:Event):void{
       let document:Document|null;
       try{document=(event.currentTarget as HTMLIFrameElement).contentDocument;}catch{return;}
@@ -87,7 +101,7 @@ namespace PigeCommunity {
     function editorialCheck():void{if(/^(https?:\/\/|www\.)/i.test(s.website.headline.trim()))throw new Error('Use um título na chamada principal. Informe a URL no endereço do botão.');}
     async function saveWebsite():Promise<void>{await run(async()=>{await transport('/schools/'+props.schoolId+'/website/draft',{method:'PUT',body:JSON.stringify(websitePayload())});await loadWebsite();s.notice='Rascunho salvo. A versão pública permanece a mesma até você publicar.';});}
     async function publishWebsite():Promise<void>{if(s.website.design?.demonstration&&!s.demoConfirmed){s.error='Confirme explicitamente a publicação de conteúdo demonstrativo ou substitua e revise os exemplos.';return;}if(!window.confirm(s.website.design?.demonstration?'Publicar EXEMPLOS DEMONSTRATIVOS com identificação visível?':'Publicar este conteúdo no site da escola?'))return;await run(async()=>{editorialCheck();await transport('/schools/'+props.schoolId+'/website/draft',{method:'PUT',body:JSON.stringify(websitePayload())});await loadWebsite();await transport('/schools/'+props.schoolId+'/website/publish',{method:'POST',body:JSON.stringify({version:s.website.version,confirm_demonstration:s.demoConfirmed})});await loadWebsite();s.notice='Site publicado com sucesso.';});}
-    async function previewWebsite():Promise<void>{await run(async()=>{s.modelPreviewActive=false;editorialCheck();const result=await transport('/schools/'+props.schoolId+'/website/preview'+(editingPage()?'?page='+encodeURIComponent(editingPage()!.slug):''),{method:'POST',body:JSON.stringify(websitePayload())}) as {html:string};s.previewHtml=result.html;});}
+    async function previewWebsite():Promise<void>{await runPreview(async(signal,current)=>{s.modelPreviewActive=false;editorialCheck();const result=await transport('/schools/'+props.schoolId+'/website/preview'+(editingPage()?'?page='+encodeURIComponent(editingPage()!.slug):''),{method:'POST',signal,body:JSON.stringify(websitePayload())}) as {html:string};if(!current())return;s.previewHtml=result.html;});}
     async function unpublishWebsite():Promise<void>{if(!window.confirm('Retirar o site do ar? O conteúdo será preservado em rascunho.'))return;await run(async()=>{await transport('/schools/'+props.schoolId+'/website/unpublish',{method:'POST',body:JSON.stringify(websitePayload())});await loadWebsite();s.notice='Site retirado da publicação. Rascunho preservado.';});}
     async function search():Promise<void>{s.page=1;await run(load);}
     async function page(delta:number):Promise<void>{s.page+=delta;await run(load);}
@@ -108,6 +122,6 @@ namespace PigeCommunity {
     const expired=(post:Post)=>Boolean(post.expires_at)&&new Date(post.expires_at as string)<=new Date();
     const paragraphs=(value:string)=>value.split(/\n\s*\n/).filter(Boolean);
     Vue.onMounted(()=>{void run(async()=>{await load();await loadWebsite();});});
-    return {s,props,manage,run,load,toggleWebsite,loadSiteAssets,removeSiteAsset,uploadSiteImage,move,removeSiteItem,addSection,loadSiteModels,selectedModel,modelReady,clearModelPreview,modelNewPages,modelRenames,previewModel,previewModelPage,bindPreviewLinks,applyModel,restoreModelCheckpoint,markDemoReplaced,editingPage,contentSections,selectSitePage,addSitePage,moveSitePage,removeSitePage,addPageToMenu,inheritBrand,newImage,newLink,newItem,sectionLabels,saveWebsite,publishWebsite,previewWebsite,unpublishWebsite,search,page,open,edit,closeEditor,save,remove,date,audienceLabels,statusLabels,scheduled,expired,paragraphs};
+    return {s,props,manage,run,load,toggleWebsite,loadSiteAssets,removeSiteAsset,uploadSiteImage,move,removeSiteItem,addSection,loadSiteModels,selectedModel,modelReady,clearModelPreview,modelNewPages,modelRenames,previewModel,previewModelPage,bindPreviewLinks,closePreview,applyModel,restoreModelCheckpoint,markDemoReplaced,editingPage,contentSections,selectSitePage,addSitePage,moveSitePage,removeSitePage,addPageToMenu,inheritBrand,newImage,newLink,newItem,sectionLabels,saveWebsite,publishWebsite,previewWebsite,unpublishWebsite,search,page,open,edit,closeEditor,save,remove,date,audienceLabels,statusLabels,scheduled,expired,paragraphs};
   }};
 }
