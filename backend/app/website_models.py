@@ -9,9 +9,9 @@ ASSET_PREFIX='/api/v1/public/website-model-assets/'
 
 def image(name,caption=''):
     if name=='preschool':
-        return {'url':ASSET_PREFIX+name+'.jpg','alt':'Fotografia ilustrativa de infância: criança brincando com tinta. Senjuti Kundu / Unsplash. Não representa alunos desta escola.','caption':caption,'focal_x':50,'focal_y':50}
+        return {'url':ASSET_PREFIX+name+'.jpg','alt':'Fotografia ilustrativa de infância: criança brincando com tinta. Senjuti Kundu / Unsplash. Não representa alunos desta escola.','caption':caption,'focal_x':50,'focal_y':25 if name=='theatre' else 50}
     return {'url':ASSET_PREFIX+name+'.jpg','alt':caption or 'Ilustração gerada por IA: '+{'garden':'grupo cultivando uma horta','community':'encontro de famílias na escola','library':'estudantes compartilhando uma leitura','theatre':'grupo em apresentação teatral','lab':'estudantes construindo um circuito','sport':'estudantes jogando basquete'}[name],
-            'caption':caption,'focal_x':50,'focal_y':50}
+            'caption':caption,'focal_x':50,'focal_y':25 if name=='theatre' else 50}
 
 
 def link(label,target='#visita'):return {'label':label,'url':target}
@@ -76,6 +76,8 @@ def multipage_website(website):
     source={s['id']:s for s in d['sections']}
     school=section('proposta-escola','split','Uma escola feita de relações e descobertas.','Cuidado, conhecimento e participação caminham juntos. A relação entre estudantes, educadores e famílias dá sentido às experiências e abre espaço para novas descobertas.',photo='community',eyebrow='Nossa proposta',action=link('Converse com a equipe','/contato'))
     projects=section('experiencias','cards','Muitas maneiras de aprender.','A curiosidade conecta o que aprendemos com o mundo ao nosso redor.',items=[item('Investigar e experimentar','Perguntas e experiências aproximam ciência e cotidiano.','lab',target='/visita'),item('Ler e imaginar','Histórias ampliam repertórios e maneiras de se expressar.','library',target='/visita'),item('Criar e compartilhar','Arte e convivência fortalecem a expressão de cada estudante.','theatre',target='/visita')])
+    if theme=='editorial':
+        projects=section('experiencias','cards','Descobrir o mundo brincando.','Pequenos gestos, encontros e experiências que ampliam a curiosidade.',items=[item('Brincar e imaginar','Brincadeiras convidam a criar histórias, explorar materiais e experimentar novas possibilidades.','preschool',label=''),item('Explorar a natureza','Observar plantas, cores e texturas desperta perguntas e o cuidado com o mundo.','garden',label=''),item('Conviver e compartilhar','Encontros, escuta e descobertas em companhia fortalecem os primeiros vínculos.','community',label='')])
     groups={
       'horizon':[('escola','A escola',[source.get('escola',school)]),('educacao','Educação',[source.get('educacao',projects)]),('espacos','Espaços e vivências',[source.get('espacos',projects)]),('projetos','Projetos',[projects])],
       'editorial':[('proposta','Nossa proposta',[source.get('jornada',school)]),('rotina','Nossa rotina',[source.get('rotina',school)]),('familias','Famílias',[source.get('familias',school)]),('descobertas','Descobertas',[projects])],
@@ -84,7 +86,7 @@ def multipage_website(website):
     groups.extend([('visita','Conheça a escola',[section('planejar-visita','steps','Uma visita para conhecer e conversar.','Escolher uma escola começa com boas perguntas. Converse com a equipe e conheça a proposta e os espaços.',items=[item('Compartilhe suas perguntas','Conte a etapa escolar e o que sua família deseja conhecer.',label=''),item('Combine o melhor momento','Confirme a disponibilidade e as orientações com a secretaria.',label=''),item('Conheça a escola de perto','Explore os espaços e converse sobre o acompanhamento dos estudantes.',label='')],action=link('Fale com a equipe','/contato'))]),
       ('contato','Contato',[section('atendimento','text','Vamos conversar.','Perguntas sobre a proposta pedagógica, etapas de ensino ou visitas? Entre em contato pelos canais institucionais e conte como podemos ajudar sua família.'),section('duvidas','cards','Como podemos ajudar?',items=[item('Conhecer a proposta','Tire dúvidas sobre o cotidiano e a aprendizagem.',label=''),item('Planejar uma visita','Converse com a equipe sobre disponibilidade.',label=''),item('Falar com a secretaria','Solicite informações institucionais pelos canais oficiais.',label='')])])])
     if theme=='campus':
-        groups=[(slug,title,[section('publicacoes-'+slug,'news' if slug=='noticias' else 'agenda',title,'Publicações públicas da instituição.' if slug=='noticias' else 'Eventos públicos da instituição.')]) if slug in {'noticias','agenda'} else (slug,title,sections) for slug,title,sections in groups]
+        groups=[(slug,title,[section('publicacoes-'+slug,'news' if slug=='noticias' else 'agenda','')]) if slug in {'noticias','agenda'} else (slug,title,sections) for slug,title,sections in groups]
     mapping={'#contato':'/contato','#visita':'/visita','#pilares':'/educacao','#jornada':'/proposta','#destaque':'/projetos'}
     for slug,_,sections in groups:
         mapping.update({'#'+s['id']:'/'+slug for s in sections})
@@ -108,14 +110,19 @@ def multipage_website(website):
     }
     pages=[{'slug':slug,'model_origin':theme+':'+slug,'show_contact_details':slug=='contato','title':title,'introduction':introductions[slug],'published':True,'image':None,'sections':deepcopy(sections)} for slug,title,sections in groups]
     # The cover carries the identity; the home contains summaries, not entire pages.
-    summaries=[item(title,'Conheça este assunto e encontre mais informações.',next((s['image']['url'].split('/')[-1][:-4] for s in sections if s.get('image')),['garden','library','lab'][index]),label='Conheça mais',target='/'+slug) for index,(slug,title,sections) in enumerate(groups[:3])]
+    summary_groups=groups[1:4] if theme=='culture' else groups[:3]
+    summaries=[item(title,introductions[slug],label='Conheça mais',target='/'+slug) for slug,title,_ in summary_groups]
     first=section('explore','cards','Descubra nossa escola.','Encontre a proposta, as experiências e as informações que você procura.',items=summaries)
     if theme=='horizon':home=[source['pilares'],first]
+    elif theme=='culture':
+        feature=deepcopy(source['destaque'])
+        feature.update(text='Perguntas ganham forma em experiências que conectam investigação, criatividade e trabalho em equipe.',items=[],action=link('Conheça o projeto','/projetos'))
+        home=[feature,first]
     elif theme=='campus':
         lead=deepcopy(source['historias'])
         for index,story in enumerate(lead['items']):story['action']=link('Leia a história','/'+('historias' if index==0 else 'vivencias'))
         home=[lead,section('convite','cta','Conheça as histórias e participe.','Explore a vida escolar, consulte a agenda e converse com a equipe.',action=link('Ver agenda','/agenda'))]
-    else:home=[first,section('convite','cta','Vamos conhecer sua família?','Uma conversa é o primeiro passo para descobrir a escola.',action=link('Planeje sua visita','/visita'))]
+    else:home=[first]
     d.update(sections=home,pages=pages,menu=[link(title,'/'+slug) for slug,title,_ in groups],primary_action=link('Agende uma visita','/visita'),secondary_action=None)
     result['design']=rewrite_links(d,mapping)
     for page in result['design']['pages']:

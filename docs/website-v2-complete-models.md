@@ -109,3 +109,27 @@ valida destinos de links e registra todas as internas em 390/1440 px, além das
 homes em 320/390/768/1440 e menus móveis: 72 PNGs. Registra altura do rodapé e
 geometria de cards/grids. A guarda de upload e retenção existentes não mudam.
 Essas capturas ainda exigem inspeção humana antes de qualquer afirmação visual.
+
+## Revisão das 72 capturas multipágina
+
+A rodada `39871604934` gerou as 72 imagens e passou navegação/reload das páginas,
+mas o E2E do editor encontrou nome acessível instável no seletor de prévia. O label
+agora é explícito, separado das opções; a asserção exata foi preservada.
+
+A inspeção real dos quatro modelos e 48 capturas internas levou a estes ajustes:
+- sínteses textuais sem repetir as mesmas fotografias da capa;
+- Infância sem CTA inferior repetido e com fotos apropriadas em Descobertas;
+- Projetos recupera o destaque foto/painel da composição V2, ligando à página própria;
+- foco vertical da foto teatral para preservar rostos;
+- Contato prioriza canais institucionais antes do conteúdo de apoio;
+- títulos de Agenda/Notícias não são duplicados no bloco de publicações;
+- rodapé permanece em fluxo, sem faixa vazia abaixo em páginas curtas.
+
+O artefato dessa rodada tinha 40.654.493 bytes (conjunto completo, não só imagens).
+A próxima rodada deve confirmar os ajustes de pixels e concluir os E2Es do editor.
+A variável temporária de upload deve voltar ao estado anterior somente após baixar
+as evidências finais. Nenhum merge, release ou deploy faz parte desta correção.
+
+A revisão independente também cobriu o limite agregado: entrada individual válida
+que excederia 1 MB após compor o modelo retorna 422 sem expor conteúdo, preservando
+rascunho, publicação, versão e checkpoint. O limite não é reduzido nem ignorado.

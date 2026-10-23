@@ -241,5 +241,60 @@ def test_community_news_and_agenda_are_real_feed_sections():
     pages={p['slug']:p for p in model['design']['pages']}
     assert pages['noticias']['sections'][0]['kind']=='news'
     assert pages['agenda']['sections'][0]['kind']=='agenda'
+    assert pages['agenda']['sections'][0]['title']==pages['noticias']['sections'][0]['title']==''
     assert not pages['agenda']['sections'][0]['items']
     assert pages['contato']['show_contact_details'] is True
+
+
+def test_home_summaries_are_compact_and_editorial_discoveries_are_age_appropriate():
+    models={m['id']:m['website']['design'] for m in catalog()['items']}
+    for theme in ('horizon','editorial','culture'):
+        summary=next(s for s in models[theme]['sections'] if s['id']=='explore')
+        assert len(summary['items'])==3
+        assert all(card['image'] is None for card in summary['items'])
+        assert len({card['text'] for card in summary['items']})==3
+        pages={p['slug']:p for p in models[theme]['pages']}
+        assert all(card['text']==pages[card['action']['url'][1:]]['introduction'] for card in summary['items'])
+    assert models['horizon']['sections'][0]['layout']=='pillars'
+    assert len(models['editorial']['sections'])==1
+    feature=models['culture']['sections'][0]
+    assert feature['layout']=='feature' and feature['image']['url'].endswith('/lab.jpg')
+    assert feature['action']=={'label':'Conheça o projeto','url':'/projetos'}
+    assert len(models['culture']['sections'])==2 and not feature['items']
+    discoveries=next(p for p in models['editorial']['pages'] if p['slug']=='descobertas')
+    assert [card['image']['url'].split('/')[-1] for card in discoveries['sections'][0]['items']]==['preschool.jpg','garden.jpg','community.jpg']
+    assert models['campus']['sections'][0]['layout']=='magazine'
+
+
+@pytest.mark.parametrize('existing_checkpoint',[False,True])
+def test_resulting_model_size_limit_is_422_without_any_mutation(api,client,existing_checkpoint):
+    from copy import deepcopy
+    from sqlalchemy import select
+    from app.db import SessionLocal
+    from app.school_website import SchoolWebsite
+
+    config=website('Publicado preservado','model-size-'+str(existing_checkpoint).lower()+'.example.test')
+    row=api.call('PUT','/website',config)
+    if existing_checkpoint:
+        row=api.post('/website/apply-model',{'model_id':'campus','website':{**config,'version':row['version']}},200)
+    pages=[{'slug':'original-'+str(i),'sections':[{'id':'bloco-'+str(j),'kind':'text','text':'x'*10000} for j in range(20)]} for i in range(5)]
+    pages.append({'slug':'final','sections':[{'id':'fim-'+str(j),'kind':'text','text':'y'*10000} for j in range(3)]})
+    editor={**config,'version':row['version'],'design':{'pages':pages}}
+    WebsiteInput(**editor) # The submitted content is valid; only the resolved merge exceeds 1 MB.
+    row=api.call('PUT','/website/draft',editor)
+    before=api.get('/website')['configuration']
+    public_path='/api/v1/public/schools/'+api.school['id']+'/website'
+    public_before=client.get(public_path).json()
+    def checkpoint():
+        with SessionLocal() as db:
+            return deepcopy(db.scalar(select(SchoolWebsite).where(SchoolWebsite.school_id==api.school['id'])).model_checkpoint)
+    checkpoint_before=checkpoint()
+    assert bool(checkpoint_before) is existing_checkpoint
+    payload={'model_id':'horizon','website':{**row['draft'],'version':row['version']}}
+    for route in ('preview-model','apply-model'):
+        result=api.post('/website/'+route,payload,422)
+        assert '1 MB' in result['detail'] and 'Nenhum conteúdo foi alterado' in result['detail']
+        assert 'xxxxxxxx' not in str(result) and len(str(result))<500
+        assert api.get('/website')['configuration']==before
+        assert checkpoint()==checkpoint_before
+        assert client.get(public_path).json()==public_before

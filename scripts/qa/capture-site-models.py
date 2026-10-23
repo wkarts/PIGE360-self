@@ -40,6 +40,7 @@ def inspect_page(page,theme,width,slug,output):
         if width>=768:assert all(card>=120 for card in group['cards']),f'{name}: unreadably narrow cards {group}'
     footer=page.locator('.site-footer').bounding_box()
     assert footer and footer['height']<=350,f'{name}: oversized fixture footer {footer}'
+    assert footer['y']+footer['height']>=page.viewport_size['height']-1,f'{name}: blank canvas below footer'
     if slug:
         assert page.locator('.is-internal').count()==1
         assert page.locator('.hero-gallery').count()==0,name+': repeated home mosaic'

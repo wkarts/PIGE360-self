@@ -6,7 +6,7 @@ import re
 from urllib.parse import urlsplit
 from fastapi import APIRouter, Request, UploadFile, File
 from fastapi.responses import Response
-from pydantic import Field, field_validator
+from pydantic import Field, ValidationError, field_validator
 from sqlalchemy import Boolean, ForeignKey, String, Text, JSON, Integer, LargeBinary, UniqueConstraint, func, select
 from sqlalchemy.orm import Mapped, mapped_column
 from . import models as m
@@ -518,7 +518,10 @@ def resolve_website_model(model_id,values):
     draft['design']['pages']=existing+preset['design']['pages']
     for key in ('header_sticky','mobile_actions'):
         if key in values['design']:draft['design'][key]=values['design'][key]
-    return website_values(WebsiteInput(**draft),exclude_enabled=True)
+    try:
+        return website_values(WebsiteInput(**draft),exclude_enabled=True)
+    except ValidationError:
+        fail(422,'A composição resultante excede os limites permitidos (incluindo 1 MB de conteúdo) ou contém configuração inválida. Reduza o conteúdo e revise a configuração. Nenhum conteúdo foi alterado.')
 
 
 @router.post('/schools/{school_id}/website/preview-model')

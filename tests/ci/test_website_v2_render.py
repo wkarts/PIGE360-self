@@ -146,9 +146,10 @@ class CompleteModelRendererTests(unittest.TestCase):
     def test_contact_page_uses_institution_data_once_and_honest_empty_state(self):
         payload=data(composition_version=2)
         payload['school'].update(address='Rua da Escola, 10',phone='+557500000000',email='escola@example.com')
-        payload['page']={'title':'Contato','show_contact_details':True,'sections':[]}
+        payload['page']={'title':'Contato','show_contact_details':True,'sections':[{'id':'faq','kind':'text','title':'Dúvidas comuns','text':'Informações adicionais.'}]}
         doc=renderer.render(payload)
         self.assertIn('class="contact-channels"',doc)
+        self.assertLess(doc.index('id="contato-institucional"'),doc.index('id="faq"'))
         self.assertEqual(doc.count('Rua da Escola, 10'),1)
         self.assertIn('href="tel:+557500000000"',doc)
         self.assertIn('href="mailto:escola@example.com"',doc)

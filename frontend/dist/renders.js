@@ -13727,7 +13727,8 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                 key: 1,
                 class: "website-preview"
               }, [_createElementVNode("div", { class: "actions" }, [(s.modelPreviewActive&&modelReady())
-                ? (_openBlock(), _createElementBlock("label", { key: 0 }, [_createTextVNode("Página da prévia do modelo"), _withDirectives(_createElementVNode("select", {
+                ? (_openBlock(), _createElementBlock("div", { key: 0 }, [_createElementVNode("label", { for: 'website-model-preview-page-'+props.schoolId }, "Página da prévia do modelo", 8, ["for"]), _withDirectives(_createElementVNode("select", {
+                    id: 'website-model-preview-page-'+props.schoolId,
                     "onUpdate:modelValue": $event => ((s.modelPreviewPage) = $event),
                     onChange: previewModelPage,
                     disabled: s.busy
@@ -13736,7 +13737,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                       key: page.slug,
                       value: page.slug
                     }, _toDisplayString(page.title) + " · /" + _toDisplayString(page.slug), 9, ["value"]))
-                  }), 128))], 40, ["onUpdate:modelValue", "onChange", "disabled"]), [[_vModelSelect, s.modelPreviewPage]])]))
+                  }), 128))], 40, ["id", "onUpdate:modelValue", "onChange", "disabled"]), [[_vModelSelect, s.modelPreviewPage]])]))
                 : _createCommentVNode("", true), _createElementVNode("label", null, [_createTextVNode("Largura da prévia"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((s.previewWidth) = $event) }, [
                 _createElementVNode("option", { value: "100%" }, "Desktop"),
                 _createElementVNode("option", { value: "768px" }, "768 px"),

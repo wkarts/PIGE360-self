@@ -6,6 +6,11 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const dist=process.env.PIGE_EDITOR_DIST||path.join(root,'dist');
+// Keep the label separate from option text: exact accessible-name queries must
+// remain stable as the six model pages and their titles change.
+const communityTemplate=fs.readFileSync(path.join(root,'templates/community.html'),'utf8');
+assert.match(communityTemplate,/<label :for="'website-model-preview-page-'\+props\.schoolId">Página da prévia do modelo<\/label><select :id="'website-model-preview-page-'\+props\.schoolId"/);
+
 const sandbox={console,document:{querySelector:()=>null,querySelectorAll:()=>[],createElement:()=>({})},navigator:{onLine:true},location:{hash:'',pathname:'/',origin:'https://school.test'},history:{replaceState(){}},localStorage:{getItem:()=>null,setItem(){}},URLSearchParams,URL,Intl,Headers,FormData,Blob,File,Event,CustomEvent,AbortController,AbortSignal,setTimeout,clearTimeout};
 sandbox.window=sandbox;sandbox.addEventListener=()=>{};sandbox.confirm=()=>true;
 vm.createContext(sandbox);
