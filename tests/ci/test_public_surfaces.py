@@ -35,6 +35,15 @@ class SurfaceTests(unittest.TestCase):
         self.addCleanup(lambda:(server.shutdown(),server.server_close(),thread.join(timeout=2)))
         return f'http://127.0.0.1:{server.server_port}'
 
+    def test_invitation_form_layout_preserves_hidden_state(self):
+        html=(ROOT/'frontend/public/first-access.html').read_text()
+        self.assertIn('<form id="invite-form" hidden>',html)
+        for directory in ('public','dist'):
+            with self.subTest(directory=directory):
+                css=(ROOT/f'frontend/{directory}/family.css').read_text()
+                self.assertIn('.family-login form:not([hidden]){display:grid;',css)
+                self.assertNotRegex(css,r'\.family-login\s+form\s*\{[^}]*display\s*:')
+
     def test_first_access_script_survives_refresh_without_javascript_storage(self):
         subprocess.run(['node',str(ROOT/'tests/ci/first-access-session.mjs')],check=True,capture_output=True,text=True)
 
