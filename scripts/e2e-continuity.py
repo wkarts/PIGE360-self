@@ -133,17 +133,32 @@ try:
         assert 'Senha temporária' not in text and PASSWORD not in text
         record('SMTP TLS capturador aceita convite em User.email e preserva o domínio público configurado')
         family=browser.new_page(viewport={'width':1365,'height':1000});family.on('pageerror',lambda e:errors.append(str(e)))
-        family.goto(link);expect(family.locator('#invite-form')).to_be_visible();assert '#' not in family.url
+        # Hold the real inspection request so readiness is checked independently of network speed.
+        pending_inspections=[]
+        family.route('**/api/v1/invitations/inspect',lambda route:pending_inspections.append(route))
+        with family.expect_request('**/api/v1/invitations/inspect'):
+            family.goto(link)
+        expect(family.locator('#invite-form')).to_be_hidden()
+        expect(family.locator('#status')).to_have_text('Conferindo convite…')
+        assert family.url==link
+        assert len(pending_inspections)==1
+        pending_inspections.pop().continue_()
+        family.unroute('**/api/v1/invitations/inspect')
+        expect(family.locator('#invite-form')).to_be_visible()
+        expect(family).to_have_url(re.compile(r'/first-access\.html\?invitation=[^#]+$'))
         expect(family.locator('#institution-name')).to_have_text(brand)
         expect(family).to_have_title(brand+' · Primeiro acesso')
         family.wait_for_function('document.querySelector("#institution-logo").naturalWidth>0')
         cookies=[cookie for cookie in family.context.cookies(PORTAL+'/api/v1/invitations/inspect') if cookie['name'].startswith('pige_invitation_')]
         assert len(cookies)==1 and cookies[0]['httpOnly'] and cookies[0]['sameSite']=='Strict' and cookies[0]['path']=='/api/v1/invitations'
         assert family.evaluate('localStorage.length===0&&sessionStorage.length===0')
-        family.reload();expect(family.locator('#invite-form')).to_be_visible();assert '#' not in family.url
+        family.reload();expect(family.locator('#invite-form')).to_be_visible()
+        expect(family).to_have_url(re.compile(r'/first-access\.html\?invitation=[^#]+$'))
         expect(family.locator('#institution-name')).to_have_text(brand)
         record('Primeiro acesso mantém identidade e convite após refresh sem token em URL ou armazenamento JavaScript')
         family.get_by_label('Nova senha',exact=True).fill(PASSWORD);family.get_by_label('Confirme a senha',exact=True).fill(PASSWORD);family.get_by_role('button',name='Definir senha',exact=True).click();expect(family.get_by_text('Senha definida.',exact=False)).to_be_visible()
+        expect(family.locator('#invite-form')).to_be_hidden()
+        record('Formulário fica oculto durante inspeção pendente e após aceitar o convite; URL limpa somente após sucesso')
         def family_nav(name):
             target=family.locator('#family-navigation').get_by_role('button',name=name,exact=True)
             if not target.is_visible():
