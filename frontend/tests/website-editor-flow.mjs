@@ -96,4 +96,29 @@ pending[3].reject(Error('Stale failure'));await failedOld;assert.equal(race.s.er
 const olderSuccess=race.previewWebsite();race.closePreview();const newestSuccess=race.previewWebsite();pending[6].resolve({html:'<h1>Newest completed preview</h1>'});await newestSuccess;
 pending[5].resolve({html:'<h1>Too late old success</h1>'});await olderSuccess;assert.equal(race.s.previewHtml,'<h1>Newest completed preview</h1>');assert.equal(race.s.busy,false);
 let finishNonPreview;const nonPreview=race.run(()=>new Promise(resolve=>{finishNonPreview=resolve;}));race.closePreview();assert.equal(race.s.busy,true,'Close must not unlock save/apply/restore or another non-preview operation');finishNonPreview();await nonPreview;assert.equal(race.s.busy,false);
+// Deterministic initial-load race: the editor must not advertise a clickable
+// toggle while its handler intentionally ignores clicks during pending reads.
+let mountReadiness; sandbox.Vue.onMounted=fn=>{mountReadiness=fn;};
+const delayed=[];
+const readiness=sandbox.PigeCommunity.component.setup({schoolId:'readiness-test',permissions:['schools.manage'],request:(url)=>new Promise((resolve,reject)=>delayed.push({url,resolve,reject}))});
+function findWebsiteToggle(node){
+ if(!node||typeof node!=='object')return null;
+ if(node.type==='button'&&['Configurar site','Fechar configuração'].includes(node.children))return node;
+ for(const child of Array.isArray(node.children)?node.children:[]){const found=findWebsiteToggle(child);if(found)return found;}
+ return null;
+}
+const toggleNode=()=>findWebsiteToggle(sandbox.PigeRenders.community.call(readiness,readiness,[]));
+const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
+mountReadiness();assert.equal(readiness.s.busy,true);
+// Calling the handler demonstrates why an enabled button would lose a click.
+toggleNode().props.onClick();assert.equal(readiness.s.websiteOpen,false);
+assert.equal(toggleNode().props.disabled,true,'Configurar site must be disabled while initial data is pending');
+assert.equal(delayed.length,1);delayed[0].resolve({items:[],total:0});await tick();
+assert.equal(delayed.length,2);assert.ok(delayed[1].url.endsWith('/website'));
+assert.equal(toggleNode().props.disabled,true,'Remain disabled until website configuration resolves');
+delayed[1].resolve({configuration:null});await tick();
+assert.equal(readiness.s.busy,false);assert.equal(toggleNode().props.disabled,false);
+toggleNode().props.onClick();assert.equal(readiness.s.websiteOpen,true);
+toggleNode().props.onClick();assert.equal(readiness.s.websiteOpen,false,'Close remains available once idle');
+sandbox.Vue.onMounted=()=>{};
 console.log('Website editor: four models, independent pages, sections, order, photo focus, persistence, preview, cancel and no implicit publish OK.');
