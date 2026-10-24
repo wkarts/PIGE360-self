@@ -8,6 +8,7 @@ import uuid
 import zipfile
 import pytest
 from sqlalchemy import select
+from fastapi import HTTPException
 from app import models as m
 from app.config import settings
 from app.db import SessionLocal, engine
@@ -65,6 +66,12 @@ def test_bridge_visual_configuration_encrypts_secret_and_preserves_native_financ
     with SessionLocal() as db:
         row=db.get(CRMBridgeConnection,response['id'])
         assert secret not in row.encrypted_secret
+        with pytest.raises(HTTPException) as disabled:
+            configured(row.id,api.school['id'],db)
+        assert disabled.value.status_code == 409
+        assert not api.get('/crm-bridge/status')['enabled']
+        # Saving encrypted settings does not bypass the global runtime gate.
+        monkeypatch.setattr(settings(),'crm_bridge_enabled',True)
         assert configured(row.id,api.school['id'],db)['secret']==secret
     current=api.get('/crm-bridge/configuration')['configuration']
     api.call('PUT','/crm-bridge/configuration',{**data,'version':current['version'],'secret':''})

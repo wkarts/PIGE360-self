@@ -67,6 +67,9 @@ def restore(path,*,progress=lambda *args:None,previous_id=None):
     with engine.begin() as connection:
         connection.execute(text("UPDATE integration_jobs SET status='uncertain',error_code='RESTORE_REQUIRES_RECONCILIATION',lease_until=NULL WHERE status IN ('pending','retry','processing')"))
         connection.execute(text("UPDATE connect_message_jobs SET status='uncertain',error_code='RESTORE_REQUIRES_RECONCILIATION',lease_until=NULL WHERE status IN ('pending','retry','processing')"))
+        from sqlalchemy import inspect
+        if inspect(connection).has_table('crm_bridge_external_requests'):
+            connection.execute(text("UPDATE crm_bridge_external_requests SET status='uncertain',error_code='RESTORE_REQUIRES_RECONCILIATION' WHERE status IN ('queued','sending')"))
         connection.execute(text("UPDATE crm_bridge_requests SET status='failed',error_code='RESTORE_REQUIRES_RECONCILIATION' WHERE status IN ('queued','retry')"))
         connection.execute(text("UPDATE bank_charges SET status='uncertain' WHERE status='queued'"))
         connection.execute(text("UPDATE backup_runs SET status='failed',stage='failed',error_code='RESTORE_INTERRUPTED' WHERE status IN ('queued','processing')"))

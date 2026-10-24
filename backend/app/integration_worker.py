@@ -381,7 +381,9 @@ def main():
             # Optional bridge faults must never prevent native banking/notifications.
             try:
                 from .crm_bridge import process_one as process_crm_one
+                from .crm_bridge_external import process_one as process_crm_external_one
                 worked = process_crm_one() or worked
+                worked = process_crm_external_one() or worked
             except Exception:
                 LOG.error('code=CRM_BRIDGE_WORKER_FAILED')
             if not worked:
