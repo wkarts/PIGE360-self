@@ -12945,8 +12945,9 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
             class: "panel x-card"
           }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Site institucional"), _createElementVNode("p", null, _toDisplayString(s.published?'Publicado · versão '+s.publishedVersion:'Ainda não publicado') + _toDisplayString(s.hasDraft?' · Rascunho com alterações pendentes':''), 1)]), _createElementVNode("button", {
             class: "btn btn-secondary",
+            disabled: s.busy,
             onClick: toggleWebsite
-          }, _toDisplayString(s.websiteOpen?'Fechar configuração':'Configurar site'), 9, ["onClick"])]), (s.websiteOpen)
+          }, _toDisplayString(s.websiteOpen?'Fechar configuração':'Configurar site'), 9, ["disabled", "onClick"])]), (s.websiteOpen)
             ? (_openBlock(), _createElementBlock("form", {
                 key: 0,
                 onSubmit: _withModifiers(saveWebsite, ["prevent"]),
