@@ -7,6 +7,7 @@ from datetime import date
 from uuid import UUID
 
 REQUEST_PATH = '/pige_bridge/api/v1/requests'
+DIAGNOSTIC_PATH = '/pige_bridge/api/v1/diagnostics'
 MAX_BODY = 16 * 1024
 MAX_AMOUNT = 999999999999
 SAFE_ID = re.compile(r'[A-Za-z0-9_.:-]{1,128}\Z')
@@ -116,3 +117,17 @@ def validate_receipt(value, event_id):
     if value['status'] != 'blocked' or value['reason'] != 'issuer_finance_not_isolated' or not isinstance(value['capabilities'], dict) or set(value['capabilities']) != {'issue_charge'} or value['capabilities'].get('issue_charge') is not False:
         raise ContractError('UNSUPPORTED_RECEIPT_CAPABILITY')
     return value
+
+
+def diagnostic_envelope(scope, event_id, nonce):
+    validate_scope(scope);canonical_uuid(event_id);canonical_uuid(nonce)
+    return {'schema_version':1,'event_id':event_id,'event_type':'connection.test','scope':scope,'data':{'nonce':nonce}}
+
+
+def validate_diagnostic(receipt, event):
+    exact(receipt,('schema_version','event_id','nonce','scope','status','capabilities','payment_effect_applied','academic_effect_applied'))
+    if type(receipt['schema_version']) is not int or receipt['schema_version']!=1 or receipt['event_id']!=event['event_id'] or receipt['nonce']!=event['data']['nonce'] or receipt['scope']!=event['scope'] or receipt['status']!='authenticated' or receipt['payment_effect_applied'] is not False or receipt['academic_effect_applied'] is not False:
+        raise ContractError('INVALID_DIAGNOSTIC')
+    exact(receipt['capabilities'],('create_invoice','issue_charge'))
+    if any(type(v) is not bool for v in receipt['capabilities'].values()):raise ContractError('INVALID_DIAGNOSTIC')
+    return receipt

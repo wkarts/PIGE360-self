@@ -18,8 +18,10 @@ from sqlalchemy.exc import IntegrityError
 from . import models as m
 from .common import audit
 from .config import settings
-from .crm_bridge_contract import (ContractError, MAX_BODY, REQUEST_PATH, decode, encode,
+from .crm_bridge_contract import (ContractError, MAX_BODY, REQUEST_PATH, DIAGNOSTIC_PATH, diagnostic_envelope, validate_diagnostic, decode, encode,
     exact, signature, validate_envelope, validate_receipt, validate_scope, verify_signature)
+from .crm_bridge_charge_contract import PATHS as CHARGE_PATHS
+from .crm_bridge_invoice_contract import INVOICE_PATH, INVOICE_STATUS_PATH, validate_invoice, validate_invoice_receipt
 from .crm_bridge_models import CRMBridgeObservation, CRMBridgeRequest, CRMBridgeConnection
 from .db import engine, now, uid
 from .security import Actor, DB, Scope, fail, lock_school, require, scoped
@@ -29,11 +31,12 @@ hooks = APIRouter(tags=['CRM opcional'])
 BLOCKED_MESSAGE = 'Solicitação registrada. Emissão no CRM indisponível: isolamento financeiro por emitente pendente.'
 
 
-def connections(db=None):
-    """Configuration is deployment-only; no credential UI/API or secret in DB/output."""
+def connections(db=None, *, validate_only=False):
+    """Master switch forbids runtime DB/key access; admin validation never dispatches."""
     cfg = settings()
+    if not cfg.crm_bridge_enabled and not validate_only:return {}
     try:
-        values = decode(cfg.crm_bridge_connections.encode()) if cfg.crm_bridge_enabled else {}
+        values = decode(cfg.crm_bridge_connections.encode())
         if db is None:
             with Session(engine) as session:
                 stored=list(session.scalars(select(CRMBridgeConnection).where(CRMBridgeConnection.enabled.is_(True))))
@@ -78,8 +81,10 @@ def request_output(row):
     return {'id': row.id, 'charge_id': row.charge_id, 'connection_id': row.connection_id,
             'scope': row.scope, 'status': row.status, 'request_id': row.request_id,
             'attempts': row.attempts, 'error_code': row.error_code,'receipt':row.receipt,
-            'capabilities': {'issue_charge': False}, 'message': BLOCKED_MESSAGE,
-            'financial_effect_applied': False}
+            'capabilities': {'issue_charge': False}, 'message': ('Fatura local CRM; não é boleto/Pix nem baixa acadêmica.' if decode(row.raw_body.encode())['schema_version']==2 else BLOCKED_MESSAGE),
+            'financial_effect_applied': False, 'native_payment_effect_applied': False, 'academic_effect_applied': False,
+            'crm_invoice_created': row.receipt.get('status') == 'invoice_created' if row.receipt else False,
+            'schema_version': decode(row.raw_body.encode())['schema_version']}
 
 
 class QueueInput(BaseModel):
@@ -107,7 +112,7 @@ def queue_request(data: QueueInput, db: DB, user: Actor, school: Scope, request:
     existing = db.scalar(select(CRMBridgeRequest).where(CRMBridgeRequest.school_id == school.id,
                                                        CRMBridgeRequest.charge_id == charge.id))
     if existing:
-        if existing.connection_id != data.connection_id or existing.scope != config['scope']:
+        if existing.connection_id != data.connection_id or existing.scope != config['scope'] or decode(existing.raw_body.encode())['schema_version'] != 1:
             fail(409, 'Cobrança já mapeada para outro escopo CRM.')
         return request_output(existing)
     if charge.status not in ('pending', 'overdue', 'queued'):
@@ -221,8 +226,9 @@ class DeliveryError(Exception):
         super().__init__(code)
 
 
-def send_request(config, event_id, raw):
+def send_request(config, event_id, raw, *, path=REQUEST_PATH, validator=None):
     """TLS, no proxy/redirects, bounded body/time, admin-pinned origin, public addresses."""
+    if path not in (REQUEST_PATH,DIAGNOSTIC_PATH,INVOICE_PATH,INVOICE_STATUS_PATH,*CHARGE_PATHS.values()):raise DeliveryError('CRM_INVALID_PATH')
     base = config['base_url'].rstrip('/')
     host = urlsplit(base).hostname.encode('idna').decode('ascii')
     try:
@@ -233,22 +239,22 @@ def send_request(config, event_id, raw):
         raise DeliveryError('CRM_PRIVATE_ADDRESS_BLOCKED')
     # Connect to the validated numeric address. TLS uses the original hostname
     # (httpcore's sni_hostname extension), preventing a second DNS resolution.
-    pinned_url = httpx.URL(base + REQUEST_PATH).copy_with(host=addresses[0][4][0])
+    pinned_url = httpx.URL(base + path).copy_with(host=addresses[0][4][0])
     timestamp = str(int(time.time()))
     headers = {'Content-Type': 'application/json', 'Accept': 'application/json', 'Host': host,
                'X-Pige-Timestamp': timestamp, 'X-Pige-Event-Id': event_id,
-               'X-Pige-Signature': signature(config['secret'], timestamp, event_id, REQUEST_PATH, raw)}
+               'X-Pige-Signature': signature(config['secret'], timestamp, event_id, path, raw)}
     try:
         with httpx.Client(timeout=httpx.Timeout(settings().integration_timeout_seconds), follow_redirects=False, trust_env=False) as client:
             with client.stream('POST', pinned_url, content=raw, headers=headers, extensions={'sni_hostname': host}) as response:
-                if response.status_code not in (200, 202):
+                if response.status_code not in ((200,) if path==DIAGNOSTIC_PATH else (200,202)):
                     raise DeliveryError('CRM_HTTP_' + str(response.status_code), response.status_code >= 500 or response.status_code == 429)
                 received = bytearray()
                 for part in response.iter_bytes():
                     received.extend(part)
                     if len(received) > MAX_BODY:
                         raise DeliveryError('CRM_RESPONSE_TOO_LARGE')
-                return validate_receipt(decode(bytes(received)), event_id)
+                return validator(decode(bytes(received))) if validator else validate_receipt(decode(bytes(received)), event_id)
     except httpx.HTTPError:
         # The receiver contract guarantees event+raw-body idempotency, including after timeout.
         raise DeliveryError('CRM_NETWORK_ERROR', True) from None
@@ -281,12 +287,19 @@ def process_one():
                 raise DeliveryError('CRM_NATIVE_CHARGE_SETTLED_OR_UNAVAILABLE')
             if int(native.amount * 100) != snapshot['amount_cents'] or native.due_on.isoformat() != snapshot['due_date']:
                 raise DeliveryError('CRM_NATIVE_CHARGE_CHANGED')
-            receipt = send_request(config, row.id, raw)
-            # Validate also injected transports; never trust a create/paid response.
-            validate_receipt(receipt, row.id)
+            event = decode(raw)
+            if event['schema_version'] == 2:
+                validate_invoice(event)
+                receipt = send_request(config, row.id, raw, path=INVOICE_PATH, validator=lambda value: validate_invoice_receipt(value, event))
+                validate_invoice_receipt(receipt, event)
+            else:
+                receipt = send_request(config, row.id, raw)
+                validate_receipt(receipt, row.id)
             if row.request_id and row.request_id != receipt['request_id']:
                 raise DeliveryError('CRM_MAPPING_CHANGED')
-            row.request_id, row.receipt, row.status, row.error_code = receipt['request_id'], receipt, 'blocked', ''
+            if event['schema_version']==2 and row.receipt.get('invoice_id') is not None and row.receipt['invoice_id'] != receipt['invoice_id']:
+                raise DeliveryError('CRM_INVOICE_CHANGED')
+            row.request_id, row.receipt, row.status, row.error_code = receipt['request_id'], receipt, (receipt['status'] if event['schema_version']==2 else 'blocked'), ''
         except (DeliveryError, ContractError) as error:
             row.error_code = error.code if isinstance(error, DeliveryError) else 'CRM_INVALID_RECEIPT'
             row.status = 'retry' if isinstance(error, DeliveryError) and error.retryable and row.attempts < 5 else 'failed'
@@ -352,7 +365,7 @@ def save_configuration(data:ConnectionInput,db:DB,user:Actor,school:Scope,reques
     row.enabled=data.enabled;row.base_url=data.base_url.rstrip('/');row.issuer_id=data.issuer_id
     row.account_id=data.account_id;row.environment=data.environment
     if row.id:row.version+=1
-    db.flush();connections(db)  # valida duplicidade de escopos e segredos sem expô-los
+    db.flush();connections(db,validate_only=True)  # valida duplicidade de escopos e segredos sem expô-los
     audit(db,request,user,'crm.configuration_changed',row,school.id,{'enabled':row.enabled,'environment':row.environment})
     return connection_output(row)
 
@@ -369,19 +382,70 @@ def test_connection(db:DB,user:Actor,school:Scope,request:Request):
     require(user,'integrations.manage')
     row=db.scalar(select(CRMBridgeConnection).where(CRMBridgeConnection.school_id==school.id))
     if not row or not row.enabled:fail(409,'Salve e habilite a conexão antes do teste.')
-    # HEAD apenas verifica transporte; não envia evento financeiro nem cria cobrança.
-    host=urlsplit(row.base_url).hostname
+    config=configured(row.id,school.id,db)
+    event=diagnostic_envelope(config['scope'],uid(),uid())
     try:
-        addresses=socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)
-        if not addresses or any(not ipaddress.ip_address(x[4][0]).is_global for x in addresses):
-            fail(422,'O destino deve resolver somente para endereços públicos.')
-        url=httpx.URL(row.base_url+REQUEST_PATH).copy_with(host=addresses[0][4][0])
-        with httpx.Client(timeout=settings().integration_timeout_seconds,follow_redirects=False,trust_env=False) as client:
-            response=client.head(url,headers={'Host':host},extensions={'sni_hostname':host})
-        ok=response.status_code in (200,202,204,401,403,405)
-        result={'reachable':ok,'http_status':response.status_code,'charge_created':False,
-            'message':'Transporte HTTPS acessível. Este teste não homologa autenticação nem emissão.' if ok else 'O destino respondeu, mas a rota da ponte não foi confirmada.'}
-    except (httpx.HTTPError,OSError):
-        result={'reachable':False,'charge_created':False,'message':'Não foi possível alcançar o destino por HTTPS.'}
+        receipt=send_request(config,event['event_id'],encode(event),path=DIAGNOSTIC_PATH,validator=lambda value:validate_diagnostic(value,event))
+        result={'reachable':True,'authenticated':True,'charge_created':False,'capabilities':receipt['capabilities'],
+            'message':'Conexão HMAC autenticada para esta empresa/conta/ambiente. Nenhuma cobrança foi criada.'}
+    except DeliveryError as error:
+        result={'reachable':False,'authenticated':False,'charge_created':False,'error_code':error.code,
+            'message':'Autenticação da ponte não confirmada. Confira token, empresa, conta, ambiente e habilitação.'}
     audit(db,request,user,'crm.connection_tested',row,school.id,{'reachable':result['reachable']})
     return result
+
+
+class InvoiceQueueInput(QueueInput):
+    client_id: int = Field(ge=1, le=2147483647)
+
+
+@router.post('/invoices', status_code=202)
+def queue_invoice(data: InvoiceQueueInput, db: DB, user: Actor, school: Scope, request: Request):
+    require(user, 'banking.write')
+    config = configured(data.connection_id, school.id, db)
+    lock_school(db, school.id)
+    charge = scoped(db, m.BankCharge, data.charge_id, school.id)
+    existing = db.scalar(select(CRMBridgeRequest).where(CRMBridgeRequest.school_id == school.id, CRMBridgeRequest.charge_id == charge.id))
+    if existing:
+        prior = decode(existing.raw_body.encode())
+        if existing.connection_id != data.connection_id or existing.scope != config['scope'] or prior['schema_version'] != 2 or prior['data']['client_id'] != data.client_id:
+            fail(409, 'Cobrança já vinculada a outro contrato, cliente ou escopo CRM.')
+        return request_output(existing)
+    if charge.status not in ('pending', 'overdue', 'queued'):
+        fail(409, 'Somente cobranças pendentes podem solicitar fatura CRM.')
+    event_id = uid()
+    event = {'schema_version': 2, 'event_id': event_id, 'event_type': 'invoice.requested', 'scope': config['scope'],
+        'data': {'charge_id': charge.id, 'client_id': data.client_id, 'amount_cents': int(charge.amount*100),
+                 'currency': 'BRL', 'due_date': charge.due_on.isoformat(), 'description': 'Cobrança escolar'}}
+    try: validate_invoice(event)
+    except ContractError: fail(422, 'Cobrança incompatível com o contrato de fatura CRM.')
+    raw = encode(event)
+    row = CRMBridgeRequest(id=event_id, school_id=school.id, charge_id=charge.id, connection_id=data.connection_id,
+        scope=config['scope'], raw_body=raw.decode(), payload_hash=hashlib.sha256(raw).hexdigest(), status='queued')
+    db.add(row); db.flush()
+    audit(db, request, user, 'crm.invoice.queued', row, school.id)
+    return request_output(row)
+
+
+@router.post('/requests/{request_id}/invoice-status')
+def refresh_invoice_status(request_id: str, db: DB, user: Actor, school: Scope, request: Request):
+    # Explicit observation command, not GET and not a create/retry/settlement action.
+    require(user, 'banking.write'); lock_school(db, school.id)
+    row = db.scalar(select(CRMBridgeRequest).where(CRMBridgeRequest.id == request_id, CRMBridgeRequest.school_id == school.id).with_for_update())
+    if not row: fail(404, 'Solicitação não encontrada nesta escola.')
+    config = configured(row.connection_id, school.id, db)
+    if row.scope != config['scope'] or decode(row.raw_body.encode())['schema_version'] != 2:
+        fail(409, 'Consulta exige fatura v2 e o escopo original da conexão.')
+    event = {'schema_version': 2, 'event_id': uid(), 'event_type': 'invoice.status.requested', 'scope': row.scope, 'data': {'charge_id': row.charge_id}}
+    validate_invoice(event, status=True)
+    try:
+        receipt = send_request(config, event['event_id'], encode(event), path=INVOICE_STATUS_PATH, validator=lambda value: validate_invoice_receipt(value, event))
+        validate_invoice_receipt(receipt, event)
+        if row.request_id and row.request_id != receipt['request_id']: raise DeliveryError('CRM_MAPPING_CHANGED')
+        old_invoice = row.receipt.get('invoice_id') if row.receipt else None
+        if old_invoice is not None and receipt['invoice_id'] != old_invoice: raise DeliveryError('CRM_INVOICE_CHANGED')
+    except (DeliveryError, ContractError):
+        fail(502, 'Consulta CRM não confirmada. Nenhuma criação, reenvio ou baixa foi solicitada.')
+    row.request_id, row.receipt, row.status, row.error_code = receipt['request_id'], receipt, receipt['status'], ''
+    audit(db, request, user, 'crm.invoice.status_observed', row, school.id, {'payment_effect_applied': False, 'academic_effect_applied': False})
+    return request_output(row)
