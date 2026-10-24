@@ -135,7 +135,11 @@ try:
         admin.get_by_label('Habilitar ponte opcional',exact=True).check();admin.get_by_role('button',name='Salvar ponte',exact=True).click()
         expect(admin.get_by_text('Configuração da ponte salva.',exact=False)).to_be_visible();assert admin.get_by_label('Segredo compartilhado',exact=True).input_value()==''
         record('Configuração visual da ponte salva com segredo omitido na resposta e capacidade financeira indisponível informada')
-        admin.goto(URL+'/#/community');admin.get_by_role('button',name='Configurar site',exact=True).click()
+        admin.goto(URL+'/#/community')
+        configure_site=admin.get_by_role('button',name='Configurar site',exact=True)
+        expect(configure_site).to_be_enabled()
+        configure_site.click()
+        expect(admin.get_by_label('Domínio público do site',exact=True)).to_be_visible()
         admin.get_by_label('Domínio público do site',exact=True).fill('https://escola.example.test')
         admin.get_by_label('Endereço do portal escolar',exact=True).fill('https://portal.example.test')
         admin.get_by_label('Endereço da inscrição e matrícula',exact=True).fill('https://gestor.example.test/online.html')

@@ -8668,7 +8668,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
               _createElementVNode("section", { class: "panel x-card" }, [
                 _createElementVNode("h2", null, "Ponte financeira opcional"),
                 _createElementVNode("p", { class: "alert info" }, _toDisplayString(s.bridgeMessage), 1),
-                _createElementVNode("p", null, "O financeiro nativo funciona sem esta integração. O teste verifica HTTPS sem criar cobranças; recibos da ponte não são pagamentos."),
+                _createElementVNode("p", null, "O financeiro nativo funciona sem esta integração. O teste verifica autenticação HMAC sem criar cobranças; recibos da ponte não são pagamentos."),
                 _createElementVNode("form", {
                   onSubmit: _withModifiers(saveBridge, ["prevent"]),
                   class: "x-form"
@@ -8713,13 +8713,142 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                       key: 0,
                       onSubmit: _withModifiers(queueBridge, ["prevent"]),
                       class: "x-form spaced"
-                    }, [_createElementVNode("label", null, [_createTextVNode("ID da cobrança nativa"), _withDirectives(_createElementVNode("input", {
-                      "onUpdate:modelValue": $event => ((s.bridgeCharge) = $event),
-                      required: "",
-                      minlength: "36",
-                      maxlength: "36"
-                    }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.bridgeCharge]])]), _createElementVNode("button", { class: "btn btn-secondary" }, "Registrar solicitação na ponte")], 40, ["onSubmit"]))
+                    }, [
+                      _createElementVNode("label", null, [_createTextVNode("ID da cobrança nativa"), _withDirectives(_createElementVNode("input", {
+                        "onUpdate:modelValue": $event => ((s.bridgeCharge) = $event),
+                        required: "",
+                        minlength: "36",
+                        maxlength: "36"
+                      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.bridgeCharge]])]),
+                      _createElementVNode("label", null, [_createTextVNode("ID do cliente existente no CRM para esta cobrança"), _withDirectives(_createElementVNode("input", {
+                        "onUpdate:modelValue": $event => ((s.bridgeClient) = $event),
+                        required: "",
+                        inputmode: "numeric",
+                        pattern: "[1-9][0-9]*"
+                      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.bridgeClient]])]),
+                      _createElementVNode("p", null, "O cliente pode variar em cada cobrança. O CRM valida acesso ao cliente pela empresa emitente configurada; nenhum pagador será criado automaticamente."),
+                      _createElementVNode("button", { class: "btn btn-secondary" }, "Solicitar fatura local no CRM")
+                    ], 40, ["onSubmit"]))
                   : _createCommentVNode("", true),
+                (s.bridgeConfig.enabled)
+                  ? (_openBlock(), _createElementBlock("form", {
+                      key: 1,
+                      onSubmit: _withModifiers(issueExternal, ["prevent"]),
+                      class: "x-form spaced"
+                    }, [
+                      _createElementVNode("h3", null, "Emissão externa — ação separada"),
+                      _createElementVNode("label", null, [_createTextVNode("Provedor já configurado no CRM"), _withDirectives(_createElementVNode("select", {
+                        "onUpdate:modelValue": $event => ((s.bridgeProvider) = $event),
+                        onChange: $event => (s.bridgeBilling=s.bridgeProvider==='banco_brasil'?'BOLETO':'PIX')
+                      }, [_createElementVNode("option", { value: "asaas" }, "Asaas"), _createElementVNode("option", { value: "banco_brasil" }, "Banco do Brasil · boleto")], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, s.bridgeProvider]])]),
+                      _createElementVNode("p", null, "Esta seleção não altera o provedor, a empresa ou a conta no CRM. Divergências são recusadas."),
+                      _createElementVNode("p", null, "Exige fatura v2 já confirmada e pagador existente correspondente ao cliente/empresa/conta. Não cria pagador automaticamente."),
+                      _createElementVNode("label", null, [_createTextVNode("Fatura local confirmada"), _withDirectives(_createElementVNode("select", {
+                        "onUpdate:modelValue": $event => ((s.bridgeInvoice) = $event),
+                        required: ""
+                      }, [_createElementVNode("option", { value: "" }, "Selecione"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.bridgeRequests.filter(r=>r.schema_version===2 && r.receipt.status==='invoice_created'), (r) => {
+                        return (_openBlock(), _createElementBlock("option", {
+                          key: r.id,
+                          value: r.id
+                        }, _toDisplayString(r.charge_id), 9, ["value"]))
+                      }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, s.bridgeInvoice]])]),
+                      _createElementVNode("label", null, [_createTextVNode(_toDisplayString(s.bridgeProvider==='banco_brasil'?'ID do cliente CRM da mesma fatura v2':'ID do vínculo de pagador existente no CRM/Asaas'), 1), _withDirectives(_createElementVNode("input", {
+                        "onUpdate:modelValue": $event => ((s.bridgePayer) = $event),
+                        required: "",
+                        inputmode: "numeric",
+                        pattern: "[1-9][0-9]*"
+                      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.bridgePayer]])]),
+                      _createElementVNode("label", null, [_createTextVNode("Modalidade"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((s.bridgeBilling) = $event) }, [(s.bridgeProvider==='asaas')
+                        ? (_openBlock(), _createElementBlock("option", { key: 0 }, "PIX"))
+                        : _createCommentVNode("", true), _createElementVNode("option", null, "BOLETO")], 8, ["onUpdate:modelValue"]), [[_vModelSelect, s.bridgeBilling]])]),
+                      (s.bridgeProvider==='banco_brasil')
+                        ? (_openBlock(), _createElementBlock("fieldset", {
+                            key: 0,
+                            class: "x-grid"
+                          }, [
+                            _createElementVNode("legend", null, "Título BB — parâmetros explícitos por solicitação"),
+                            _createElementVNode("p", null, "Não altera cadastro do cliente. Sem juros, descontos, protesto ou recebimento parcial. Espécie e aceite precisam ser definidos pelo operador, sem valor presumido."),
+                            _createElementVNode("label", null, [_createTextVNode("Endereço"), _withDirectives(_createElementVNode("input", {
+                              "onUpdate:modelValue": $event => ((s.bridgeBB.payer_address) = $event),
+                              required: "",
+                              maxlength: "60"
+                            }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.bridgeBB.payer_address]])]),
+                            _createElementVNode("label", null, [_createTextVNode("Bairro"), _withDirectives(_createElementVNode("input", {
+                              "onUpdate:modelValue": $event => ((s.bridgeBB.payer_district) = $event),
+                              required: "",
+                              maxlength: "30"
+                            }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.bridgeBB.payer_district]])]),
+                            _createElementVNode("label", null, [_createTextVNode("CEP (8 dígitos)"), _withDirectives(_createElementVNode("input", {
+                              "onUpdate:modelValue": $event => ((s.bridgeBB.payer_zip) = $event),
+                              required: "",
+                              pattern: "[0-9]{8}",
+                              maxlength: "8"
+                            }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.bridgeBB.payer_zip]])]),
+                            _createElementVNode("label", null, [_createTextVNode("Cidade"), _withDirectives(_createElementVNode("input", {
+                              "onUpdate:modelValue": $event => ((s.bridgeBB.payer_city) = $event),
+                              required: "",
+                              maxlength: "30"
+                            }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.bridgeBB.payer_city]])]),
+                            _createElementVNode("label", null, [_createTextVNode("UF"), _withDirectives(_createElementVNode("input", {
+                              "onUpdate:modelValue": $event => ((s.bridgeBB.payer_state) = $event),
+                              required: "",
+                              pattern: "[A-Z]{2}",
+                              maxlength: "2"
+                            }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.bridgeBB.payer_state]])]),
+                            _createElementVNode("label", null, [_createTextVNode("Espécie do título"), _withDirectives(_createElementVNode("select", {
+                              "onUpdate:modelValue": $event => ((s.bridgeBB.species) = $event),
+                              required: ""
+                            }, [_createElementVNode("option", { value: "" }, "Selecione o código autorizado"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(['02','04','12','17','19'], (code) => {
+                              return (_openBlock(), _createElementBlock("option", {
+                                key: code,
+                                value: code
+                              }, _toDisplayString(code), 9, ["value"]))
+                            }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, s.bridgeBB.species]])]),
+                            _createElementVNode("label", null, [_createTextVNode("Aceite"), _withDirectives(_createElementVNode("select", {
+                              "onUpdate:modelValue": $event => ((s.bridgeBB.acceptance) = $event),
+                              required: ""
+                            }, [_createElementVNode("option", { value: "" }, "Selecione explicitamente"), _createElementVNode("option", { value: "A" }, "A · com aceite"), _createElementVNode("option", { value: "N" }, "N · sem aceite")], 8, ["onUpdate:modelValue"]), [[_vModelSelect, s.bridgeBB.acceptance]])])
+                          ]))
+                        : _createCommentVNode("", true),
+                      _createElementVNode("button", { class: "btn btn-secondary" }, "Solicitar emissão externa uma vez")
+                    ], 40, ["onSubmit"]))
+                  : _createCommentVNode("", true),
+                _createElementVNode("details", null, [_createElementVNode("summary", null, "Origens externas, instrumentos e conciliação"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.bridgeExternal, (row) => {
+                  return (_openBlock(), _createElementBlock("article", {
+                    key: row.id,
+                    class: "x-charge"
+                  }, [
+                    _createElementVNode("p", null, _toDisplayString(row.charge_id) + " · " + _toDisplayString(row.status) + " · " + _toDisplayString(row.error_code), 1),
+                    _createElementVNode("pre", null, _toDisplayString(JSON.stringify(row.receipt,null,2)), 1),
+                    (row.last_command.status==='unconfirmed')
+                      ? (_openBlock(), _createElementBlock("p", {
+                          key: 0,
+                          role: "alert"
+                        }, "Último comando não confirmado. Nenhuma repetição automática."))
+                      : _createCommentVNode("", true),
+                    _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                      class: "btn btn-secondary",
+                      onClick: $event => (externalCommand(row,'status'))
+                    }, "Consultar estado CRM (sem emissão)", 8, ["onClick"]), _createElementVNode("button", {
+                      class: "btn btn-secondary",
+                      onClick: $event => (externalCommand(row,'instruments'))
+                    }, "Obter instrumento", 8, ["onClick"]), _createElementVNode("button", {
+                      class: "btn btn-secondary",
+                      disabled: !row.receipt.proof_id,
+                      onClick: $event => (externalCommand(row,'reconcile'))
+                    }, "Conciliar recebimento no CRM", 8, ["disabled", "onClick"])]),
+                    (row.provider!=='banco_brasil')
+                      ? (_openBlock(), _createElementBlock("label", { key: 1 }, [_createTextVNode("ID remoto para recuperação (opcional)"), _withDirectives(_createElementVNode("input", {
+                          "onUpdate:modelValue": $event => ((s.bridgeRecovery[row.id]) = $event),
+                          maxlength: "64"
+                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.bridgeRecovery[row.id]]])]))
+                      : (_openBlock(), _createElementBlock("p", { key: 2 }, "BB consulta somente o nosso número imutável da origem; não aceita ID alternativo.")),
+                    _createElementVNode("button", {
+                      class: "btn btn-secondary",
+                      onClick: $event => (externalCommand(row,'sync'))
+                    }, "Sincronizar prova no CRM (sem baixa)", 8, ["onClick"])
+                  ]))
+                }), 128))]),
                 _createElementVNode("details", null, [_createElementVNode("summary", null, "Solicitações, mapeamentos e recibos"), _createElementVNode("button", {
                   class: "btn btn-secondary",
                   onClick: $event => (run(loadBridge))
@@ -8742,7 +8871,14 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                     _createElementVNode("button", {
                       class: "btn btn-secondary",
                       onClick: $event => (retryBridge(row))
-                    }, "Conciliar mesmo evento", 8, ["onClick"])
+                    }, "Reenviar mesmo evento (ação explícita)", 8, ["onClick"]),
+                    (row.schema_version===2)
+                      ? (_openBlock(), _createElementBlock("button", {
+                          key: 2,
+                          class: "btn btn-secondary",
+                          onClick: $event => (statusBridge(row))
+                        }, "Consultar estado remoto (sem emissão)", 8, ["onClick"]))
+                      : _createCommentVNode("", true)
                   ]))
                 }), 128))])
               ]),
@@ -12809,8 +12945,9 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
             class: "panel x-card"
           }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Site institucional"), _createElementVNode("p", null, _toDisplayString(s.published?'Publicado · versão '+s.publishedVersion:'Ainda não publicado') + _toDisplayString(s.hasDraft?' · Rascunho com alterações pendentes':''), 1)]), _createElementVNode("button", {
             class: "btn btn-secondary",
+            disabled: s.busy,
             onClick: toggleWebsite
-          }, _toDisplayString(s.websiteOpen?'Fechar configuração':'Configurar site'), 9, ["onClick"])]), (s.websiteOpen)
+          }, _toDisplayString(s.websiteOpen?'Fechar configuração':'Configurar site'), 9, ["disabled", "onClick"])]), (s.websiteOpen)
             ? (_openBlock(), _createElementBlock("form", {
                 key: 0,
                 onSubmit: _withModifiers(saveWebsite, ["prevent"]),
