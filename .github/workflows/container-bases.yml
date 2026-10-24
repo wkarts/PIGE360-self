@@ -10,6 +10,7 @@ on:
         type: boolean
         default: false
     outputs:
+      artifact_id: {value: '${{ jobs.publish.outputs.artifact_id }}'}
       python_ref: {value: '${{ jobs.publish.outputs.python_ref }}'}
       node_ref: {value: '${{ jobs.publish.outputs.node_ref }}'}
       postgres_ref: {value: '${{ jobs.publish.outputs.postgres_ref }}'}
@@ -35,6 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     outputs:
+      artifact_id: ${{ steps.evidence.outputs.artifact-id }}
       python_ref: ${{ steps.bases.outputs.python_ref }}
       node_ref: ${{ steps.bases.outputs.node_ref }}
       postgres_ref: ${{ steps.bases.outputs.postgres_ref }}
@@ -60,8 +62,9 @@ jobs:
           if [[ "$REFRESH" == true ]]; then args+=(--refresh-upstream); fi
           python scripts/ci/base_images.py "${args[@]}"
       - uses: actions/upload-artifact@v4
+        id: evidence
         with:
           name: base-images-${{ github.run_id }}-${{ github.run_attempt }}
           path: ci-evidence/base-images.lock.json
           retention-days: 30
-          overwrite: true
+          if-no-files-found: error

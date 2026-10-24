@@ -122,7 +122,7 @@ jobs:
       python_ref: ${{ needs.bases.outputs.python_ref }}
       postgres_ref: ${{ needs.bases.outputs.postgres_ref }}
   release:
-    needs: [version, candidate]
+    needs: [version, candidate, bases]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
@@ -142,10 +142,22 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # Um rerun parcial mantém o produtor anterior: não derivar seu artefato
+      # de github.run_attempt, que pertence ao consumidor reexecutado.
+      - name: Exigir o artefato exato informado pelo produtor das bases
+        env:
+          BASE_ARTIFACT_ID: ${{ needs.bases.outputs.artifact_id }}
+        run: |
+          if [[ ! "$BASE_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::O produtor das bases não informou um artifact-id válido."
+            exit 1
+          fi
       - name: Recuperar as bases imutáveis usadas nesta execução
         uses: actions/download-artifact@v4
         with:
-          name: base-images-${{ github.run_id }}-${{ github.run_attempt }}
+          artifact-ids: ${{ needs.bases.outputs.artifact_id }}
+          # O guard aceita um único ID; extrair o lock diretamente em ci-evidence.
+          merge-multiple: true
           path: ci-evidence
       - name: Release, checkpoint e promoção por digest
         env:
