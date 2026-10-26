@@ -30,7 +30,11 @@ with socket.socket() as sock:
 values={'APP_SECRET_KEY':secrets.token_urlsafe(48),'SETUP_TOKEN':secrets.token_urlsafe(32),
         'POSTGRES_PASSWORD':secrets.token_urlsafe(36),'STORAGE_SECRET_KEY':secrets.token_urlsafe(36),
         'STORAGE_ACCESS_KEY':'pige360minio','STORAGE_ENDPOINT_URL':'http://minio:9000', 'APP_ENV':'production',
-        'PORTAL_PUBLIC_URL':'http://127.0.0.1:58083','PORTAL_PORT':'58083','WEBSITE_PORT':'58082','WEBSITE_INTERNAL_TOKEN':secrets.token_urlsafe(36),'PORTAL_INTERNAL_TOKEN':secrets.token_urlsafe(48),'APP_URL':f'http://127.0.0.1:{app_port}','APP_PORT':str(app_port),'APP_BIND':'127.0.0.1',
+        # Docker allocates the surface ports atomically; probes discover them.
+        # The public Host stays explicit, as with a reverse proxy in production.
+        'PORTAL_PUBLIC_URL':'http://localhost','PORTAL_PORT':'0','WEBSITE_PORT':'0',
+        'PORTAL_BIND':'127.0.0.1','WEBSITE_BIND':'127.0.0.1',
+        'WEBSITE_INTERNAL_TOKEN':secrets.token_urlsafe(36),'PORTAL_INTERNAL_TOKEN':secrets.token_urlsafe(48),'APP_URL':f'http://127.0.0.1:{app_port}','APP_PORT':str(app_port),'APP_BIND':'127.0.0.1',
         'COOKIE_SECURE':'false','ALLOWED_HOSTS':'localhost,127.0.0.1',
         'INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(),
         'MAIL_AGENT_SHARED_KEY':secrets.token_urlsafe(48),'SOGO_DB_PASSWORD':secrets.token_urlsafe(36),

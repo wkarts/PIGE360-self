@@ -138,10 +138,10 @@ with SessionLocal.begin() as db:
         page.screenshot(path=str(OUT/'04-portal-documento-responsavel.png'))
         record('Portal reaproveita anexo privado e preenche a identidade do responsável sem modificar o aluno')
         page.get_by_role('button',name='Minhas matrículas',exact=False).click();page.get_by_role('button',name='Editar dados',exact=True).click()
-        page.get_by_text('Preencher com ajuda de um documento',exact=True).click();assist=page.locator('.portal-wizard .assist')
+        page.get_by_text('Preencher com ajuda de um documento (opcional)',exact=True).click();assist=page.locator('.portal-wizard .assist')
         assist.get_by_role('button',name='Consultar CEP',exact=True).click();assist.get_by_label('CEP',exact=True).fill('40020000');assist.get_by_role('button',name='Consultar',exact=True).click();expect(assist.locator('.assist-review')).to_be_visible();apply(assist)
         page.get_by_role('button',name='Continuar',exact=True).click();page.get_by_role('button',name='Continuar',exact=True).click()
-        page.get_by_role('button',name='Salvar e continuar',exact=True).click();expect(page.get_by_role('heading',name='Documentos do aluno',exact=True)).to_be_visible()
+        page.get_by_role('button',name='Salvar e enviar documentos',exact=True).click();expect(page.get_by_role('heading',name='Documentos do aluno',exact=True)).to_be_visible()
         child=parent_http.get('/api/v1/portal/admissions/'+admission['id']).json()['student_data'];assert child['city']=='Salvador' and child['birth_date']=='2017-04-10'
         record('Consulta de CEP também funciona no rascunho da matrícula do portal')
         parent_http.close()

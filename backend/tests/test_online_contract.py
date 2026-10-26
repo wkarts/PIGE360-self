@@ -99,7 +99,8 @@ def test_campaign_contract_revision_and_activation_gate(online, tmp_path, monkey
     assert pc(o,'GET',f"/admissions/{a['id']}/issued/{issued['id']}").content==final
 
 
-def test_contract_correction_requires_new_revision_and_keeps_signed_history(online,tmp_path,monkeypatch):
+@pytest.mark.parametrize('switch_model',[False,True])
+def test_contract_correction_requires_new_revision_and_keeps_signed_history(online,tmp_path,monkeypatch,switch_model):
     from app.config import settings
     from app.pdf_signing import sign_pdf_pfx
     o=online;api=o['api']
@@ -123,16 +124,23 @@ def test_contract_correction_requires_new_revision_and_keeps_signed_history(onli
     updated=api.patch('/document-templates/'+template['id'],{'version':template['version'],
         'name':template['name'],'kind':template['kind'],'academic_year_id':template['academic_year_id'],
         'require_signature':True,'body':'Redação corrigida de {{aluno.nome}} com {{escola.nome}}.'})
-    request={'version':a['version'],'template_version':updated['version'],'reason':'Correção de conteúdo contratual conferida pela Direção.'}
+    if switch_model:
+        updated=api.post('/document-templates',{'name':'Outro contrato revisado','kind':'educational_contract',
+            'academic_year_id':o['cat']['year']['id'],'require_signature':True,
+            'body':'Outro contrato de {{aluno.nome}} com {{escola.nome}}.'})
+    request={'version':a['version'],'template_id':updated['id'],'template_version':updated['version'],'reason':'Correção de conteúdo contratual conferida pela Direção.'}
     revised=api.post('/admissions/'+a['id']+'/contract-revision',request,200)
     assert revised['contract_template_version']==updated['version']
+    assert revised['contract_template_id']==updated['id']
     assert revised['contract']['issued_document_id'] is None
     assert api.post('/admissions/'+a['id']+'/contract-revision',request,200)['version']==revised['version']
     assert issued['id'] not in [x['document_id'] for x in api.get('/issued-documents/signatures/pending')['items']]
     assert pc(o,'GET',f"/admissions/{a['id']}/issued/{issued['id']}").content==signed
+    response=api.client.post(api.base+'/issued-documents/'+issued['id']+'/signed-external',headers=api.headers,files={'file':('antigo.pdf',signed,'application/pdf')})
+    assert response.status_code==409,response.text
     pc(o,'POST',f"/admissions/{a['id']}/issued/{issued['id']}/external-signature",
         files={'file':('contrato.pdf',signed,'application/pdf')},status=404)
-    next_document=api.post('/document-templates/'+template['id']+'/issue',{'enrollment_id':a['enrollment_id'],
+    next_document=api.post('/document-templates/'+updated['id']+'/issue',{'enrollment_id':a['enrollment_id'],
         'template_version':updated['version']})
     assert next_document['id']!=issued['id'] and next_document['signature_status']=='unsigned'
     pc(o,'POST',f"/admissions/{a['id']}/issued/{next_document['id']}/external-signature",
