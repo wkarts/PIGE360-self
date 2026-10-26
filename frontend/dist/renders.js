@@ -1,5 +1,49 @@
 /* Vue pré-compilado; sem eval em runtime. */
-var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) {
+var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
+  with (_ctx) {
+    const { toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createTextVNode: _createTextVNode, createElementVNode: _createElementVNode, renderList: _renderList, Fragment: _Fragment, normalizeClass: _normalizeClass } = _Vue
+
+    return (_openBlock(), _createElementBlock("label", { class: _normalizeClass(["contract-typed-field", 'contract-kind-'+props.field.input_type]) }, [_createElementVNode("span", null, [_createTextVNode(_toDisplayString(props.field.label) + " ", 1), (props.field.required)
+      ? (_openBlock(), _createElementBlock("small", {
+          key: 0,
+          class: "contract-required"
+        }, "Obrigatório"))
+      : _createCommentVNode("", true)]), (props.field.input_type==='uf')
+      ? (_openBlock(), _createElementBlock("select", {
+          key: 0,
+          value: props.value,
+          disabled: props.locked,
+          onChange: change,
+          "aria-label": props.field.label
+        }, [_createElementVNode("option", { value: "" }, "Selecione"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(states, (uf) => {
+          return (_openBlock(), _createElementBlock("option", {
+            key: uf,
+            value: uf
+          }, _toDisplayString(uf), 9, ["value"]))
+        }), 128))], 40, ["value", "disabled", "onChange", "aria-label"]))
+      : (_openBlock(), _createElementBlock("input", {
+          key: 1,
+          type: nativeType(),
+          value: display(props.value,props.field.input_type),
+          readonly: props.locked,
+          onInput: change,
+          onBlur: moneyBlur,
+          inputmode: mode(),
+          min: props.field.input_type==='integer'?(props.field.min||0):undefined,
+          max: props.field.max||undefined,
+          step: props.field.input_type==='integer'?1:undefined,
+          maxlength: props.field.input_type==='cpf'?14:props.field.input_type==='cep'?9:2000,
+          "aria-label": props.field.label,
+          autocomplete: "off",
+          placeholder: props.field.input_type==='money'?'0,00':undefined
+        }, null, 40, ["type", "value", "readonly", "onInput", "onBlur", "inputmode", "min", "max", "step", "maxlength", "aria-label", "placeholder"])), (props.locked)
+      ? (_openBlock(), _createElementBlock("small", {
+          key: 2,
+          class: "muted"
+        }, _toDisplayString(props.field.source==='cadastro'?'Cadastro':props.field.source), 1))
+      : _createCommentVNode("", true)], 2))
+  }
+},enrollmentWorkflow:function render(_ctx, _cache) {
   with (_ctx) {
     const { createElementVNode: _createElementVNode, toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, renderList: _renderList, Fragment: _Fragment, vModelSelect: _vModelSelect, withDirectives: _withDirectives, createTextVNode: _createTextVNode, vModelText: _vModelText, vModelCheckbox: _vModelCheckbox, withModifiers: _withModifiers, resolveComponent: _resolveComponent, createBlock: _createBlock } = _Vue
 
@@ -1808,12 +1852,13 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                       : _createCommentVNode("", true),
                     (['online','banking','integrations','connect'].includes(state.page))
                       ? (_openBlock(), _createBlock(_component_expansion_panel, {
+                          onViewStudent: viewStudent,
                           key: state.schoolId+':'+state.page,
                           "school-id": state.schoolId,
                           page: state.page,
                           permissions: state.user.permissions,
                           role: state.user.role
-                        }, null, 8, ["school-id", "page", "permissions", "role"]))
+                        }, null, 8, ["onViewStudent", "school-id", "page", "permissions", "role"]))
                       : _createCommentVNode("", true),
                     (state.page==='diary')
                       ? (_openBlock(), _createBlock(_component_diary_panel, {
@@ -7161,7 +7206,10 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
   }
 },expansion:function render(_ctx, _cache) {
   with (_ctx) {
-    const { toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createElementVNode: _createElementVNode, renderList: _renderList, Fragment: _Fragment, createTextVNode: _createTextVNode, normalizeClass: _normalizeClass, vModelText: _vModelText, withDirectives: _withDirectives, vModelSelect: _vModelSelect, vModelCheckbox: _vModelCheckbox, withModifiers: _withModifiers, Teleport: _Teleport, createBlock: _createBlock } = _Vue
+    const { toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createElementVNode: _createElementVNode, renderList: _renderList, Fragment: _Fragment, createTextVNode: _createTextVNode, normalizeClass: _normalizeClass, vModelText: _vModelText, withDirectives: _withDirectives, vModelSelect: _vModelSelect, vModelCheckbox: _vModelCheckbox, withModifiers: _withModifiers, vShow: _vShow, resolveComponent: _resolveComponent, createBlock: _createBlock, Teleport: _Teleport } = _Vue
+
+    const _component_contract_value_field = _resolveComponent("contract-value-field")
+    const _component_signing_panel = _resolveComponent("signing-panel")
 
     return (_openBlock(), _createElementBlock("section", { class: "expansion-panel" }, [
       (s.error)
@@ -7191,7 +7239,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
       }, [
         (props.page==='online')
           ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
-              (s.readiness)
+              (s.readiness&&!s.selected)
                 ? (_openBlock(), _createElementBlock("section", {
                     key: 0,
                     class: "panel x-card",
@@ -7490,13 +7538,16 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                         }, "Próxima", 8, ["onClick", "disabled"])])])
                       ]))
                     : _createCommentVNode("", true), (s.selected)
-                    ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
+                    ? (_openBlock(), _createElementBlock("div", {
+                        key: 1,
+                        class: "admission-workspace"
+                      }, [
                         _createElementVNode("section", { class: "panel x-card" }, [
                           _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, _toDisplayString(s.selected.number) + " · " + _toDisplayString(s.selected.campaign_title), 1), _createElementVNode("h2", null, _toDisplayString(s.selected.student_data.name), 1), _createElementVNode("p", null, [_createTextVNode(_toDisplayString(s.selected.class_name) + " · ", 1), _createElementVNode("span", { class: "badge" }, _toDisplayString(s.selected.status_label), 1)])]), _createElementVNode("button", {
                             class: "btn btn-secondary",
-                            onClick: $event => (s.selected=null)
+                            onClick: closeAdmission
                           }, "← Voltar à fila", 8, ["onClick"])]),
-                          _createElementVNode("div", { class: "x-grid" }, [_createElementVNode("div", null, [
+                          _withDirectives(_createElementVNode("div", { class: "x-grid" }, [_createElementVNode("div", null, [
                             _createElementVNode("h3", null, "Aluno"),
                             _createElementVNode("p", null, "Nascimento: " + _toDisplayString(date(s.selected.student_data.birth_date||'')), 1),
                             _createElementVNode("p", null, "CPF: " + _toDisplayString(s.selected.student_data.cpf||'Não informado'), 1),
@@ -7508,17 +7559,55 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                             _createElementVNode("p", null, _toDisplayString(s.selected.guardian_snapshot.email||s.selected.account?.email), 1),
                             _createElementVNode("p", null, _toDisplayString(s.selected.guardian_snapshot.phone||s.selected.account?.phone), 1),
                             _createElementVNode("p", null, "CPF: " + _toDisplayString(s.selected.guardian_snapshot.cpf||'Não informado'), 1)
-                          ])]),
-                          _createElementVNode("p", { class: "preserve-lines" }, _toDisplayString(s.selected.notes), 1),
-                          _createElementVNode("p", null, "Termos aceitos: versão " + _toDisplayString(s.selected.consent.terms_version||'ainda não aceita') + " · " + _toDisplayString(date(s.selected.consent.accepted_at)), 1),
+                          ])], 512), [[_vShow, s.admissionStage==='registry']]),
+                          _withDirectives(_createElementVNode("p", { class: "preserve-lines" }, _toDisplayString(s.selected.notes), 513), [[_vShow, s.admissionStage==='registry']]),
+                          _withDirectives(_createElementVNode("p", null, "Termos aceitos: versão " + _toDisplayString(s.selected.consent.terms_version||'ainda não aceita') + " · " + _toDisplayString(date(s.selected.consent.accepted_at)), 513), [[_vShow, s.admissionStage==='registry']]),
+                          (s.admissionStage==='registry'&&s.selected.student_id&&can('students.read'))
+                            ? (_openBlock(), _createElementBlock("button", {
+                                key: 0,
+                                type: "button",
+                                class: "btn btn-secondary",
+                                onClick: openStudentRegistry
+                              }, "Abrir cadastro completo do aluno e responsáveis", 8, ["onClick"]))
+                            : _createCommentVNode("", true),
                           (s.selected.enrollment)
-                            ? (_openBlock(), _createElementBlock("p", { key: 0 }, [_createTextVNode("Matrícula vinculada: "), _createElementVNode("strong", null, _toDisplayString(s.selected.enrollment.number), 1), _createTextVNode(" · " + _toDisplayString(label(s.selected.enrollment.status)) + ". Disponível também no menu Matrículas.", 1)]))
+                            ? (_openBlock(), _createElementBlock("p", { key: 1 }, [_createTextVNode("Matrícula vinculada: "), _createElementVNode("strong", null, _toDisplayString(s.selected.enrollment.number), 1), _createTextVNode(" · " + _toDisplayString(label(s.selected.enrollment.status)) + ". Disponível também no menu Matrículas.", 1)]))
                             : _createCommentVNode("", true)
                         ]),
-                        (s.selected.contract?.required||canChangeContract())
-                          ? (_openBlock(), _createElementBlock("section", {
+                        _createElementVNode("nav", {
+                          class: "admission-stage-nav",
+                          "aria-label": "Etapas da matrícula"
+                        }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList([{id:'registry',label:'1 · Cadastro'},{id:'documents',label:'2 · Documentos'},{id:'contract',label:'3 · Contrato'},{id:'finalize',label:'4 · Efetivação'}], (step) => {
+                          return (_openBlock(), _createElementBlock("button", {
+                            key: step.id,
+                            type: "button",
+                            class: _normalizeClass(["btn", s.admissionStage===step.id?'btn-primary':'btn-secondary']),
+                            "aria-current": s.admissionStage===step.id?'step':undefined,
+                            onClick: $event => (s.admissionStage=step.id)
+                          }, _toDisplayString(step.label), 11, ["aria-current", "onClick"]))
+                        }), 128))]),
+                        (s.finalReadiness)
+                          ? (_openBlock(), _createElementBlock("aside", {
                               key: 0,
-                              class: "panel x-card"
+                              class: "admission-next panel"
+                            }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("strong", null, _toDisplayString(s.selected.status==='enrolled'?'Matrícula efetivada':s.finalReadiness.ready?'Pronta para efetivação':'Pendências da matrícula'), 1), _createElementVNode("button", {
+                              type: "button",
+                              class: "btn btn-secondary small-button",
+                              onClick: refreshAdmissionStatus
+                            }, "Atualizar verificações", 8, ["onClick"])]), (s.finalReadiness.checks.some(c=>!c.ready))
+                              ? (_openBlock(), _createElementBlock("details", { key: 0 }, [_createElementVNode("summary", null, "Conferir " + _toDisplayString(s.finalReadiness.checks.filter(c=>!c.ready).length) + " pendência(s)", 1), _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.finalReadiness.checks.filter(c=>!c.ready), (check) => {
+                                  return (_openBlock(), _createElementBlock("li", { key: check.code }, [_createElementVNode("button", {
+                                    type: "button",
+                                    class: "link-button",
+                                    onClick: $event => (showReadinessStage(check.stage))
+                                  }, _toDisplayString(check.label), 9, ["onClick"]), _createElementVNode("span", null, _toDisplayString(check.message), 1)]))
+                                }), 128))])]))
+                              : (_openBlock(), _createElementBlock("p", { key: 1 }, _toDisplayString(s.selected.status==='enrolled'?'O comprovante está disponível na ficha e no portal.':'Confira o parecer e conclua na etapa Efetivação.'), 1))]))
+                          : _createCommentVNode("", true),
+                        (s.selected.contract?.required||canChangeContract())
+                          ? _withDirectives((_openBlock(), _createElementBlock("section", {
+                              key: 1,
+                              class: "panel x-card admission-contract"
                             }, [
                               _createElementVNode("h2", null, "Contrato desta matrícula"),
                               (s.selected.status==='approved' && s.selected.contract.available_template_version && s.selected.contract.template_version && s.selected.contract.available_template_version>s.selected.contract.template_version && canChangeContract())
@@ -7532,22 +7621,24 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                                   }, "Vincular nova revisão do contrato", 8, ["onClick", "disabled"])]))
                                 : _createCommentVNode("", true),
                               (s.selected.contract.required)
-                                ? (_openBlock(), _createElementBlock("p", { key: 1 }, [_createTextVNode("Modelo " + _toDisplayString(templateName(s.selected.contract.template_id)) + " · revisão congelada v" + _toDisplayString(selectedContractVersion()), 1), (s.selected.contract_template_revision_sha256)
-                                    ? (_openBlock(), _createElementBlock("span", {
-                                        key: 0,
-                                        class: "mono small",
-                                        style: {"overflow-wrap":"anywhere"}
-                                      }, " · SHA-256 " + _toDisplayString(s.selected.contract_template_revision_sha256), 1))
-                                    : _createCommentVNode("", true)]))
+                                ? (_openBlock(), _createElementBlock("p", { key: 1 }, "Modelo " + _toDisplayString(templateName(s.selected.contract.template_id)) + " · revisão congelada v" + _toDisplayString(selectedContractVersion()), 1))
                                 : _createCommentVNode("", true),
-                              (canChangeContract())
-                                ? (_openBlock(), _createElementBlock("form", {
+                              (s.selected.contract_template_revision_sha256)
+                                ? (_openBlock(), _createElementBlock("details", {
                                     key: 2,
+                                    class: "admission-revision-details"
+                                  }, [_createElementVNode("summary", null, "Detalhes da revisão vinculada"), _createElementVNode("p", {
+                                    class: "mono small",
+                                    style: {"overflow-wrap":"anywhere"}
+                                  }, "SHA-256 " + _toDisplayString(s.selected.contract_template_revision_sha256), 1)]))
+                                : _createCommentVNode("", true),
+                              _createElementVNode("details", { class: "admission-model-settings" }, [_createElementVNode("summary", null, "Atualizar versão ou trocar modelo"), _createTextVNode(), (canChangeContract())
+                                ? (_openBlock(), _createElementBlock("form", {
+                                    key: 0,
                                     onSubmit: _withModifiers(applyContractChoice, ["prevent"]),
                                     class: "x-form spaced",
                                     "aria-label": "Alterar contrato vinculado"
                                   }, [
-                                    _createElementVNode("h3", null, "Atualizar versão ou trocar modelo"),
                                     _createElementVNode("p", null, "Escolha a revisão atual do mesmo modelo ou outro contrato para esta matrícula. A mudança só ocorre ao confirmar e não altera o contrato das outras inscrições do processo."),
                                     _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
                                       type: "button",
@@ -7590,7 +7681,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                                       disabled: s.busy||!contractChoiceChanged()||s.contractChangeReason.trim().length<10
                                     }, "Confirmar alteração do contrato", 8, ["disabled"])
                                   ], 40, ["onSubmit"]))
-                                : _createCommentVNode("", true),
+                                : _createCommentVNode("", true)]),
                               (s.selected.contract.required)
                                 ? (_openBlock(), _createElementBlock("p", {
                                     key: 3,
@@ -7631,27 +7722,59 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                                                 class: "alert info"
                                               }, "Valores alterados. Atualize a prévia antes de emitir."))
                                             : _createCommentVNode("", true),
-                                          _createElementVNode("div", { class: "x-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(contractPreviewKeys(), (key) => {
-                                            return (_openBlock(), _createElementBlock("label", { key: key }, [_createTextVNode(_toDisplayString(contractFieldLabel(key)) + " ", 1), _createElementVNode("small", { class: "muted" }, _toDisplayString(key) + " · " + _toDisplayString(contractAutomatic(key)?'do cadastro':'desta emissão'), 1), _createElementVNode("input", {
-                                              value: contractValue(key),
-                                              readonly: contractAutomatic(key),
-                                              onInput: $event => (setContractValue(key,$event)),
-                                              maxlength: "2000",
-                                              autocomplete: "off"
-                                            }, null, 40, ["value", "readonly", "onInput"])]))
+                                          _createElementVNode("p", { class: "small muted" }, "As variáveis opcionais vazias são omitidas do PDF. Somente as marcadas como obrigatórias nos parâmetros do modelo impedem a emissão."),
+                                          _createElementVNode("div", { class: "contract-variable-groups" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(contractFieldGroups, (group) => {
+                                            return (_openBlock(), _createElementBlock(_Fragment, { key: group }, [(contractGroupKeys(group).length&&(['Contratante II','Testemunhas'].includes(group)&&contractGroupKeys(group).every(key=>!contractFieldMeta(key).required)))
+                                              ? (_openBlock(), _createElementBlock("details", {
+                                                  key: 0,
+                                                  class: "contract-optional-group"
+                                                }, [_createElementVNode("summary", null, _toDisplayString(group) + " · campos opcionais", 1), _createElementVNode("div", { class: "contract-value-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(contractGroupKeys(group), (key) => {
+                                                  return (_openBlock(), _createBlock(_component_contract_value_field, {
+                                                    key: key,
+                                                    field: contractFieldMeta(key),
+                                                    value: contractValue(key),
+                                                    onChange: $event => (setContractFieldValue(key,$event))
+                                                  }, null, 8, ["field", "value", "onChange"]))
+                                                }), 128))])]))
+                                              : (contractGroupKeys(group).length)
+                                                ? (_openBlock(), _createElementBlock("fieldset", {
+                                                    key: 1,
+                                                    class: "contract-variable-group"
+                                                  }, [_createElementVNode("legend", null, _toDisplayString(group), 1), _createElementVNode("div", { class: "contract-value-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(contractGroupKeys(group), (key) => {
+                                                    return (_openBlock(), _createBlock(_component_contract_value_field, {
+                                                      key: key,
+                                                      field: contractFieldMeta(key),
+                                                      value: contractValue(key),
+                                                      onChange: $event => (setContractFieldValue(key,$event))
+                                                    }, null, 8, ["field", "value", "onChange"]))
+                                                  }), 128))])]))
+                                                : _createCommentVNode("", true), (contractGroupKeys(group,true).length)
+                                              ? (_openBlock(), _createElementBlock("details", { key: 2 }, [_createElementVNode("summary", null, _toDisplayString(group) + " · dados já preenchidos", 1), _createElementVNode("dl", { class: "contract-registry-summary" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(contractGroupKeys(group,true), (key) => {
+                                                  return (_openBlock(), _createElementBlock("div", { key: key }, [_createElementVNode("dt", null, _toDisplayString(contractFieldLabel(key)), 1), _createElementVNode("dd", null, [_createTextVNode(_toDisplayString(s.contractPreview.variables[key]) + " ", 1), _createElementVNode("small", null, "· " + _toDisplayString(contractFieldMeta(key).source), 1)])]))
+                                                }), 128))])]))
+                                              : _createCommentVNode("", true)], 64))
                                           }), 128))]),
-                                          _createElementVNode("div", {
+                                          _createElementVNode("div", { class: "admission-contract-actions" }, [_createElementVNode("button", {
+                                            type: "button",
+                                            class: "btn btn-secondary",
+                                            onClick: reloadContractRegistry
+                                          }, "Atualizar dados do cadastro", 8, ["onClick"]), _createElementVNode("button", {
+                                            type: "button",
+                                            class: "btn btn-secondary",
+                                            onClick: saveContractDraft
+                                          }, "Salvar rascunho", 8, ["onClick"]), _createElementVNode("span", { class: "small muted" }, _toDisplayString(s.contractDraftDirty?'Alterações ainda não salvas':'Rascunho desta matrícula e revisão'), 1)]),
+                                          _createElementVNode("details", { class: "contract-preview-toggle" }, [_createElementVNode("summary", null, "Conferir conteúdo do contrato"), _createElementVNode("div", {
                                             class: "contract-paper panel",
                                             "aria-label": "Prévia textual da revisão congelada"
                                           }, [_createElementVNode("div", { class: "contract-paper-head" }, [_createElementVNode("strong", null, _toDisplayString(identity.display_name) + " · versão " + _toDisplayString(s.contractPreview.template_version), 1)]), _createElementVNode("div", { class: "contract-paper-content preserve" }, [(s.contractPreview.header)
                                             ? (_openBlock(), _createElementBlock("p", { key: 0 }, _toDisplayString(s.contractPreview.header), 1))
                                             : _createCommentVNode("", true), _createElementVNode("p", null, _toDisplayString(s.contractPreview.content), 1), (s.contractPreview.footer)
                                             ? (_openBlock(), _createElementBlock("p", { key: 1 }, _toDisplayString(s.contractPreview.footer), 1))
-                                            : _createCommentVNode("", true)])]),
+                                            : _createCommentVNode("", true)])])]),
                                           _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
                                             type: "button",
                                             class: "btn btn-secondary",
-                                            disabled: s.busy || s.contractPreviewStale,
+                                            disabled: s.busy || s.contractPreviewStale || !!s.contractPreview.missing_fields.length,
                                             onClick: previewFrozenPdf
                                           }, "Conferir PDF timbrado", 8, ["disabled", "onClick"]), _createElementVNode("button", {
                                             type: "button",
@@ -7667,9 +7790,27 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                                         class: "small muted"
                                       }, "O contrato pode ser emitido após a aprovação e a criação da matrícula em preparação."))
                                     : _createCommentVNode("", true),
-                              (s.selected.issued_documents.some(d=>d.kind==='template'))
+                              (s.selected.contract.issued_document_id)
                                 ? (_openBlock(), _createElementBlock("details", {
                                     key: 7,
+                                    class: "admission-signature-context"
+                                  }, [_createElementVNode("summary", null, "Assinatura do responsável e conferência da Direção"), (_openBlock(), _createBlock(_component_signing_panel, {
+                                    key: s.selected.id+':'+s.selected.contract.issued_document_id,
+                                    mode: "document",
+                                    "school-id": props.schoolId,
+                                    permissions: props.permissions,
+                                    role: props.role,
+                                    "enrollment-id": s.selected.enrollment_id,
+                                    "issued-id": s.selected.contract.issued_document_id
+                                  }, null, 8, ["school-id", "permissions", "role", "enrollment-id", "issued-id"])), _createElementVNode("button", {
+                                    type: "button",
+                                    class: "btn btn-secondary",
+                                    onClick: refreshAdmissionStatus
+                                  }, "Atualizar situação após a conferência", 8, ["onClick"])]))
+                                : _createCommentVNode("", true),
+                              (s.selected.issued_documents.some(d=>d.kind==='template'))
+                                ? (_openBlock(), _createElementBlock("details", {
+                                    key: 8,
                                     class: "spaced"
                                   }, [_createElementVNode("summary", null, "Histórico de contratos emitidos"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.selected.issued_documents.filter(d=>d.kind==='template'), (d) => {
                                     return (_openBlock(), _createElementBlock("div", {
@@ -7682,11 +7823,11 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                                     }, "Baixar via do histórico", 8, ["onClick"])]))
                                   }), 128))]))
                                 : _createCommentVNode("", true)
-                            ]))
+                            ], 512)), [[_vShow, s.admissionStage==='contract']])
                           : _createCommentVNode("", true),
                         (s.selected.reservation && s.selected.reservation.status!=='none')
-                          ? (_openBlock(), _createElementBlock("section", {
-                              key: 1,
+                          ? _withDirectives((_openBlock(), _createElementBlock("section", {
+                              key: 2,
                               class: "panel x-card"
                             }, [
                               _createElementVNode("h2", null, "Reserva de vaga"),
@@ -7703,9 +7844,9 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                                     class: "alert warning"
                                   }, "A vaga foi liberada ou exige análise. Confira o pagamento e a capacidade antes de renovar."))
                                 : _createCommentVNode("", true)
-                            ]))
+                            ], 512)), [[_vShow, s.admissionStage==='finalize']])
                           : _createCommentVNode("", true),
-                        _createElementVNode("section", { class: "panel x-card" }, [
+                        _withDirectives(_createElementVNode("section", { class: "panel x-card" }, [
                           _createElementVNode("h2", null, "Análise e documentos"),
                           (can('admissions.write'))
                             ? (_openBlock(), _createElementBlock("div", {
@@ -7853,36 +7994,59 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                                 onClick: approve,
                                 disabled: !s.identity||s.reason.length<10
                               }, "Aprovar e criar matrícula em preparação", 8, ["onClick", "disabled"])], 64))
+                            : _createCommentVNode("", true)
+                        ], 512), [[_vShow, s.admissionStage==='documents']]),
+                        _withDirectives(_createElementVNode("section", { class: "panel x-card" }, [
+                          _createElementVNode("h2", null, "Efetivação da matrícula"),
+                          (s.selected.status==='enrolled')
+                            ? (_openBlock(), _createElementBlock("p", {
+                                key: 0,
+                                class: "alert success"
+                              }, "Matrícula efetivada. O comprovante está disponível no portal do responsável e na ficha do aluno."))
+                            : (s.selected.status!=='approved')
+                              ? (_openBlock(), _createElementBlock("p", { key: 1 }, "Conclua a aprovação na etapa Documentos antes de efetivar."))
+                              : _createCommentVNode("", true),
+                          _createElementVNode("ul", { class: "admission-checklist" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.finalReadiness?.checks||[], (check) => {
+                            return (_openBlock(), _createElementBlock("li", { key: check.code }, [_createElementVNode("strong", null, _toDisplayString(check.label), 1), _createElementVNode("span", null, _toDisplayString(check.message), 1), (!check.ready&&check.stage!=='finalize')
+                              ? (_openBlock(), _createElementBlock("button", {
+                                  key: 0,
+                                  type: "button",
+                                  class: "link-button",
+                                  onClick: $event => (showReadinessStage(check.stage))
+                                }, "Resolver pendência", 8, ["onClick"]))
+                              : _createCommentVNode("", true)]))
+                          }), 128))]),
+                          (s.selected.status==='approved')
+                            ? (_openBlock(), _createElementBlock("label", { key: 2 }, [_createTextVNode("Parecer para a efetivação"), _withDirectives(_createElementVNode("textarea", {
+                                "onUpdate:modelValue": $event => ((s.reason) = $event),
+                                rows: "2",
+                                maxlength: "2000",
+                                placeholder: "Registre a conclusão da conferência"
+                              }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.reason]])]))
                             : _createCommentVNode("", true),
+                          _createTextVNode(),
                           (can('admissions.write')&&can('enrollments.write')&&s.selected.status==='approved')
                             ? (_openBlock(), _createElementBlock("div", {
-                                key: 4,
+                                key: 3,
                                 class: "x-form"
-                              }, [
-                                _createElementVNode("p", null, "A efetivação verifica vagas, documentos obrigatórios e pagamentos exigidos. Contratos novos recebem a assinatura A1 institucional nesta etapa. O comprovante será disponibilizado ao responsável."),
-                                (s.selected.contract?.required && s.selected.contract.signature_status!=='verified')
-                                  ? (_openBlock(), _createElementBlock("p", {
-                                      key: 0,
-                                      class: "alert warning"
-                                    }, "Aguarde a assinatura do responsável e a conferência da Direção em Modelos e contratos → Assinaturas e revisão."))
-                                  : _createCommentVNode("", true),
-                                (s.selected.reservation && ['expired','review','released'].includes(s.selected.reservation.status))
-                                  ? (_openBlock(), _createElementBlock("button", {
-                                      key: 1,
-                                      class: "btn btn-secondary",
-                                      onClick: renewReservation,
-                                      disabled: s.reason.length<3
-                                    }, "Revisar e renovar reserva", 8, ["onClick", "disabled"]))
-                                  : _createCommentVNode("", true),
-                                _createElementVNode("button", {
-                                  class: "btn btn-primary",
-                                  onClick: finalize,
-                                  disabled: s.reason.length<3 || (s.selected.contract?.required && s.selected.contract.signature_status!=='verified')
-                                }, "Efetivar matrícula e emitir comprovante", 8, ["onClick", "disabled"])
-                              ]))
+                              }, [_createElementVNode("p", null, "A efetivação verifica vagas, documentos obrigatórios e pagamentos exigidos. Contratos novos recebem a assinatura A1 institucional nesta etapa. O comprovante será disponibilizado ao responsável."), (s.selected.reservation && ['expired','review','released'].includes(s.selected.reservation.status))
+                                ? (_openBlock(), _createElementBlock("button", {
+                                    key: 0,
+                                    class: "btn btn-secondary",
+                                    onClick: renewReservation,
+                                    disabled: s.reason.length<3
+                                  }, "Revisar e renovar reserva", 8, ["onClick", "disabled"]))
+                                : _createCommentVNode("", true), _createElementVNode("button", {
+                                class: "btn btn-primary",
+                                onClick: finalize,
+                                disabled: s.reason.length<3 || !s.finalReadiness?.ready
+                              }, "Efetivar matrícula e emitir comprovante", 8, ["onClick", "disabled"])]))
                             : _createCommentVNode("", true)
-                        ]),
-                        _createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("h2", null, "Cobranças da inscrição"), (can('banking.write')&&!['draft','withdrawn','rejected'].includes(s.selected.status))
+                        ], 512), [[_vShow, s.admissionStage==='finalize']]),
+                        _createElementVNode("details", {
+                          id: "admission-charges",
+                          class: "admission-secondary"
+                        }, [_createElementVNode("summary", null, "Cobranças da inscrição · " + _toDisplayString(s.charges.length), 1), _createTextVNode(), _createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("h2", null, "Cobranças da inscrição"), (can('banking.write')&&!['draft','withdrawn','rejected'].includes(s.selected.status))
                           ? (_openBlock(), _createElementBlock("button", {
                               key: 0,
                               class: "btn btn-primary",
@@ -7896,8 +8060,8 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                             class: "x-record",
                             onClick: $event => (inspectCharge(c))
                           }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(c.description), 1), _createElementVNode("span", null, _toDisplayString(date(c.due_on)) + " · " + _toDisplayString(chargeMethod(c)), 1)]), _createElementVNode("strong", null, _toDisplayString(money(c.amount)), 1), _createElementVNode("span", { class: "badge" }, _toDisplayString(chargeStatus(c)), 1)], 8, ["onClick"]))
-                        }), 128))]),
-                        _createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("h2", null, "Atendimento com o responsável"), _createElementVNode("div", { class: "x-timeline" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.selected.messages, (m) => {
+                        }), 128))])]),
+                        _createElementVNode("details", { class: "admission-secondary" }, [_createElementVNode("summary", null, "Atendimento e mensagens"), _createTextVNode(), _createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("h2", null, "Atendimento com o responsável"), _createElementVNode("div", { class: "x-timeline" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.selected.messages, (m) => {
                           return (_openBlock(), _createElementBlock("article", {
                             key: m.id,
                             class: _normalizeClass({'x-internal':m.internal})
@@ -7929,8 +8093,8 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                                 : _createCommentVNode("", true)]),
                               _createElementVNode("p", { class: "muted" }, "Envios por WhatsApp exigem consentimento e telefone verificado. Prefira avisos curtos com acesso ao portal.")
                             ], 40, ["onSubmit"]))
-                          : _createCommentVNode("", true)])
-                      ], 64))
+                          : _createCommentVNode("", true)])])
+                      ]))
                     : _createCommentVNode("", true)], 64))
             ], 64))
           : _createCommentVNode("", true),
@@ -11391,6 +11555,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
   with (_ctx) {
     const { toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createElementVNode: _createElementVNode, normalizeClass: _normalizeClass, renderList: _renderList, Fragment: _Fragment, vModelText: _vModelText, withDirectives: _withDirectives, createTextVNode: _createTextVNode, vModelSelect: _vModelSelect, vModelCheckbox: _vModelCheckbox, vShow: _vShow, withModifiers: _withModifiers, resolveComponent: _resolveComponent, createBlock: _createBlock } = _Vue
 
+    const _component_contract_value_field = _resolveComponent("contract-value-field")
     const _component_signing_panel = _resolveComponent("signing-panel")
 
     return (_openBlock(), _createElementBlock("section", {
@@ -11669,6 +11834,27 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                       }), 128))])]))
                     : _createCommentVNode("", true)
                 ]),
+                _createElementVNode("section", {
+                  class: "panel x-card",
+                  "aria-label": "Parâmetros das variáveis do contrato"
+                }, [
+                  _createElementVNode("h3", null, "Parâmetros das variáveis"),
+                  _createElementVNode("p", null, "Marque quais variáveis são obrigatórias. As opcionais vazias e seus trechos correspondentes serão omitidos do documento. Nenhum valor será inventado. Salvar altera a revisão do modelo."),
+                  (!placeholders().length)
+                    ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Inclua os campos no texto ou prepare o mapeamento do DOCX."))
+                    : _createCommentVNode("", true),
+                  _createElementVNode("div", { class: "contract-parameter-list" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(placeholders(), (key) => {
+                    return (_openBlock(), _createElementBlock("article", { key: key }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(fieldLabel(key)), 1), _createElementVNode("code", null, _toDisplayString(key), 1)]), _createElementVNode("label", { class: "x-check" }, [_withDirectives(_createElementVNode("input", {
+                      type: "checkbox",
+                      "onUpdate:modelValue": $event => ((variableOptions(key).required) = $event)
+                    }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, variableOptions(key).required]]), _createTextVNode("Obrigatória")]), _createElementVNode("label", null, [_createTextVNode("Componente"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((variableOptions(key).input_type) = $event) }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(fieldKinds, (kind) => {
+                      return (_openBlock(), _createElementBlock("option", {
+                        key: kind.value,
+                        value: kind.value
+                      }, _toDisplayString(kind.label), 9, ["value"]))
+                    }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, variableOptions(key).input_type]])])]))
+                  }), 128))])
+                ]),
                 (!state.draft.source_docx_file_id)
                   ? (_openBlock(), _createElementBlock("section", {
                       key: 0,
@@ -11896,25 +12082,45 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                               class: "alert info"
                             }, "Dados alterados. Atualize a prévia antes da emissão."))
                           : _createCommentVNode("", true),
-                        (previewKeys().length)
-                          ? (_openBlock(), _createElementBlock("div", {
-                              key: 2,
-                              class: "contract-value-grid"
-                            }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(previewKeys(), (key) => {
-                              return (_openBlock(), _createElementBlock("label", {
-                                key: key,
-                                class: _normalizeClass(["field", {'contract-missing':state.preview.missing_fields.includes(key)}])
-                              }, [_createTextVNode(_toDisplayString(fieldLabel(key)) + " ", 1), _createElementVNode("small", { class: "muted" }, _toDisplayString(key) + " · " + _toDisplayString(automaticValue(key)?'do cadastro':'preenchimento desta emissão'), 1), _createElementVNode("input", {
-                                value: displayValue(key),
-                                readonly: automaticValue(key),
-                                onInput: $event => (setValue(key,$event)),
-                                "aria-label": fieldLabel(key),
-                                autocomplete: "off",
-                                maxlength: "2000"
-                              }, null, 40, ["value", "readonly", "onInput", "aria-label"])], 2))
-                            }), 128))]))
-                          : _createCommentVNode("", true),
-                        _createElementVNode("div", {
+                        _createElementVNode("p", { class: "small muted" }, "Preencha somente as informações aplicáveis. Opcionais vazias não aparecem no PDF; as obrigatórias estão identificadas."),
+                        _createElementVNode("div", { class: "contract-variable-groups" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(fieldGroups, (group) => {
+                          return (_openBlock(), _createElementBlock(_Fragment, { key: group }, [(groupKeys(group).length&&(['Contratante II','Testemunhas'].includes(group)&&groupKeys(group).every(key=>!fieldMeta(key).required)))
+                            ? (_openBlock(), _createElementBlock("details", {
+                                key: 0,
+                                class: "contract-optional-group"
+                              }, [_createElementVNode("summary", null, _toDisplayString(group) + " · campos opcionais", 1), _createElementVNode("div", { class: "contract-value-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(groupKeys(group), (key) => {
+                                return (_openBlock(), _createBlock(_component_contract_value_field, {
+                                  key: key,
+                                  field: fieldMeta(key),
+                                  value: displayValue(key),
+                                  onChange: $event => (setFieldValue(key,$event))
+                                }, null, 8, ["field", "value", "onChange"]))
+                              }), 128))])]))
+                            : (groupKeys(group).length)
+                              ? (_openBlock(), _createElementBlock("fieldset", {
+                                  key: 1,
+                                  class: "contract-variable-group"
+                                }, [_createElementVNode("legend", null, _toDisplayString(group), 1), _createElementVNode("div", { class: "contract-value-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(groupKeys(group), (key) => {
+                                  return (_openBlock(), _createBlock(_component_contract_value_field, {
+                                    key: key,
+                                    field: fieldMeta(key),
+                                    value: displayValue(key),
+                                    onChange: $event => (setFieldValue(key,$event))
+                                  }, null, 8, ["field", "value", "onChange"]))
+                                }), 128))])]))
+                              : _createCommentVNode("", true), (groupKeys(group,true).length)
+                            ? (_openBlock(), _createElementBlock("details", { key: 2 }, [_createElementVNode("summary", null, _toDisplayString(group) + " · dados já preenchidos", 1), _createElementVNode("dl", { class: "contract-registry-summary" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(groupKeys(group,true), (key) => {
+                                return (_openBlock(), _createElementBlock("div", { key: key }, [_createElementVNode("dt", null, _toDisplayString(fieldLabel(key)), 1), _createElementVNode("dd", null, [_createTextVNode(_toDisplayString(state.preview.variables[key]) + " ", 1), _createElementVNode("small", null, "· " + _toDisplayString(fieldMeta(key).source), 1)])]))
+                              }), 128))])]))
+                            : _createCommentVNode("", true)], 64))
+                        }), 128))]),
+                        _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                          type: "button",
+                          class: "btn btn-secondary",
+                          onClick: savePreparation,
+                          disabled: state.busy
+                        }, "Salvar rascunho", 8, ["onClick", "disabled"]), _createElementVNode("span", { class: "small muted" }, _toDisplayString(state.draftDirty?'Alterações ainda não salvas':'Rascunho desta matrícula e revisão'), 1)]),
+                        _createElementVNode("details", { class: "contract-preview-toggle" }, [_createElementVNode("summary", null, "Conferir conteúdo do documento"), _createElementVNode("div", {
                           class: "contract-paper panel",
                           "aria-label": "Prévia do conteúdo preenchido"
                         }, [_createElementVNode("div", { class: "contract-paper-head" }, [(identity.logo_url)
@@ -11927,11 +12133,11 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                           ? (_openBlock(), _createElementBlock("p", { key: 0 }, _toDisplayString(state.preview.header), 1))
                           : _createCommentVNode("", true), _createElementVNode("p", null, _toDisplayString(state.preview.content), 1), (state.preview.footer)
                           ? (_openBlock(), _createElementBlock("p", { key: 1 }, _toDisplayString(state.preview.footer), 1))
-                          : _createCommentVNode("", true)]), _createElementVNode("div", { class: "contract-paper-foot" }, _toDisplayString(identity.display_name), 1)]),
+                          : _createCommentVNode("", true)]), _createElementVNode("div", { class: "contract-paper-foot" }, _toDisplayString(identity.display_name), 1)])]),
                         _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
                           type: "button",
                           class: "btn btn-secondary",
-                          disabled: state.busy || state.previewStale,
+                          disabled: state.busy || state.previewStale || !!state.preview.missing_fields.length,
                           onClick: downloadPdfPreview
                         }, "Conferir papel timbrado em PDF", 8, ["disabled", "onClick"]), (can('documents.generate'))
                           ? (_openBlock(), _createElementBlock("button", {

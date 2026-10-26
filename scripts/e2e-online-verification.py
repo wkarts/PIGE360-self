@@ -82,9 +82,12 @@ try:
   admin.locator('.x-record',has_text='Aluno Exemplo').click()
   admin.get_by_label('Justificativa / parecer para a próxima ação',exact=True).fill('Identidade e documentação sintéticas conferidas pela Direção.')
   admin.get_by_label('Conferi a identidade, os documentos e a legitimidade',exact=False).check();admin.get_by_role('button',name='Aprovar e criar matrícula em preparação',exact=True).click()
+  admin.get_by_text('Atualizar versão ou trocar modelo',exact=True).click()
   choice=admin.get_by_role('form',name='Alterar contrato vinculado')
   expect(choice).to_be_visible()
   def choose_contract(ident,reason):
+   details=admin.locator('.admission-model-settings')
+   if not details.evaluate('(element)=>element.open'):details.locator('summary').click()
    choice.get_by_label('Contrato a vincular').select_option(ident)
    choice.get_by_label('Justificativa da alteração do contrato',exact=True).fill(reason)
    choice.get_by_role('button',name='Confirmar alteração do contrato',exact=True).click()
@@ -98,6 +101,7 @@ try:
   a=client.get(base+'/admissions/'+data['id'],headers=headers).json();old_id=a['contract']['issued_document_id']
   old_pdf=client.get('/api/v1/portal/admissions/'+data['id']+'/issued/'+old_id).content
   response=client.patch(base+'/document-templates/'+first['id'],headers=headers,json={'version':first['version'],'body':'Contrato inicial atualizado de {{aluno.nome}} com {{escola.nome}}.'});assert response.is_success,response.text
+  if not admin.locator('.admission-model-settings').evaluate('(element)=>element.open'):admin.get_by_text('Atualizar versão ou trocar modelo',exact=True).click()
   admin.get_by_role('button',name='Atualizar modelos disponíveis',exact=True).click()
   expect(admin.get_by_text('Modelos e revisões atualizados.',exact=False)).to_be_visible()
   choose_contract(first['id'],'Atualizar o vínculo para a revisão mais recente do modelo.')
@@ -114,8 +118,52 @@ try:
   for width in (390,1440):
    admin.set_viewport_size({'width':width,'height':1000});assert admin.evaluate('document.documentElement.scrollWidth<=innerWidth')
    admin.screenshot(path=str(OUT/f'contract-choice-{width}.png'),full_page=True)
+  # Configure variable requirements through the actual editor, then resume a saved contract.
+  admin.goto(URL+'/#/contracts')
+  admin.get_by_role('button',name='+ Novo modelo',exact=True).click()
+  admin.get_by_label('Nome do modelo',exact=True).fill('Contrato parametrizado da inscrição')
+  admin.get_by_label('Cláusulas e conteúdo',exact=True).fill('Aluno: {{aluno.nome}}\nData: {{assinatura.data}}\nValor: R$ {{financeiro.valor_parcela}}\nUF: {{assinatura.uf}}\nCONTRATANTE II\nNome: {{contratante2.nome}}\nCPF: {{contratante2.cpf}}\nTESTEMUNHAS\nNome: {{testemunha1.nome}} · CPF: {{testemunha1.cpf}}')
+  parameters=admin.get_by_role('region',name='Parâmetros das variáveis do contrato')
+  parameters.locator('article',has_text='assinatura.data').get_by_label('Obrigatória',exact=True).check()
+  admin.get_by_role('button',name='Salvar modelo',exact=True).click()
+  expect(admin.get_by_text('Modelo salvo.',exact=False)).to_be_visible()
+  models=client.get(base+'/document-templates?include_inactive=true',headers=headers).json()['items'];parameterized=next(t for t in models if t['name']=='Contrato parametrizado da inscrição')
+  assert parameterized['field_options']['assinatura.data']['required'] is True
+  assert not parameterized['field_options']['contratante2.nome']['required']
+  admin.goto(URL+'/#/online');admin.locator('.x-record',has_text='Aluno Exemplo').click()
+  admin.get_by_text('Atualizar versão ou trocar modelo',exact=True).click()
+  choose_contract(parameterized['id'],'Modelo parametrizado e conferido para a matrícula de teste.')
+  admin.get_by_role('button',name='Preparar contrato',exact=True).click()
+  date_input=admin.get_by_label('Data da assinatura',exact=True)
+  expect(date_input).to_have_attribute('type','date')
+  expect(admin.get_by_label('UF da assinatura',exact=True)).to_have_js_property('tagName','SELECT')
+  expect(admin.get_by_role('button',name='Conferir PDF timbrado',exact=True)).to_be_disabled()
+  date_input.fill('2027-02-10');admin.get_by_label('Valor da parcela',exact=True).fill('950,00')
+  admin.get_by_role('button',name='Salvar rascunho',exact=True).click()
+  expect(admin.get_by_text('Rascunho salvo nesta matrícula e revisão.',exact=False)).to_be_visible()
+  admin.reload();admin.locator('.x-record',has_text='Aluno Exemplo').click()
+  admin.get_by_role('button',name='Preparar contrato',exact=True).click()
+  expect(admin.get_by_label('Data da assinatura',exact=True)).to_have_value('2027-02-10')
+  expect(admin.get_by_label('Valor da parcela',exact=True)).to_have_value('950,00')
+  with admin.expect_download() as download:
+   admin.get_by_role('button',name='Conferir PDF timbrado',exact=True).click()
+  from pypdf import PdfReader
+  pdf_text='\n'.join(p.extract_text() or '' for p in PdfReader(download.value.path()).pages)
+  assert '{{' not in pdf_text and '}}' not in pdf_text
+  assert '950,00' in pdf_text and '10/02/2027' in pdf_text
+  assert all(label not in pdf_text for label in ('CONTRATANTE II','TESTEMUNHAS','CPF:','UF:'))
+  for width in (320,390,768,1024,1440,1920,2560):
+   admin.set_viewport_size({'width':width,'height':1000})
+   assert admin.evaluate('document.documentElement.scrollWidth<=innerWidth'),width
+   admin.screenshot(path=str(OUT/f'contract-workspace-{width}.png'),full_page=True)
+   responsive['contract_'+str(width)]=admin.evaluate('document.documentElement.scrollWidth<=innerWidth')
+  admin.get_by_role('button',name='Emitir contrato da revisão aprovada',exact=True).click()
+  expect(admin.get_by_text('Contrato emitido da revisão aprovada.',exact=False)).to_be_visible()
+  admin.get_by_role('button',name='4 · Efetivação',exact=True).click()
+  expect(admin.get_by_role('heading',name='Efetivação da matrícula',exact=True)).to_be_visible()
+  expect(admin.get_by_role('button',name='Efetivar matrícula e emitir comprovante',exact=True)).to_be_disabled()
   assert not errors,errors
-  result={'status':'passed','checks':['Instância preexistente compartilhada selecionada sem integração legada','Botão WhatsApp disponível no fluxo da matrícula','Dois documentos anexados manualmente sem catálogo','Confirmação de código mantém inscrição aberta','Inscrição concluída pela interface com contato confirmado','Contrato vinculado na análise sem alterar campanha','Revisão atualizada pela interface após recarregar modelos','Troca para outro modelo v1 preserva três vias e downloads históricos'],'responsive':responsive,'javascript_errors':errors,'browser':browser.version,'external_delivery':'Não executada; código sintético da fila usado na confirmação','database':'SQLite temporário'}
+  result={'status':'passed','checks':['Instância preexistente compartilhada selecionada sem integração legada','Botão WhatsApp disponível no fluxo da matrícula','Dois documentos anexados manualmente sem catálogo','Confirmação de código mantém inscrição aberta','Inscrição concluída pela interface com contato confirmado','Contrato vinculado na análise sem alterar campanha','Revisão atualizada pela interface após recarregar modelos','Troca para outro modelo v1 preserva três vias e downloads históricos','Obrigatoriedade configurada por variável no editor real','Rascunho retomado após recarregar a aplicação','Calendário e seletor UF conforme o campo','PDF real sem marcadores, rótulos vazios ou contratantes inventados','Efetivação mostra os requisitos restantes na mesma matrícula'],'responsive':responsive,'javascript_errors':errors,'browser':browser.version,'external_delivery':'Não executada; código sintético da fila usado na confirmação','database':'SQLite temporário'}
   (OUT/'results.json').write_text(json.dumps(result,ensure_ascii=False,indent=2));print(json.dumps(result,ensure_ascii=False));browser.close()
 finally:
  proc.terminate();proc.wait(timeout=10);log.close()

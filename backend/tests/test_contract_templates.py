@@ -41,6 +41,7 @@ def test_template_period_prefill_snapshot_idempotence_and_letterhead(api):
         'name': 'Contrato escolar', 'kind': 'declaration', 'body': body,
         'academic_year_id': catalog['year']['id'], 'header': 'ESCOLA {{escola.nome}}',
         'footer': 'Documento por matrícula {{matricula.numero}}',
+        'field_options': {'financeiro.valor_parcela': {'required': True}, 'assinatura.data_extenso': {'required': True}},
     })
     assert len(api.get('/document-templates?enrollment_id=' + enrollment['id'])['items']) == 1
     assert api.get('/document-templates/fields')['fields']

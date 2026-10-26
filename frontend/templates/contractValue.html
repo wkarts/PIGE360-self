@@ -1,0 +1,6 @@
+<label class="contract-typed-field" :class="'contract-kind-'+props.field.input_type">
+  <span>{{props.field.label}} <small v-if="props.field.required" class="contract-required">Obrigatório</small></span>
+  <select v-if="props.field.input_type==='uf'" :value="props.value" :disabled="props.locked" @change="change" :aria-label="props.field.label"><option value="">Selecione</option><option v-for="uf in states" :key="uf" :value="uf">{{uf}}</option></select>
+  <input v-else :type="nativeType()" :value="display(props.value,props.field.input_type)" :readonly="props.locked" @input="change" @blur="moneyBlur" :inputmode="mode()" :min="props.field.input_type==='integer'?(props.field.min||0):undefined" :max="props.field.max||undefined" :step="props.field.input_type==='integer'?1:undefined" :maxlength="props.field.input_type==='cpf'?14:props.field.input_type==='cep'?9:2000" :aria-label="props.field.label" autocomplete="off" :placeholder="props.field.input_type==='money'?'0,00':undefined">
+  <small v-if="props.locked" class="muted">{{props.field.source==='cadastro'?'Cadastro':props.field.source}}</small>
+</label>

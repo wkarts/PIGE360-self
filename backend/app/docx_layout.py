@@ -69,6 +69,10 @@ def replace_ranges(p,replacements):
         cursor=0;inserted=False
         for n in nodes:
             original=n.text or '';left=cursor;right=left+len(original);cursor=right
+            if start==end and left<=start<=right:
+                offset=start-left;n.text=original[:offset]+value+original[offset:]
+                n.set('{http://www.w3.org/XML/1998/namespace}space','preserve');inserted=True
+                break
             if right<=start or left>=end:continue
             begin=max(0,start-left);finish=min(len(original),end-left)
             n.text=original[:begin]+(value if not inserted else '')+original[finish:]
@@ -107,6 +111,7 @@ def mapped(data,mapping):
 
 
 def fill(data,values):
+    from .contract_fields import render_text, paragraph_edits
     output=io.BytesIO()
     with archive(data) as z,zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as out:
         selected=parts(z)
@@ -114,10 +119,24 @@ def fill(data,values):
             content=z.read(item.filename)
             if item.filename in selected:
                 root=ET.fromstring(content)
+                emptied_rows=set()
                 for p in root.findall('.//w:p',NS):
                     text=''.join(n.text or '' for n in p.findall('.//w:t',NS))
-                    ranges=[(m.start(),m.end(),str(values.get(m.group(1),'['+m.group(1)+']'))) for m in TOKEN.finditer(text) if m.group(1)]
-                    replace_ranges(p,ranges)
+                    try: rendered=render_text(text,values,values.keys())
+                    except ValueError as exc: fail(422,str(exc))
+                    replace_ranges(p,paragraph_edits(text,rendered))
+                    if text.strip() and not rendered.strip():
+                        emptied_rows.update(p.iterancestors('{'+NS['w']+'}tr'))
+                        parent=p.getparent()
+                        # Every table cell must retain at least one paragraph.
+                        has_artwork=p.find('.//w:drawing',NS) is not None or p.find('.//w:pict',NS) is not None
+                        if not has_artwork and (parent.tag!='{'+NS['w']+'}tc' or len(parent.findall('w:p',NS))>1):
+                            parent.remove(p)
+                for row in list(root.findall('.//w:tr',NS)):
+                    if row in emptied_rows and not ''.join(row.itertext()).strip() and row.find('.//w:drawing',NS) is None and row.find('.//w:pict',NS) is None:
+                        row.getparent().remove(row)
+                for table in list(root.findall('.//w:tbl',NS)):
+                    if not table.findall('w:tr',NS): table.getparent().remove(table)
                 content=ET.tostring(root,xml_declaration=True,encoding='UTF-8',standalone=True)
             out.writestr(item,content)
     return output.getvalue()
