@@ -74,7 +74,48 @@ try:
    responsive[str(width)]=page.evaluate('document.documentElement.scrollWidth<=innerWidth');assert responsive[str(width)]
   assert not errors,errors
   data=client.get('/api/v1/portal/admissions').json()['items'][0];assert data['status']=='submitted' and len(data['attachments'])==2
-  result={'status':'passed','checks':['Instância preexistente compartilhada selecionada sem integração legada','Botão WhatsApp disponível no fluxo da matrícula','Dois documentos anexados manualmente sem catálogo','Confirmação de código mantém inscrição aberta','Inscrição concluída pela interface com contato confirmado'],'responsive':responsive,'javascript_errors':errors,'browser':browser.version,'external_delivery':'Não executada; código sintético da fila usado na confirmação','database':'SQLite temporário'}
+  first=post('/document-templates',{'name':'Contrato inicial da matrícula','kind':'educational_contract','body':'Contrato inicial de {{aluno.nome}} com {{escola.nome}}.','require_signature':True})
+  other=post('/document-templates',{'name':'Contrato alternativo da matrícula','kind':'educational_contract','body':'Contrato alternativo de {{aluno.nome}} com {{escola.nome}}.','require_signature':True})
+  admin=browser.new_page(viewport={'width':1440,'height':1000});admin.on('pageerror',lambda error:errors.append(str(error)))
+  admin.goto(URL+'/');admin.get_by_label('E-mail',exact=True).fill('secretaria@example.com');admin.get_by_label('Senha',exact=True).fill(password);admin.get_by_role('button',name='Entrar na aplicação').click()
+  expect(admin.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible();admin.goto(URL+'/#/online')
+  admin.locator('.x-record',has_text='Aluno Exemplo').click()
+  admin.get_by_label('Justificativa / parecer para a próxima ação',exact=True).fill('Identidade e documentação sintéticas conferidas pela Direção.')
+  admin.get_by_label('Conferi a identidade, os documentos e a legitimidade',exact=False).check();admin.get_by_role('button',name='Aprovar e criar matrícula em preparação',exact=True).click()
+  choice=admin.get_by_role('form',name='Alterar contrato vinculado')
+  expect(choice).to_be_visible()
+  def choose_contract(ident,reason):
+   choice.get_by_label('Contrato a vincular').select_option(ident)
+   choice.get_by_label('Justificativa da alteração do contrato',exact=True).fill(reason)
+   choice.get_by_role('button',name='Confirmar alteração do contrato',exact=True).click()
+   expect(admin.get_by_text('Nova revisão vinculada.',exact=False)).to_be_visible()
+  def issue_contract():
+   admin.get_by_role('button',name='Preparar contrato',exact=True).click()
+   admin.get_by_role('button',name='Emitir contrato da revisão aprovada',exact=True).click()
+   expect(admin.get_by_text('Contrato emitido da revisão aprovada.',exact=False)).to_be_visible()
+  choose_contract(first['id'],'Vincular contrato conferido para esta matrícula sintética.')
+  issue_contract()
+  a=client.get(base+'/admissions/'+data['id'],headers=headers).json();old_id=a['contract']['issued_document_id']
+  old_pdf=client.get('/api/v1/portal/admissions/'+data['id']+'/issued/'+old_id).content
+  response=client.patch(base+'/document-templates/'+first['id'],headers=headers,json={'version':first['version'],'body':'Contrato inicial atualizado de {{aluno.nome}} com {{escola.nome}}.'});assert response.is_success,response.text
+  admin.get_by_role('button',name='Atualizar modelos disponíveis',exact=True).click()
+  expect(admin.get_by_text('Modelos e revisões atualizados.',exact=False)).to_be_visible()
+  choose_contract(first['id'],'Atualizar o vínculo para a revisão mais recente do modelo.')
+  a=client.get(base+'/admissions/'+data['id'],headers=headers).json();assert a['contract_template_version']==2 and not a['contract']['issued_document_id']
+  issue_contract()
+  choose_contract(other['id'],'Trocar explicitamente o modelo do contrato desta matrícula.')
+  a=client.get(base+'/admissions/'+data['id'],headers=headers).json();assert a['contract_template_id']==other['id'] and a['contract_template_version']==1
+  issue_contract()
+  a=client.get(base+'/admissions/'+data['id'],headers=headers).json();assert len([d for d in a['issued_documents'] if d['kind']=='template'])==3
+  assert client.get('/api/v1/portal/admissions/'+data['id']+'/issued/'+old_id).content==old_pdf
+  assert client.get(base+'/admission-campaigns',headers=headers).json()[0]['contract_template_id'] is None
+  admin.get_by_text('Histórico de contratos emitidos',exact=True).click()
+  expect(admin.get_by_text('Histórico preservado',exact=False).first).to_be_visible()
+  for width in (390,1440):
+   admin.set_viewport_size({'width':width,'height':1000});assert admin.evaluate('document.documentElement.scrollWidth<=innerWidth')
+   admin.screenshot(path=str(OUT/f'contract-choice-{width}.png'),full_page=True)
+  assert not errors,errors
+  result={'status':'passed','checks':['Instância preexistente compartilhada selecionada sem integração legada','Botão WhatsApp disponível no fluxo da matrícula','Dois documentos anexados manualmente sem catálogo','Confirmação de código mantém inscrição aberta','Inscrição concluída pela interface com contato confirmado','Contrato vinculado na análise sem alterar campanha','Revisão atualizada pela interface após recarregar modelos','Troca para outro modelo v1 preserva três vias e downloads históricos'],'responsive':responsive,'javascript_errors':errors,'browser':browser.version,'external_delivery':'Não executada; código sintético da fila usado na confirmação','database':'SQLite temporário'}
   (OUT/'results.json').write_text(json.dumps(result,ensure_ascii=False,indent=2));print(json.dumps(result,ensure_ascii=False));browser.close()
 finally:
  proc.terminate();proc.wait(timeout=10);log.close()

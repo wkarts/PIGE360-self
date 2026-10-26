@@ -11,7 +11,7 @@ from cryptography import x509 as cryptography_x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.serialization import pkcs12
 from fastapi import APIRouter, File, Form, Header, Request, UploadFile
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, cast, func, select
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, cast, func, select, or_
 from sqlalchemy.orm import Mapped, mapped_column
 
 from . import models as m
@@ -210,8 +210,29 @@ def _store_revision(db, issued, pdf, actor_id, request, *, source, operation_key
     return revision
 
 
+def superseded_contract_filter(school_id):
+    kinds=('contract','contracts','contrato','contratos')
+    legacy_kind=select(m.DocumentTemplate.kind).where(m.DocumentTemplate.school_id==school_id,
+        m.DocumentTemplate.id==m.IssuedDocument.template_id).correlate(m.IssuedDocument).scalar_subquery()
+    kind=func.coalesce(m.IssuedDocument.snapshot['template_kind'].as_string(),legacy_kind)
+    is_contract=or_(*[(('_'+kind+'_').contains('_'+token+'_',autoescape=True)) for token in kinds])
+    replaced=select(m.Admission.id).where(m.Admission.school_id==school_id,
+        m.Admission.enrollment_id==m.IssuedDocument.enrollment_id,
+        m.Admission.contract_template_id.is_not(None),
+        or_(m.Admission.contract_template_id!=m.IssuedDocument.template_id,
+            cast(m.Admission.contract_template_version,String)!=m.IssuedDocument.template_version)).exists()
+    return is_contract & replaced
+
+
+def ensure_current_contract(db,issued):
+    if db.scalar(select(m.IssuedDocument.id).where(m.IssuedDocument.id==issued.id,
+        superseded_contract_filter(issued.school_id))):
+        fail(409,'Esta via está no histórico. Utilize o contrato atualmente vinculado à matrícula.')
+
+
 def auto_sign_issued_document(db, issued, actor_id, request):
     """Emite assinatura A1 antes de entregar o contrato ao responsável."""
+    ensure_current_contract(db,issued)
     if _company_revision(db,issued):
         return _company_revision(db,issued)
     if _latest(db, issued) and not applicant_first(issued):
@@ -243,6 +264,7 @@ def submit_external_signature(db, issued, signed_pdf, actor_id, request,
                               expected_signer_cpf=None, idempotency_key=None):
     """Só aceita uma nova assinatura sobre os bytes exatos do PDF da escola."""
     document = scoped(db, m.IssuedDocument, issued.id, issued.school_id)
+    ensure_current_contract(db,document)
     if idempotency_key and not re.fullmatch(r'[A-Za-z0-9._:-]{8,128}', idempotency_key):
         fail(422, 'Chave de idempotência inválida.')
     digest = _digest(signed_pdf)
@@ -424,10 +446,7 @@ def pending_signatures(db: DB, user: Actor, school: Scope,
     require(user, 'documents.validate')
     if not 1 <= limit <= 100 or not 0 <= offset <= 10000:
         fail(422, 'Paginação inválida.')
-    superseded=select(m.Admission.id).where(m.Admission.school_id==school.id,
-        m.Admission.enrollment_id==m.IssuedDocument.enrollment_id,
-        m.Admission.contract_template_id==m.IssuedDocument.template_id,
-        cast(m.Admission.contract_template_version,String)!=m.IssuedDocument.template_version).exists()
+    superseded=superseded_contract_filter(school.id)
     filters = (m.IssuedDocument.school_id == school.id,
                m.IssuedDocument.signature_status == 'pending_validation',~superseded)
     total = db.scalar(select(func.count()).select_from(m.IssuedDocument).where(*filters))
@@ -451,7 +470,7 @@ def unsigned_documents(db: DB, user: Actor, school: Scope, limit: int = 30, offs
     if not 1 <= limit <= 100 or not 0 <= offset <= 10000:
         fail(422, 'Paginação inválida.')
     filters = (m.IssuedDocument.school_id == school.id,
-               m.IssuedDocument.signature_status == 'unsigned')
+               m.IssuedDocument.signature_status == 'unsigned',~superseded_contract_filter(school.id))
     total = db.scalar(select(func.count()).select_from(m.IssuedDocument).where(*filters))
     rows = db.execute(select(m.IssuedDocument, m.Person.name).join(
         m.Student, m.Student.id == m.IssuedDocument.student_id).join(
@@ -523,6 +542,7 @@ def validate_external_signature(document_id: str, db: DB, user: Actor, school: S
         fail(403, 'A validação final exige direção ou administração.')
     lock_school(db, school.id)
     issued = scoped(db, m.IssuedDocument, document_id, school.id)
+    ensure_current_contract(db,issued)
     row = _latest(db, issued)
     if issued.signature_status != 'pending_validation' or not row or row.source != 'external_portal':
         fail(409, 'Somente uma assinatura pendente pode ser validada. Solicite novo envio se ela foi devolvida.')
@@ -567,6 +587,7 @@ def reject_external_signature(document_id: str, db: DB, user: Actor, school: Sco
         fail(422, 'Informe motivo entre 10 e 2000 caracteres.')
     lock_school(db, school.id)
     issued = scoped(db, m.IssuedDocument, document_id, school.id)
+    ensure_current_contract(db,issued)
     revision = _latest(db, issued)
     if issued.signature_status != 'pending_validation' or not revision or revision.source != 'external_portal':
         fail(409, 'Não há assinatura externa pendente para rejeitar.')

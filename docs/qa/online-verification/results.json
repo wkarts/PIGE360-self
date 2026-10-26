@@ -5,7 +5,10 @@
     "Botão WhatsApp disponível no fluxo da matrícula",
     "Dois documentos anexados manualmente sem catálogo",
     "Confirmação de código mantém inscrição aberta",
-    "Inscrição concluída pela interface com contato confirmado"
+    "Inscrição concluída pela interface com contato confirmado",
+    "Contrato vinculado na análise sem alterar campanha",
+    "Revisão atualizada pela interface após recarregar modelos",
+    "Troca para outro modelo v1 preserva três vias e downloads históricos"
   ],
   "responsive": {
     "320": true,

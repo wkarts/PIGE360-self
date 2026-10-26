@@ -146,7 +146,7 @@ def admission_output(db,obj,public=True):
     from .admission_reservations import state as reservation_state
     data['reservation']={'status':reservation_state(obj),'payment_deadline':obj.reserved_until.isoformat() if obj.reserved_until else None,
         'paid_at':obj.reservation_paid_at.isoformat() if obj.reservation_paid_at else None}
-    data['contract']={'signing_order':obj.contract_signing_order,'required':bool(selected_template),'template_id':selected_template,
+    data['contract']={'academic_year_id':db.get(m.ClassGroup,obj.class_group_id).academic_year_id,'signing_order':obj.contract_signing_order,'required':bool(selected_template),'template_id':selected_template,
                       'template_version':obj.contract_template_version,
                       'issued_document_id':contract.id if contract and (obj.contract_signing_order=='applicant_first' or contract.signature_status in ('company_signed','pending_validation','verified','rejected')) else None,
                       'signature_status':contract.signature_status if contract else 'awaiting_school'}
@@ -672,7 +672,7 @@ def issued(id:str,issued_id:str,request:Request,db:DB,account:Parent):
     if not obj.enrollment_id or not record or record.school_id!=obj.school_id or record.enrollment_id!=obj.enrollment_id:fail(404,'Documento não encontrado.')
     if obj.contract_signing_order!='applicant_first' and record.template_id and record.template_id==obj.contract_template_id and record.signature_status not in ('company_signed','pending_validation','verified','rejected'):
         fail(409,'A escola ainda está preparando a assinatura do contrato.')
-    if record.template_id and record.template_id==obj.contract_template_id:
+    if record.template_id:
         from .contract_signatures import latest_signed_file
         stored=latest_signed_file(db,record)
         if not stored:fail(409,'A versão assinada pela escola está indisponível.')

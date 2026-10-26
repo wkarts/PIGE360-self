@@ -1811,8 +1811,9 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                           key: state.schoolId+':'+state.page,
                           "school-id": state.schoolId,
                           page: state.page,
-                          permissions: state.user.permissions
-                        }, null, 8, ["school-id", "page", "permissions"]))
+                          permissions: state.user.permissions,
+                          role: state.user.role
+                        }, null, 8, ["school-id", "page", "permissions", "role"]))
                       : _createCommentVNode("", true),
                     (state.page==='diary')
                       ? (_openBlock(), _createBlock(_component_diary_panel, {
@@ -7514,31 +7515,90 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                             ? (_openBlock(), _createElementBlock("p", { key: 0 }, [_createTextVNode("Matrícula vinculada: "), _createElementVNode("strong", null, _toDisplayString(s.selected.enrollment.number), 1), _createTextVNode(" · " + _toDisplayString(label(s.selected.enrollment.status)) + ". Disponível também no menu Matrículas.", 1)]))
                             : _createCommentVNode("", true)
                         ]),
-                        (s.selected.contract?.required)
+                        (s.selected.contract?.required||canChangeContract())
                           ? (_openBlock(), _createElementBlock("section", {
                               key: 0,
                               class: "panel x-card"
                             }, [
                               _createElementVNode("h2", null, "Contrato desta matrícula"),
-                              (s.selected.status==='approved' && s.selected.contract.available_template_version && s.selected.contract.template_version && s.selected.contract.available_template_version>s.selected.contract.template_version && can('admissions.write') && can('documents.generate'))
+                              (s.selected.status==='approved' && s.selected.contract.available_template_version && s.selected.contract.template_version && s.selected.contract.available_template_version>s.selected.contract.template_version && canChangeContract())
                                 ? (_openBlock(), _createElementBlock("div", {
                                     key: 0,
                                     class: "alert warning"
                                   }, [_createElementVNode("p", null, "O modelo possui a revisão v" + _toDisplayString(s.selected.contract.available_template_version) + ". A via atual continua vinculada à revisão aprovada. Para corrigir o conteúdo desta inscrição, a Direção/Administração deve registrar uma justificativa e vincular a nova revisão. A família precisará assinar a nova via; arquivos e assinaturas anteriores ficam no histórico.", 1), _createElementVNode("button", {
                                     class: "btn btn-secondary",
                                     onClick: reviseContract,
-                                    disabled: s.reason.trim().length<10
+                                    disabled: s.busy||(s.contractChangeReason||s.reason).trim().length<10
                                   }, "Vincular nova revisão do contrato", 8, ["onClick", "disabled"])]))
                                 : _createCommentVNode("", true),
-                              _createElementVNode("p", null, [_createTextVNode("Modelo " + _toDisplayString(templateName(s.selected.contract.template_id)) + " · revisão congelada v" + _toDisplayString(selectedContractVersion()), 1), (s.selected.contract_template_revision_sha256)
-                                ? (_openBlock(), _createElementBlock("span", {
-                                    key: 0,
-                                    class: "mono small"
-                                  }, " · SHA-256 " + _toDisplayString(s.selected.contract_template_revision_sha256), 1))
-                                : _createCommentVNode("", true)]),
-                              _createElementVNode("p", { class: "alert info" }, "A revisão foi preservada na aprovação. Alterar o modelo depois não muda este contrato. " + _toDisplayString(s.selected.contract.signing_order==='applicant_first'?'A família baixa o contrato, assina fora da aplicação e devolve o PDF. A instituição assina com A1 por último ao efetivar a matrícula.':'Este contrato preserva o fluxo anterior: escola primeiro, responsável depois.'), 1),
+                              (s.selected.contract.required)
+                                ? (_openBlock(), _createElementBlock("p", { key: 1 }, [_createTextVNode("Modelo " + _toDisplayString(templateName(s.selected.contract.template_id)) + " · revisão congelada v" + _toDisplayString(selectedContractVersion()), 1), (s.selected.contract_template_revision_sha256)
+                                    ? (_openBlock(), _createElementBlock("span", {
+                                        key: 0,
+                                        class: "mono small",
+                                        style: {"overflow-wrap":"anywhere"}
+                                      }, " · SHA-256 " + _toDisplayString(s.selected.contract_template_revision_sha256), 1))
+                                    : _createCommentVNode("", true)]))
+                                : _createCommentVNode("", true),
+                              (canChangeContract())
+                                ? (_openBlock(), _createElementBlock("form", {
+                                    key: 2,
+                                    onSubmit: _withModifiers(applyContractChoice, ["prevent"]),
+                                    class: "x-form spaced",
+                                    "aria-label": "Alterar contrato vinculado"
+                                  }, [
+                                    _createElementVNode("h3", null, "Atualizar versão ou trocar modelo"),
+                                    _createElementVNode("p", null, "Escolha a revisão atual do mesmo modelo ou outro contrato para esta matrícula. A mudança só ocorre ao confirmar e não altera o contrato das outras inscrições do processo."),
+                                    _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                                      type: "button",
+                                      class: "btn btn-secondary",
+                                      onClick: reloadContractTemplates,
+                                      disabled: s.busy
+                                    }, "Atualizar modelos disponíveis", 8, ["onClick", "disabled"])]),
+                                    _createElementVNode("label", null, [_createTextVNode("Contrato a vincular"), _withDirectives(_createElementVNode("select", {
+                                      "onUpdate:modelValue": $event => ((s.contractTargetId) = $event),
+                                      required: ""
+                                    }, [_createElementVNode("option", { value: "" }, "Selecione um contrato"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(admissionContractTemplates(), (t) => {
+                                      return (_openBlock(), _createElementBlock("option", {
+                                        key: t.id,
+                                        value: t.id
+                                      }, _toDisplayString(t.name) + " · revisão v" + _toDisplayString(t.version), 9, ["value"]))
+                                    }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, s.contractTargetId]])]),
+                                    (!admissionContractTemplates().length)
+                                      ? (_openBlock(), _createElementBlock("p", {
+                                          key: 0,
+                                          class: "alert info"
+                                        }, "Nenhum contrato ativo e vigente para este ano letivo. Cadastre ou ative o modelo em Modelos e contratos e atualize a lista."))
+                                      : _createCommentVNode("", true),
+                                    (s.contractTargetId && admissionContractTemplates().some(t=>t.id===s.contractTargetId) && !contractChoiceChanged())
+                                      ? (_openBlock(), _createElementBlock("p", {
+                                          key: 1,
+                                          class: "small muted"
+                                        }, "Este modelo já está vinculado à revisão atual. Atualize os modelos disponíveis para consultar alterações recentes."))
+                                      : _createCommentVNode("", true),
+                                    _createElementVNode("label", null, [_createTextVNode("Justificativa da alteração do contrato"), _withDirectives(_createElementVNode("textarea", {
+                                      "onUpdate:modelValue": $event => ((s.contractChangeReason) = $event),
+                                      minlength: "10",
+                                      maxlength: "1000",
+                                      rows: "3",
+                                      required: "",
+                                      placeholder: "Descreva a correção ou o motivo da troca de modelo."
+                                    }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.contractChangeReason]])]),
+                                    _createElementVNode("p", { class: "alert warning" }, "Arquivos e assinaturas anteriores ficam no histórico. A nova via deverá ser preparada, emitida e assinada novamente pelo responsável antes da efetivação."),
+                                    _createElementVNode("button", {
+                                      class: "btn btn-primary",
+                                      disabled: s.busy||!contractChoiceChanged()||s.contractChangeReason.trim().length<10
+                                    }, "Confirmar alteração do contrato", 8, ["disabled"])
+                                  ], 40, ["onSubmit"]))
+                                : _createCommentVNode("", true),
+                              (s.selected.contract.required)
+                                ? (_openBlock(), _createElementBlock("p", {
+                                    key: 3,
+                                    class: "alert info"
+                                  }, "A revisão foi preservada na aprovação. Alterar o modelo depois não muda este contrato. " + _toDisplayString(s.selected.contract.signing_order==='applicant_first'?'A família baixa o contrato, assina fora da aplicação e devolve o PDF. A instituição assina com A1 por último ao efetivar a matrícula.':'Este contrato preserva o fluxo anterior: escola primeiro, responsável depois.'), 1))
+                                : _createCommentVNode("", true),
                               (s.selected.contract.issued_document_id)
-                                ? (_openBlock(), _createElementBlock("div", { key: 1 }, [_createElementVNode("p", null, [_createTextVNode("Situação: "), _createElementVNode("strong", null, _toDisplayString(contractStatus(s.selected.contract.signature_status)), 1)]), _createElementVNode("button", {
+                                ? (_openBlock(), _createElementBlock("div", { key: 4 }, [_createElementVNode("p", null, [_createTextVNode("Situação: "), _createElementVNode("strong", null, _toDisplayString(contractStatus(s.selected.contract.signature_status)), 1)]), _createElementVNode("button", {
                                     type: "button",
                                     class: "btn btn-secondary",
                                     onClick: downloadSignedContract
@@ -7549,7 +7609,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                                       }, "A revisão está na fila de Assinaturas e revisão do menu Modelos e contratos."))
                                     : _createCommentVNode("", true)]))
                                 : (s.selected.status==='approved' && can('documents.generate'))
-                                  ? (_openBlock(), _createElementBlock("div", { key: 2 }, [_createElementVNode("button", {
+                                  ? (_openBlock(), _createElementBlock("div", { key: 5 }, [_createElementVNode("button", {
                                       type: "button",
                                       class: "btn btn-secondary",
                                       onClick: previewFrozenContract,
@@ -7603,10 +7663,25 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                                       : _createCommentVNode("", true)]))
                                   : (!s.selected.contract.issued_document_id)
                                     ? (_openBlock(), _createElementBlock("p", {
-                                        key: 3,
+                                        key: 6,
                                         class: "small muted"
                                       }, "O contrato pode ser emitido após a aprovação e a criação da matrícula em preparação."))
-                                    : _createCommentVNode("", true)
+                                    : _createCommentVNode("", true),
+                              (s.selected.issued_documents.some(d=>d.kind==='template'))
+                                ? (_openBlock(), _createElementBlock("details", {
+                                    key: 7,
+                                    class: "spaced"
+                                  }, [_createElementVNode("summary", null, "Histórico de contratos emitidos"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.selected.issued_documents.filter(d=>d.kind==='template'), (d) => {
+                                    return (_openBlock(), _createElementBlock("div", {
+                                      key: d.id,
+                                      class: "x-line"
+                                    }, [_createElementVNode("span", null, [_createTextVNode(_toDisplayString(templateName(d.template_id)) + " · revisão v" + _toDisplayString(d.template_version) + " · " + _toDisplayString(contractStatus(d.signature_status)), 1), _createElementVNode("small", null, _toDisplayString(dateTime(d.created_at)) + " · " + _toDisplayString(d.id===s.selected.contract.issued_document_id?'Via atual':'Histórico preservado'), 1)]), _createElementVNode("button", {
+                                      type: "button",
+                                      class: "btn btn-secondary",
+                                      onClick: $event => (downloadContractHistory(d.id))
+                                    }, "Baixar via do histórico", 8, ["onClick"])]))
+                                  }), 128))]))
+                                : _createCommentVNode("", true)
                             ]))
                           : _createCommentVNode("", true),
                         (s.selected.reservation && s.selected.reservation.status!=='none')
