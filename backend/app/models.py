@@ -399,7 +399,18 @@ class DocumentTemplate(Record, Scoped, Base):
     source_docx_file_id: Mapped[str | None] = mapped_column(ForeignKey('files.id'))
     docx_mapping: Mapped[list] = mapped_column(JSON,default=list)
     docx_reviewed: Mapped[bool] = mapped_column(Boolean,default=False)
+    field_options: Mapped[dict] = mapped_column(JSON, default=dict, server_default='{}')
     __table_args__ = (CheckConstraint('valid_until IS NULL OR valid_from IS NULL OR valid_until >= valid_from', name='template_validity'),)
+
+class ContractPreparationDraft(Record, Scoped, Base):
+    __tablename__ = 'contract_preparation_drafts'
+    enrollment_id: Mapped[str] = mapped_column(ForeignKey('enrollments.id'))
+    template_id: Mapped[str] = mapped_column(ForeignKey('document_templates.id'))
+    template_version: Mapped[int] = mapped_column(Integer)
+    values: Mapped[dict] = mapped_column(JSON, default=dict)
+    updated_by: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    __table_args__ = (UniqueConstraint('school_id', 'enrollment_id', 'template_id', 'template_version', name='uq_contract_preparation_revision'),)
+
 
 class DocumentTemplateRevision(Record, Scoped, Base):
     """Cópia imutável por API de cada versão do modelo antes de emitir."""

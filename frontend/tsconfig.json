@@ -17,6 +17,7 @@
     "src/api.ts",
     "src/support-widget.ts",
     "src/online-types.ts",
+    "src/contract-fields.ts",
     "src/expansion.ts",
     "src/dialogs.ts",
     "src/workspace.ts",

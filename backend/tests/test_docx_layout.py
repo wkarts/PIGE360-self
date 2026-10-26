@@ -29,6 +29,33 @@ def test_multirun_mapping_preserves_table_style_and_media():
         text=''.join(root.itertext());assert 'Aluno Sintético' in text and 'XXXXXX' not in text
 
 
+def test_optional_docx_fields_are_omitted_in_headers_tables_and_footer():
+    original=io.BytesIO()
+    with zipfile.ZipFile(original,'w') as z:
+        z.writestr('word/document.xml','<w:document xmlns:w="'+NS['w']+'"><w:body><w:p><w:r><w:t>Nome: {{aluno.</w:t></w:r><w:r><w:t>nome}} · CPF: {{aluno.cpf}}</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t>Testemunha: {{testemunha1.nome}}</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p><w:r><w:t>Cláusula fixa preservada.</w:t></w:r></w:p></w:body></w:document>')
+        z.writestr('word/header1.xml','<w:hdr xmlns:w="'+NS['w']+'"><w:p><w:r><w:t>Referência: {{referencia.codigo}}</w:t></w:r></w:p></w:hdr>')
+        z.writestr('word/footer1.xml','<w:ftr xmlns:w="'+NS['w']+'"><w:p><w:r><w:t>Data: {{assinatura.data}}</w:t></w:r></w:p></w:ftr>')
+    rendered=fill(original.getvalue(),{'aluno.nome':'Aluno conferido'})
+    with zipfile.ZipFile(io.BytesIO(rendered)) as z:
+        for name in ('word/document.xml','word/header1.xml','word/footer1.xml'):
+            text=''.join(etree.fromstring(z.read(name)).itertext())
+            assert '{{' not in text and '}}' not in text
+            assert all(label not in text for label in ('CPF:', 'Testemunha:', 'Referência:', 'Data:'))
+        text=''.join(etree.fromstring(z.read('word/document.xml')).itertext())
+        assert 'Aluno conferido' in text and 'Cláusula fixa preservada.' in text
+
+
+def test_empty_optional_paragraph_keeps_inline_artwork_and_table_row():
+    source = io.BytesIO()
+    with zipfile.ZipFile(source, 'w') as z:
+        z.writestr('word/document.xml', '<w:document xmlns:w="'+NS['w']+'"><w:body><w:tbl><w:tr><w:tc><w:p><w:r><w:drawing/><w:t>Nome: {{testemunha1.nome}}</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>')
+    with zipfile.ZipFile(io.BytesIO(fill(source.getvalue(), {}))) as z:
+        root = etree.fromstring(z.read('word/document.xml'))
+        assert root.find('.//w:drawing', NS) is not None
+        assert root.find('.//w:tr', NS) is not None
+        assert not ''.join(root.itertext()).strip()
+
+
 def test_preserved_source_review_pdf_and_immutable_issue(api):
     original=document()
     imported=api.client.post(api.base+'/document-sources/inspect',headers=api.headers,files={'file':('synthetic.docx',original)})
@@ -77,7 +104,7 @@ def test_form_fields_use_private_registry_and_never_infer_image_consent(api):
     catalog=api.catalogs();student=api.student('Aluno ficha privada',adult=True)
     api.patch('/students/'+student['id'],{'version':student['version'],'data':{'health_plan':'Plano sintético','allergies':'Registro sintético','special_needs':'Informação conferida'}})
     enrollment=api.enroll(student,catalog['group'])
-    template=api.post('/document-templates',{'name':'Ficha privada sintética','kind':'declaration','body':'Saúde: {{aluno.alergias}}. Imagem: {{consentimento.imagem}}.'})
+    template=api.post('/document-templates',{'name':'Ficha privada sintética','kind':'declaration','body':'Saúde: {{aluno.alergias}}. Imagem: {{consentimento.imagem}}.','field_options':{'consentimento.imagem':{'required':True}}})
     preview=api.post('/document-templates/'+template['id']+'/preview',{'enrollment_id':enrollment['id']},200)
     assert preview['variables']['aluno.alergias']=='Registro sintético'
     assert preview['missing_fields']==['consentimento.imagem']

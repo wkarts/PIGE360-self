@@ -1,6 +1,6 @@
 """Operação interna das inscrições: análise, conciliação cadastral e efetivação auditada."""
-from datetime import date
-from fastapi import APIRouter, Query, Request
+from datetime import date, datetime, UTC
+from fastapi import APIRouter, Query, Request, HTTPException
 from sqlalchemy import func, select
 from . import models as m, schemas, online_schemas as s
 from .common import audit, output, number
@@ -16,6 +16,47 @@ def admission_readiness(db:DB,user:Actor,school:Scope):
     require(user,'admissions.read')
     from .portal_access import readiness
     return readiness(db,school)
+
+
+@router.get('/admissions/{id}/readiness')
+def enrollment_readiness(id: str, db: DB, user: Actor, school: Scope):
+    require(user, 'admissions.read')
+    admission = scoped(db, m.Admission, id, school.id)
+    checks = []
+    def add(code, label, ready, message, stage):
+        checks.append({'code': code, 'label': label, 'ready': ready, 'message': message, 'stage': stage})
+    if admission.status == 'enrolled':
+        return {'ready': True, 'checks': [], 'enrolled': True}
+    if admission.status != 'approved' or not admission.enrollment_id:
+        add('approval', 'Aprovação', False, 'Confira os dados e aprove a inscrição para preparar a matrícula.', 'documents')
+        return {'ready': False, 'checks': checks, 'enrolled': False}
+    enrollment = scoped(db, m.Enrollment, admission.enrollment_id, school.id)
+    from .admission_reservations import gate
+    for code, label, operation, stage in [('reservation', 'Reserva e vaga', lambda: gate(db, enrollment.id), 'finalize'),
+            ('payment', 'Pagamento exigido', lambda: payment_gate(db, school.id, enrollment.id), 'charges'),
+            ('contract', 'Contrato e assinatura do responsável', lambda: contract_gate(db, school.id, enrollment.id), 'contract')]:
+        try: operation(); add(code, label, True, 'Conferido', stage)
+        except HTTPException as exc: add(code, label, False, str(exc.detail), stage)
+    from .documents import checklist
+    group = scoped(db, m.ClassGroup, enrollment.class_group_id, school.id)
+    pending = [x['name'] for x in checklist(db, school.id, enrollment.student_id, group.grade_id) if x['required'] and not x['complete']]
+    add('documents', 'Documentação', not (pending and school.document_policy == 'block'),
+        'Documentação pendente: ' + ', '.join(pending) if pending else 'Conferida', 'documents')
+    from .registry import occupancy
+    has_capacity = occupancy(db, group.id, enrollment.id) < group.capacity
+    add('capacity', 'Vaga na turma', has_capacity,
+        'Disponibilidade conferida na turma' if has_capacity else 'Turma sem vagas disponíveis.', 'finalize')
+    if admission.contract_template_id and admission.contract_signing_order == 'applicant_first':
+        from .contract_signatures import _certificate
+        certificate = _certificate(db, school.id)
+        expires = certificate.expires_at.replace(tzinfo=UTC) if certificate and certificate.expires_at.tzinfo is None else certificate.expires_at if certificate else None
+        add('certificate', 'Certificado A1 da escola', bool(expires and expires > datetime.now(UTC)),
+            'Configurado e dentro da validade' if expires and expires > datetime.now(UTC) else 'A Direção deve configurar um certificado A1 válido.', 'finalize')
+        from .access_security import permissions_for
+        allowed = user.role in {'admin', 'direction'} and 'documents.generate' in permissions_for(user)
+        add('authority', 'Conclusão pela Direção/Administração', allowed,
+            'Perfil autorizado' if allowed else 'A assinatura institucional final exige Direção ou Administração com permissão de emissão.', 'finalize')
+    return {'ready': all(item['ready'] for item in checks), 'checks': checks, 'enrolled': False}
 
 @router.get('/admission-campaigns')
 def campaigns(db:DB,user:Actor,school:Scope):
