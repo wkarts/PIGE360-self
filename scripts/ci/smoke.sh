@@ -32,7 +32,7 @@ values={'APP_SECRET_KEY':secrets.token_urlsafe(48),'SETUP_TOKEN':secrets.token_u
         'STORAGE_ACCESS_KEY':'pige360minio','STORAGE_ENDPOINT_URL':'http://minio:9000', 'APP_ENV':'production',
         # Docker allocates the surface ports atomically; probes discover them.
         # The public Host stays explicit, as with a reverse proxy in production.
-        'PORTAL_PUBLIC_URL':'http://portal.smoke.test','PORTAL_PORT':'0','WEBSITE_PORT':'0',
+        'PORTAL_PUBLIC_URL':'http://localhost','PORTAL_PORT':'0','WEBSITE_PORT':'0',
         'PORTAL_BIND':'127.0.0.1','WEBSITE_BIND':'127.0.0.1',
         'WEBSITE_INTERNAL_TOKEN':secrets.token_urlsafe(36),'PORTAL_INTERNAL_TOKEN':secrets.token_urlsafe(48),'APP_URL':f'http://127.0.0.1:{app_port}','APP_PORT':str(app_port),'APP_BIND':'127.0.0.1',
         'COOKIE_SECURE':'false','ALLOWED_HOSTS':'localhost,127.0.0.1',

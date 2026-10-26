@@ -57,7 +57,7 @@ exit 69
                 self.assertEqual((deployment / name / 'preserve-me').read_bytes(), b'existing installation')
             self.assertEqual(list(isolated_tmp.iterdir()), [], 'Diretório temporário do smoke não foi limpo')
             self.assertEqual(set(captured_ports.read_text().splitlines()), {
-                'PORTAL_PORT=0', 'WEBSITE_PORT=0', 'PORTAL_PUBLIC_URL=http://portal.smoke.test'})
+                'PORTAL_PORT=0', 'WEBSITE_PORT=0', 'PORTAL_PUBLIC_URL=http://localhost'})
 
 
 if __name__ == '__main__':

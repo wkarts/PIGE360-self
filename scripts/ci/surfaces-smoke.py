@@ -21,7 +21,7 @@ def surface_url(service):
     if not re.fullmatch(r'127\.0\.0\.1:[1-9][0-9]*',address):raise AssertionError(f'Publicação loopback inválida para {service}: {address}')
     return 'http://'+address
 website_url,portal_url=surface_url('website'),surface_url('portal')
-portal_headers={'Host':'portal.smoke.test'}
+portal_headers={'Host':'localhost'}
 url='http://'+address;password='Synthetic-Backup-2026!'
 client=httpx.Client(base_url=url,trust_env=False,timeout=30)
 setup=client.get('/api/v1/setup/status');assert setup.is_success and setup.json()['configured'],setup.text
