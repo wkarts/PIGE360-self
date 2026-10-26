@@ -5582,9 +5582,51 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                   : _createCommentVNode("", true)
               ]))
             : (_openBlock(), _createElementBlock(_Fragment, { key: 5 }, [
-                (state.section==='community')
+                (state.section==='account'||(!state.account.email_verified&&!state.account.phone_verified))
                   ? (_openBlock(), _createElementBlock("section", {
                       key: 0,
+                      class: "panel x-card",
+                      "aria-label": "Confirmar contato"
+                    }, [
+                      _createElementVNode("h2", null, "Confirmar meu e-mail ou WhatsApp"),
+                      _createElementVNode("p", null, "Confirme um contato para continuar. O código vence em 10 minutos. Seus dados e documentos ficam salvos nesta inscrição."),
+                      _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                        type: "button",
+                        class: "btn btn-secondary",
+                        disabled: !state.verification.email,
+                        onClick: $event => (verifyRequest('email'))
+                      }, "Enviar código por e-mail", 8, ["disabled", "onClick"]), _createElementVNode("button", {
+                        type: "button",
+                        class: "btn btn-secondary",
+                        disabled: !state.verification.whatsapp,
+                        onClick: $event => (verifyRequest('whatsapp'))
+                      }, "Enviar código por WhatsApp", 8, ["disabled", "onClick"])]),
+                      (!state.verification.whatsapp)
+                        ? (_openBlock(), _createElementBlock("p", {
+                            key: 0,
+                            class: "portal-hint"
+                          }, [_createTextVNode(_toDisplayString(state.verification.whatsapp_message) + " ", 1), _createElementVNode("button", {
+                            type: "button",
+                            class: "link-button",
+                            onClick: $event => (selectSection('account'))
+                          }, "Meus dados de contato", 8, ["onClick"])]))
+                        : _createCommentVNode("", true),
+                      _createElementVNode("form", {
+                        onSubmit: _withModifiers(verifyConfirm, ["prevent"]),
+                        class: "x-form"
+                      }, [_createElementVNode("label", null, [_createTextVNode("Código recebido"), _withDirectives(_createElementVNode("input", {
+                        "onUpdate:modelValue": $event => ((state.code) = $event),
+                        inputmode: "numeric",
+                        autocomplete: "one-time-code",
+                        pattern: "[0-9]{6}",
+                        maxlength: "6",
+                        required: ""
+                      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.code]])]), _createElementVNode("button", { class: "btn btn-primary" }, "Confirmar contato")], 40, ["onSubmit"])
+                    ]))
+                  : _createCommentVNode("", true),
+                (state.section==='community')
+                  ? (_openBlock(), _createElementBlock("section", {
+                      key: 1,
                       class: "panel x-card"
                     }, [(_openBlock(), _createBlock(_component_school_community, {
                       key: state.schoolId,
@@ -5593,7 +5635,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                     }, null, 8, ["portal-mode", "school-id"]))]))
                   : _createCommentVNode("", true),
                 (state.section==='learning')
-                  ? (_openBlock(), _createElementBlock("section", { key: 1 }, [(!state.diaryAccess.students.length)
+                  ? (_openBlock(), _createElementBlock("section", { key: 2 }, [(!state.diaryAccess.students.length)
                       ? (_openBlock(), _createElementBlock("div", {
                           key: 0,
                           class: "alert info"
@@ -5607,202 +5649,190 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                   : _createCommentVNode("", true),
                 (state.section==='account')
                   ? (_openBlock(), _createElementBlock("section", {
-                      key: 2,
+                      key: 3,
                       class: "panel x-card"
+                    }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "MINHA CONTA"), _createElementVNode("h2", null, _toDisplayString(state.account.name), 1), _createElementVNode("p", null, _toDisplayString(state.account.email) + " · " + _toDisplayString(state.account.email_verified?'E-mail confirmado':'E-mail não confirmado') + " · " + _toDisplayString(state.account.phone_verified?'Telefone confirmado':'Telefone não confirmado'), 1)]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                      class: "btn btn-secondary",
+                      onClick: refresh
+                    }, "Atualizar", 8, ["onClick"]), _createElementVNode("button", {
+                      class: "btn btn-secondary",
+                      onClick: logout
+                    }, "Sair", 8, ["onClick"])])]), _createElementVNode("details", {
+                      id: "portal-profile",
+                      open: state.profileOpen,
+                      onToggle: $event => (state.profileOpen=$event.target.open)
+                    }, [_createElementVNode("summary", null, "Meus dados de contato"), _createElementVNode("form", {
+                      onSubmit: _withModifiers(saveProfile, ["prevent"]),
+                      class: "x-form"
                     }, [
-                      _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "MINHA CONTA"), _createElementVNode("h2", null, _toDisplayString(state.account.name), 1), _createElementVNode("p", null, _toDisplayString(state.account.email) + " · " + _toDisplayString(state.account.email_verified?'E-mail confirmado':'E-mail não confirmado') + " · " + _toDisplayString(state.account.phone_verified?'Telefone confirmado':'Telefone não confirmado'), 1)]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
-                        class: "btn btn-secondary",
-                        onClick: refresh
-                      }, "Atualizar", 8, ["onClick"]), _createElementVNode("button", {
-                        class: "btn btn-secondary",
-                        onClick: logout
-                      }, "Sair", 8, ["onClick"])])]),
-                      _createElementVNode("details", {
-                        id: "portal-profile",
-                        open: state.profileOpen,
-                        onToggle: $event => (state.profileOpen=$event.target.open)
-                      }, [_createElementVNode("summary", null, "Meus dados de contato"), _createElementVNode("form", {
-                        onSubmit: _withModifiers(saveProfile, ["prevent"]),
-                        class: "x-form"
-                      }, [
-                        (state.profileOpen)
-                          ? (_openBlock(), _createBlock(_component_assist_panel, {
-                              key: state.account.id+state.profileReadSource,
-                              target: state.account,
-                              fields: personAssistFields.filter(k=>k!=='email'),
-                              request: assistRequest,
-                              root: "/portal",
-                              label: 'responsável desta conta · '+state.account.name,
-                              source: state.profileReadSource
-                            }, null, 8, ["target", "fields", "request", "label", "source"]))
-                          : _createCommentVNode("", true),
-                        _createElementVNode("div", { class: "x-grid" }, [
-                          _createElementVNode("label", null, [_createTextVNode("Seu nome"), _withDirectives(_createElementVNode("input", {
-                            "onUpdate:modelValue": $event => ((state.account.name) = $event),
-                            required: "",
-                            maxlength: "180"
-                          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.account.name]])]),
-                          _createElementVNode("label", null, [_createTextVNode("CPF"), _withDirectives(_createElementVNode("input", {
-                            "onUpdate:modelValue": $event => ((state.account.cpf) = $event),
-                            onBlur: $event => (state.account.cpf=formatCPF(state.account.cpf)),
-                            maxlength: "14",
-                            inputmode: "numeric"
-                          }, null, 40, ["onUpdate:modelValue", "onBlur"]), [[_vModelText, state.account.cpf]])]),
-                          _createElementVNode("label", null, [_createTextVNode("Telefone / WhatsApp"), _withDirectives(_createElementVNode("input", {
-                            "onUpdate:modelValue": $event => ((state.account.phone) = $event),
-                            onBlur: $event => (state.account.phone=formatPhone(state.account.phone)),
-                            type: "tel",
-                            maxlength: "24"
-                          }, null, 40, ["onUpdate:modelValue", "onBlur"]), [[_vModelText, state.account.phone]])]),
-                          _createElementVNode("label", null, [_createTextVNode("Endereço"), _withDirectives(_createElementVNode("input", {
-                            "onUpdate:modelValue": $event => ((state.account.address) = $event),
-                            maxlength: "400"
-                          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.account.address]])])
-                        ]),
-                        _createElementVNode("label", { class: "x-check" }, [_withDirectives(_createElementVNode("input", {
-                          type: "checkbox",
-                          "onUpdate:modelValue": $event => ((state.account.whatsapp_opt_in) = $event)
-                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, state.account.whatsapp_opt_in]]), _createTextVNode("Autorizo avisos deste processo por WhatsApp.")]),
-                        _createElementVNode("p", null, "Alterar o telefone exige nova verificação. O cadastro oficial da escola só pode ser alterado pela Secretaria."),
-                        _createElementVNode("details", null, [_createElementVNode("summary", null, "Identificação e endereço detalhado do responsável"), _createElementVNode("div", { class: "x-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(detailFields, ([key,caption]) => {
-                          return (_openBlock(), _createElementBlock("label", { key: key }, [_createTextVNode(_toDisplayString(caption), 1), _withDirectives(_createElementVNode("input", {
-                            "onUpdate:modelValue": $event => ((state.account[key]) = $event),
-                            type: key==='birth_date'?'date':'text'
-                          }, null, 8, ["onUpdate:modelValue", "type"]), [[_vModelDynamic, state.account[key]]])]))
-                        }), 128))])]),
-                        _createElementVNode("button", { class: "btn btn-secondary" }, "Salvar meus dados")
-                      ], 40, ["onSubmit"])], 40, ["open", "onToggle"]),
-                      _createElementVNode("details", { onToggle: $event => ($event.target.open && mfa.manage()) }, [_createElementVNode("summary", null, "Segurança da minha conta"), _createElementVNode("section", { class: "mfa-box" }, [(mfa.state.challenge || mfa.state.codes.length)
-                        ? (_openBlock(), _createElementBlock("div", {
-                            key: 0,
-                            class: "mfa-box",
-                            "aria-live": "polite"
-                          }, [(mfa.state.error)
-                            ? (_openBlock(), _createElementBlock("div", {
+                      (state.profileOpen)
+                        ? (_openBlock(), _createBlock(_component_assist_panel, {
+                            key: state.account.id+state.profileReadSource,
+                            target: state.account,
+                            fields: personAssistFields.filter(k=>k!=='email'),
+                            request: assistRequest,
+                            root: "/portal",
+                            label: 'responsável desta conta · '+state.account.name,
+                            source: state.profileReadSource
+                          }, null, 8, ["target", "fields", "request", "label", "source"]))
+                        : _createCommentVNode("", true),
+                      _createElementVNode("div", { class: "x-grid" }, [
+                        _createElementVNode("label", null, [_createTextVNode("Seu nome"), _withDirectives(_createElementVNode("input", {
+                          "onUpdate:modelValue": $event => ((state.account.name) = $event),
+                          required: "",
+                          maxlength: "180"
+                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.account.name]])]),
+                        _createElementVNode("label", null, [_createTextVNode("CPF"), _withDirectives(_createElementVNode("input", {
+                          "onUpdate:modelValue": $event => ((state.account.cpf) = $event),
+                          onBlur: $event => (state.account.cpf=formatCPF(state.account.cpf)),
+                          maxlength: "14",
+                          inputmode: "numeric"
+                        }, null, 40, ["onUpdate:modelValue", "onBlur"]), [[_vModelText, state.account.cpf]])]),
+                        _createElementVNode("label", null, [_createTextVNode("Telefone / WhatsApp"), _withDirectives(_createElementVNode("input", {
+                          "onUpdate:modelValue": $event => ((state.account.phone) = $event),
+                          onBlur: $event => (state.account.phone=formatPhone(state.account.phone)),
+                          type: "tel",
+                          maxlength: "24"
+                        }, null, 40, ["onUpdate:modelValue", "onBlur"]), [[_vModelText, state.account.phone]])]),
+                        _createElementVNode("label", null, [_createTextVNode("Endereço"), _withDirectives(_createElementVNode("input", {
+                          "onUpdate:modelValue": $event => ((state.account.address) = $event),
+                          maxlength: "400"
+                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.account.address]])])
+                      ]),
+                      _createElementVNode("label", { class: "x-check" }, [_withDirectives(_createElementVNode("input", {
+                        type: "checkbox",
+                        "onUpdate:modelValue": $event => ((state.account.whatsapp_opt_in) = $event)
+                      }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, state.account.whatsapp_opt_in]]), _createTextVNode("Autorizo avisos deste processo por WhatsApp.")]),
+                      _createElementVNode("p", null, "Alterar o telefone exige nova verificação. O cadastro oficial da escola só pode ser alterado pela Secretaria."),
+                      _createElementVNode("details", null, [_createElementVNode("summary", null, "Identificação e endereço detalhado do responsável"), _createElementVNode("div", { class: "x-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(detailFields, ([key,caption]) => {
+                        return (_openBlock(), _createElementBlock("label", { key: key }, [_createTextVNode(_toDisplayString(caption), 1), _withDirectives(_createElementVNode("input", {
+                          "onUpdate:modelValue": $event => ((state.account[key]) = $event),
+                          type: key==='birth_date'?'date':'text'
+                        }, null, 8, ["onUpdate:modelValue", "type"]), [[_vModelDynamic, state.account[key]]])]))
+                      }), 128))])]),
+                      _createElementVNode("button", { class: "btn btn-secondary" }, "Salvar meus dados")
+                    ], 40, ["onSubmit"])], 40, ["open", "onToggle"]), _createElementVNode("details", { onToggle: $event => ($event.target.open && mfa.manage()) }, [_createElementVNode("summary", null, "Segurança da minha conta"), _createElementVNode("section", { class: "mfa-box" }, [(mfa.state.challenge || mfa.state.codes.length)
+                      ? (_openBlock(), _createElementBlock("div", {
+                          key: 0,
+                          class: "mfa-box",
+                          "aria-live": "polite"
+                        }, [(mfa.state.error)
+                          ? (_openBlock(), _createElementBlock("div", {
+                              key: 0,
+                              role: "alert",
+                              class: "alert error"
+                            }, _toDisplayString(mfa.state.error), 1))
+                          : _createCommentVNode("", true), (mfa.state.codes.length)
+                          ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
+                              _createElementVNode("h2", null, "Guarde seus códigos de recuperação"),
+                              _createElementVNode("p", null, "Use um código se perder o autenticador. Cada código funciona uma única vez; eles não serão exibidos novamente."),
+                              _createElementVNode("div", { class: "mfa-codes" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(mfa.state.codes, (code) => {
+                                return (_openBlock(), _createElementBlock("code", { key: code }, _toDisplayString(code), 1))
+                              }), 128))]),
+                              _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                                class: "btn btn-secondary",
+                                type: "button",
+                                onClick: mfa.downloadCodes
+                              }, "Salvar códigos", 8, ["onClick"]), _createElementVNode("button", {
+                                class: "btn btn-primary",
+                                type: "button",
+                                disabled: mfa.state.busy,
+                                onClick: mfa.acknowledge
+                              }, "Guardei os códigos · Continuar", 8, ["disabled", "onClick"])])
+                            ], 64))
+                          : (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [
+                              _createElementVNode("h2", null, _toDisplayString(mfa.state.enrolling?'Ative a autenticação em duas etapas':'Confirme seu acesso'), 1),
+                              (mfa.state.enrolling)
+                                ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createElementVNode("p", null, "Adicione esta conta ao seu aplicativo autenticador e informe o código gerado."), (mfa.state.qr)
+                                    ? (_openBlock(), _createElementBlock("img", {
+                                        key: 0,
+                                        src: mfa.state.qr,
+                                        class: "mfa-qr",
+                                        alt: "QR Code para configurar seu autenticador"
+                                      }, null, 8, ["src"]))
+                                    : _createCommentVNode("", true), _createElementVNode("details", null, [_createElementVNode("summary", null, "Digitar chave manualmente"), _createElementVNode("code", { class: "mfa-secret" }, _toDisplayString(mfa.state.secret), 1)])], 64))
+                                : (_openBlock(), _createElementBlock("p", { key: 1 }, "Informe o código do autenticador ou um código de recuperação.")),
+                              _createElementVNode("label", { class: "field" }, [_createTextVNode(_toDisplayString(mfa.state.enrolling?'Código de 6 dígitos':'Código do autenticador ou de recuperação'), 1), _withDirectives(_createElementVNode("input", {
+                                "onUpdate:modelValue": $event => ((mfa.state.code) = $event),
+                                autocomplete: "one-time-code",
+                                inputmode: mfa.state.enrolling?'numeric':'text',
+                                maxlength: "30",
+                                disabled: mfa.state.busy,
+                                onKeydown: _withKeys(_withModifiers(mfa.finish, ["prevent"]), ["enter"])
+                              }, null, 40, ["onUpdate:modelValue", "inputmode", "disabled", "onKeydown"]), [[_vModelText, mfa.state.code]])]),
+                              _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                                type: "button",
+                                class: "btn btn-secondary",
+                                disabled: mfa.state.busy,
+                                onClick: mfa.cancel
+                              }, "Voltar", 8, ["disabled", "onClick"]), _createElementVNode("button", {
+                                type: "button",
+                                class: "btn btn-primary",
+                                disabled: mfa.state.busy || !mfa.state.code,
+                                onClick: mfa.finish
+                              }, _toDisplayString(mfa.state.busy?'Validando…':'Confirmar'), 9, ["disabled", "onClick"])])
+                            ], 64))]))
+                      : (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
+                          _createElementVNode("h3", null, "Autenticação em duas etapas"),
+                          _createElementVNode("p", null, _toDisplayString(mfa.state.status.enabled?'2FA ativado nesta conta.':'2FA ainda não ativado nesta conta.') + " " + _toDisplayString(mfa.state.status.required?'Obrigatório pela instituição.':'Uso opcional pela instituição.'), 1),
+                          (mfa.state.status.enabled)
+                            ? (_openBlock(), _createElementBlock("p", {
                                 key: 0,
-                                role: "alert",
-                                class: "alert error"
+                                class: "small muted"
+                              }, _toDisplayString(mfa.state.status.recovery_remaining) + " códigos de recuperação disponíveis.", 1))
+                            : _createCommentVNode("", true),
+                          (mfa.state.error)
+                            ? (_openBlock(), _createElementBlock("div", {
+                                key: 1,
+                                class: "alert error",
+                                role: "alert"
                               }, _toDisplayString(mfa.state.error), 1))
-                            : _createCommentVNode("", true), (mfa.state.codes.length)
-                            ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
-                                _createElementVNode("h2", null, "Guarde seus códigos de recuperação"),
-                                _createElementVNode("p", null, "Use um código se perder o autenticador. Cada código funciona uma única vez; eles não serão exibidos novamente."),
-                                _createElementVNode("div", { class: "mfa-codes" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(mfa.state.codes, (code) => {
-                                  return (_openBlock(), _createElementBlock("code", { key: code }, _toDisplayString(code), 1))
-                                }), 128))]),
-                                _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
-                                  class: "btn btn-secondary",
-                                  type: "button",
-                                  onClick: mfa.downloadCodes
-                                }, "Salvar códigos", 8, ["onClick"]), _createElementVNode("button", {
-                                  class: "btn btn-primary",
-                                  type: "button",
-                                  disabled: mfa.state.busy,
-                                  onClick: mfa.acknowledge
-                                }, "Guardei os códigos · Continuar", 8, ["disabled", "onClick"])])
-                              ], 64))
-                            : (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [
-                                _createElementVNode("h2", null, _toDisplayString(mfa.state.enrolling?'Ative a autenticação em duas etapas':'Confirme seu acesso'), 1),
-                                (mfa.state.enrolling)
-                                  ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createElementVNode("p", null, "Adicione esta conta ao seu aplicativo autenticador e informe o código gerado."), (mfa.state.qr)
-                                      ? (_openBlock(), _createElementBlock("img", {
-                                          key: 0,
-                                          src: mfa.state.qr,
-                                          class: "mfa-qr",
-                                          alt: "QR Code para configurar seu autenticador"
-                                        }, null, 8, ["src"]))
-                                      : _createCommentVNode("", true), _createElementVNode("details", null, [_createElementVNode("summary", null, "Digitar chave manualmente"), _createElementVNode("code", { class: "mfa-secret" }, _toDisplayString(mfa.state.secret), 1)])], 64))
-                                  : (_openBlock(), _createElementBlock("p", { key: 1 }, "Informe o código do autenticador ou um código de recuperação.")),
-                                _createElementVNode("label", { class: "field" }, [_createTextVNode(_toDisplayString(mfa.state.enrolling?'Código de 6 dígitos':'Código do autenticador ou de recuperação'), 1), _withDirectives(_createElementVNode("input", {
-                                  "onUpdate:modelValue": $event => ((mfa.state.code) = $event),
-                                  autocomplete: "one-time-code",
-                                  inputmode: mfa.state.enrolling?'numeric':'text',
-                                  maxlength: "30",
-                                  disabled: mfa.state.busy,
-                                  onKeydown: _withKeys(_withModifiers(mfa.finish, ["prevent"]), ["enter"])
-                                }, null, 40, ["onUpdate:modelValue", "inputmode", "disabled", "onKeydown"]), [[_vModelText, mfa.state.code]])]),
-                                _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
-                                  type: "button",
-                                  class: "btn btn-secondary",
-                                  disabled: mfa.state.busy,
-                                  onClick: mfa.cancel
-                                }, "Voltar", 8, ["disabled", "onClick"]), _createElementVNode("button", {
-                                  type: "button",
-                                  class: "btn btn-primary",
-                                  disabled: mfa.state.busy || !mfa.state.code,
-                                  onClick: mfa.finish
-                                }, _toDisplayString(mfa.state.busy?'Validando…':'Confirmar'), 9, ["disabled", "onClick"])])
-                              ], 64))]))
-                        : (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
-                            _createElementVNode("h3", null, "Autenticação em duas etapas"),
-                            _createElementVNode("p", null, _toDisplayString(mfa.state.status.enabled?'2FA ativado nesta conta.':'2FA ainda não ativado nesta conta.') + " " + _toDisplayString(mfa.state.status.required?'Obrigatório pela instituição.':'Uso opcional pela instituição.'), 1),
-                            (mfa.state.status.enabled)
-                              ? (_openBlock(), _createElementBlock("p", {
-                                  key: 0,
-                                  class: "small muted"
-                                }, _toDisplayString(mfa.state.status.recovery_remaining) + " códigos de recuperação disponíveis.", 1))
-                              : _createCommentVNode("", true),
-                            (mfa.state.error)
-                              ? (_openBlock(), _createElementBlock("div", {
-                                  key: 1,
-                                  class: "alert error",
-                                  role: "alert"
-                                }, _toDisplayString(mfa.state.error), 1))
-                              : _createCommentVNode("", true),
-                            _createElementVNode("label", { class: "field" }, [_createTextVNode("Senha atual"), _withDirectives(_createElementVNode("input", {
-                              type: "password",
-                              "onUpdate:modelValue": $event => ((mfa.state.password) = $event),
-                              autocomplete: "current-password",
-                              maxlength: "128",
-                              disabled: mfa.state.busy
-                            }, null, 8, ["onUpdate:modelValue", "disabled"]), [[_vModelText, mfa.state.password]])]),
-                            (mfa.state.status.enabled)
-                              ? (_openBlock(), _createElementBlock("label", {
-                                  key: 2,
-                                  class: "field"
-                                }, [_createTextVNode("Código do autenticador ou de recuperação"), _withDirectives(_createElementVNode("input", {
-                                  "onUpdate:modelValue": $event => ((mfa.state.code) = $event),
-                                  autocomplete: "one-time-code",
-                                  maxlength: "30",
-                                  disabled: mfa.state.busy
-                                }, null, 8, ["onUpdate:modelValue", "disabled"]), [[_vModelText, mfa.state.code]])]))
-                              : _createCommentVNode("", true),
-                            _createElementVNode("div", { class: "actions" }, [(!mfa.state.status.enabled)
-                              ? (_openBlock(), _createElementBlock("button", {
-                                  key: 0,
-                                  class: "btn btn-primary",
-                                  type: "button",
-                                  disabled: mfa.state.busy || !mfa.state.password,
-                                  onClick: mfa.enroll
-                                }, "Configurar 2FA", 8, ["disabled", "onClick"]))
-                              : (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [_createElementVNode("button", {
-                                  type: "button",
-                                  class: "btn btn-secondary",
-                                  disabled: mfa.state.busy || !mfa.state.password || !mfa.state.code,
-                                  onClick: mfa.recovery
-                                }, "Gerar novos códigos", 8, ["disabled", "onClick"]), (!mfa.state.status.required)
-                                  ? (_openBlock(), _createElementBlock("button", {
-                                      key: 0,
-                                      type: "button",
-                                      class: "btn btn-secondary",
-                                      disabled: mfa.state.busy || !mfa.state.password || !mfa.state.code,
-                                      onClick: mfa.disable
-                                    }, "Desativar 2FA", 8, ["disabled", "onClick"]))
-                                  : _createCommentVNode("", true)], 64))])
-                          ], 64))])], 40, ["onToggle"]),
-                      _createElementVNode("details", { open: !state.account.email_verified&&!state.account.phone_verified }, [_createElementVNode("summary", null, "Confirmar meu e-mail ou telefone"), _createElementVNode("p", null, "A escola pode exigir essa confirmação antes do envio. O código vence em 10 minutos."), _createElementVNode("div", { class: "x-grid" }, [_createElementVNode("form", { onSubmit: _withModifiers(verifyRequest, ["prevent"]) }, [_createElementVNode("label", null, [_createTextVNode("Receber código por"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.verifyChannel) = $event) }, [_createElementVNode("option", { value: "email" }, "E-mail"), _createElementVNode("option", { value: "whatsapp" }, "WhatsApp informado na conta")], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.verifyChannel]])]), _createElementVNode("button", { class: "btn btn-secondary" }, "Enviar código")], 40, ["onSubmit"]), _createElementVNode("form", { onSubmit: _withModifiers(verifyConfirm, ["prevent"]) }, [_createElementVNode("label", null, [_createTextVNode("Código recebido"), _withDirectives(_createElementVNode("input", {
-                        "onUpdate:modelValue": $event => ((state.code) = $event),
-                        inputmode: "numeric",
-                        pattern: "[0-9]{6}",
-                        maxlength: "6",
-                        required: "",
-                        autocomplete: "one-time-code"
-                      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.code]])]), _createElementVNode("button", { class: "btn btn-primary" }, "Confirmar contato")], 40, ["onSubmit"])])], 8, ["open"])
-                    ]))
+                            : _createCommentVNode("", true),
+                          _createElementVNode("label", { class: "field" }, [_createTextVNode("Senha atual"), _withDirectives(_createElementVNode("input", {
+                            type: "password",
+                            "onUpdate:modelValue": $event => ((mfa.state.password) = $event),
+                            autocomplete: "current-password",
+                            maxlength: "128",
+                            disabled: mfa.state.busy
+                          }, null, 8, ["onUpdate:modelValue", "disabled"]), [[_vModelText, mfa.state.password]])]),
+                          (mfa.state.status.enabled)
+                            ? (_openBlock(), _createElementBlock("label", {
+                                key: 2,
+                                class: "field"
+                              }, [_createTextVNode("Código do autenticador ou de recuperação"), _withDirectives(_createElementVNode("input", {
+                                "onUpdate:modelValue": $event => ((mfa.state.code) = $event),
+                                autocomplete: "one-time-code",
+                                maxlength: "30",
+                                disabled: mfa.state.busy
+                              }, null, 8, ["onUpdate:modelValue", "disabled"]), [[_vModelText, mfa.state.code]])]))
+                            : _createCommentVNode("", true),
+                          _createElementVNode("div", { class: "actions" }, [(!mfa.state.status.enabled)
+                            ? (_openBlock(), _createElementBlock("button", {
+                                key: 0,
+                                class: "btn btn-primary",
+                                type: "button",
+                                disabled: mfa.state.busy || !mfa.state.password,
+                                onClick: mfa.enroll
+                              }, "Configurar 2FA", 8, ["disabled", "onClick"]))
+                            : (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [_createElementVNode("button", {
+                                type: "button",
+                                class: "btn btn-secondary",
+                                disabled: mfa.state.busy || !mfa.state.password || !mfa.state.code,
+                                onClick: mfa.recovery
+                              }, "Gerar novos códigos", 8, ["disabled", "onClick"]), (!mfa.state.status.required)
+                                ? (_openBlock(), _createElementBlock("button", {
+                                    key: 0,
+                                    type: "button",
+                                    class: "btn btn-secondary",
+                                    disabled: mfa.state.busy || !mfa.state.password || !mfa.state.code,
+                                    onClick: mfa.disable
+                                  }, "Desativar 2FA", 8, ["disabled", "onClick"]))
+                                : _createCommentVNode("", true)], 64))])
+                        ], 64))])], 40, ["onToggle"])]))
                   : _createCommentVNode("", true),
                 (state.section==='diary')
                   ? (_openBlock(), _createElementBlock("section", {
-                      key: 3,
+                      key: 4,
                       class: "panel x-card",
                       "aria-label": "Diário Escolar e comunicados"
                     }, [
@@ -5890,7 +5920,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                   : _createCommentVNode("", true),
                 (state.section==='admissions'&&!state.selected&&!state.editing)
                   ? (_openBlock(), _createElementBlock("section", {
-                      key: 4,
+                      key: 5,
                       class: "panel x-card"
                     }, [
                       _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "ACOMPANHE CADA ETAPA"), _createElementVNode("h2", null, "Minhas inscrições")]), _createElementVNode("button", {
@@ -5924,7 +5954,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                   : _createCommentVNode("", true),
                 (state.section==='admissions'&&state.editing)
                   ? (_openBlock(), _createElementBlock("section", {
-                      key: 5,
+                      key: 6,
                       class: "panel x-card portal-wizard"
                     }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, _toDisplayString(state.selected?'ATUALIZAR PRÉ-MATRÍCULA':'NOVA PRÉ-MATRÍCULA'), 1), _createElementVNode("h2", null, "Vamos conhecer o aluno")]), _createElementVNode("button", {
                       type: "button",
@@ -5948,7 +5978,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                         tabindex: "-1"
                       }, _toDisplayString(formSteps[state.step]), 1),
                       (state.step===0)
-                        ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createElementVNode("p", { class: "muted" }, "Preencha conforme o documento do aluno. Nome e nascimento são obrigatórios."), _createElementVNode("details", { open: Boolean(state.assistSource) }, [_createElementVNode("summary", null, "Preencher com ajuda de um documento"), (_openBlock(), _createBlock(_component_assist_panel, {
+                        ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createElementVNode("p", { class: "muted" }, "Preencha conforme o documento do aluno. Nome e nascimento são obrigatórios. Para anexar seus arquivos manualmente, preencha os dados e selecione Salvar e enviar documentos na revisão."), _createElementVNode("details", { open: Boolean(state.assistSource) }, [_createElementVNode("summary", null, "Preencher com ajuda de um documento (opcional)"), (_openBlock(), _createBlock(_component_assist_panel, {
                             key: state.assistSource,
                             target: state.form.student,
                             fields: personAssistFields,
@@ -6061,11 +6091,11 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                             class: "btn btn-secondary",
                             onClick: $event => {state.step--;state.error=''}
                           }, "Voltar", 8, ["onClick"]))
-                        : _createCommentVNode("", true), _createElementVNode("span", null, "Etapa " + _toDisplayString(state.step+1) + " de " + _toDisplayString(formSteps.length), 1), _createElementVNode("button", { class: "btn btn-primary" }, _toDisplayString(state.step===2?'Salvar e continuar':'Continuar'), 1)])
+                        : _createCommentVNode("", true), _createElementVNode("span", null, "Etapa " + _toDisplayString(state.step+1) + " de " + _toDisplayString(formSteps.length), 1), _createElementVNode("button", { class: "btn btn-primary" }, _toDisplayString(state.step===2?'Salvar e enviar documentos':'Continuar'), 1)])
                     ], 40, ["onSubmit"])]))
                   : _createCommentVNode("", true),
                 (state.section==='admissions'&&state.selected&&!state.editing)
-                  ? (_openBlock(), _createElementBlock(_Fragment, { key: 6 }, [
+                  ? (_openBlock(), _createElementBlock(_Fragment, { key: 7 }, [
                       _createElementVNode("section", { class: "panel x-card" }, [
                         _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [
                           _createElementVNode("p", { class: "eyebrow" }, _toDisplayString(state.selected.number), 1),
@@ -6288,7 +6318,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                           : (_openBlock(), _createElementBlock("p", {
                               key: 1,
                               class: "portal-hint"
-                            }, "A escola não solicitou anexos para esta inscrição. Você já pode concluir o envio.")),
+                            }, _toDisplayString(editable()?'Você pode enviar documentos manualmente abaixo, mesmo sem uma lista de documentos obrigatórios.':'Confira os documentos enviados e as orientações da Secretaria.'), 1)),
                         _createElementVNode("div", { class: "x-list" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.selected.document_types, (d) => {
                           return (_openBlock(), _createElementBlock("div", {
                             key: d.id,
@@ -6318,15 +6348,12 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                             }, "Abrir arquivo", 8, ["onClick"])
                           ]))
                         }), 128)),
-                        (editable()&&state.selected.document_types.length)
+                        (editable())
                           ? (_openBlock(), _createElementBlock("form", {
                               key: 2,
                               onSubmit: _withModifiers(upload, ["prevent"]),
                               class: "x-form"
-                            }, [_createElementVNode("div", { class: "x-grid" }, [_createElementVNode("label", null, [_createTextVNode("Tipo de documento"), _withDirectives(_createElementVNode("select", {
-                              "onUpdate:modelValue": $event => ((state.documentType) = $event),
-                              required: ""
-                            }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.selected.document_types, (d) => {
+                            }, [_createElementVNode("div", { class: "x-grid" }, [_createElementVNode("label", null, [_createTextVNode("Tipo de documento"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.documentType) = $event) }, [_createElementVNode("option", { value: "" }, "Documento complementar (envio manual)"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.selected.document_types, (d) => {
                               return (_openBlock(), _createElementBlock("option", {
                                 key: d.id,
                                 value: d.id
@@ -6337,7 +6364,7 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
                               accept: "image/jpeg,image/png,application/pdf",
                               onChange: fileChange,
                               required: ""
-                            }, null, 40, ["onChange"]))])]), _createElementVNode("button", { class: "btn btn-secondary" }, "Enviar documento")], 40, ["onSubmit"]))
+                            }, null, 40, ["onChange"]))])]), _createElementVNode("button", { class: "btn btn-secondary" }, "Enviar documento manualmente")], 40, ["onSubmit"]))
                           : _createCommentVNode("", true)
                       ]),
                       (editable())
@@ -11352,14 +11379,22 @@ var _Vue=Vue; var PigeRenders={enrollmentWorkflow:function render(_ctx, _cache) 
             ? (_openBlock(), _createElementBlock("section", {
                 key: 0,
                 class: "panel x-card"
-              }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h3", null, "Biblioteca de modelos"), _createElementVNode("p", { class: "muted" }, "Modelos inativos continuam no histórico e deixam de aparecer para novas emissões.")]), (can('academic.write'))
+              }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h3", null, "Biblioteca de modelos"), _createElementVNode("p", { class: "muted" }, "Modelos inativos continuam no histórico e deixam de aparecer para novas emissões.")]), _createElementVNode("div", { class: "actions" }, [(can('academic.write'))
                 ? (_openBlock(), _createElementBlock("button", {
                     key: 0,
                     class: "btn btn-primary",
                     type: "button",
                     onClick: beginNew
                   }, "+ Novo modelo", 8, ["onClick"]))
-                : _createCommentVNode("", true)]), _createElementVNode("div", { class: "table-scroll" }, [_createElementVNode("table", null, [_createElementVNode("thead", null, [_createElementVNode("tr", null, [
+                : _createCommentVNode("", true), (can('academic.write'))
+                ? (_openBlock(), _createElementBlock("button", {
+                    key: 1,
+                    class: "btn btn-secondary",
+                    type: "button",
+                    disabled: state.busy,
+                    onClick: useBuiltin
+                  }, "Usar modelo de serviços educacionais", 8, ["disabled", "onClick"]))
+                : _createCommentVNode("", true)])]), _createElementVNode("div", { class: "table-scroll" }, [_createElementVNode("table", null, [_createElementVNode("thead", null, [_createElementVNode("tr", null, [
                 _createElementVNode("th", null, "Modelo"),
                 _createElementVNode("th", null, "Categoria"),
                 _createElementVNode("th", null, "Ano letivo"),

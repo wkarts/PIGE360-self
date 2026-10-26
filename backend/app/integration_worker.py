@@ -299,6 +299,8 @@ def process_connect_one():
             db.commit()
             try:
                 payload = unseal(job.encrypted_payload)
+                if payload.get('expires_at') and utc(datetime.fromisoformat(payload['expires_at'])) <= now():
+                    raise IntegrationFailure('MESSAGE_EXPIRED')
                 instance = db.get(m.ConnectInstance, job.instance_id)
                 if not instance or instance.school_id != job.school_id or not instance.enabled or instance.status == 'deleted':
                     raise IntegrationFailure('CONNECT_INSTANCE_DISABLED')

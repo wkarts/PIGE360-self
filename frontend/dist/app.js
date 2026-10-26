@@ -2156,6 +2156,19 @@ var PigeContracts;
                 state.error = '';
                 state.notice = '';
             }
+            async function useBuiltin() {
+                beginNew();
+                if (!state.editing)
+                    return;
+                await run(async () => {
+                    const result = await PigeAPI.request(base() + '/document-template-models');
+                    const model = result.items[0];
+                    if (!model)
+                        throw new Error('Modelo indisponível. Tente novamente.');
+                    state.draft = { ...emptyDraft(), name: model.name, kind: model.kind, header: model.header, body: model.body, footer: model.footer, active: false, require_signature: true };
+                    state.notice = 'Modelo carregado. Selecione o ano letivo, confira os dados e salve. Os campos da escola, aluno e responsáveis são preenchidos a partir da matrícula; condições financeiras e testemunhas são informadas na emissão.';
+                });
+            }
             async function beginEdit(item) {
                 if (editorDirty() && !window.confirm('Descartar alterações não salvas?'))
                     return;
@@ -2409,7 +2422,7 @@ var PigeContracts;
                 void activateEnrollment(props.enrollmentId); }); });
             Vue.onUnmounted(() => { window.removeEventListener('beforeunload', beforeUnload); PigeContracts.hasUnsavedChanges = () => false; clearLetterhead(); });
             const hasDocumentContext = () => Boolean(props.enrollmentId || props.issuedId || state.enrollment);
-            return { hasDocumentContext, state, identity, can, str, date, load, beginNew, beginEdit, cancelEdit, save, importDocx, previewSource, downloadOriginal, mappingChanged, importJson, insertField, categories, categoryFields, yearName, contractKind, syncContractSignature, editorDirty, placeholders, fieldLabel, automaticValue, searchEnrollments, chooseEnrollment, clearEnrollment, selectTemplate, previewKeys, displayValue, setValue, preview, issue, downloadPdfPreview, downloadIssued, letterheadChanged, uploadLetterhead, removeLetterhead };
+            return { hasDocumentContext, state, identity, can, str, date, load, beginNew, useBuiltin, beginEdit, cancelEdit, save, importDocx, previewSource, downloadOriginal, mappingChanged, importJson, insertField, categories, categoryFields, yearName, contractKind, syncContractSignature, editorDirty, placeholders, fieldLabel, automaticValue, searchEnrollments, chooseEnrollment, clearEnrollment, selectTemplate, previewKeys, displayValue, setValue, preview, issue, downloadPdfPreview, downloadIssued, letterheadChanged, uploadLetterhead, removeLetterhead };
         } };
 })(PigeContracts || (PigeContracts = {}));
 var PigeSigning;

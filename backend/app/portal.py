@@ -6,7 +6,7 @@ import secrets
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Annotated
-from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy import select, func, update, text
 from . import models as m, online_schemas as s
@@ -16,7 +16,7 @@ from .security import DB, digest, fail, hash_password, verify, utc, request_csrf
 from .common import output, number, audit
 from .auth import DUMMY_PASSWORD_HASH
 from .documents import validate_upload, render_pdf
-from .integration_core import connection, enqueue, admission_notification
+from .integration_core import connection, enqueue, admission_notification, IntegrationFailure
 from .portal_access import (
     PORTAL_DIARY_ACCESS_CONSENT_TEXT,
     PORTAL_DIARY_ACCESS_CONSENT_VERSION,
@@ -31,6 +31,7 @@ from .portal_access import (
 
 router=APIRouter(prefix='/api/v1/portal',tags=['Portal dos responsáveis'])
 EDITABLE={'draft','changes_requested'}
+COMPLEMENTARY_DOCUMENT = 'Anexo complementar da inscrição'
 STATUS_LABELS={'draft':'Rascunho','submitted':'Enviada','under_review':'Em análise','changes_requested':'Correção solicitada','waitlisted':'Lista de espera','approved':'Aprovada / matrícula em preparação','enrolled':'Matriculada','rejected':'Indeferida','withdrawn':'Desistência'}
 
 def rate_limit(db,request,namespace,key,limit=12,seconds=900):
@@ -129,7 +130,7 @@ def admission_output(db,obj,public=True):
     criteria=[m.AdmissionMessage.admission_id==obj.id]
     if public:criteria.append(m.AdmissionMessage.internal.is_(False))
     data['messages']=[output(x) for x in db.scalars(select(m.AdmissionMessage).where(*criteria).order_by(m.AdmissionMessage.created_at,m.AdmissionMessage.id))]
-    data['document_types']=[{'id':x.id,'name':x.name,'required':x.required} for x in document_types(db,obj)]
+    data['document_types']=[{'id':x.id,'name':x.name,'required':x.required} for x in document_types(db,obj) if x.name != COMPLEMENTARY_DOCUMENT or x.required]
     account=db.get(m.PortalAccount,obj.account_id)
     if not public:data['account']=account_output(account)
     if obj.enrollment_id:
@@ -406,15 +407,42 @@ def logout(account:Parent,request:Request,response:Response,db:DB):
 def code_hash(account_id,purpose,code):
     return hmac.new(settings().app_secret_key.encode(),f'{account_id}:{purpose}:{code}'.encode(),hashlib.sha256).hexdigest()
 
+def whatsapp_transport(db, school_id):
+    """Use the instance selected in WhatsApp settings; preserve legacy-only installs."""
+    from .connect_core import connect_instance_for_school
+    instance = connect_instance_for_school(db, school_id, required=False)
+    if instance:
+        configured = bool(settings().connect_api_base_url and settings().connect_api_key)
+        return ('instance', instance) if configured and instance.status == 'open' else (None, None)
+    legacy = connection(db, school_id, 'connect_api', required=False)
+    return ('legacy', legacy) if legacy and legacy.enabled else (None, None)
+
+
+@router.get('/verification/channels')
+def verification_channels(db:DB, account:Parent):
+    from .notification_email import available
+    transport, _ = whatsapp_transport(db, account.school_id)
+    encrypted = bool(settings().integration_encryption_key)
+    return {'email': encrypted and available(db, account.school_id),
+            'whatsapp': encrypted and bool(account.phone) and bool(transport),
+            'whatsapp_message': 'Informe e salve seu telefone com DDD em Minha conta.' if not account.phone
+                else 'Se o WhatsApp estiver indisponível, confirme por e-mail ou procure a Secretaria.'}
+
+
 def challenge(db,account,purpose,channel):
     config=settings()
+    if not config.integration_encryption_key:
+        fail(409,'Não foi possível solicitar o código agora. Tente novamente ou procure a Secretaria.')
+    transport=None;instance=None
     if channel=='email':
         from .notification_email import available
-        if not available(db, account.school_id):fail(409,'Envio de e-mail não configurado. Solicite orientação à Secretaria.')
+        if not available(db, account.school_id):fail(409,'Não foi possível solicitar o código por e-mail agora. Tente novamente ou procure a Secretaria.')
         conn=None;kind='smtp_email';target=account.email
     else:
-        conn=connection(db,account.school_id,'connect_api')
-        if not account.phone:fail(422,'Não há telefone na conta. Utilize verificação por e-mail.')
+        if not account.phone:fail(422,'Informe e salve seu telefone com DDD em Minha conta ou confirme por e-mail.')
+        transport, instance = whatsapp_transport(db, account.school_id)
+        if not transport:fail(409,'Não foi possível solicitar o código por WhatsApp agora. Utilize o e-mail ou procure a Secretaria.')
+        conn=instance if transport=='legacy' else None
         kind='connect_text';target=account.phone
     db.execute(update(m.PortalChallenge).where(m.PortalChallenge.account_id==account.id,m.PortalChallenge.purpose==purpose,m.PortalChallenge.used.is_(False)).values(used=True))
     code=f'{secrets.randbelow(1_000_000):06d}'
@@ -425,7 +453,14 @@ def challenge(db,account,purpose,channel):
     text=f'Seu código de acesso — {school_name} — é {code}. Válido por 10 minutos. Não compartilhe este código. Ignore esta mensagem se não solicitou.'
     payload={'number':target,'text':text} if kind=='connect_text' else {'to':target,'subject':'Código de acesso — '+school_name,'text':text}
     payload['expires_at']=item.expires_at.isoformat()
-    enqueue(db,account.school_id,kind,payload,'otp:'+item.id,conn.id if conn else None)
+    try:
+        if transport=='instance':
+            from .connect_core import enqueue_connect_message
+            enqueue_connect_message(db,account.school_id,instance.id,payload,'otp:'+item.id)
+        else:
+            enqueue(db,account.school_id,kind,payload,'otp:'+item.id,conn.id if conn else None)
+    except (IntegrationFailure, HTTPException):
+        fail(409,'Não foi possível solicitar o código agora. Tente novamente ou procure a Secretaria.')
     return {'ok':True,'message':'Código solicitado. Consulte o canal escolhido.','expires_in_seconds':600}
 
 def consume_code(db,account,purpose,code):
@@ -568,20 +603,30 @@ def message(id:str,data:s.MessageInput,request:Request,db:DB,account:Parent):
     db.flush();return admission_output(db,obj)
 
 @router.post('/admissions/{id}/attachments',status_code=201)
-def upload(id:str,request:Request,db:DB,account:Parent,document_type_id:str=Form(...),version:int=Form(...),file:UploadFile=File(...)):
+def upload(id:str,request:Request,db:DB,account:Parent,document_type_id:str=Form(''),version:int=Form(...),file:UploadFile=File(...)):
     rate_limit(db,request,'uploads',account.id,30)
     lock_school(db,account.school_id);obj=own_admission(db,account,id);check_version(obj,version)
     if obj.status not in EDITABLE:fail(409,'Envio documental permitido em rascunho ou correção solicitada.')
-    if document_type_id not in {d.id for d in document_types(db,obj)}:fail(422,'Tipo documental não aplicável a esta inscrição.')
+    complementary = not document_type_id
+    if not complementary and document_type_id not in {d.id for d in document_types(db,obj)}:fail(422,'Tipo documental não aplicável a esta inscrição.')
     maximum=settings().max_upload_mb*1024*1024;content=file.file.read(maximum+1)
     if len(content)>maximum:fail(413,'Arquivo maior que o limite configurado.')
     name=Path((file.filename or 'arquivo').replace('\\','/')).name[:240]
     mime=validate_upload(content,name)
-    count=db.scalar(select(func.count()).select_from(m.AdmissionAttachment).where(m.AdmissionAttachment.admission_id==obj.id,m.AdmissionAttachment.active.is_(True),m.AdmissionAttachment.document_type_id!=document_type_id))
+    count_query=select(func.count()).select_from(m.AdmissionAttachment).where(m.AdmissionAttachment.admission_id==obj.id,m.AdmissionAttachment.active.is_(True))
+    if not complementary:count_query=count_query.where(m.AdmissionAttachment.document_type_id!=document_type_id)
+    count=db.scalar(count_query)
     used=db.scalar(select(func.coalesce(func.sum(m.AdmissionAttachment.size),0)).join(m.Admission,m.Admission.id==m.AdmissionAttachment.admission_id).where(m.Admission.account_id==account.id))
     if count>=settings().portal_max_files or used+len(content)>settings().portal_max_storage_mb*1024*1024:fail(413,'Limite de armazenamento do portal atingido. Procure a Secretaria.')
-    # Um anexo atual por tipo; as versões anteriores permanecem preservadas.
-    db.execute(update(m.AdmissionAttachment).where(m.AdmissionAttachment.admission_id==obj.id,m.AdmissionAttachment.document_type_id==document_type_id,m.AdmissionAttachment.active.is_(True)).values(active=False))
+    if complementary:
+        dtype=db.scalar(select(m.DocumentType).where(m.DocumentType.school_id==account.school_id,m.DocumentType.name==COMPLEMENTARY_DOCUMENT))
+        if not dtype:
+            dtype=m.DocumentType(school_id=account.school_id,name=COMPLEMENTARY_DOCUMENT,required=False)
+            db.add(dtype);db.flush()
+        document_type_id=dtype.id
+    else:
+        # Required types retain one current version; complementary uploads accumulate.
+        db.execute(update(m.AdmissionAttachment).where(m.AdmissionAttachment.admission_id==obj.id,m.AdmissionAttachment.document_type_id==document_type_id,m.AdmissionAttachment.active.is_(True)).values(active=False))
     from .storage import put_bytes, backend_name
     key=f'{account.school_id}/portal/{uid()}'
     put_bytes(key,content,mime)

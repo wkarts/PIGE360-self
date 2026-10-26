@@ -1,0 +1,20 @@
+{
+  "status": "passed",
+  "checks": [
+    "Instância preexistente compartilhada selecionada sem integração legada",
+    "Botão WhatsApp disponível no fluxo da matrícula",
+    "Dois documentos anexados manualmente sem catálogo",
+    "Confirmação de código mantém inscrição aberta",
+    "Inscrição concluída pela interface com contato confirmado"
+  ],
+  "responsive": {
+    "320": true,
+    "390": true,
+    "768": true,
+    "1440": true
+  },
+  "javascript_errors": [],
+  "browser": "140.0.7339.16",
+  "external_delivery": "Não executada; código sintético da fila usado na confirmação",
+  "database": "SQLite temporário"
+}
