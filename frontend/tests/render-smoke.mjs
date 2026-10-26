@@ -301,7 +301,7 @@ sandbox.PigeAPI.request=async path=>{
   if(path.endsWith('/academic-years'))return[{id:'year-2027',name:'2027',status:'active'}];
   if(path.endsWith('/units'))return[];
   if(path.endsWith('/academic-years'))return[{id:'year-2027',name:'2027'}];
-  if(path.endsWith('/document-templates'))return{items:[templateChoice]};
+  if(path.endsWith('/document-templates?include_inactive=true'))return{items:[templateChoice]};
   if(path.endsWith('/document-templates/fields'))return{fields:[{key:'financeiro.anuidade',label:'Anuidade',source:'manual'}]};
   if(path.includes('/admissions-summary'))return{counts:{}};
   if(path.includes('/admissions/admission-1'))return admission;

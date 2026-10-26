@@ -50,6 +50,14 @@ namespace PigeContracts {
     function beginNew():void{if(editorDirty()&&!window.confirm('Descartar alterações não salvas?'))return;
       clearLetterhead();state.selected=null;state.draft=emptyDraft();state.savedDraft=JSON.stringify(state.draft);state.importWarnings=[];state.importFileName='';state.editing=true;state.tab='templates';state.error='';state.notice='';
     }
+    async function useBuiltin():Promise<void>{
+      beginNew();if(!state.editing)return;
+      await run(async()=>{const result=await PigeAPI.request<{items:Template[]}>(base()+'/document-template-models');
+        const model=result.items[0];if(!model)throw new Error('Modelo indisponível. Tente novamente.');
+        state.draft={...emptyDraft(),name:model.name,kind:model.kind,header:model.header,body:model.body,footer:model.footer,active:false,require_signature:true};
+        state.notice='Modelo carregado. Selecione o ano letivo, confira os dados e salve. Os campos da escola, aluno e responsáveis são preenchidos a partir da matrícula; condições financeiras e testemunhas são informadas na emissão.';
+      });
+    }
     async function beginEdit(item:Template):Promise<void>{if(editorDirty()&&!window.confirm('Descartar alterações não salvas?'))return;
       await run(async()=>{
         const template=await PigeAPI.request<Template>(base()+'/document-templates/'+item.id);
@@ -178,6 +186,6 @@ namespace PigeContracts {
     Vue.onMounted(()=>{window.addEventListener('beforeunload',beforeUnload);void load().then(()=>{if(props.enrollmentId)void activateEnrollment(props.enrollmentId);});});
     Vue.onUnmounted(()=>{window.removeEventListener('beforeunload',beforeUnload);hasUnsavedChanges=()=>false;clearLetterhead();});
     const hasDocumentContext=()=>Boolean(props.enrollmentId||props.issuedId||state.enrollment);
-    return{hasDocumentContext,state,identity,can,str,date,load,beginNew,beginEdit,cancelEdit,save,importDocx,previewSource,downloadOriginal,mappingChanged,importJson,insertField,categories,categoryFields,yearName,contractKind,syncContractSignature,editorDirty,placeholders,fieldLabel,automaticValue,searchEnrollments,chooseEnrollment,clearEnrollment,selectTemplate,previewKeys,displayValue,setValue,preview,issue,downloadPdfPreview,downloadIssued,letterheadChanged,uploadLetterhead,removeLetterhead};
+    return{hasDocumentContext,state,identity,can,str,date,load,beginNew,useBuiltin,beginEdit,cancelEdit,save,importDocx,previewSource,downloadOriginal,mappingChanged,importJson,insertField,categories,categoryFields,yearName,contractKind,syncContractSignature,editorDirty,placeholders,fieldLabel,automaticValue,searchEnrollments,chooseEnrollment,clearEnrollment,selectTemplate,previewKeys,displayValue,setValue,preview,issue,downloadPdfPreview,downloadIssued,letterheadChanged,uploadLetterhead,removeLetterhead};
   }};
 }

@@ -453,6 +453,14 @@ def _docx_part(data: bytes, part: str) -> str:
     return '\n'.join(blocks).strip()
 
 
+@router.get('/document-template-models')
+def template_models(db:DB, user:Actor, school:Scope):
+    require(user, 'documents.read')
+    model = json.loads((Path(__file__).parent / 'template_models' / 'educational_contract.json').read_text())
+    # Validate the distributed model through the same schema as imported contracts.
+    return {'items': [TemplateInput.model_validate(model).model_dump(mode='json')]}
+
+
 @router.get('/document-templates/fields')
 def fields(db: DB, user: Actor, school: Scope):
     require(user, 'documents.read')

@@ -134,6 +134,7 @@ class FinalizeAdmission(Input):
     reason: str = Field(min_length=3,max_length=1000)
 
 class ContractRevisionInput(Input):
+    template_id: str | None = Field(default=None, min_length=1, max_length=36)
     version: int = Field(ge=1)
     template_version: int = Field(ge=1)
     reason: str = Field(min_length=10,max_length=1000)
