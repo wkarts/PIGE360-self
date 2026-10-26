@@ -1,0 +1,138 @@
+{
+  "base_commit": "d5706736087942c890c532f35db9bbda5db774e5",
+  "branch": "feat/admission-contract-workspace",
+  "date": "2026-10-26",
+  "local_environment": {
+    "python": "3.12",
+    "node": "24.22.1",
+    "database": "temporary SQLite",
+    "browser": "Chromium 140.0.7339.16",
+    "official_CI": "Python 3.13, Node 22, PostgreSQL, Docker"
+  },
+  "results": {
+    "backend_full": {
+      "passed": 856,
+      "skipped": 3,
+      "subtests_passed": 5,
+      "note": "Antes do último ajuste de preservação de imagem; grupo focado final repetido."
+    },
+    "backend_focused_final": {
+      "passed": 29
+    },
+    "ci_unittest": {
+      "run": 259,
+      "skipped": 1,
+      "status": "OK"
+    },
+    "npm_ci": "passed",
+    "frontend_build": "passed",
+    "validate": "passed",
+    "compileall": "passed",
+    "diff_check": "passed",
+    "online_http_chromium": {
+      "status": "passed",
+      "checks": [
+        "Instância preexistente compartilhada selecionada sem integração legada",
+        "Botão WhatsApp disponível no fluxo da matrícula",
+        "Dois documentos anexados manualmente sem catálogo",
+        "Confirmação de código mantém inscrição aberta",
+        "Inscrição concluída pela interface com contato confirmado",
+        "Contrato vinculado na análise sem alterar campanha",
+        "Revisão atualizada pela interface após recarregar modelos",
+        "Troca para outro modelo v1 preserva três vias e downloads históricos",
+        "Obrigatoriedade configurada por variável no editor real",
+        "Rascunho retomado após recarregar a aplicação",
+        "Calendário e seletor UF conforme o campo",
+        "PDF real sem marcadores, rótulos vazios ou contratantes inventados",
+        "Efetivação mostra os requisitos restantes na mesma matrícula"
+      ],
+      "responsive": {
+        "320": true,
+        "390": true,
+        "768": true,
+        "1440": true,
+        "contract_320": true,
+        "contract_390": true,
+        "contract_768": true,
+        "contract_1024": true,
+        "contract_1440": true,
+        "contract_1920": true,
+        "contract_2560": true
+      },
+      "javascript_errors": [],
+      "browser": "140.0.7339.16",
+      "external_delivery": "Não executada; código sintético da fila usado na confirmação",
+      "database": "SQLite temporário"
+    },
+    "completion_http_chromium": {
+      "status": "passed",
+      "checks": [
+        "Habilitação em produção e delegação pela interface, com backup SQLite explicitamente indisponível",
+        "Envio legado parado reaparece na UI, cancelar preserva estado e confirmar enfileira uma única recuperação",
+        "Usuário delegado alcança a importação pela navegação, sem acesso ao backup global",
+        "Configuração visual da ponte salva com segredo omitido na resposta e capacidade financeira indisponível informada",
+        "Quatro modelos publicados explicitamente pela UI, rascunho privado, conteúdo restrito ausente e layout móvel sem overflow",
+        "Família baixa o contrato sem A1 exigido, devolve PDF assinado e acompanha a reserva pela interface",
+        "Correção contratual vincula nova revisão pela UI, preserva a via anterior e exige novo envio pela família",
+        "Efetivação pela Secretaria aplica o A1 institucional por último e preserva as duas assinaturas sintéticas"
+      ],
+      "page_errors": [],
+      "data": "synthetic-only",
+      "real_external_accounts_used": false,
+      "real_icp_brasil_homologation": false,
+      "database": "disposable SQLite"
+    }
+  },
+  "limits": [
+    "Certificados e contatos sintéticos; sem homologação real ICP-Brasil ou envio WhatsApp real.",
+    "Três testes de concorrência exigem PostgreSQL; Docker/PostgreSQL executados no GitHub Actions.",
+    "Teste completo inicial teve 404 first-access durante build concorrente. Repetição isolada e completa passaram.",
+    "Nenhum merge, release ou deploy executado."
+  ],
+  "sha256_files": {
+    "backend/app/admissions.py": "787bb34828f95d2aba2d7771bb52e2651a1fc06b0f8becee63585032023108cb",
+    "backend/app/contract_fields.py": "37c9546ef0244aa694b20671a9e3ae1663ff25a0069d9acc0207da4726f0ac7d",
+    "backend/app/contract_templates.py": "50b3a734cf32b1482399c12bcf9cd72ad02e0e461b5d834fc8c2c3488530bf6e",
+    "backend/app/docx_layout.py": "5307ae07dbe4a4238e9962f3414742d96e6f550d1e05e30d8a8ab1e514791eaa",
+    "backend/app/models.py": "cc5d0ba8c424c89c192479d418af8a7daf432df8903a83632334617aa83370f9",
+    "backend/migrations/versions/0057_contract_field_options.py": "9efba2689d0a7eb8981bdbc26290d32a0ff85d3ef9e992667a00ec5488d8a1db",
+    "backend/tests/test_contract_field_options.py": "4732b2433f37fbfb05deb964ee749932d8584acefe93ad6fedb1b426a34dbcef",
+    "backend/tests/test_contract_templates.py": "b8077a7e960f5957f7147cd9b495b49401faac49e08a1747b1f10bfeed68406d",
+    "backend/tests/test_docx_layout.py": "cb400f0c124f430b9fd7c0afe1a3b8fc9670cc724c4519b8a5f8fa33b0176e59",
+    "docs/implementation/2026-10-26-admission-contract-workspace.md": "66d5393e31bdf5ec01ba2f8526a503c76480f37bc6755c0d65b10104246a825a",
+    "frontend/build.mjs": "4816de2c39d2769fc3c93436233a8a3b406da03b195855431de7c11a94653c3e",
+    "frontend/dist/app.js": "475eea9a289d596db229730b436d30292820369b1ec708c5089a43e18012514b",
+    "frontend/dist/build-info.json": "b3e78fb7b390f1bf75137a9bdfa51339e2cacef6b89698a5f3396c05a1e0d784",
+    "frontend/dist/contracts.css": "c75954293d4e08a29f2b6c163298b2b552d938ed70ccc970872bd779de77788f",
+    "frontend/dist/family.html": "001dcd5da4d38ca1544e7ef9352874233ef2b5705e4f072d738a119e8224edb5",
+    "frontend/dist/index.html": "a1a439e7c9e6bd91f99b8ad18658db2d0bfdaf009f438bdd724f80dd6c784ecb",
+    "frontend/dist/news.html": "273fff49df107e488cfc7fabbd51ffa50af6be18485dae0f9eb4a7b422ecb5c4",
+    "frontend/dist/online.html": "0d8ba7477a64d3b65f4a655d33037127135569a93e60d50ca94be8f3dd517cba",
+    "frontend/dist/renders.js": "06a1f609f2dbebed0921e648f7846cff70266da00c1df510648c7ace1856b6a8",
+    "frontend/dist/sw.js": "f2235124693092791c73b15542da8c440591c64c8b9b1a37eb5f533186c7ea07",
+    "frontend/public/contracts.css": "c75954293d4e08a29f2b6c163298b2b552d938ed70ccc970872bd779de77788f",
+    "frontend/src/app.ts": "a06b24fc4a342968178390b564917a4befac6b5932c6a435619e2fd4ce597eb8",
+    "frontend/src/contract-fields.ts": "c167a9b38241c1614a9e92a81a35885d74adbe6dbd27311383fe823f3f4cdc22",
+    "frontend/src/contracts.ts": "d10717baf4cae6126a6f76900f905ed4b43cf1d0ac255b386dd3ada765c62362",
+    "frontend/src/expansion.ts": "4cb02ef43c38573d41527d338d14dafadc9a67817d2550268b7668569178da1f",
+    "frontend/src/vue-globals.d.ts": "a340353908d9e5d757f9f48c16b8405235e93295a2a84624e6986c1e33fb6232",
+    "frontend/templates/app.html": "6903fc9ce756925c5f17f1df201d141e28b4ef2e27924be6dc33f75074574b66",
+    "frontend/templates/contractValue.html": "d459703cc09211662c82ce82ff7fcbb6bbc200f1390d0b28e25cac0f2270ff13",
+    "frontend/templates/contracts.html": "fea0728a62904f62ee51b7cf72224bdf623458049543b457dc37d0df61859355",
+    "frontend/templates/expansion.html": "e50ae63c90174b8a2b4481cf918e1fe69a0989502c2050f3deaea5424f82ce83",
+    "frontend/tests/render-smoke.mjs": "df3ad0ce9c0a3a6867077fd54376ea83468a876674d131beb96026850dd15164",
+    "frontend/tsconfig.json": "00d619c0f51fe3936335e20e072ec0f0ff5977862fa5f75a94285ad548b7a788",
+    "scripts/e2e-completion.py": "a1abcf4c31c824e8a36a0e7638d207179d0a8d6ac01ced8bd54ed80abdf2296a",
+    "scripts/e2e-online-verification.py": "92caf5ce1896665825ad05cea52e927ca989f03ed568acecb3068e5a02d6c6af",
+    "scripts/e2e-portal-polished.py": "0b9a1aea4398330b435a01d2dd6db996896295473d3a3befd5813f901000bd66"
+  },
+  "sha256_local_logs": {
+    "contract-workspace-backend-final.log": "d8f768f11a9f90e4a1a00743c539b434ef52fda4bb255de8fb4df54810d66490",
+    "contract-workspace-focused-final.log": "afa60d5cd3fd7e7b3ae1ace43d7a905217d1e0942b873413a22889f5ec98b2bc",
+    "contract-workspace-ci-tests-final.log": "8881da43ecdff51487a4e205feb7f5b34396cb08e9817351ee4549cb687209f3",
+    "contract-workspace-npm-ci.log": "d83f403811f32499cc9b29b5f71397c82832bd9953fd40c70fce6ec485201ed6",
+    "contract-workspace-build-final.log": "bcb3b6841cc4fcb4c2de2e12f57d19c25fb8bea4c5cc7dfcee8a193f986c9334",
+    "contract-workspace-e2e-final.log": "e8fbd02377b8508c94a1be15e806b70dacd24ba0eb12f0b27532fe41911522cb",
+    "contract-workspace-completion-final.log": "9d278829131ac2d0f72603a1b29dde656080024853af4827f2366f4641f74951"
+  }
+}

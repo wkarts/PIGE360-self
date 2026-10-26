@@ -30,6 +30,7 @@ from .documents import validate_upload, write_file
 from .institution import InstitutionAsset, identity_data
 from .security import Actor, DB, Scope, check_version, fail, lock_school, require, scoped
 from .storage import read_bytes
+from .contract_fields import FieldOptions, input_type, input_value, normalize_value, render_text
 
 router = APIRouter(prefix='/api/v1/schools/{school_id}', tags=['Modelos de documentos'])
 PLACEHOLDER = re.compile(r'\{\{\s*([a-z][a-z0-9_.]{0,79})\s*\}\}')
@@ -122,6 +123,7 @@ class TemplateInput(BaseModel):
     source_docx_file_id: str | None = None
     docx_mapping: list[dict] = Field(default_factory=list,max_length=500)
     docx_reviewed: bool = False
+    field_options: dict[str, FieldOptions] = Field(default_factory=dict, max_length=160)
 
     @model_validator(mode='after')
     def validate_period(self):
@@ -130,6 +132,8 @@ class TemplateInput(BaseModel):
         if _is_contract_kind(self.kind) and not self.require_signature:
             raise ValueError('Modelos de contrato exigem assinatura A1 da escola.')
         _placeholders(self.header + '\n' + self.body + '\n' + self.footer)
+        if any(not PLACEHOLDER.fullmatch('{{' + key + '}}') for key in self.field_options):
+            raise ValueError('Parâmetro de variável inválido.')
         return self
 
 
@@ -149,6 +153,7 @@ class TemplatePatch(BaseModel):
     source_docx_file_id: str | None = None
     docx_mapping: list[dict] | None = None
     docx_reviewed: bool | None = None
+    field_options: dict[str, FieldOptions] | None = None
 
 
 class RenderInput(BaseModel):
@@ -206,6 +211,7 @@ def _versioned_template(db, template: m.DocumentTemplate, version_number: int | 
     if not revision:
         fail(404, 'Versão do modelo não encontrada nesta escola.')
     values = dict(revision.content)
+    values.setdefault('field_options', {})
     for key in ('valid_from', 'valid_until'):
         values[key] = date.fromisoformat(values[key]) if values.get(key) else None
     return SimpleNamespace(id=template.id, version=revision.version_number,
@@ -293,15 +299,17 @@ def _applicable(template: m.DocumentTemplate, enrollment: m.Enrollment) -> bool:
 def _render(template, values: dict[str, str]):
     fields = _placeholders('\n'.join((template.header, template.body, template.footer)))
     selected = {key: str(values.get(key, '') or '').strip() for key in fields}
-    missing = [key for key, value in selected.items() if not value]
+    options = getattr(template, 'field_options', {}) or {}
+    missing = [key for key, value in selected.items() if not value and options.get(key, {}).get('required', False)]
     def replace(content):
-        return PLACEHOLDER.sub(lambda match: selected[match.group(1)] or match.group(0), content)
+        try: return render_text(content, selected, fields)
+        except ValueError as exc: fail(422, str(exc))
     return { 'header': replace(template.header), 'content': replace(template.body),
              'footer': replace(template.footer), 'variables': selected,
              'missing_fields': missing, 'template_version': template.version }
 
 
-def _render_with_context(db, school, template, enrollment, supplied, actor=None):
+def _available_fields(db, school, template):
     available = set(_placeholders('\n'.join((template.header, template.body, template.footer))))
     if getattr(template,'source_docx_file_id',None):
         from .docx_layout import mapped,archive,parts,NS as DOCX_NS
@@ -312,19 +320,59 @@ def _render_with_context(db, school, template, enrollment, supplied, actor=None)
                 root=etree.fromstring(z.read(part))
                 for paragraph in root.findall('.//w:p',DOCX_NS):
                     available.update(_placeholders(''.join(n.text or '' for n in paragraph.findall('.//w:t',DOCX_NS))))
+    return available
+
+
+def _render_with_context(db, school, template, enrollment, supplied, actor=None):
+    available = _available_fields(db, school, template)
     if available & {'aluno.'+key for key in STUDENT_FORM_FIELDS}:
         if actor is None:fail(403,'Acesso à ficha do aluno necessário para preencher estes campos.')
         require(actor,'students.read')
     if set(supplied) - available:
         fail(422, 'A requisição contém campos que não existem neste modelo.')
     official = _context(db, school, enrollment)
+    options = getattr(template, 'field_options', {}) or {}
+    sources = {key: 'cadastro' for key, value in official.items() if value}
+    # Only fill absent registry values from the snapshot actually approved for this enrollment.
+    # Existing nonempty values are never overwritten or silently reconciled.
+    if enrollment:
+        admission = db.scalar(select(m.Admission).where(m.Admission.school_id == school.id, m.Admission.enrollment_id == enrollment.id))
+        if admission and admission.status in {'approved', 'enrolled'}:
+            from types import SimpleNamespace
+            for snapshot, prefix in [(admission.student_data, 'aluno'), (admission.guardian_snapshot, 'contratante1')]:
+                if not snapshot: continue
+                person = scoped(db, m.Person, scoped(db, m.Student, enrollment.student_id, school.id).person_id if prefix == 'aluno' else enrollment.financial_person_id, school.id) if (prefix == 'aluno' or enrollment.financial_person_id) else None
+                if not person: continue
+                if snapshot.get('cpf') and person.cpf and snapshot['cpf'] != person.cpf: continue
+                if snapshot.get('name') and snapshot['name'].strip().casefold() != person.name.strip().casefold(): continue
+                if official.get(prefix+'.nome') and official[prefix+'.nome'] != person.name: continue
+                # Do not combine structured addresses from conflicting addresses.
+                address_conflict = bool(person.address and snapshot.get('address') and person.address.strip().casefold() != snapshot['address'].strip().casefold())
+                raw = {key: snapshot.get(key) or (None if key == 'birth_date' else '') for key in ('name', 'birth_date', 'cpf', 'postal_code', 'address', 'street', 'address_number', 'district', 'city', 'state', 'email')}
+                try: raw['birth_date'] = date.fromisoformat(raw['birth_date']) if isinstance(raw['birth_date'], str) and raw['birth_date'] else raw['birth_date']
+                except ValueError: raw['birth_date'] = None
+                for key, value in _person_values(SimpleNamespace(**raw), prefix).items():
+                    if address_conflict and key.rsplit('.', 1)[-1] in {'cep', 'endereco', 'bairro', 'cidade', 'uf'}: continue
+                    if value and not official.get(key): official[key] = value; sources[key] = 'inscrição conferida'
+    normalized = {}
+    labels = {key: label for key, label, _ in FIELDS}
     for key, value in supplied.items():
+        try: normalized[key] = normalize_value(key, value, options)
+        except ValueError as exc: fail(422, f'{labels.get(key, key)}: {exc}')
+    for key, value in normalized.items():
         if key in AUTOMATIC_FIELDS and official.get(key) and str(value).strip() != official[key]:
             fail(409, f'O campo {key} já possui valor cadastrado. Corrija o cadastro de origem antes de emitir.')
-    values={**official, **supplied}
+    values={**official, **normalized}
     result=_render(template,values)
     result['variables']={key:str(values.get(key,'') or '').strip() for key in sorted(available)}
-    result['missing_fields']=[key for key,value in result['variables'].items() if not value]
+    result['missing_fields']=[key for key,value in result['variables'].items() if not value and options.get(key, {}).get('required', False)]
+    result['omitted_fields']=[key for key,value in result['variables'].items() if not value and key not in result['missing_fields']]
+    result['field_meta']={key:{'label':labels.get(key,key), 'input_type':input_type(key,options),
+        'required':bool(options.get(key,{}).get('required',False)),
+        'min':1 if key in {'financeiro.parcelas','financeiro.dia_vencimento'} else 0,
+        'max':31 if key=='financeiro.dia_vencimento' else 120 if key=='financeiro.parcelas' else None,
+        'source':'desta emissão' if key in normalized else sources.get(key,'não informado'),
+        'automatic':bool(official.get(key)), 'input_value':input_value(key,value,options)} for key,value in result['variables'].items()}
     return result
 
 
@@ -508,6 +556,8 @@ def create_template(data: TemplateInput, db: DB, user: Actor, school: Scope, req
     if data.academic_year_id:
         scoped(db, m.AcademicYear, data.academic_year_id, school.id)
     validate_docx_template(db,school,data)
+    if set(data.field_options) - _available_fields(db, school, data):
+        fail(422, 'Os parâmetros contêm variáveis ausentes no texto ou no mapeamento deste modelo.')
     obj = m.DocumentTemplate(school_id=school.id, **data.model_dump())
     db.add(obj); db.flush()
     _save_revision(db, obj, user.id)
@@ -556,6 +606,8 @@ def edit_template(template_id: str, data: TemplatePatch, db: DB, user: Actor, sc
     if validated.academic_year_id:
         scoped(db, m.AcademicYear, validated.academic_year_id, school.id)
     validate_docx_template(db,school,validated)
+    if set(validated.field_options) - _available_fields(db, school, validated):
+        fail(422, 'Remova dos parâmetros as variáveis que não existem mais neste modelo.')
     for key, value in validated.model_dump().items():
         setattr(obj, key, value)
     obj.version += 1
@@ -613,6 +665,8 @@ def preview_pdf(template_id: str, data: RenderInput, db: DB, user: Actor, school
     obj = _versioned_template(db, scoped(db, m.DocumentTemplate, template_id, school.id), data.template_version)
     enrollment = scoped(db, m.Enrollment, data.enrollment_id, school.id) if data.enrollment_id else None
     preview = _render_with_context(db, school, obj, enrollment, data.values, user)
+    if preview['missing_fields']:
+        fail(422, 'Preencha os campos obrigatórios antes de gerar o PDF: ' + ', '.join(preview['field_meta'][key]['label'] for key in preview['missing_fields']))
     if obj.letterhead_file_id:
         preview['letterhead_file'] = scoped(db, m.FileRecord, obj.letterhead_file_id, school.id)
     return Response(template_pdf(db, school, obj, preview), media_type='application/pdf',
@@ -778,8 +832,57 @@ def validate_docx_template(db,school,data):
 
 
 def template_pdf(db,school,obj,preview):
+    if preview.get('missing_fields'):
+        fail(422, 'Há variáveis obrigatórias pendentes neste contrato.')
     if getattr(obj,'source_docx_file_id',None):
         from .docx_layout import mapped,fill,pdf
         original=source_bytes(db,school.id,obj.source_docx_file_id)
-        return pdf(fill(mapped(original,obj.docx_mapping),preview['variables']))
-    return _pdf(db,school,obj.name,preview)
+        rendered = pdf(fill(mapped(original,obj.docx_mapping),preview['variables']))
+    else:
+        rendered = _pdf(db,school,obj.name,preview)
+    # Enforce the same invariant on the actual artifact, including DOCX headers/tables.
+    from pypdf import PdfReader
+    text = '\n'.join(page.extract_text() or '' for page in PdfReader(io.BytesIO(rendered)).pages)
+    if '{{' in text or '}}' in text:
+        fail(422, 'O PDF contém marcadores não resolvidos. Revise os parâmetros do modelo.')
+    return rendered
+
+
+class PreparationInput(RenderInput):
+    enrollment_id: str
+    version: int = Field(default=0, ge=0)
+
+
+@router.get('/document-templates/{template_id}/preparation')
+def get_preparation(template_id: str, enrollment_id: str, db: DB, user: Actor, school: Scope, template_version: int | None = None):
+    require(user, 'documents.read')
+    scoped(db, m.Enrollment, enrollment_id, school.id)
+    template = _versioned_template(db, scoped(db, m.DocumentTemplate, template_id, school.id), template_version)
+    row = db.scalar(select(m.ContractPreparationDraft).where(m.ContractPreparationDraft.school_id == school.id,
+        m.ContractPreparationDraft.enrollment_id == enrollment_id, m.ContractPreparationDraft.template_id == template_id,
+        m.ContractPreparationDraft.template_version == template.version))
+    return {'version': row.version if row else 0, 'values': row.values if row else {},
+            'template_version': template.version, 'updated_at': row.updated_at if row else None}
+
+
+@router.put('/document-templates/{template_id}/preparation')
+def save_preparation(template_id: str, data: PreparationInput, db: DB, user: Actor, school: Scope, request: Request):
+    require(user, 'documents.generate'); lock_school(db, school.id)
+    scoped(db, m.Enrollment, data.enrollment_id, school.id)
+    template = _versioned_template(db, scoped(db, m.DocumentTemplate, template_id, school.id), data.template_version)
+    if set(data.values) - _available_fields(db, school, template): fail(422, 'O rascunho contém campos ausentes neste modelo.')
+    row = db.scalar(select(m.ContractPreparationDraft).where(m.ContractPreparationDraft.school_id == school.id,
+        m.ContractPreparationDraft.enrollment_id == data.enrollment_id, m.ContractPreparationDraft.template_id == template_id,
+        m.ContractPreparationDraft.template_version == template.version))
+    if row:
+        check_version(row, data.version)
+        row.values = dict(data.values); row.updated_by = user.id; row.version += 1
+    else:
+        if data.version: fail(409, 'O rascunho mudou. Atualize antes de salvar.')
+        row = m.ContractPreparationDraft(school_id=school.id, enrollment_id=data.enrollment_id,
+            template_id=template_id, template_version=template.version, values=dict(data.values), updated_by=user.id)
+        db.add(row)
+    db.flush()
+    audit(db, request, user, 'document_template.preparation_saved', row, school.id,
+          {'template_id': template_id, 'template_version': template.version, 'fields': sorted(data.values)})
+    return {'version': row.version, 'values': row.values, 'template_version': template.version, 'updated_at': row.updated_at}

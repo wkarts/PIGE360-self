@@ -3,18 +3,18 @@ namespace PigeContracts {
   type Row=PigeAPI.Row;
   type Mapping={id:number;part:string;paragraph:number;start:number;end:number;original:string;context:string;field:string;confidence:string;required:boolean;accepted:boolean;preserve?:boolean};
   type Source={source_docx_file_id:string|null;docx_mapping:Mapping[];docx_reviewed:boolean};
-  type Template=Row&Partial<Source>&{name:string;kind:string;header:string;body:string;footer:string;academic_year_id?:string|null;valid_from?:string|null;valid_until?:string|null;active:boolean;require_signature?:boolean;created_at?:string;letterhead_file_id?:string|null};
+  type Template=Row&Partial<Source>&{field_options?:Record<string,PigeContractFields.Options>;name:string;kind:string;header:string;body:string;footer:string;academic_year_id?:string|null;valid_from?:string|null;valid_until?:string|null;active:boolean;require_signature?:boolean;created_at?:string;letterhead_file_id?:string|null};
   type Field={key:string;label:string;source:string};
-  type Preview={header:string;content:string;footer:string;variables:Record<string,string>;missing_fields:string[];template_version:number};
+  type Preview=PigeContractFields.Preview;
   type ImportResult={name:string;header?:string;body:string;footer?:string;warnings:string[];placeholders:string[]};
   type Enrollment=Row&{student_id:string;student_name:string;number:string;year_name:string;status:string};
   type Props={schoolId:string;permissions:string[];role:string;enrollmentId?:string;issuedId?:string};
-  type Draft=Source&{name:string;kind:string;header:string;body:string;footer:string;academic_year_id:string;valid_from:string;valid_until:string;active:boolean;require_signature:boolean};
-  const emptyDraft=():Draft=>({source_docx_file_id:null,docx_mapping:[],docx_reviewed:false,name:'',kind:'educational_contract',header:'',body:'',footer:'',academic_year_id:'',valid_from:'',valid_until:'',active:true,require_signature:true});
+  type Draft=Source&{field_options:Record<string,PigeContractFields.Options>;name:string;kind:string;header:string;body:string;footer:string;academic_year_id:string;valid_from:string;valid_until:string;active:boolean;require_signature:boolean};
+  const emptyDraft=():Draft=>({field_options:{},source_docx_file_id:null,docx_mapping:[],docx_reviewed:false,name:'',kind:'educational_contract',header:'',body:'',footer:'',academic_year_id:'',valid_from:'',valid_until:'',active:true,require_signature:true});
   const contractKind=(kind:string):boolean=>kind.split('_').some(token=>['contract','contracts','contrato','contratos'].includes(token));
   const str=(value:unknown):string=>value==null?'':String(value);
   const date=(value:unknown):string=>{const raw=str(value);return raw?new Intl.DateTimeFormat('pt-BR',{timeZone:'UTC'}).format(new Date(raw.length===10?raw+'T12:00:00Z':raw)):'—';};
-  export const component={props:['schoolId','permissions','role','enrollmentId','issuedId'],render:PigeRenders.contracts,setup(props:Props){
+  export const component={get components(){return {'contract-value-field':PigeContractFields.component,'signing-panel':PigeSigning.component};},props:['schoolId','permissions','role','enrollmentId','issuedId'],render:PigeRenders.contracts,setup(props:Props){
     const state=Vue.reactive({
       busy:false,loading:false,error:'',notice:'',tab:props.issuedId?'signatures':'templates',
       templates:[] as Template[],applicable:[] as Template[],years:[] as Row[],fields:[] as Field[],
@@ -22,15 +22,16 @@ namespace PigeContracts {
       docxPrepared:false,docxPreviewed:false,importWarnings:[] as string[],importFileName:'',letterheadName:'',letterheadUrl:'',
       enrollmentSearch:'',enrollmentChoices:[] as Enrollment[],enrollment:null as Enrollment|null,
       templateId:'',values:{} as Record<string,string>,preview:null as Preview|null,previewStale:false,
-      issued:null as (Row&{file_id:string;template_name?:string})|null
+      draftVersion:0,draftDirty:false,previewVisible:false,issued:null as (Row&{file_id:string;template_name?:string})|null
     });
     const identity=PigeInstitution.state;
     let letterheadFile:File|null=null;
+    let preparedTemplateId='';
     const base=()=>'/schools/'+props.schoolId;
     const can=(permission:string)=>props.permissions.includes(permission);
     const textDirty=()=>state.editing&&JSON.stringify(state.draft)!==state.savedDraft;
     const editorDirty=()=>textDirty()||Boolean(letterheadFile);
-    hasUnsavedChanges=editorDirty;
+    hasUnsavedChanges=()=>editorDirty()||state.draftDirty;
     const templatesResponse=(data:{items?:Template[]}|Template[]):Template[]=>Array.isArray(data)?data:data.items||[];
     async function run(action:()=>Promise<void>):Promise<void>{if(state.busy)return;state.busy=true;state.error='';state.notice='';try{await action();}catch(error){state.error=error instanceof Error?error.message:String(error);}finally{state.busy=false;}}
     async function load():Promise<void>{state.loading=true;state.error='';try{
@@ -48,7 +49,7 @@ namespace PigeContracts {
       state.applicable=templatesResponse(data);if(!state.applicable.some(template=>template.id===state.templateId)){state.templateId='';state.preview=null;state.values={};}
     }
     function beginNew():void{if(editorDirty()&&!window.confirm('Descartar alterações não salvas?'))return;
-      clearLetterhead();state.selected=null;state.draft=emptyDraft();state.savedDraft=JSON.stringify(state.draft);state.importWarnings=[];state.importFileName='';state.editing=true;state.tab='templates';state.error='';state.notice='';
+      clearLetterhead();state.selected=null;state.draft=emptyDraft();placeholders().forEach(key=>variableOptions(key));state.savedDraft=JSON.stringify(state.draft);state.importWarnings=[];state.importFileName='';state.editing=true;state.tab='templates';state.error='';state.notice='';
     }
     async function useBuiltin():Promise<void>{
       beginNew();if(!state.editing)return;
@@ -61,8 +62,8 @@ namespace PigeContracts {
     async function beginEdit(item:Template):Promise<void>{if(editorDirty()&&!window.confirm('Descartar alterações não salvas?'))return;
       await run(async()=>{
         const template=await PigeAPI.request<Template>(base()+'/document-templates/'+item.id);
-        state.selected=template;state.docxPrepared=true;state.docxPreviewed=Boolean(template.docx_reviewed);state.draft={source_docx_file_id:template.source_docx_file_id||null,docx_mapping:template.docx_mapping||[],docx_reviewed:Boolean(template.docx_reviewed),name:template.name,kind:template.kind,header:str(template.header),body:template.body,footer:str(template.footer),academic_year_id:str(template.academic_year_id),valid_from:str(template.valid_from),valid_until:str(template.valid_until),active:Boolean(template.active),require_signature:Boolean(template.require_signature)||contractKind(template.kind)};
-        state.savedDraft=JSON.stringify(state.draft);state.importWarnings=[];state.importFileName='';state.editing=true;state.tab='templates';
+        state.selected=template;state.docxPrepared=true;state.docxPreviewed=Boolean(template.docx_reviewed);state.draft={field_options:template.field_options||{},source_docx_file_id:template.source_docx_file_id||null,docx_mapping:template.docx_mapping||[],docx_reviewed:Boolean(template.docx_reviewed),name:template.name,kind:template.kind,header:str(template.header),body:template.body,footer:str(template.footer),academic_year_id:str(template.academic_year_id),valid_from:str(template.valid_from),valid_until:str(template.valid_until),active:Boolean(template.active),require_signature:Boolean(template.require_signature)||contractKind(template.kind)};
+        placeholders().forEach(key=>variableOptions(key));state.savedDraft=JSON.stringify(state.draft);state.importWarnings=[];state.importFileName='';state.editing=true;state.tab='templates';
         await hydrateLetterhead(template);
       });
     }
@@ -95,11 +96,12 @@ namespace PigeContracts {
     }
     async function save():Promise<void>{await run(async()=>{
       if(state.draft.source_docx_file_id){await prepareSource();if(state.draft.active&&!state.draft.docx_reviewed)throw new Error('Confira o PDF e confirme a revisão antes de ativar.');}validateDraft();const draft=state.draft;
+      draft.field_options=Object.fromEntries(placeholders().map(key=>[key,variableOptions(key)]));
       const data={...draft,name:draft.name.trim(),kind:draft.kind.trim(),require_signature:draft.require_signature||contractKind(draft.kind),academic_year_id:draft.academic_year_id||null,valid_from:draft.valid_from||null,valid_until:draft.valid_until||null};
       const saved=state.selected
         ?await PigeAPI.patch<Template>(base()+'/document-templates/'+state.selected.id,{...data,version:state.selected.version})
         :await PigeAPI.post<Template>(base()+'/document-templates',data);
-      state.selected=saved;state.savedDraft=JSON.stringify(state.draft);state.importWarnings=[];state.importFileName='';
+      state.selected=saved;placeholders().forEach(key=>variableOptions(key));state.savedDraft=JSON.stringify(state.draft);state.importWarnings=[];state.importFileName='';
       const result=await PigeAPI.request<{items:Template[]}>(base()+'/document-templates?include_inactive=true');state.templates=templatesResponse(result);
       if(state.enrollment)await loadApplicable();state.notice='Modelo salvo. A versão anterior dos documentos já emitidos continua preservada.';
     });}
@@ -130,7 +132,7 @@ namespace PigeContracts {
         const requestedYear=str(raw.academic_year||outer?.academic_year||file.name.match(/20\d{2}/)?.[0]);
         const year=requestedYear?state.years.find(item=>String(item.name).includes(requestedYear)):undefined;
         const kind=typeof raw.kind==='string'?raw.kind:'educational_contract',needsA1=contractKind(kind);
-        state.draft={source_docx_file_id:null,docx_mapping:[],docx_reviewed:false,name:raw.name.slice(0,160),kind,header:str(raw.header),body:raw.body,footer:str(raw.footer),academic_year_id:str(year?.id)||'',valid_from:typeof raw.valid_from==='string'?raw.valid_from:'',valid_until:typeof raw.valid_until==='string'?raw.valid_until:'',active:false,require_signature:needsA1||Boolean(raw.require_signature)};
+        state.draft={field_options:raw.field_options&&typeof raw.field_options==='object'&&!Array.isArray(raw.field_options)?raw.field_options as Record<string,PigeContractFields.Options>:{},source_docx_file_id:null,docx_mapping:[],docx_reviewed:false,name:raw.name.slice(0,160),kind,header:str(raw.header),body:raw.body,footer:str(raw.footer),academic_year_id:str(year?.id)||'',valid_from:typeof raw.valid_from==='string'?raw.valid_from:'',valid_until:typeof raw.valid_until==='string'?raw.valid_until:'',active:false,require_signature:needsA1||Boolean(raw.require_signature)};
         state.importFileName=file.name;state.importWarnings=needsA1&&raw.require_signature===false?['Este é um contrato: a assinatura A1 da escola foi ativada para cumprir a regra de emissão.']:[];
         state.notice='Modelo JSON carregado somente no editor. Confira o ano letivo e o texto; após salvar, envie o timbrado e ative quando estiver revisado.';
       });
@@ -151,14 +153,20 @@ namespace PigeContracts {
     async function searchEnrollments():Promise<void>{const q=state.enrollmentSearch.trim();if(q.length<2){state.enrollmentChoices=[];return;}
       await run(async()=>{const result=await PigeAPI.request<PigeAPI.Page<Enrollment>>(base()+'/enrollments?page_size=20&q='+encodeURIComponent(q));state.enrollmentChoices=result.items;});
     }
-    async function chooseEnrollment(enrollment:Enrollment):Promise<void>{state.enrollment=enrollment;state.enrollmentSearch='';state.enrollmentChoices=[];state.values={};state.preview=null;state.issued=null;state.templateId='';await run(loadApplicable);}
-    function clearEnrollment():void{state.enrollment=null;state.applicable=[];state.templateId='';state.preview=null;state.values={};state.issued=null;}
-    function selectTemplate():void{state.preview=null;state.values={};state.issued=null;}
+    async function chooseEnrollment(enrollment:Enrollment):Promise<void>{if(state.draftDirty&&!window.confirm('Descartar o preenchimento não salvo desta matrícula?'))return;state.draftDirty=false;state.draftVersion=0;preparedTemplateId='';state.enrollment=enrollment;state.enrollmentSearch='';state.enrollmentChoices=[];state.values={};state.preview=null;state.issued=null;state.templateId='';await run(loadApplicable);}
+    function clearEnrollment():void{if(state.draftDirty&&!window.confirm('Descartar o preenchimento não salvo desta matrícula?'))return;state.draftDirty=false;state.draftVersion=0;preparedTemplateId='';state.enrollment=null;state.applicable=[];state.templateId='';state.preview=null;state.values={};state.issued=null;}
+    function selectTemplate():void{if(state.draftDirty&&!window.confirm('Descartar o preenchimento não salvo deste modelo?')){state.templateId=preparedTemplateId;return;}preparedTemplateId=state.templateId;state.preview=null;state.values={};state.issued=null;state.draftVersion=0;state.draftDirty=false;}
     function previewKeys():string[]{return state.preview?Array.from(new Set([...Object.keys(state.preview.variables||{}),...(state.preview.missing_fields||[])])):[];}
     function displayValue(key:string):string{return Object.prototype.hasOwnProperty.call(state.values,key)?state.values[key]:str(state.preview?.variables?.[key]);}
-    function automaticValue(key:string):boolean{return !Object.prototype.hasOwnProperty.call(state.values,key)&&Boolean(state.preview?.variables?.[key]);}
-    function setValue(key:string,event:Event):void{state.values[key]=(event.target as HTMLInputElement).value;state.previewStale=true;state.issued=null;}
+    function automaticValue(key:string):boolean{return fieldMeta(key).automatic;}
+    function setValue(key:string,event:Event):void{setFieldValue(key,(event.target as HTMLInputElement).value);}
+    function setFieldValue(key:string,value:string):void{state.values[key]=value;state.previewStale=true;state.draftDirty=true;state.issued=null;}
+    function fieldMeta(key:string):PigeContractFields.Meta{return PigeContractFields.meta(state.preview,key,fieldLabel(key));}
+    function groupKeys(name:string,automatic=false):string[]{return previewKeys().filter(key=>PigeContractFields.group(key)===name&&automaticValue(key)===automatic);}
+    function variableOptions(key:string):PigeContractFields.Options{return state.draft.field_options[key]||(state.draft.field_options[key]={required:false,input_type:PigeContractFields.infer(key)});}
+    async function savePreparation():Promise<void>{if(!state.enrollment||!state.templateId)return;await run(async()=>{const result=await PigeAPI.request<{version:number}>(base()+'/document-templates/'+state.templateId+'/preparation',{method:'PUT',body:JSON.stringify({enrollment_id:state.enrollment!.id,template_version:state.preview?.template_version,version:state.draftVersion,values:state.values})});state.draftVersion=result.version;state.draftDirty=false;state.notice='Rascunho salvo nesta matrícula e revisão.';});}
     async function preview():Promise<void>{if(!state.templateId||!state.enrollment)return;await run(async()=>{
+      if(!state.preview){const draft=await PigeAPI.request<{version:number;values:Record<string,string>}>(base()+'/document-templates/'+state.templateId+'/preparation?enrollment_id='+state.enrollment!.id);state.draftVersion=draft.version;state.values=draft.values||{};}
       state.preview=await PigeAPI.post<Preview>(base()+'/document-templates/'+state.templateId+'/preview',{enrollment_id:state.enrollment!.id,values:state.values});
       state.previewStale=false;state.issued=null;
     });}
@@ -182,10 +190,10 @@ namespace PigeContracts {
     }
     async function downloadIssued():Promise<void>{if(!state.issued)return;await run(()=>downloadIssuedFile(state.issued!,'documento-emitido.pdf'));}
     async function activateEnrollment(id:string):Promise<void>{try{const enrollment=await PigeAPI.request<Enrollment>(base()+'/enrollments/'+id);if(state.editing)return;if(!props.issuedId)state.tab='issue';await chooseEnrollment(enrollment);}catch(error){state.error=error instanceof Error?error.message:String(error);}}
-    const beforeUnload=(event:BeforeUnloadEvent)=>{if(editorDirty()){event.preventDefault();event.returnValue='';}};
+    const beforeUnload=(event:BeforeUnloadEvent)=>{if(editorDirty()||state.draftDirty){event.preventDefault();event.returnValue='';}};
     Vue.onMounted(()=>{window.addEventListener('beforeunload',beforeUnload);void load().then(()=>{if(props.enrollmentId)void activateEnrollment(props.enrollmentId);});});
     Vue.onUnmounted(()=>{window.removeEventListener('beforeunload',beforeUnload);hasUnsavedChanges=()=>false;clearLetterhead();});
     const hasDocumentContext=()=>Boolean(props.enrollmentId||props.issuedId||state.enrollment);
-    return{hasDocumentContext,state,identity,can,str,date,load,beginNew,useBuiltin,beginEdit,cancelEdit,save,importDocx,previewSource,downloadOriginal,mappingChanged,importJson,insertField,categories,categoryFields,yearName,contractKind,syncContractSignature,editorDirty,placeholders,fieldLabel,automaticValue,searchEnrollments,chooseEnrollment,clearEnrollment,selectTemplate,previewKeys,displayValue,setValue,preview,issue,downloadPdfPreview,downloadIssued,letterheadChanged,uploadLetterhead,removeLetterhead};
+    return{hasDocumentContext,state,identity,can,str,date,load,fieldKinds:PigeContractFields.kinds,fieldGroups:PigeContractFields.groups,variableOptions,fieldMeta,groupKeys,setFieldValue,savePreparation,beginNew,useBuiltin,beginEdit,cancelEdit,save,importDocx,previewSource,downloadOriginal,mappingChanged,importJson,insertField,categories,categoryFields,yearName,contractKind,syncContractSignature,editorDirty,placeholders,fieldLabel,automaticValue,searchEnrollments,chooseEnrollment,clearEnrollment,selectTemplate,previewKeys,displayValue,setValue,preview,issue,downloadPdfPreview,downloadIssued,letterheadChanged,uploadLetterhead,removeLetterhead};
   }};
 }

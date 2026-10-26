@@ -304,6 +304,8 @@ sandbox.PigeAPI.request=async path=>{
   if(path.endsWith('/document-templates?include_inactive=true'))return{items:[templateChoice]};
   if(path.endsWith('/document-templates/fields'))return{fields:[{key:'financeiro.anuidade',label:'Anuidade',source:'manual'}]};
   if(path.includes('/admissions-summary'))return{counts:{}};
+  if(path.includes('/preparation?'))return{version:0,values:{}};
+  if(path.endsWith('/admissions/admission-1/readiness'))return{ready:false,checks:[{code:'contract',ready:false,message:'Emita o contrato',stage:'contract'}]};
   if(path.includes('/admissions/admission-1'))return admission;
   if(path.includes('/bank-charges'))return{items:[],total:0};
   if(path.includes('/admissions?'))return{items:[],total:0};
@@ -436,6 +438,7 @@ sandbox.PigeAPI.request=async path=>{
   if(path.endsWith('/admission-campaigns'))return[];
   if(path.endsWith('/admissions-summary'))return{counts:{}};
   if(path.includes('/admissions?'))return{items:[],total:0};
+  if(path.endsWith('/admissions/readonly-one/readiness'))return{ready:false,checks:[{code:'approval',ready:false,message:'Aprove a inscrição',stage:'documents'}]};
   if(path.endsWith('/admissions/readonly-one'))return{id:'readonly-one',status:'submitted'};
   throw new Error('Consulta fora das permissões: '+path);
 };

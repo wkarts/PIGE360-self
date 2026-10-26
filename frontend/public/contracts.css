@@ -1,4 +1,45 @@
 .contracts{display:grid;gap:18px}
+.admission-workspace{max-width:1240px;margin-inline:auto;min-width:0;display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:14px;align-items:start}
+.admission-workspace>.x-card,.admission-workspace>.admission-stage-nav,.admission-workspace>.admission-secondary{grid-column:1}
+.admission-workspace>.x-card:first-child,.admission-workspace>.admission-stage-nav{grid-column:1/-1}
+.admission-workspace>.admission-next{grid-column:2;grid-row:3/span 5;padding:16px;margin:0;min-width:0}
+.admission-workspace>.x-card{padding:18px;margin:0;min-width:0}
+.admission-workspace .x-form{gap:12px}
+.admission-workspace .x-grid{gap:12px}
+.admission-stage-nav{display:flex;gap:8px;flex-wrap:wrap}
+.admission-stage-nav .btn{flex:1;white-space:normal;min-width:125px}
+.admission-next ul{list-style:none;padding:0;margin:10px 0 0;display:grid;gap:12px}
+.admission-next li{border-top:1px solid var(--border);padding-top:10px;display:grid;gap:4px;overflow-wrap:anywhere}
+.admission-next li .link-button{text-align:left;padding:0;min-height:30px}
+.admission-next li span{font-size:12px;line-height:1.5;color:var(--muted)}
+.admission-workspace .admission-model-settings,.admission-workspace .contract-preview-toggle{margin:10px 0;padding:12px;border:1px solid var(--border);box-shadow:none}
+.admission-contract-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.contract-variable-groups{display:grid;gap:12px}
+.contract-variable-group{border:0;border-top:1px solid var(--border);padding:12px 0 0;margin:0;min-width:0}
+.contract-variable-group legend{padding:0 12px 0 0;font-weight:650;font-size:13px}
+.contract-variable-group .contract-value-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:12px;margin:0}
+.contract-typed-field{min-width:0;display:grid;gap:5px;align-content:start;font-size:13px!important;max-width:360px}
+.contract-typed-field input,.contract-typed-field select{width:100%;min-width:0}
+.contract-kind-date{max-width:210px}.contract-kind-uf{max-width:110px}.contract-kind-integer{max-width:155px}.contract-kind-cpf,.contract-kind-cep,.contract-kind-money{max-width:215px}
+.contract-required{display:inline;color:var(--danger,#a43e24);font-size:11px;font-weight:500}
+.contract-registry-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:9px 14px;margin:10px 0 0}
+.contract-registry-summary dt{font-size:12px;color:var(--muted)}.contract-registry-summary dd{margin:0;overflow-wrap:anywhere;font-size:13px}
+.contract-registry-summary small{display:block;font-size:11px;color:var(--muted)}
+.contract-parameter-list{display:grid;gap:10px}
+.contract-parameter-list article{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;border-top:1px solid var(--border);padding-top:12px}
+.contract-parameter-list code{display:block;overflow-wrap:anywhere;font-size:11px}
+.contract-parameter-list label{font-size:12px}.contract-parameter-list .x-check{margin:0}
+.admission-checklist{padding:0;list-style:none;display:grid;gap:10px;margin:14px 0}
+.admission-checklist li{display:grid;gap:3px;border-bottom:1px solid var(--border);padding:9px 0}
+.admission-checklist li span{font-size:13px;color:var(--muted)}
+.admission-workspace>.admission-secondary{padding:12px 16px;background:var(--surface,#fff);border:1px solid var(--border);border-radius:10px;margin:0;min-width:0}
+.admission-secondary>.x-card{padding:12px 0 0;margin:0;box-shadow:none;border:0}
+.admission-workspace .contract-paper{aspect-ratio:auto;min-height:0;padding:22px;max-width:100%;margin:12px 0 0}
+.admission-workspace .contract-paper-content{overflow:visible;max-height:none;white-space:pre-wrap}
+.admission-workspace .contract-paper-content p+p{margin-top:12px}
+@media(max-width:1100px){.admission-workspace{grid-template-columns:minmax(0,1fr)}.admission-workspace>.admission-next{grid-column:1;grid-row:auto}.admission-workspace>.x-card,.admission-workspace>.admission-secondary{grid-column:1}}
+@media(max-width:600px){.admission-workspace>.x-card{padding:15px}.admission-stage-nav{gap:6px}.admission-stage-nav .btn{min-width:115px}.contract-variable-group .contract-value-grid{grid-template-columns:minmax(0,1fr)}.contract-typed-field{max-width:none}.contract-kind-uf{max-width:120px}.contract-kind-integer{max-width:170px}}
+@media print{.admission-workspace .contract-paper,.contracts .contract-preview .contract-paper{display:none!important}}
 .contracts .x-card{padding:22px;overflow:visible}
 .contracts .x-card>h3{margin-bottom:12px}
 .contracts .x-card>p+h3{margin-top:14px}
