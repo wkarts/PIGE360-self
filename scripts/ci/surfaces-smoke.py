@@ -15,6 +15,13 @@ ROOT=Path(__file__).resolve().parents[2]
 address,stack,envfile,project=sys.argv[1:]
 stack=Path(stack).resolve()
 if not project.startswith('pige360-ci-') or not (stack/'.pige360-smoke-owned').is_file():raise SystemExit('Exige stack descartável pertencente ao CI.')
+command=['docker','compose','--env-file',envfile,'-p',project,'-f',str(stack/'compose.yaml')]
+def surface_url(service):
+    address=subprocess.check_output([*command,'port',service,'8080'],text=True).strip()
+    if not re.fullmatch(r'127\.0\.0\.1:[1-9][0-9]*',address):raise AssertionError(f'Publicação loopback inválida para {service}: {address}')
+    return 'http://'+address
+website_url,portal_url=surface_url('website'),surface_url('portal')
+portal_headers={'Host':'portal.smoke.test'}
 url='http://'+address;password='Synthetic-Backup-2026!'
 client=httpx.Client(base_url=url,trust_env=False,timeout=30)
 setup=client.get('/api/v1/setup/status');assert setup.is_success and setup.json()['configured'],setup.text
@@ -26,21 +33,20 @@ assert response.is_success,response.text
 response=client.post(base+'/community-posts',headers=headers,json={'title':'Publicação Docker visível','content':'Conteúdo aprovado via API interna.','audience':'public','status':'published'});assert response.is_success,response.text
 response=client.post(base+'/community-posts',headers=headers,json={'title':'Publicação privada nunca visível','content':'Conteúdo privado para os responsáveis autorizados.','audience':'guardians','status':'published'});assert response.is_success,response.text
 for path in ('/health/live','/health/ready'):
-    response=httpx.get('http://127.0.0.1:58082'+path,trust_env=False)
+    response=httpx.get(website_url+path,trust_env=False)
     assert response.status_code==200,(path,response.status_code,response.text)
-site=httpx.get('http://127.0.0.1:58082/',headers={'Host':'school.example.test'},trust_env=False);assert site.is_success,site.text
+site=httpx.get(website_url+'/',headers={'Host':'school.example.test'},trust_env=False);assert site.is_success,site.text
 assert 'Site integrado no Docker' in site.text and 'Publicação Docker visível' in site.text and 'Publicação privada nunca visível' not in site.text
-unknown=httpx.get('http://127.0.0.1:58082/',headers={'Host':'unknown.example.test'},trust_env=False)
+unknown=httpx.get(website_url+'/',headers={'Host':'unknown.example.test'},trust_env=False)
 assert unknown.status_code==404 and 'Site em preparação' in unknown.text and 'Site integrado no Docker' not in unknown.text
-assert httpx.get('http://127.0.0.1:58083/',trust_env=False).status_code==200
-assert httpx.get('http://127.0.0.1:58083/api/v1/backups',trust_env=False).status_code==404
+assert httpx.get(portal_url+'/',headers=portal_headers,trust_env=False).status_code==200
+assert httpx.get(portal_url+'/api/v1/backups',headers=portal_headers,trust_env=False).status_code==404
 print('PASS: site e portal em imagens próprias, conteúdo interno autenticado e bloqueio administrativo',flush=True)
 
 # Adota a composição CI existente, com caminhos absolutos e o MESMO nome de projeto.
 # Isto demonstra a atualização de uma instalação; não inicia outra stack.
 checkout=stack/'restore-checkout';deployment=checkout/'deploy/docker';deployment.mkdir(parents=True)
 (checkout/'scripts').mkdir();shutil.copy2(ROOT/'scripts/configure.py',checkout/'scripts/configure.py')
-command=['docker','compose','--env-file',envfile,'-p',project,'-f',str(stack/'compose.yaml')]
 config=json.loads(subprocess.check_output([*command,'--profile','website','--profile','portal','config','--format','json'],text=True))
 config['name']=project
 (deployment/'compose.yaml').write_text(json.dumps(config))

@@ -32,11 +32,22 @@ class SmokeIsolationTests(unittest.TestCase):
             binaries = directory / 'bin'
             binaries.mkdir()
             docker = binaries / 'docker'
-            docker.write_text('#!/bin/sh\nexit 69\n')
+            docker.write_text('''#!/bin/sh
+# Capture only the generated port/origin settings, never generated secrets.
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = --env-file ]; then
+    sed -n '/^PORTAL_PORT=/p; /^WEBSITE_PORT=/p; /^PORTAL_PUBLIC_URL=/p' "$2" > "$CAPTURE_PORTS"
+    break
+  fi
+  shift
+done
+exit 69
+''')
             docker.chmod(0o755)
             isolated_tmp = directory / 'tmp'
             isolated_tmp.mkdir()
-            environment = dict(os.environ, PATH=str(binaries) + os.pathsep + os.environ['PATH'], TMPDIR=str(isolated_tmp))
+            captured_ports = directory / 'ports'
+            environment = dict(os.environ, PATH=str(binaries) + os.pathsep + os.environ['PATH'], TMPDIR=str(isolated_tmp), CAPTURE_PORTS=str(captured_ports))
             result = subprocess.run(
                 ['bash', str(checkout / 'scripts/ci/smoke.sh'), 'example.invalid/image:ci', 'remote'],
                 cwd=checkout, env=environment, text=True, capture_output=True, timeout=30,
@@ -45,6 +56,8 @@ class SmokeIsolationTests(unittest.TestCase):
             for name in ('data-postgres', 'data-documents'):
                 self.assertEqual((deployment / name / 'preserve-me').read_bytes(), b'existing installation')
             self.assertEqual(list(isolated_tmp.iterdir()), [], 'Diretório temporário do smoke não foi limpo')
+            self.assertEqual(set(captured_ports.read_text().splitlines()), {
+                'PORTAL_PORT=0', 'WEBSITE_PORT=0', 'PORTAL_PUBLIC_URL=http://portal.smoke.test'})
 
 
 if __name__ == '__main__':
