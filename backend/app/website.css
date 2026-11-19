@@ -72,3 +72,10 @@ body.composition-v2>main{flex:1}
 .composition-secondary .content-item,.magazine-secondary .story{display:block}
 .composition-secondary .content-item>.captioned-photo>.photo,.magazine-secondary .story>.photo{aspect-ratio:3/2;height:auto;margin-bottom:20px}
 }
+
+/* Service directory on the family home page, using the active school's colors. */
+#servicos .cards-grid,#servicos .card-grid{align-items:stretch}
+#servicos article{display:flex;flex-direction:column;align-items:flex-start;border-top:3px solid var(--brand);min-inline-size:0}
+#servicos article .text-link{margin-block-start:auto}
+.internal-cover .page-copy .actions{display:flex;flex-wrap:wrap;gap:.65rem;margin-block-start:1.25rem}
+@media(max-width:520px){.internal-cover .page-copy .actions>.button{max-width:100%;white-space:normal}}

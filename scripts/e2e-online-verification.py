@@ -131,8 +131,11 @@ try:
   models=client.get(base+'/document-templates?include_inactive=true',headers=headers).json()['items'];parameterized=next(t for t in models if t['name']=='Contrato parametrizado da inscrição')
   assert parameterized['field_options']['assinatura.data']['required'] is True
   assert not parameterized['field_options']['contratante2.nome']['required']
-  admin.goto(URL+'/#/online');admin.locator('.x-record',has_text='Aluno Exemplo').click()
-  admin.get_by_text('Atualizar versão ou trocar modelo',exact=True).click()
+  admin.get_by_role('tab',name='Inscrições online',exact=True).click()
+  choice_details=admin.locator('details').filter(has=admin.get_by_text('Atualizar versão ou trocar modelo',exact=True)).last
+  if choice_details.get_attribute('open') is None:
+   admin.get_by_text('Atualizar versão ou trocar modelo',exact=True).click()
+  admin.get_by_role('button',name='Atualizar modelos disponíveis',exact=True).click()
   choose_contract(parameterized['id'],'Modelo parametrizado e conferido para a matrícula de teste.')
   admin.get_by_role('button',name='Preparar contrato',exact=True).click()
   date_input=admin.get_by_label('Data da assinatura',exact=True)

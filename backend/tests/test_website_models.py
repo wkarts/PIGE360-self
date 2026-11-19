@@ -7,7 +7,7 @@ from test_school_website_domains import website
 
 def test_catalog_complete_editable_safe_and_fresh():
     entries=catalog()['items']
-    assert {x['id'] for x in entries}=={'horizon','editorial','culture','campus'}
+    assert {x['id'] for x in entries}=={'horizon','editorial','culture','campus','familias'}
     for entry in entries:
         value=WebsiteInput(**entry['website'])
         d=value.design
@@ -26,7 +26,7 @@ def test_catalog_complete_editable_safe_and_fresh():
 
 def test_catalog_read_does_not_write_and_needs_auth(api,client):
     before=api.get('/website')
-    assert len(api.get('/website/models')['items'])==4
+    assert len(api.get('/website/models')['items'])==5
     assert api.get('/website')==before
     response=client.get(api.base+'/website/models')
     assert response.status_code in (401,403)
@@ -298,3 +298,18 @@ def test_resulting_model_size_limit_is_422_without_any_mutation(api,client,exist
         assert api.get('/website')['configuration']==before
         assert checkpoint()==checkpoint_before
         assert client.get(public_path).json()==public_before
+
+
+def test_family_services_use_school_links_only_when_configured():
+    from app.website_render import render
+
+    site = next(model['website'] for model in catalog()['items'] if model['id'] == 'familias')
+    pages = {page['slug']: page for page in site['design']['pages']}
+    assert set(pages) == {'escola', 'ensino', 'matriculas', 'agenda', 'noticias', 'contato'}
+    data = {'school': {'name': 'Colégio de teste'}, 'identity': {}, 'website': site, 'page': pages['matriculas']}
+    assert 'Acessar matrícula online<span' not in render(data)
+    site.update(admission_url='https://ingresso.example.test/online', portal_url='https://familia.example.test/')
+    page = render(data)
+    assert 'href="https://ingresso.example.test/online">Acessar matrícula online<span' in page
+    assert 'href="https://familia.example.test/">Portal da família<span' in page
+    assert 'Acessar matrícula online<span' not in render({**data, 'page': pages['ensino']})

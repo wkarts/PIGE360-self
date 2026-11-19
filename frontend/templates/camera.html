@@ -1,4 +1,4 @@
-<teleport to="body">
+<teleport :to="dialogTarget">
   <div class="camera-overlay">
     <section :id="id" class="camera-dialog" role="dialog" aria-modal="true" :aria-labelledby="id+'-title'" :aria-busy="s.busy">
       <header class="camera-header"><div><p class="camera-eyebrow">{{s.preview?'CONFERIR FOTO':'CÂMERA'}}</p><h2 :id="id+'-title'" tabindex="-1" data-dialog-title>{{title()}}</h2></div><button type="button" class="camera-close" aria-label="Fechar câmera" data-dialog-close @click="close">×</button></header>

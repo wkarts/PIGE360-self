@@ -454,7 +454,7 @@ def website_output(row):
 
 
 class ApplyModelInput(Input):
-    model_id:Literal['horizon','editorial','culture','campus']
+    model_id:Literal['horizon','editorial','culture','campus','familias']
     website:WebsiteInput
 
 
