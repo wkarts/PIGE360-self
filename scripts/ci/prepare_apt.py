@@ -1,6 +1,11 @@
 """Configure bounded APT downloads on disposable Ubuntu CI runners only."""
+import re
 from pathlib import Path
 
+
+RUNNER_ARCHIVE = re.compile(
+    r'(?<!\S)https?://(?:azure|us-east-2\.ec2)\.archive\.ubuntu\.com/ubuntu(?=/|\s|$)'
+)
 
 NETWORK_CONFIG = '''Acquire::Retries "3";
 Acquire::http::Timeout "30";
@@ -18,10 +23,7 @@ def prepare_apt(root: Path = Path('/etc/apt')) -> int:
         if not path.is_file():
             continue
         original = path.read_text()
-        content = original
-        for scheme in ('http', 'https'):
-            content = content.replace(f'{scheme}://azure.archive.ubuntu.com/ubuntu',
-                                      'https://archive.ubuntu.com/ubuntu')
+        content = RUNNER_ARCHIVE.sub('https://archive.ubuntu.com/ubuntu', original)
         if content != original:
             path.write_text(content)
             changed += 1

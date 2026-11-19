@@ -10,7 +10,7 @@ spec.loader.exec_module(module)
 
 
 class PrepareAptTests(unittest.TestCase):
-    def test_only_azure_ubuntu_mirror_changes_preserving_trust_and_other_repositories(self):
+    def test_azure_ubuntu_mirror_changes_preserving_trust_and_other_repositories(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             sources = root / 'sources.list.d'
@@ -37,3 +37,20 @@ class PrepareAptTests(unittest.TestCase):
             self.assertEqual(nested.read_text(), 'https://archive.ubuntu.com/ubuntu/\n')
             self.assertEqual(module.prepare_apt(root), 0)
             self.assertIn('Acquire::https::Timeout "30";', (root / 'apt.conf.d/80-pige360-ci-network').read_text())
+
+    def test_ec2_runner_uses_official_archive_without_changing_other_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            catalog = root / 'sources.list.d/ubuntu.sources'
+            catalog.parent.mkdir()
+            mirror = 'http://us-east-2.ec2.archive.ubuntu.com/ubuntu'
+            archive = 'https://archive.ubuntu.com/ubuntu'
+            metadata = 'Suites: resolute resolute-updates\nSigned-By: /keys/ubuntu.gpg\n'
+            catalog.write_text(f'Types: deb\nURIs: {mirror}\n{metadata}')
+            mirrors = root / 'apt-mirrors.txt'
+            other = 'https://security.ubuntu.com/ubuntu'
+            mirrors.write_text(f'{mirror.replace("http:", "https:")}/\tpriority:1\n{other}\n')
+            self.assertEqual(module.prepare_apt(root), 2)
+            self.assertEqual(catalog.read_text(), f'Types: deb\nURIs: {archive}\n{metadata}')
+            self.assertEqual(mirrors.read_text(), f'{archive}/\tpriority:1\n{other}\n')
+            self.assertEqual(module.prepare_apt(root), 0)
