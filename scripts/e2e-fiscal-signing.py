@@ -128,9 +128,17 @@ try:
         page.goto(URL)
         page.get_by_label('E-mail', exact=True).fill(EMAIL)
         page.get_by_label('Senha', exact=True).fill(LOGIN_PASSWORD)
-        page.get_by_role('button', name='Entrar na aplicação').click()
-        expect(page.locator('.app-root')).to_be_visible()
+        # Hold one real catalog request so the first menu interaction always happens during school loading.
+        catalog_url = '**/api/v1/schools/*/academic-years'
+        pending_catalog = []
+        page.route(catalog_url, lambda route: pending_catalog.append(route), times=1)
+        with page.expect_request(catalog_url):
+            page.get_by_role('button', name='Entrar na aplicação').click()
         page.get_by_role('button', name='Abrir menu', exact=True).click()
+        menu = page.locator('#school-navigation')
+        expect(menu.get_by_role('status')).to_have_text('Carregando o menu da escola…')
+        expect(menu.get_by_role('button', name='Configurações', exact=True)).to_have_count(0)
+        pending_catalog.pop().continue_()
         page.get_by_role('button', name='Configurações', exact=True).click()
         page.locator('aside nav a[href="#/certificate"]').click()
         expect(page.locator('.contract-signatures')).to_be_visible()
