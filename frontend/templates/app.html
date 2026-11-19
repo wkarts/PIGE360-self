@@ -397,6 +397,7 @@
         <p class="preserve">{{ state.modal.target.description || 'Sem descrição adicional.' }}</p>
         <div class="actions spaced"><button v-if="can('protocols.write')" class="btn btn-secondary" @click="newProtocol(state.modal.target)">Atualizar protocolo</button><button v-if="can('protocols.write') && !['completed','cancelled'].includes(state.modal.target.status)" class="btn btn-primary" @click="protocolNote">Registrar atendimento</button><button v-if="can('reports.read')" class="btn btn-secondary" @click="protocolReceipt(state.modal.target.id)">Comprovante PDF</button></div>
         <h3 class="spaced">Histórico de atendimento</h3>
+        <button v-if="state.modal.target.evidence_file_id && can('documents.read')" class="btn btn-secondary" @click="downloadFile(state.modal.target.evidence_file_id,state.modal.target.evidence_filename)">Baixar comprovante da ausência</button>
         <div v-for="h in state.modal.target.history" :key="h.id" class="timeline-item"><span class="timeline-dot"></span><div><strong>{{ {created:'Protocolo aberto',updated:'Protocolo atualizado',note:'Registro de atendimento'}[h.action] }}</strong><p class="preserve">{{ h.message }}</p><small>{{ date(h.created_at) }} · {{ h.actor_name }}</small></div></div>
         <p v-if="!state.modal.target.history?.length" class="alert info spaced">O histórico detalhado será registrado a partir desta versão. O protocolo anterior foi preservado.</p>
       </div>

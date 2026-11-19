@@ -39,7 +39,7 @@ namespace PigeAPI {
   function checkScope(epoch: number): void { if (epoch !== scopeEpoch) throw scopeChanged(); }
   function scopedHeaders(path: string, initial?: HeadersInit): Headers {
     const headers = new Headers(initial);
-    const pathSchool = path.match(/^\/schools\/([^/?]+)/)?.[1];
+    const pathSchool = path.match(/^\/(?:teacher\/)?schools\/([^/?]+)/)?.[1];
     if (activeSchool && pathSchool && decodeURIComponent(pathSchool) !== activeSchool) throw scopeChanged();
     if (activeSchool) headers.set('X-School-Id', activeSchool);
     if (token) headers.set('Authorization', `Bearer ${token}`);

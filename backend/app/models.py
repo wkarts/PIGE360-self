@@ -547,3 +547,24 @@ from .access_models import SchoolAccessProfile  # noqa: F401,E402
 
 # Registro aditivo do Diário Escolar Digital.
 from .diary_models import AcademicPeriod, CurriculumComponent, CurriculumPlan, SchoolDiary, DiaryLesson, DiaryAttendance, DiaryClosure, DiaryRevision, AssessmentInstrument, AssessmentResult, DescriptiveOpinion, PedagogicalRecord, DiaryOccurrence, DiaryFamilyCommunication, PeriodAssessmentRule, PeriodResult  # noqa: F401,E402
+
+
+class ClassMaterial(Record, Scoped, Base):
+    __tablename__ = 'class_materials'
+    diary_id: Mapped[str] = mapped_column(ForeignKey('school_diaries.id'), index=True)
+    enrollment_id: Mapped[str | None] = mapped_column(ForeignKey('enrollments.id'))
+    author_id: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    kind: Mapped[str] = mapped_column(String(24))
+    title: Mapped[str] = mapped_column(String(160))
+    body: Mapped[str] = mapped_column(Text)
+
+
+class AbsenceSubmission(Base):
+    __tablename__ = 'absence_submissions'
+    protocol_id: Mapped[str] = mapped_column(ForeignKey('protocols.id'), primary_key=True)
+    author_id: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    client_key: Mapped[str] = mapped_column(String(36))
+    absence_date: Mapped[date] = mapped_column(Date)
+    file_id: Mapped[str | None] = mapped_column(ForeignKey('files.id'))
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    __table_args__ = (UniqueConstraint('author_id', 'client_key'),)

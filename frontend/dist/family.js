@@ -15,7 +15,7 @@ var PigeInstitution;
     function apply(value) {
         Object.assign(PigeInstitution.state, value);
         const surface = document.documentElement?.dataset?.institutionSurface;
-        document.title = value.display_name + ' · ' + (location.pathname === '/online.html' ? 'Portal dos responsáveis' : surface === 'portal' ? 'Portal do aluno e responsável' : 'Gestão escolar');
+        document.title = value.display_name + ' · ' + (location.pathname === '/online.html' ? 'Portal dos responsáveis' : surface === 'teacher' ? 'Portal do Professor' : surface === 'portal' ? 'Portal do aluno e responsável' : 'Gestão escolar');
         document.querySelector('meta[name="theme-color"]')?.setAttribute('content', value.primary_color);
         const theme = document.querySelector('link[data-institution-theme]');
         if (theme && !theme.href.endsWith('/api/v1/institution/theme.css?v=' + value.version))
@@ -163,9 +163,45 @@ var PigeLearning;
 /** Portal privado: shell da aplicação, transporte e autorizações escolares preservados. */
 var PigeFamily;
 (function (PigeFamily) {
-    const titles = { overview: 'Visão geral', students: 'Meus alunos', academic: 'Vida acadêmica', news: 'Comunicados', agenda: 'Agenda escolar', finance: 'Financeiro', documents: 'Documentos', support: 'Atendimento' };
+    const titles = { materials: 'Atividades', absences: 'Justificativas de ausência', overview: 'Visão geral', students: 'Meus alunos', academic: 'Vida acadêmica', news: 'Comunicados', agenda: 'Agenda escolar', finance: 'Financeiro', documents: 'Documentos', support: 'Atendimento' };
     function routeSection() { const view = new URLSearchParams(location.search).get('view'); return view && titles[view] ? view : location.pathname.includes('documents') ? 'documents' : location.pathname.includes('finance') ? 'finance' : location.pathname.includes('academic') ? 'academic' : 'overview'; }
     const s = Vue.reactive({ ready: false, busy: false, error: '', contextError: false, account: null, email: '', password: '', passwordVisible: false, menuOpen: false, schoolId: '', schools: {}, section: routeSection(), students: [], studentId: new URLSearchParams(location.search).get('student') || '', charges: [], financeNote: '', financeError: '', financeLoaded: false, news: [], events: [], feedItems: [], feedTotal: 0, feedPage: 1, feedBusy: false, feedError: '', overviewFeedError: '', selectedPost: null });
+    const schoolwork = Vue.reactive({ materials: [], absences: [], day: '', reason: '', file: null, key: '', receipt: '', fileVersion: 0 });
+    function clearSchoolwork() { schoolwork.materials = []; schoolwork.absences = []; schoolwork.file = null; schoolwork.key = ''; schoolwork.day = ''; schoolwork.reason = ''; schoolwork.receipt = ''; schoolwork.fileVersion++; }
+    function pickEvidence(event) { schoolwork.file = event.target.files?.[0] || null; }
+    async function loadSchoolwork() {
+        const current = generation, id = s.studentId, section = s.section;
+        if (!id || !['materials', 'absences'].includes(section) || (section === 'absences' && s.account?.role !== 'guardian'))
+            return;
+        const path = '/family/students/' + id + '/' + section;
+        if (section === 'materials') {
+            const items = await request(path);
+            if (current === generation && s.studentId === id)
+                schoolwork.materials = items;
+        }
+        else {
+            const items = await request(path);
+            if (current === generation && s.studentId === id)
+                schoolwork.absences = items;
+        }
+    }
+    async function submitAbsence() {
+        await run(async () => {
+            const id = s.studentId, current = generation, form = new FormData();
+            schoolwork.key ||= crypto.randomUUID();
+            form.set('client_key', schoolwork.key);
+            form.set('absence_date', schoolwork.day);
+            form.set('reason', schoolwork.reason);
+            if (schoolwork.file)
+                form.set('evidence', schoolwork.file);
+            const result = await request('/family/students/' + id + '/absences', { method: 'POST', body: form });
+            if (current !== generation || s.studentId !== id)
+                return;
+            clearSchoolwork();
+            schoolwork.receipt = result.number;
+            await loadSchoolwork();
+        });
+    }
     let postTrigger = null;
     let generation = 0, feedGeneration = 0, authEpoch = 0;
     let token = '';
@@ -176,10 +212,10 @@ var PigeFamily;
     function checkAuth(epoch) { if (epoch !== authEpoch)
         throw new SessionChanged(); }
     function invalidateAuth() { authEpoch++; refreshing = null; }
-    function clearPrivate() { generation++; feedGeneration++; s.students = []; s.charges = []; s.financeNote = ''; s.financeError = ''; s.financeLoaded = false; s.news = []; s.events = []; s.feedItems = []; s.feedTotal = 0; s.feedPage = 1; s.feedBusy = false; s.selectedPost = null; s.feedError = ''; s.overviewFeedError = ''; s.menuOpen = false; }
+    function clearPrivate() { generation++; feedGeneration++; clearSchoolwork(); s.students = []; s.charges = []; s.financeNote = ''; s.financeError = ''; s.financeLoaded = false; s.news = []; s.events = []; s.feedItems = []; s.feedTotal = 0; s.feedPage = 1; s.feedBusy = false; s.selectedPost = null; s.feedError = ''; s.overviewFeedError = ''; s.menuOpen = false; }
     async function raw(path, options = {}) { const headers = new Headers(options.headers); headers.set('X-CSRF-Protection', '1'); if (token)
         headers.set('Authorization', 'Bearer ' + token); if (s.schoolId)
-        headers.set('X-School-Id', s.schoolId); if (options.body)
+        headers.set('X-School-Id', s.schoolId); if (typeof options.body === 'string')
         headers.set('Content-Type', 'application/json'); return fetch('/api/v1' + path, { ...options, headers, credentials: 'same-origin', cache: 'no-store' }); }
     async function renew() {
         const epoch = authEpoch;
@@ -264,7 +300,10 @@ var PigeFamily;
             PigeMFA.clear();
         } });
     }
-    async function load() { clearPrivate(); s.contextError = false; const current = generation; try {
+    async function load() { if (s.account?.role === 'teacher') {
+        location.replace('/professor.html');
+        return;
+    } clearPrivate(); s.contextError = false; const current = generation; try {
         const data = await request('/family/context');
         if (current !== generation)
             return;
@@ -272,7 +311,7 @@ var PigeFamily;
         s.students = data.students;
         if (!s.students.some(x => x.id === s.studentId))
             s.studentId = s.students[0]?.id || '';
-        await Promise.all([finance(), overviewFeed()]);
+        await Promise.all([finance(), overviewFeed(), loadSchoolwork()]);
         if (current === generation && ['news', 'agenda'].includes(s.section))
             await loadFeed();
     }
@@ -281,7 +320,7 @@ var PigeFamily;
             s.contextError = true;
         throw e;
     } }
-    const label = (value) => ({ draft: 'Em preparação', active: 'Efetivada', suspended: 'Suspensa', completed: 'Concluída', pending: 'Pendente', overdue: 'Vencida', validated: 'Validado', received: 'Recebido', waived: 'Dispensado', rejected: 'Revisão necessária', expired: 'Vencido', queued: 'Em processamento', cancelled: 'Cancelada', paid: 'Paga', settled: 'Liquidada', issued: 'Emitida', registered: 'Registrada' }[value] || value);
+    const label = (value) => ({ open: 'Aberto', in_progress: 'Em atendimento', waiting: 'Aguardando', draft: 'Em preparação', active: 'Efetivada', suspended: 'Suspensa', completed: 'Concluída', pending: 'Pendente', overdue: 'Vencida', validated: 'Validado', received: 'Recebido', waived: 'Dispensado', rejected: 'Revisão necessária', expired: 'Vencido', queued: 'Em processamento', cancelled: 'Cancelada', paid: 'Paga', settled: 'Liquidada', issued: 'Emitida', registered: 'Registrada' }[value] || value);
     const student = () => s.students.find(x => x.id === s.studentId);
     const pendingDocuments = () => (student()?.documents || []).filter(x => ['pending', 'rejected', 'expired'].includes(x.status));
     const overdue = () => s.charges.filter(x => x.status === 'overdue');
@@ -336,7 +375,7 @@ var PigeFamily;
     function updateLocation(push = false) { const params = new URLSearchParams({ view: s.section }); if (s.studentId)
         params.set('student', s.studentId); history[push ? 'pushState' : 'replaceState']({}, '', '/family.html?' + params); }
     async function changeStudent() { if (s.busy)
-        return; s.selectedPost = null; updateLocation(); await run(finance); }
+        return; clearSchoolwork(); s.selectedPost = null; updateLocation(); await run(async () => { await Promise.all([finance(), loadSchoolwork()]); }); }
     async function chooseStudent(id) { if (s.busy)
         return; s.studentId = id; await changeStudent(); section('academic'); }
     async function changeSchool() { if (s.busy)
@@ -386,12 +425,15 @@ var PigeFamily;
     } }
     function section(name) { if (!titles[name])
         return; const changed = s.section !== name; s.section = name; s.selectedPost = null; closeMenu(false); if (changed)
-        updateLocation(true); if (['news', 'agenda'].includes(name))
+        updateLocation(true); if (['materials', 'absences'].includes(name))
+        void loadSchoolwork().catch(e => { if (s.section === name)
+            s.error = e.message; }); if (['news', 'agenda'].includes(name))
         void loadFeed(); void Vue.nextTick(() => window.document.getElementById('family-title')?.focus()); }
     async function popstate() { s.section = routeSection(); s.selectedPost = null; closeMenu(false); const id = new URLSearchParams(location.search).get('student'); if (id && s.students.some(x => x.id === id) && id !== s.studentId) {
+        clearSchoolwork();
         s.studentId = id;
         await finance();
-    } if (['news', 'agenda'].includes(s.section))
+    } await run(loadSchoolwork); if (['news', 'agenda'].includes(s.section))
         await loadFeed(); }
-    Vue.createApp({ components: { 'learning-portal': PigeLearning.component }, render: PigeRenders.familyPortal, setup() { Vue.onMounted(() => { window.addEventListener('popstate', popstate); window.addEventListener('keydown', menuKeys); window.addEventListener('resize', resized); PigeMFA.init(request, authenticated, logout); void start(); }); Vue.onUnmounted(() => { window.removeEventListener('popstate', popstate); window.removeEventListener('keydown', menuKeys); window.removeEventListener('resize', resized); }); return { s, label, student, title, initials, date, money, pendingDocuments, overdue, login, logout, changeSchool, changeStudent, chooseStudent, document, request, download, section, run, load, loadFeed, openPost, closePost, openMenu, closeMenu, mfa: PigeMFA, identity: PigeInstitution.state }; } }).mount('#family');
+    Vue.createApp({ components: { 'learning-portal': PigeLearning.component }, render: PigeRenders.familyPortal, setup() { Vue.onMounted(() => { window.addEventListener('popstate', popstate); window.addEventListener('keydown', menuKeys); window.addEventListener('resize', resized); PigeMFA.init(request, authenticated, logout); void start(); }); Vue.onUnmounted(() => { window.removeEventListener('popstate', popstate); window.removeEventListener('keydown', menuKeys); window.removeEventListener('resize', resized); }); return { s, schoolwork, pickEvidence, submitAbsence, label, student, title, initials, date, money, pendingDocuments, overdue, login, logout, changeSchool, changeStudent, chooseStudent, document, request, download, section, run, load, loadFeed, openPost, closePost, openMenu, closeMenu, mfa: PigeMFA, identity: PigeInstitution.state }; } }).mount('#family');
 })(PigeFamily || (PigeFamily = {}));
