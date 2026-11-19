@@ -1029,6 +1029,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
             }, [_createElementVNode("use", { href: "/ui-icons.svg#close" })]))], 8, ["onClick"]), _createElementVNode("a", {
               href: "#/dashboard",
               class: "brand-line",
+              inert: state.schoolLoading,
               onClick: _withModifiers($event => (navigate('dashboard')), ["prevent"])
             }, [(identity.logo_url)
               ? (_openBlock(), _createElementBlock("img", {
@@ -1040,457 +1041,466 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
               : (_openBlock(), _createElementBlock("strong", {
                   key: 1,
                   class: "institution-name"
-                }, _toDisplayString(identity.short_name), 1))], 8, ["onClick"])]), _createElementVNode("div", {
-              class: "sidebar-scroll",
-              tabindex: "0",
-              role: "region",
-              "aria-label": "Rolagem do menu"
-            }, [
-              _createElementVNode("div", { class: "sidebar-label" }, "OPERAÇÃO ESCOLAR"),
-              (state.emailAvailable)
-                ? (_openBlock(), _createElementBlock("nav", {
-                    key: 0,
-                    "aria-label": "E-mail institucional"
-                  }, [_createElementVNode("a", {
-                    href: "#/webmail",
-                    class: _normalizeClass({active:state.page==='webmail'}),
-                    "aria-current": state.page==='webmail'?'page':undefined,
-                    onClick: _withModifiers($event => (navigate('webmail')), ["prevent"])
-                  }, [(_openBlock(), _createElementBlock("svg", {
-                    class: "nav-icon",
-                    "aria-hidden": "true"
-                  }, [_createElementVNode("use", { href: "/ui-icons.svg#email" })])), _createTextVNode("E-mail")], 10, ["aria-current", "onClick"]), (state.user?.role!=='admin')
-                    ? (_openBlock(), _createElementBlock("a", {
+                }, _toDisplayString(identity.short_name), 1))], 8, ["inert", "onClick"])]), (state.schoolLoading)
+              ? (_openBlock(), _createElementBlock("div", {
+                  key: 0,
+                  class: "sidebar-scroll"
+                }, [_createElementVNode("p", {
+                  class: "sidebar-label",
+                  role: "status"
+                }, "Carregando o menu da escola…")]))
+              : (_openBlock(), _createElementBlock("div", {
+                  key: 1,
+                  class: "sidebar-scroll",
+                  tabindex: "0",
+                  role: "region",
+                  "aria-label": "Rolagem do menu"
+                }, [
+                  _createElementVNode("div", { class: "sidebar-label" }, "OPERAÇÃO ESCOLAR"),
+                  (state.emailAvailable)
+                    ? (_openBlock(), _createElementBlock("nav", {
                         key: 0,
-                        href: "#/email",
-                        class: _normalizeClass({active:state.page==='email'}),
-                        "aria-current": state.page==='email'?'page':undefined,
-                        onClick: _withModifiers($event => (navigate('email')), ["prevent"])
+                        "aria-label": "E-mail institucional"
+                      }, [_createElementVNode("a", {
+                        href: "#/webmail",
+                        class: _normalizeClass({active:state.page==='webmail'}),
+                        "aria-current": state.page==='webmail'?'page':undefined,
+                        onClick: _withModifiers($event => (navigate('webmail')), ["prevent"])
                       }, [(_openBlock(), _createElementBlock("svg", {
                         class: "nav-icon",
                         "aria-hidden": "true"
-                      }, [_createElementVNode("use", { href: "/ui-icons.svg#integrations" })])), _createTextVNode("Preferências de e-mail")], 10, ["aria-current", "onClick"]))
-                    : _createCommentVNode("", true)]))
-                : _createCommentVNode("", true),
-              (!isProfileRole())
-                ? (_openBlock(), _createElementBlock("nav", {
-                    key: 1,
-                    "aria-label": "Menu principal"
-                  }, [
-                    (can('dashboard.read') || isProfileRole())
-                      ? (_openBlock(), _createElementBlock("a", {
-                          key: 0,
-                          href: "#/dashboard",
-                          class: _normalizeClass({active:state.page==='dashboard'}),
-                          "aria-current": state.page==='dashboard'?'page':undefined,
-                          onClick: _withModifiers($event => (navigate('dashboard')), ["prevent"])
-                        }, [(_openBlock(), _createElementBlock("svg", {
-                          class: "nav-icon",
-                          "aria-hidden": "true",
-                          focusable: "false"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#dashboard" })])), _createTextVNode("Visão geral")], 10, ["aria-current", "onClick"]))
-                      : _createCommentVNode("", true),
-                    (can('people.read') || can('read'))
-                      ? (_openBlock(), _createElementBlock("div", {
-                          key: 1,
-                          class: _normalizeClass(["nav-group", {selected:registryPages.includes(state.page)}])
-                        }, [_createElementVNode("button", {
-                          type: "button",
-                          class: "nav-group-toggle",
-                          "aria-label": "Cadastros",
-                          onClick: $event => (state.cadastresOpen=!state.cadastresOpen),
-                          "aria-expanded": state.cadastresOpen,
-                          "aria-controls": "cadastres-menu"
-                        }, [(_openBlock(), _createElementBlock("svg", {
-                          class: "nav-icon",
-                          "aria-hidden": "true",
-                          focusable: "false"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#records" })])), _createElementVNode("span", null, "Cadastros"), (_openBlock(), _createElementBlock("svg", {
-                          class: _normalizeClass(["nav-chevron ui-icon", {expanded:state.cadastresOpen}]),
-                          "aria-hidden": "true",
-                          focusable: "false"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#chevron" })], 2))], 8, ["onClick", "aria-expanded"]), _withDirectives(_createElementVNode("div", {
-                          id: "cadastres-menu",
-                          class: "nav-group-items"
-                        }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(registryPages, (key) => {
-                          return (_openBlock(), _createElementBlock("a", {
-                            key: key,
-                            href: '#/'+key,
-                            class: _normalizeClass({active:state.page===key}),
-                            "aria-current": state.page===key?'page':undefined,
-                            onClick: _withModifiers($event => (navigate(key)), ["prevent"])
+                      }, [_createElementVNode("use", { href: "/ui-icons.svg#email" })])), _createTextVNode("E-mail")], 10, ["aria-current", "onClick"]), (state.user?.role!=='admin')
+                        ? (_openBlock(), _createElementBlock("a", {
+                            key: 0,
+                            href: "#/email",
+                            class: _normalizeClass({active:state.page==='email'}),
+                            "aria-current": state.page==='email'?'page':undefined,
+                            onClick: _withModifiers($event => (navigate('email')), ["prevent"])
                           }, [(_openBlock(), _createElementBlock("svg", {
                             class: "nav-icon",
-                            "aria-hidden": "true",
-                            focusable: "false"
-                          }, [_createElementVNode("use", { href: '/ui-icons.svg#'+key }, null, 8, ["href"])])), _createElementVNode("span", null, _toDisplayString(pageLabels[key]), 1)], 10, ["href", "aria-current", "onClick"]))
-                        }), 128))], 512), [[_vShow, state.cadastresOpen]])], 2))
-                      : _createCommentVNode("", true),
-                    (can('enrollments.read'))
-                      ? (_openBlock(), _createElementBlock("a", {
-                          key: 2,
-                          href: "#/enrollments",
-                          class: _normalizeClass({active:state.page==='enrollments'}),
-                          "aria-current": state.page==='enrollments'?'page':undefined,
-                          onClick: _withModifiers($event => (navigate('enrollments')), ["prevent"])
-                        }, [(_openBlock(), _createElementBlock("svg", {
-                          class: "nav-icon",
-                          "aria-hidden": "true",
-                          focusable: "false"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#enrollment" })])), _createTextVNode("Matrículas")], 10, ["aria-current", "onClick"]))
-                      : _createCommentVNode("", true),
-                    (can('academic.read'))
-                      ? (_openBlock(), _createElementBlock("a", {
-                          key: 3,
-                          href: "#/academic",
-                          class: _normalizeClass({active:state.page==='academic'}),
-                          "aria-current": state.page==='academic'?'page':undefined,
-                          onClick: _withModifiers($event => (navigate('academic')), ["prevent"])
-                        }, [(_openBlock(), _createElementBlock("svg", {
-                          class: "nav-icon",
-                          "aria-hidden": "true",
-                          focusable: "false"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#academic" })])), _createTextVNode("Estrutura acadêmica")], 10, ["aria-current", "onClick"]))
-                      : _createCommentVNode("", true),
-                    (can('diary.read'))
-                      ? (_openBlock(), _createElementBlock("a", {
-                          key: 4,
-                          href: "#/diary",
-                          class: _normalizeClass({active:state.page==='diary'}),
-                          "aria-current": state.page==='diary'?'page':undefined,
-                          onClick: _withModifiers($event => (navigate('diary')), ["prevent"])
-                        }, [(_openBlock(), _createElementBlock("svg", {
-                          class: "nav-icon",
-                          "aria-hidden": "true",
-                          focusable: "false"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#academic" })])), _createTextVNode("Diário Escolar")], 10, ["aria-current", "onClick"]))
-                      : _createCommentVNode("", true),
-                    (can('documents.read'))
-                      ? (_openBlock(), _createElementBlock("div", {
-                          key: 5,
-                          class: _normalizeClass(["nav-group", {selected:documentPages.includes(state.page)}])
-                        }, [_createElementVNode("button", {
-                          type: "button",
-                          class: "nav-group-toggle",
-                          "aria-label": "Documentos",
-                          onClick: $event => (state.documentsOpen=!state.documentsOpen),
-                          "aria-expanded": state.documentsOpen || documentPages.includes(state.page),
-                          "aria-controls": "documents-menu"
-                        }, [(_openBlock(), _createElementBlock("svg", {
-                          class: "nav-icon",
-                          "aria-hidden": "true"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#documents" })])), _createElementVNode("span", null, "Documentos"), (_openBlock(), _createElementBlock("svg", {
-                          class: _normalizeClass(["nav-chevron ui-icon", {expanded:state.documentsOpen || documentPages.includes(state.page)}]),
-                          "aria-hidden": "true"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#chevron" })], 2))], 8, ["onClick", "aria-expanded"]), _withDirectives(_createElementVNode("div", {
-                          id: "documents-menu",
-                          class: "nav-group-items"
-                        }, [
-                          _createElementVNode("a", {
-                            href: "#/documents",
-                            class: _normalizeClass({active:state.page==='documents'}),
-                            "aria-current": state.page==='documents'?'page':undefined,
-                            onClick: _withModifiers($event => (navigate('documents')), ["prevent"])
-                          }, "Pendências documentais", 10, ["aria-current", "onClick"]),
-                          _createElementVNode("a", {
-                            href: "#/contracts",
-                            class: _normalizeClass({active:state.page==='contracts'}),
-                            "aria-current": state.page==='contracts'?'page':undefined,
-                            onClick: _withModifiers($event => (navigate('contracts')), ["prevent"])
-                          }, "Modelos e contratos", 10, ["aria-current", "onClick"]),
-                          _createElementVNode("a", {
-                            href: "#/pending-signatures",
-                            class: _normalizeClass({active:state.page==='pending-signatures'}),
-                            "aria-current": state.page==='pending-signatures'?'page':undefined,
-                            onClick: _withModifiers($event => (navigate('pending-signatures')), ["prevent"])
-                          }, "Assinaturas pendentes", 10, ["aria-current", "onClick"]),
-                          (can('documents.validate'))
-                            ? (_openBlock(), _createElementBlock("a", {
-                                key: 0,
-                                href: "#/signature-review",
-                                class: _normalizeClass({active:state.page==='signature-review'}),
-                                "aria-current": state.page==='signature-review'?'page':undefined,
-                                onClick: _withModifiers($event => (navigate('signature-review')), ["prevent"])
-                              }, "Conferência de assinaturas", 10, ["aria-current", "onClick"]))
-                            : _createCommentVNode("", true)
-                        ], 512), [[_vShow, state.documentsOpen || documentPages.includes(state.page)]])], 2))
-                      : _createCommentVNode("", true),
-                    (can('protocols.read'))
-                      ? (_openBlock(), _createElementBlock("a", {
-                          key: 6,
-                          href: "#/protocols",
-                          class: _normalizeClass({active:state.page==='protocols'}),
-                          "aria-current": state.page==='protocols'?'page':undefined,
-                          onClick: _withModifiers($event => (navigate('protocols')), ["prevent"])
-                        }, [(_openBlock(), _createElementBlock("svg", {
-                          class: "nav-icon",
-                          "aria-hidden": "true",
-                          focusable: "false"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#protocols" })])), _createTextVNode("Protocolos")], 10, ["aria-current", "onClick"]))
-                      : _createCommentVNode("", true),
-                    (can('reports.read'))
-                      ? (_openBlock(), _createElementBlock("a", {
-                          key: 7,
-                          href: "#/reports",
-                          class: _normalizeClass({active:state.page==='reports'}),
-                          "aria-current": state.page==='reports'?'page':undefined,
-                          onClick: _withModifiers($event => (navigate('reports')), ["prevent"])
-                        }, [(_openBlock(), _createElementBlock("svg", {
-                          class: "nav-icon",
-                          "aria-hidden": "true",
-                          focusable: "false"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#reports" })])), _createTextVNode("Relatórios")], 10, ["aria-current", "onClick"]))
-                      : _createCommentVNode("", true)
-                  ]))
-                : _createCommentVNode("", true),
-              _createElementVNode("div", { class: "sidebar-label" }, "INSTITUIÇÃO"),
-              (!isProfileRole())
-                ? (_openBlock(), _createElementBlock("nav", {
-                    key: 2,
-                    "aria-label": "Gestão da instituição"
-                  }, [(can('schools.manage'))
-                    ? (_openBlock(), _createElementBlock("a", {
-                        key: 0,
-                        href: "#/settings",
-                        class: _normalizeClass({active:state.page==='settings'}),
-                        "aria-current": state.page==='settings'?'page':undefined,
-                        onClick: _withModifiers($event => (navigate('settings')), ["prevent"])
-                      }, [(_openBlock(), _createElementBlock("svg", {
-                        class: "nav-icon",
-                        "aria-hidden": "true"
-                      }, [_createElementVNode("use", { href: "/ui-icons.svg#school" })])), _createTextVNode("Instituição")], 10, ["aria-current", "onClick"]))
-                    : _createCommentVNode("", true), (can('users.manage'))
-                    ? (_openBlock(), _createElementBlock("a", {
+                            "aria-hidden": "true"
+                          }, [_createElementVNode("use", { href: "/ui-icons.svg#integrations" })])), _createTextVNode("Preferências de e-mail")], 10, ["aria-current", "onClick"]))
+                        : _createCommentVNode("", true)]))
+                    : _createCommentVNode("", true),
+                  (!isProfileRole())
+                    ? (_openBlock(), _createElementBlock("nav", {
                         key: 1,
-                        href: "#/users",
-                        class: _normalizeClass({active:state.page==='users'}),
-                        "aria-current": state.page==='users'?'page':undefined,
-                        onClick: _withModifiers($event => (navigate('users')), ["prevent"])
-                      }, [(_openBlock(), _createElementBlock("svg", {
-                        class: "nav-icon",
-                        "aria-hidden": "true"
-                      }, [_createElementVNode("use", { href: "/ui-icons.svg#access" })])), _createTextVNode("Usuários e acessos")], 10, ["aria-current", "onClick"]))
-                    : _createCommentVNode("", true)]))
-                : _createCommentVNode("", true),
-              _createElementVNode("div", { class: "sidebar-label" }, "GESTÃO E SERVIÇOS"),
-              (!isProfileRole())
-                ? (_openBlock(), _createElementBlock("nav", {
-                    key: 3,
-                    "aria-label": "Administração"
-                  }, [
-                    (can('admissions.read'))
-                      ? (_openBlock(), _createElementBlock("a", {
-                          key: 0,
-                          href: "#/online",
-                          class: _normalizeClass({active:state.page==='online'}),
-                          "aria-current": state.page==='online'?'page':undefined,
-                          onClick: _withModifiers($event => (navigate('online')), ["prevent"])
-                        }, [(_openBlock(), _createElementBlock("svg", {
-                          class: "nav-icon",
-                          "aria-hidden": "true",
-                          focusable: "false"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#online" })])), _createTextVNode("Inscrições online")], 10, ["aria-current", "onClick"]))
-                      : _createCommentVNode("", true),
-                    (can('banking.read'))
-                      ? (_openBlock(), _createElementBlock("div", {
-                          key: 1,
-                          class: _normalizeClass(["nav-group", {selected:state.page==='banking'}])
-                        }, [_createElementVNode("button", {
-                          type: "button",
-                          class: "nav-group-toggle",
-                          "aria-label": "Financeiro",
-                          onClick: $event => (state.financeOpen=!state.financeOpen),
-                          "aria-expanded": state.financeOpen || state.page==='banking',
-                          "aria-controls": "finance-menu"
-                        }, [(_openBlock(), _createElementBlock("svg", {
-                          class: "nav-icon",
-                          "aria-hidden": "true"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#billing" })])), _createElementVNode("span", null, "Financeiro"), (_openBlock(), _createElementBlock("svg", {
-                          class: _normalizeClass(["nav-chevron ui-icon", {expanded:state.financeOpen || state.page==='banking'}]),
-                          "aria-hidden": "true"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#chevron" })], 2))], 8, ["onClick", "aria-expanded"]), _withDirectives(_createElementVNode("div", {
-                          id: "finance-menu",
-                          class: "nav-group-items"
-                        }, [_createElementVNode("a", {
-                          href: "#/banking",
-                          class: _normalizeClass({active:state.page==='banking'}),
-                          "aria-current": state.page==='banking'?'page':undefined,
-                          onClick: _withModifiers($event => (navigate('banking')), ["prevent"])
-                        }, [(_openBlock(), _createElementBlock("svg", {
-                          class: "nav-icon",
-                          "aria-hidden": "true"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#billing" })])), _createTextVNode("Cobranças")], 10, ["aria-current", "onClick"])], 512), [[_vShow, state.financeOpen || state.page==='banking']])], 2))
-                      : _createCommentVNode("", true),
-                    (can('connect.manage') || can('integrations.manage') || state.user?.role==='admin')
-                      ? (_openBlock(), _createElementBlock("div", {
-                          key: 2,
-                          class: _normalizeClass(["nav-group", {selected:integrationPages.includes(state.page)}])
-                        }, [_createElementVNode("button", {
-                          type: "button",
-                          class: "nav-group-toggle",
-                          "aria-label": "Integrações",
-                          onClick: $event => (state.integrationsOpen=!state.integrationsOpen),
-                          "aria-expanded": state.integrationsOpen,
-                          "aria-controls": "integrations-menu"
-                        }, [(_openBlock(), _createElementBlock("svg", {
-                          class: "nav-icon",
-                          "aria-hidden": "true",
-                          focusable: "false"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#integrations" })])), _createElementVNode("span", null, "Integrações"), (_openBlock(), _createElementBlock("svg", {
-                          class: _normalizeClass(["nav-chevron ui-icon", {expanded:state.integrationsOpen}]),
-                          "aria-hidden": "true",
-                          focusable: "false"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#chevron" })], 2))], 8, ["onClick", "aria-expanded"]), _withDirectives(_createElementVNode("div", {
-                          id: "integrations-menu",
-                          class: "nav-group-items"
-                        }, [(can('connect.manage'))
+                        "aria-label": "Menu principal"
+                      }, [
+                        (can('dashboard.read') || isProfileRole())
                           ? (_openBlock(), _createElementBlock("a", {
                               key: 0,
-                              href: "#/connect",
-                              class: _normalizeClass({active:state.page==='connect'}),
-                              "aria-current": state.page==='connect'?'page':undefined,
-                              onClick: _withModifiers($event => (navigate('connect')), ["prevent"])
+                              href: "#/dashboard",
+                              class: _normalizeClass({active:state.page==='dashboard'}),
+                              "aria-current": state.page==='dashboard'?'page':undefined,
+                              onClick: _withModifiers($event => (navigate('dashboard')), ["prevent"])
                             }, [(_openBlock(), _createElementBlock("svg", {
                               class: "nav-icon",
                               "aria-hidden": "true",
                               focusable: "false"
-                            }, [_createElementVNode("use", { href: "/ui-icons.svg#whatsapp" })])), _createTextVNode("WhatsApp")], 10, ["aria-current", "onClick"]))
-                          : _createCommentVNode("", true), (state.user?.role==='admin')
-                          ? (_openBlock(), _createElementBlock("a", {
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#dashboard" })])), _createTextVNode("Visão geral")], 10, ["aria-current", "onClick"]))
+                          : _createCommentVNode("", true),
+                        (can('people.read') || can('read'))
+                          ? (_openBlock(), _createElementBlock("div", {
                               key: 1,
-                              href: "#/email",
-                              class: _normalizeClass({active:state.page==='email'}),
-                              "aria-current": state.page==='email'?'page':undefined,
-                              onClick: _withModifiers($event => (navigate('email')), ["prevent"])
+                              class: _normalizeClass(["nav-group", {selected:registryPages.includes(state.page)}])
+                            }, [_createElementVNode("button", {
+                              type: "button",
+                              class: "nav-group-toggle",
+                              "aria-label": "Cadastros",
+                              onClick: $event => (state.cadastresOpen=!state.cadastresOpen),
+                              "aria-expanded": state.cadastresOpen,
+                              "aria-controls": "cadastres-menu"
                             }, [(_openBlock(), _createElementBlock("svg", {
                               class: "nav-icon",
                               "aria-hidden": "true",
                               focusable: "false"
-                            }, [_createElementVNode("use", { href: "/ui-icons.svg#integrations" })])), _createTextVNode("Parâmetros de e-mail")], 10, ["aria-current", "onClick"]))
-                          : _createCommentVNode("", true), (can('integrations.manage'))
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#records" })])), _createElementVNode("span", null, "Cadastros"), (_openBlock(), _createElementBlock("svg", {
+                              class: _normalizeClass(["nav-chevron ui-icon", {expanded:state.cadastresOpen}]),
+                              "aria-hidden": "true",
+                              focusable: "false"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#chevron" })], 2))], 8, ["onClick", "aria-expanded"]), _withDirectives(_createElementVNode("div", {
+                              id: "cadastres-menu",
+                              class: "nav-group-items"
+                            }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(registryPages, (key) => {
+                              return (_openBlock(), _createElementBlock("a", {
+                                key: key,
+                                href: '#/'+key,
+                                class: _normalizeClass({active:state.page===key}),
+                                "aria-current": state.page===key?'page':undefined,
+                                onClick: _withModifiers($event => (navigate(key)), ["prevent"])
+                              }, [(_openBlock(), _createElementBlock("svg", {
+                                class: "nav-icon",
+                                "aria-hidden": "true",
+                                focusable: "false"
+                              }, [_createElementVNode("use", { href: '/ui-icons.svg#'+key }, null, 8, ["href"])])), _createElementVNode("span", null, _toDisplayString(pageLabels[key]), 1)], 10, ["href", "aria-current", "onClick"]))
+                            }), 128))], 512), [[_vShow, state.cadastresOpen]])], 2))
+                          : _createCommentVNode("", true),
+                        (can('enrollments.read'))
                           ? (_openBlock(), _createElementBlock("a", {
                               key: 2,
-                              href: "#/integrations",
-                              class: _normalizeClass({active:state.page==='integrations'}),
-                              "aria-current": state.page==='integrations'?'page':undefined,
-                              onClick: _withModifiers($event => (navigate('integrations')), ["prevent"])
+                              href: "#/enrollments",
+                              class: _normalizeClass({active:state.page==='enrollments'}),
+                              "aria-current": state.page==='enrollments'?'page':undefined,
+                              onClick: _withModifiers($event => (navigate('enrollments')), ["prevent"])
                             }, [(_openBlock(), _createElementBlock("svg", {
                               class: "nav-icon",
                               "aria-hidden": "true",
                               focusable: "false"
-                            }, [_createElementVNode("use", { href: "/ui-icons.svg#bank" })])), _createTextVNode("Bancária")], 10, ["aria-current", "onClick"]))
-                          : _createCommentVNode("", true)], 512), [[_vShow, state.integrationsOpen]])], 2))
-                      : _createCommentVNode("", true),
-                    _createElementVNode("div", { class: _normalizeClass(["nav-group", {selected:state.page==='community'}]) }, [_createElementVNode("button", {
-                      type: "button",
-                      class: "nav-group-toggle",
-                      "aria-label": "Publicidade",
-                      onClick: $event => (state.publicityOpen=!state.publicityOpen),
-                      "aria-expanded": state.publicityOpen || state.page==='community',
-                      "aria-controls": "publicity-menu"
-                    }, [(_openBlock(), _createElementBlock("svg", {
-                      class: "nav-icon",
-                      "aria-hidden": "true"
-                    }, [_createElementVNode("use", { href: "/ui-icons.svg#online" })])), _createElementVNode("span", null, "Publicidade"), (_openBlock(), _createElementBlock("svg", {
-                      class: _normalizeClass(["nav-chevron ui-icon", {expanded:state.publicityOpen || state.page==='community'}]),
-                      "aria-hidden": "true"
-                    }, [_createElementVNode("use", { href: "/ui-icons.svg#chevron" })], 2))], 8, ["onClick", "aria-expanded"]), _withDirectives(_createElementVNode("div", {
-                      id: "publicity-menu",
-                      class: "nav-group-items"
-                    }, [_createElementVNode("a", {
-                      href: "#/community",
-                      class: _normalizeClass({active:state.page==='community'}),
-                      "aria-current": state.page==='community'?'page':undefined,
-                      onClick: _withModifiers($event => (navigate('community')), ["prevent"])
-                    }, [(_openBlock(), _createElementBlock("svg", {
-                      class: "nav-icon",
-                      "aria-hidden": "true"
-                    }, [_createElementVNode("use", { href: "/ui-icons.svg#online" })])), _createTextVNode("Notícias e eventos")], 10, ["aria-current", "onClick"])], 512), [[_vShow, state.publicityOpen || state.page==='community']])], 2),
-                    (can('schools.manage'))
-                      ? (_openBlock(), _createElementBlock("div", {
-                          key: 3,
-                          class: _normalizeClass(["nav-group", {selected:configurationPages.includes(state.page)}])
-                        }, [_createElementVNode("button", {
-                          type: "button",
-                          class: "nav-group-toggle",
-                          "aria-label": "Configurações",
-                          onClick: $event => (state.configurationOpen=!state.configurationOpen),
-                          "aria-expanded": state.configurationOpen || configurationPages.includes(state.page),
-                          "aria-controls": "configuration-menu"
-                        }, [(_openBlock(), _createElementBlock("svg", {
-                          class: "nav-icon",
-                          "aria-hidden": "true"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#school" })])), _createElementVNode("span", null, "Configurações"), (_openBlock(), _createElementBlock("svg", {
-                          class: _normalizeClass(["nav-chevron ui-icon", {expanded:state.configurationOpen || configurationPages.includes(state.page)}]),
-                          "aria-hidden": "true"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#chevron" })], 2))], 8, ["onClick", "aria-expanded"]), _withDirectives(_createElementVNode("div", {
-                          id: "configuration-menu",
-                          class: "nav-group-items"
-                        }, [_createElementVNode("a", {
-                          href: "#/certificate",
-                          class: _normalizeClass({active:state.page==='certificate'}),
-                          "aria-current": state.page==='certificate'?'page':undefined,
-                          onClick: _withModifiers($event => (navigate('certificate')), ["prevent"])
-                        }, "Certificados A1", 10, ["aria-current", "onClick"])], 512), [[_vShow, state.configurationOpen || configurationPages.includes(state.page)]])], 2))
-                      : _createCommentVNode("", true),
-                    (state.user?.role==='admin' || adminTool('legacy-import'))
-                      ? (_openBlock(), _createElementBlock("div", {
-                          key: 4,
-                          class: _normalizeClass(["nav-group admin-nav-group", {selected:administrationPages.includes(state.page)}])
-                        }, [_createElementVNode("button", {
-                          type: "button",
-                          class: "nav-group-toggle",
-                          "aria-label": "Administração do sistema",
-                          onClick: $event => (state.adminMenuOpen=!state.adminMenuOpen),
-                          "aria-expanded": state.adminMenuOpen || administrationPages.includes(state.page),
-                          "aria-controls": "administration-menu"
-                        }, [(_openBlock(), _createElementBlock("svg", {
-                          class: "nav-icon",
-                          "aria-hidden": "true"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#admin" })])), _createElementVNode("span", null, "Administração do sistema"), (_openBlock(), _createElementBlock("svg", {
-                          class: _normalizeClass(["nav-chevron ui-icon", {expanded:state.adminMenuOpen || administrationPages.includes(state.page)}]),
-                          "aria-hidden": "true"
-                        }, [_createElementVNode("use", { href: "/ui-icons.svg#chevron" })], 2))], 8, ["onClick", "aria-expanded"]), _withDirectives(_createElementVNode("div", {
-                          id: "administration-menu",
-                          class: "nav-group-items"
-                        }, [(adminTool('diagnostics'))
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#enrollment" })])), _createTextVNode("Matrículas")], 10, ["aria-current", "onClick"]))
+                          : _createCommentVNode("", true),
+                        (can('academic.read'))
+                          ? (_openBlock(), _createElementBlock("a", {
+                              key: 3,
+                              href: "#/academic",
+                              class: _normalizeClass({active:state.page==='academic'}),
+                              "aria-current": state.page==='academic'?'page':undefined,
+                              onClick: _withModifiers($event => (navigate('academic')), ["prevent"])
+                            }, [(_openBlock(), _createElementBlock("svg", {
+                              class: "nav-icon",
+                              "aria-hidden": "true",
+                              focusable: "false"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#academic" })])), _createTextVNode("Estrutura acadêmica")], 10, ["aria-current", "onClick"]))
+                          : _createCommentVNode("", true),
+                        (can('diary.read'))
+                          ? (_openBlock(), _createElementBlock("a", {
+                              key: 4,
+                              href: "#/diary",
+                              class: _normalizeClass({active:state.page==='diary'}),
+                              "aria-current": state.page==='diary'?'page':undefined,
+                              onClick: _withModifiers($event => (navigate('diary')), ["prevent"])
+                            }, [(_openBlock(), _createElementBlock("svg", {
+                              class: "nav-icon",
+                              "aria-hidden": "true",
+                              focusable: "false"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#academic" })])), _createTextVNode("Diário Escolar")], 10, ["aria-current", "onClick"]))
+                          : _createCommentVNode("", true),
+                        (can('documents.read'))
+                          ? (_openBlock(), _createElementBlock("div", {
+                              key: 5,
+                              class: _normalizeClass(["nav-group", {selected:documentPages.includes(state.page)}])
+                            }, [_createElementVNode("button", {
+                              type: "button",
+                              class: "nav-group-toggle",
+                              "aria-label": "Documentos",
+                              onClick: $event => (state.documentsOpen=!state.documentsOpen),
+                              "aria-expanded": state.documentsOpen || documentPages.includes(state.page),
+                              "aria-controls": "documents-menu"
+                            }, [(_openBlock(), _createElementBlock("svg", {
+                              class: "nav-icon",
+                              "aria-hidden": "true"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#documents" })])), _createElementVNode("span", null, "Documentos"), (_openBlock(), _createElementBlock("svg", {
+                              class: _normalizeClass(["nav-chevron ui-icon", {expanded:state.documentsOpen || documentPages.includes(state.page)}]),
+                              "aria-hidden": "true"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#chevron" })], 2))], 8, ["onClick", "aria-expanded"]), _withDirectives(_createElementVNode("div", {
+                              id: "documents-menu",
+                              class: "nav-group-items"
+                            }, [
+                              _createElementVNode("a", {
+                                href: "#/documents",
+                                class: _normalizeClass({active:state.page==='documents'}),
+                                "aria-current": state.page==='documents'?'page':undefined,
+                                onClick: _withModifiers($event => (navigate('documents')), ["prevent"])
+                              }, "Pendências documentais", 10, ["aria-current", "onClick"]),
+                              _createElementVNode("a", {
+                                href: "#/contracts",
+                                class: _normalizeClass({active:state.page==='contracts'}),
+                                "aria-current": state.page==='contracts'?'page':undefined,
+                                onClick: _withModifiers($event => (navigate('contracts')), ["prevent"])
+                              }, "Modelos e contratos", 10, ["aria-current", "onClick"]),
+                              _createElementVNode("a", {
+                                href: "#/pending-signatures",
+                                class: _normalizeClass({active:state.page==='pending-signatures'}),
+                                "aria-current": state.page==='pending-signatures'?'page':undefined,
+                                onClick: _withModifiers($event => (navigate('pending-signatures')), ["prevent"])
+                              }, "Assinaturas pendentes", 10, ["aria-current", "onClick"]),
+                              (can('documents.validate'))
+                                ? (_openBlock(), _createElementBlock("a", {
+                                    key: 0,
+                                    href: "#/signature-review",
+                                    class: _normalizeClass({active:state.page==='signature-review'}),
+                                    "aria-current": state.page==='signature-review'?'page':undefined,
+                                    onClick: _withModifiers($event => (navigate('signature-review')), ["prevent"])
+                                  }, "Conferência de assinaturas", 10, ["aria-current", "onClick"]))
+                                : _createCommentVNode("", true)
+                            ], 512), [[_vShow, state.documentsOpen || documentPages.includes(state.page)]])], 2))
+                          : _createCommentVNode("", true),
+                        (can('protocols.read'))
+                          ? (_openBlock(), _createElementBlock("a", {
+                              key: 6,
+                              href: "#/protocols",
+                              class: _normalizeClass({active:state.page==='protocols'}),
+                              "aria-current": state.page==='protocols'?'page':undefined,
+                              onClick: _withModifiers($event => (navigate('protocols')), ["prevent"])
+                            }, [(_openBlock(), _createElementBlock("svg", {
+                              class: "nav-icon",
+                              "aria-hidden": "true",
+                              focusable: "false"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#protocols" })])), _createTextVNode("Protocolos")], 10, ["aria-current", "onClick"]))
+                          : _createCommentVNode("", true),
+                        (can('reports.read'))
+                          ? (_openBlock(), _createElementBlock("a", {
+                              key: 7,
+                              href: "#/reports",
+                              class: _normalizeClass({active:state.page==='reports'}),
+                              "aria-current": state.page==='reports'?'page':undefined,
+                              onClick: _withModifiers($event => (navigate('reports')), ["prevent"])
+                            }, [(_openBlock(), _createElementBlock("svg", {
+                              class: "nav-icon",
+                              "aria-hidden": "true",
+                              focusable: "false"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#reports" })])), _createTextVNode("Relatórios")], 10, ["aria-current", "onClick"]))
+                          : _createCommentVNode("", true)
+                      ]))
+                    : _createCommentVNode("", true),
+                  _createElementVNode("div", { class: "sidebar-label" }, "INSTITUIÇÃO"),
+                  (!isProfileRole())
+                    ? (_openBlock(), _createElementBlock("nav", {
+                        key: 2,
+                        "aria-label": "Gestão da instituição"
+                      }, [(can('schools.manage'))
+                        ? (_openBlock(), _createElementBlock("a", {
+                            key: 0,
+                            href: "#/settings",
+                            class: _normalizeClass({active:state.page==='settings'}),
+                            "aria-current": state.page==='settings'?'page':undefined,
+                            onClick: _withModifiers($event => (navigate('settings')), ["prevent"])
+                          }, [(_openBlock(), _createElementBlock("svg", {
+                            class: "nav-icon",
+                            "aria-hidden": "true"
+                          }, [_createElementVNode("use", { href: "/ui-icons.svg#school" })])), _createTextVNode("Instituição")], 10, ["aria-current", "onClick"]))
+                        : _createCommentVNode("", true), (can('users.manage'))
+                        ? (_openBlock(), _createElementBlock("a", {
+                            key: 1,
+                            href: "#/users",
+                            class: _normalizeClass({active:state.page==='users'}),
+                            "aria-current": state.page==='users'?'page':undefined,
+                            onClick: _withModifiers($event => (navigate('users')), ["prevent"])
+                          }, [(_openBlock(), _createElementBlock("svg", {
+                            class: "nav-icon",
+                            "aria-hidden": "true"
+                          }, [_createElementVNode("use", { href: "/ui-icons.svg#access" })])), _createTextVNode("Usuários e acessos")], 10, ["aria-current", "onClick"]))
+                        : _createCommentVNode("", true)]))
+                    : _createCommentVNode("", true),
+                  _createElementVNode("div", { class: "sidebar-label" }, "GESTÃO E SERVIÇOS"),
+                  (!isProfileRole())
+                    ? (_openBlock(), _createElementBlock("nav", {
+                        key: 3,
+                        "aria-label": "Administração"
+                      }, [
+                        (can('admissions.read'))
                           ? (_openBlock(), _createElementBlock("a", {
                               key: 0,
-                              href: "#/diagnostics",
-                              class: _normalizeClass({active:state.page==='diagnostics'}),
-                              "aria-current": state.page==='diagnostics'?'page':undefined,
-                              onClick: _withModifiers($event => (navigate('diagnostics')), ["prevent"])
+                              href: "#/online",
+                              class: _normalizeClass({active:state.page==='online'}),
+                              "aria-current": state.page==='online'?'page':undefined,
+                              onClick: _withModifiers($event => (navigate('online')), ["prevent"])
                             }, [(_openBlock(), _createElementBlock("svg", {
                               class: "nav-icon",
-                              "aria-hidden": "true"
-                            }, [_createElementVNode("use", { href: "/ui-icons.svg#diagnostics" })])), _createTextVNode("Diagnóstico")], 10, ["aria-current", "onClick"]))
-                          : _createCommentVNode("", true), (adminTool('audit'))
-                          ? (_openBlock(), _createElementBlock("a", {
+                              "aria-hidden": "true",
+                              focusable: "false"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#online" })])), _createTextVNode("Inscrições online")], 10, ["aria-current", "onClick"]))
+                          : _createCommentVNode("", true),
+                        (can('banking.read'))
+                          ? (_openBlock(), _createElementBlock("div", {
                               key: 1,
-                              href: "#/audit",
-                              class: _normalizeClass({active:state.page==='audit'}),
-                              "aria-current": state.page==='audit'?'page':undefined,
-                              onClick: _withModifiers($event => (navigate('audit')), ["prevent"])
+                              class: _normalizeClass(["nav-group", {selected:state.page==='banking'}])
+                            }, [_createElementVNode("button", {
+                              type: "button",
+                              class: "nav-group-toggle",
+                              "aria-label": "Financeiro",
+                              onClick: $event => (state.financeOpen=!state.financeOpen),
+                              "aria-expanded": state.financeOpen || state.page==='banking',
+                              "aria-controls": "finance-menu"
                             }, [(_openBlock(), _createElementBlock("svg", {
                               class: "nav-icon",
                               "aria-hidden": "true"
-                            }, [_createElementVNode("use", { href: "/ui-icons.svg#audit" })])), _createTextVNode("Auditoria")], 10, ["aria-current", "onClick"]))
-                          : _createCommentVNode("", true), (adminTool('legacy-import'))
-                          ? (_openBlock(), _createElementBlock("a", {
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#billing" })])), _createElementVNode("span", null, "Financeiro"), (_openBlock(), _createElementBlock("svg", {
+                              class: _normalizeClass(["nav-chevron ui-icon", {expanded:state.financeOpen || state.page==='banking'}]),
+                              "aria-hidden": "true"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#chevron" })], 2))], 8, ["onClick", "aria-expanded"]), _withDirectives(_createElementVNode("div", {
+                              id: "finance-menu",
+                              class: "nav-group-items"
+                            }, [_createElementVNode("a", {
+                              href: "#/banking",
+                              class: _normalizeClass({active:state.page==='banking'}),
+                              "aria-current": state.page==='banking'?'page':undefined,
+                              onClick: _withModifiers($event => (navigate('banking')), ["prevent"])
+                            }, [(_openBlock(), _createElementBlock("svg", {
+                              class: "nav-icon",
+                              "aria-hidden": "true"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#billing" })])), _createTextVNode("Cobranças")], 10, ["aria-current", "onClick"])], 512), [[_vShow, state.financeOpen || state.page==='banking']])], 2))
+                          : _createCommentVNode("", true),
+                        (can('connect.manage') || can('integrations.manage') || state.user?.role==='admin')
+                          ? (_openBlock(), _createElementBlock("div", {
                               key: 2,
-                              href: "#/legacy-import",
-                              class: _normalizeClass({active:state.page==='legacy-import'}),
-                              "aria-current": state.page==='legacy-import'?'page':undefined,
-                              onClick: _withModifiers($event => (navigate('legacy-import')), ["prevent"])
+                              class: _normalizeClass(["nav-group", {selected:integrationPages.includes(state.page)}])
+                            }, [_createElementVNode("button", {
+                              type: "button",
+                              class: "nav-group-toggle",
+                              "aria-label": "Integrações",
+                              onClick: $event => (state.integrationsOpen=!state.integrationsOpen),
+                              "aria-expanded": state.integrationsOpen,
+                              "aria-controls": "integrations-menu"
+                            }, [(_openBlock(), _createElementBlock("svg", {
+                              class: "nav-icon",
+                              "aria-hidden": "true",
+                              focusable: "false"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#integrations" })])), _createElementVNode("span", null, "Integrações"), (_openBlock(), _createElementBlock("svg", {
+                              class: _normalizeClass(["nav-chevron ui-icon", {expanded:state.integrationsOpen}]),
+                              "aria-hidden": "true",
+                              focusable: "false"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#chevron" })], 2))], 8, ["onClick", "aria-expanded"]), _withDirectives(_createElementVNode("div", {
+                              id: "integrations-menu",
+                              class: "nav-group-items"
+                            }, [(can('connect.manage'))
+                              ? (_openBlock(), _createElementBlock("a", {
+                                  key: 0,
+                                  href: "#/connect",
+                                  class: _normalizeClass({active:state.page==='connect'}),
+                                  "aria-current": state.page==='connect'?'page':undefined,
+                                  onClick: _withModifiers($event => (navigate('connect')), ["prevent"])
+                                }, [(_openBlock(), _createElementBlock("svg", {
+                                  class: "nav-icon",
+                                  "aria-hidden": "true",
+                                  focusable: "false"
+                                }, [_createElementVNode("use", { href: "/ui-icons.svg#whatsapp" })])), _createTextVNode("WhatsApp")], 10, ["aria-current", "onClick"]))
+                              : _createCommentVNode("", true), (state.user?.role==='admin')
+                              ? (_openBlock(), _createElementBlock("a", {
+                                  key: 1,
+                                  href: "#/email",
+                                  class: _normalizeClass({active:state.page==='email'}),
+                                  "aria-current": state.page==='email'?'page':undefined,
+                                  onClick: _withModifiers($event => (navigate('email')), ["prevent"])
+                                }, [(_openBlock(), _createElementBlock("svg", {
+                                  class: "nav-icon",
+                                  "aria-hidden": "true",
+                                  focusable: "false"
+                                }, [_createElementVNode("use", { href: "/ui-icons.svg#integrations" })])), _createTextVNode("Parâmetros de e-mail")], 10, ["aria-current", "onClick"]))
+                              : _createCommentVNode("", true), (can('integrations.manage'))
+                              ? (_openBlock(), _createElementBlock("a", {
+                                  key: 2,
+                                  href: "#/integrations",
+                                  class: _normalizeClass({active:state.page==='integrations'}),
+                                  "aria-current": state.page==='integrations'?'page':undefined,
+                                  onClick: _withModifiers($event => (navigate('integrations')), ["prevent"])
+                                }, [(_openBlock(), _createElementBlock("svg", {
+                                  class: "nav-icon",
+                                  "aria-hidden": "true",
+                                  focusable: "false"
+                                }, [_createElementVNode("use", { href: "/ui-icons.svg#bank" })])), _createTextVNode("Bancária")], 10, ["aria-current", "onClick"]))
+                              : _createCommentVNode("", true)], 512), [[_vShow, state.integrationsOpen]])], 2))
+                          : _createCommentVNode("", true),
+                        _createElementVNode("div", { class: _normalizeClass(["nav-group", {selected:state.page==='community'}]) }, [_createElementVNode("button", {
+                          type: "button",
+                          class: "nav-group-toggle",
+                          "aria-label": "Publicidade",
+                          onClick: $event => (state.publicityOpen=!state.publicityOpen),
+                          "aria-expanded": state.publicityOpen || state.page==='community',
+                          "aria-controls": "publicity-menu"
+                        }, [(_openBlock(), _createElementBlock("svg", {
+                          class: "nav-icon",
+                          "aria-hidden": "true"
+                        }, [_createElementVNode("use", { href: "/ui-icons.svg#online" })])), _createElementVNode("span", null, "Publicidade"), (_openBlock(), _createElementBlock("svg", {
+                          class: _normalizeClass(["nav-chevron ui-icon", {expanded:state.publicityOpen || state.page==='community'}]),
+                          "aria-hidden": "true"
+                        }, [_createElementVNode("use", { href: "/ui-icons.svg#chevron" })], 2))], 8, ["onClick", "aria-expanded"]), _withDirectives(_createElementVNode("div", {
+                          id: "publicity-menu",
+                          class: "nav-group-items"
+                        }, [_createElementVNode("a", {
+                          href: "#/community",
+                          class: _normalizeClass({active:state.page==='community'}),
+                          "aria-current": state.page==='community'?'page':undefined,
+                          onClick: _withModifiers($event => (navigate('community')), ["prevent"])
+                        }, [(_openBlock(), _createElementBlock("svg", {
+                          class: "nav-icon",
+                          "aria-hidden": "true"
+                        }, [_createElementVNode("use", { href: "/ui-icons.svg#online" })])), _createTextVNode("Notícias e eventos")], 10, ["aria-current", "onClick"])], 512), [[_vShow, state.publicityOpen || state.page==='community']])], 2),
+                        (can('schools.manage'))
+                          ? (_openBlock(), _createElementBlock("div", {
+                              key: 3,
+                              class: _normalizeClass(["nav-group", {selected:configurationPages.includes(state.page)}])
+                            }, [_createElementVNode("button", {
+                              type: "button",
+                              class: "nav-group-toggle",
+                              "aria-label": "Configurações",
+                              onClick: $event => (state.configurationOpen=!state.configurationOpen),
+                              "aria-expanded": state.configurationOpen || configurationPages.includes(state.page),
+                              "aria-controls": "configuration-menu"
                             }, [(_openBlock(), _createElementBlock("svg", {
                               class: "nav-icon",
                               "aria-hidden": "true"
-                            }, [_createElementVNode("use", { href: "/ui-icons.svg#portability" })])), _createTextVNode("Portabilidade de dados")], 10, ["aria-current", "onClick"]))
-                          : _createCommentVNode("", true)], 512), [[_vShow, state.adminMenuOpen || administrationPages.includes(state.page)]])], 2))
-                      : _createCommentVNode("", true)
-                  ]))
-                : _createCommentVNode("", true)
-            ]), _createElementVNode("div", { class: "sidebar-footer" }, [_createElementVNode("small", null, [_createTextVNode(_toDisplayString(identity.short_name), 1), (state.user.role==='admin')
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#school" })])), _createElementVNode("span", null, "Configurações"), (_openBlock(), _createElementBlock("svg", {
+                              class: _normalizeClass(["nav-chevron ui-icon", {expanded:state.configurationOpen || configurationPages.includes(state.page)}]),
+                              "aria-hidden": "true"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#chevron" })], 2))], 8, ["onClick", "aria-expanded"]), _withDirectives(_createElementVNode("div", {
+                              id: "configuration-menu",
+                              class: "nav-group-items"
+                            }, [_createElementVNode("a", {
+                              href: "#/certificate",
+                              class: _normalizeClass({active:state.page==='certificate'}),
+                              "aria-current": state.page==='certificate'?'page':undefined,
+                              onClick: _withModifiers($event => (navigate('certificate')), ["prevent"])
+                            }, "Certificados A1", 10, ["aria-current", "onClick"])], 512), [[_vShow, state.configurationOpen || configurationPages.includes(state.page)]])], 2))
+                          : _createCommentVNode("", true),
+                        (state.user?.role==='admin' || adminTool('legacy-import'))
+                          ? (_openBlock(), _createElementBlock("div", {
+                              key: 4,
+                              class: _normalizeClass(["nav-group admin-nav-group", {selected:administrationPages.includes(state.page)}])
+                            }, [_createElementVNode("button", {
+                              type: "button",
+                              class: "nav-group-toggle",
+                              "aria-label": "Administração do sistema",
+                              onClick: $event => (state.adminMenuOpen=!state.adminMenuOpen),
+                              "aria-expanded": state.adminMenuOpen || administrationPages.includes(state.page),
+                              "aria-controls": "administration-menu"
+                            }, [(_openBlock(), _createElementBlock("svg", {
+                              class: "nav-icon",
+                              "aria-hidden": "true"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#admin" })])), _createElementVNode("span", null, "Administração do sistema"), (_openBlock(), _createElementBlock("svg", {
+                              class: _normalizeClass(["nav-chevron ui-icon", {expanded:state.adminMenuOpen || administrationPages.includes(state.page)}]),
+                              "aria-hidden": "true"
+                            }, [_createElementVNode("use", { href: "/ui-icons.svg#chevron" })], 2))], 8, ["onClick", "aria-expanded"]), _withDirectives(_createElementVNode("div", {
+                              id: "administration-menu",
+                              class: "nav-group-items"
+                            }, [(adminTool('diagnostics'))
+                              ? (_openBlock(), _createElementBlock("a", {
+                                  key: 0,
+                                  href: "#/diagnostics",
+                                  class: _normalizeClass({active:state.page==='diagnostics'}),
+                                  "aria-current": state.page==='diagnostics'?'page':undefined,
+                                  onClick: _withModifiers($event => (navigate('diagnostics')), ["prevent"])
+                                }, [(_openBlock(), _createElementBlock("svg", {
+                                  class: "nav-icon",
+                                  "aria-hidden": "true"
+                                }, [_createElementVNode("use", { href: "/ui-icons.svg#diagnostics" })])), _createTextVNode("Diagnóstico")], 10, ["aria-current", "onClick"]))
+                              : _createCommentVNode("", true), (adminTool('audit'))
+                              ? (_openBlock(), _createElementBlock("a", {
+                                  key: 1,
+                                  href: "#/audit",
+                                  class: _normalizeClass({active:state.page==='audit'}),
+                                  "aria-current": state.page==='audit'?'page':undefined,
+                                  onClick: _withModifiers($event => (navigate('audit')), ["prevent"])
+                                }, [(_openBlock(), _createElementBlock("svg", {
+                                  class: "nav-icon",
+                                  "aria-hidden": "true"
+                                }, [_createElementVNode("use", { href: "/ui-icons.svg#audit" })])), _createTextVNode("Auditoria")], 10, ["aria-current", "onClick"]))
+                              : _createCommentVNode("", true), (adminTool('legacy-import'))
+                              ? (_openBlock(), _createElementBlock("a", {
+                                  key: 2,
+                                  href: "#/legacy-import",
+                                  class: _normalizeClass({active:state.page==='legacy-import'}),
+                                  "aria-current": state.page==='legacy-import'?'page':undefined,
+                                  onClick: _withModifiers($event => (navigate('legacy-import')), ["prevent"])
+                                }, [(_openBlock(), _createElementBlock("svg", {
+                                  class: "nav-icon",
+                                  "aria-hidden": "true"
+                                }, [_createElementVNode("use", { href: "/ui-icons.svg#portability" })])), _createTextVNode("Portabilidade de dados")], 10, ["aria-current", "onClick"]))
+                              : _createCommentVNode("", true)], 512), [[_vShow, state.adminMenuOpen || administrationPages.includes(state.page)]])], 2))
+                          : _createCommentVNode("", true)
+                      ]))
+                    : _createCommentVNode("", true)
+                ])), _createElementVNode("div", { class: "sidebar-footer" }, [_createElementVNode("small", null, [_createTextVNode(_toDisplayString(identity.short_name), 1), (state.user.role==='admin')
               ? (_openBlock(), _createElementBlock("span", { key: 0 }, " · " + _toDisplayString(identity.app_version || '—'), 1))
               : _createCommentVNode("", true)])])], 2),
             _createElementVNode("div", { class: _normalizeClass(["main-column", {'webmail-layout':state.page==='webmail'}]) }, [_createElementVNode("header", { class: "topbar" }, [_createElementVNode("button", {

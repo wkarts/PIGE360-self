@@ -41,9 +41,10 @@
     <aside id="school-navigation" class="sidebar" :class="{visible:state.menuOpen}" aria-label="Navegação da escola">
       <div class="sidebar-brand">
         <button type="button" class="icon-button sidebar-close" aria-label="Fechar menu" @click="state.menuOpen=false"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#close"></use></svg></button>
-      <a href="#/dashboard" class="brand-line" @click.prevent="navigate('dashboard')"><img v-if="identity.logo_url" class="sidebar-logo" :src="identity.logo_url" :alt="identity.display_name"><strong v-else class="institution-name">{{ identity.short_name }}</strong></a>
+      <a href="#/dashboard" class="brand-line" :inert="state.schoolLoading" @click.prevent="navigate('dashboard')"><img v-if="identity.logo_url" class="sidebar-logo" :src="identity.logo_url" :alt="identity.display_name"><strong v-else class="institution-name">{{ identity.short_name }}</strong></a>
       </div>
-      <div class="sidebar-scroll" tabindex="0" role="region" aria-label="Rolagem do menu">
+      <div v-if="state.schoolLoading" class="sidebar-scroll"><p class="sidebar-label" role="status">Carregando o menu da escola…</p></div>
+      <div v-else class="sidebar-scroll" tabindex="0" role="region" aria-label="Rolagem do menu">
       <div class="sidebar-label">OPERAÇÃO ESCOLAR</div>
       <nav v-if="state.emailAvailable" aria-label="E-mail institucional"><a href="#/webmail" :class="{active:state.page==='webmail'}" :aria-current="state.page==='webmail'?'page':undefined" @click.prevent="navigate('webmail')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#email"></use></svg>E-mail</a><a v-if="state.user?.role!=='admin'" href="#/email" :class="{active:state.page==='email'}" :aria-current="state.page==='email'?'page':undefined" @click.prevent="navigate('email')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#integrations"></use></svg>Preferências de e-mail</a></nav>
       <nav v-if="!isProfileRole()" aria-label="Menu principal">
