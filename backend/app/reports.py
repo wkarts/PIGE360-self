@@ -171,7 +171,10 @@ def protocol_detail(protocol_id: str, db: DB, user: Actor, school: Scope):
     obj = scoped(db, m.Protocol, protocol_id, school.id)
     history = db.execute(select(m.ProtocolEvent, m.User.name).join(m.User, m.User.id == m.ProtocolEvent.actor_id).where(
         m.ProtocolEvent.school_id == school.id, m.ProtocolEvent.protocol_id == obj.id).order_by(m.ProtocolEvent.created_at, m.ProtocolEvent.id)).all()
-    return {**protocol_output(db, obj), 'history':[{**output(e), 'actor_name':name} for e,name in history]}
+    submission = db.get(m.AbsenceSubmission, obj.id)
+    file = db.get(m.FileRecord, submission.file_id) if submission and submission.file_id else None
+    return {**protocol_output(db, obj), 'evidence_file_id': file.id if file else None,
+            'evidence_filename': file.original_name if file else None, 'history':[{**output(e), 'actor_name':name} for e,name in history]}
 
 
 @router.patch('/protocols/{protocol_id}')
@@ -180,6 +183,8 @@ def edit_protocol(protocol_id: str, data: s.Edit, db: DB, user: Actor, school: S
     obj = scoped(db, m.Protocol, protocol_id, school.id); check_version(obj, data.version)
     values = validate(s.ProtocolInput, data.data).model_dump()
     if values['student_id']: scoped(db, m.Student, values['student_id'], school.id)
+    if values['student_id'] != obj.student_id and db.get(m.AbsenceSubmission, obj.id):
+        fail(409, 'O aluno de uma justificativa enviada pela família deve ser preservado.')
     before = output(obj)
     for key, value in values.items(): setattr(obj, key, value)
     obj.completed_at = (obj.completed_at or now()) if obj.status == 'completed' else None

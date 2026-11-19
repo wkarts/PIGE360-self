@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 from sqlalchemy import func, select
 
+from . import class_materials
 from . import diary_schemas as s, models as m
 from .common import audit, output
 from .db import now
@@ -1377,3 +1378,50 @@ def edit_diary_occurrence(diary_id: str,occurrence_id: str,data: s.DiaryOccurren
     obj.reviewed_by=user.id if data.status=="reviewed" else None;obj.version+=1
     db.flush();audit(db,request,user,"diary.occurrence.updated",obj,school.id,{"status":obj.status,"version":obj.version})
     return output(obj)
+
+
+
+@router.get('/diaries/{diary_id}/materials')
+def class_material_list(diary_id: str, db: DB, user: Actor, school: DiaryScope):
+    diary = _scoped(db, m.SchoolDiary, diary_id, school.id)
+    _require_diary(db, user, diary, 'diary.read')
+    return class_materials.listed(db, select(m.ClassMaterial).where(m.ClassMaterial.diary_id == diary.id))
+
+
+@router.post('/diaries/{diary_id}/materials', status_code=201)
+def publish_material(diary_id: str, data: class_materials.MaterialInput, db: DB, user: Actor,
+                     school: DiaryScope, request: Request):
+    lock_school(db, school.id)
+    diary = _scoped(db, m.SchoolDiary, diary_id, school.id)
+    _require_diary(db, user, diary, 'diary.write')
+    values = data.model_dump(exclude={'client_key'})
+    if not data.title.strip() or not data.body.strip():
+        fail(422, 'Preencha o título e o conteúdo.')
+    key = str(data.client_key)
+    previous = db.get(m.ClassMaterial, key)
+    if previous:
+        if (previous.author_id != user.id or previous.diary_id != diary.id or
+                any(getattr(previous, field) != value for field, value in values.items())):
+            fail(409, 'Esta operação já foi utilizada.')
+        return {'id': previous.id}
+    _require_open_diary(diary)
+    if data.enrollment_id:
+        enrollment = _scoped(db, m.Enrollment, data.enrollment_id, school.id)
+        if (enrollment.status != 'active' or enrollment.class_group_id != diary.class_group_id
+                or enrollment.academic_year_id != diary.academic_year_id):
+            fail(422, 'Selecione uma matrícula ativa nesta turma e ano.')
+    material = m.ClassMaterial(id=key, school_id=school.id, diary_id=diary.id, author_id=user.id, **values)
+    db.add(material)
+    db.flush()
+    audit(db, request, user, 'diary.material_published', material, school.id)
+    return {'id': material.id}
+
+
+@router.get('/diaries/{diary_id}/materials/{material_id}/print.pdf')
+def print_class_material(diary_id: str, material_id: str, db: DB, user: Actor, school: DiaryScope, request: Request):
+    diary = _scoped(db, m.SchoolDiary, diary_id, school.id)
+    _require_diary(db, user, diary, 'diary.read')
+    material = _scoped(db, m.ClassMaterial, material_id, school.id)
+    if material.diary_id != diary.id:
+        fail(404, 'Material indisponível neste diário.')
+    return class_materials.printable(db, school, user, request, material)

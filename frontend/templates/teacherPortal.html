@@ -16,26 +16,32 @@
       </form>
     </section>
   </main>
-  <main v-else id="teacher-content" class="teacher-main">
+  <div v-else class="family-shell" @keydown="menuKey">
+    <button v-if="s.menuOpen" class="family-shade" aria-label="Fechar navegação" @click="toggleMenu(false)"></button>
+    <aside id="teacher-navigation" class="family-sidebar" :class="{visible:s.menuOpen}">
+      <div class="family-sidebar-brand"><button id="teacher-menu-close" type="button" class="icon-button family-menu-close" @click="toggleMenu(false)" aria-label="Fechar menu">×</button><div><strong>{{identity.display_name}}</strong><small>PORTAL DO PROFESSOR</small></div></div>
+      <div class="family-sidebar-scroll"><p class="family-nav-label">ROTINA DOCENTE</p><nav aria-label="Rotina do professor">
+      <button v-for="item in [{id:'overview',label:'Visão geral',icon:'dashboard'},{id:'agenda',label:'Minha programação',icon:'clock'},{id:'diary',label:'Diário de classe',icon:'academic'},{id:'materials',label:'Atividades e trabalhos',icon:'documents'},{id:'news',label:'Avisos e publicações',icon:'bell'}]" :key="item.id" :aria-current="s.section===item.id?'page':undefined" :disabled="s.busy || (['diary','materials'].includes(item.id) && !s.agenda?.diaries.length) || (!s.schoolId && item.id!=='overview')" @click="navigate(item.id)"><svg class="ui-icon" aria-hidden="true"><use :href="'/ui-icons.svg#'+item.icon"/></svg>{{item.label}}</button>
+      </nav></div><footer class="family-sidebar-footer">{{identity.short_name}}<small>Portal do Professor</small></footer>
+    </aside>
+    <div class="family-main" :inert="s.menuOpen?true:undefined"><main id="teacher-content" class="teacher-main">
     <header class="teacher-header">
-      <div class="teacher-brand"><img v-if="identity.logo_url" :src="identity.logo_url" alt=""><span>{{identity.display_name}}</span></div>
+      <button id="teacher-menu-toggle" class="icon-button family-menu-toggle" aria-label="Abrir menu" aria-controls="teacher-navigation" :aria-expanded="s.menuOpen" @click="toggleMenu(true)"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#menu"/></svg></button><div class="teacher-brand"><img v-if="identity.logo_url" :src="identity.logo_url" alt=""><span>{{identity.display_name}}</span></div>
       <div class="teacher-account"><span>{{s.user.name}}</span><button class="btn btn-secondary" :disabled="s.busy" @click="logout">Sair</button></div>
     </header>
-    <div class="teacher-heading"><h1>Portal do Professor</h1><label v-if="s.schools.length>1">Instituição<select :value="s.schoolId" :disabled="s.busy" @change="selectSchool"><option v-for="item in s.schools" :key="item.id" :value="item.id">{{item.name}}</option></select></label></div>
+    <div class="teacher-heading"><h1>{{({overview:'Visão geral',agenda:'Minha programação',diary:'Diário de classe',materials:'Atividades e trabalhos',news:'Avisos e publicações'})[s.section]}}</h1><label v-if="s.schools.length>1">Instituição<select :value="s.schoolId" :disabled="s.busy" @change="selectSchool"><option v-for="item in s.schools" :key="item.id" :value="item.id">{{item.name}}</option></select></label></div>
     <p v-if="s.error" class="alert error" role="alert">{{s.error}} <button class="btn" :disabled="s.busy" @click="run(workspace)">Tentar novamente</button></p>
     <p v-if="!s.schools.length&&!s.error&&!s.busy" class="alert">Peça à Secretaria que vincule sua conta de Professor à instituição.</p>
-    <nav v-if="s.schoolId" class="teacher-nav" aria-label="Rotina do professor">
-      <button :aria-pressed="s.section==='agenda'" @click="showAgenda">Minha programação</button>
-      <button :aria-pressed="s.section==='diary'" :disabled="!s.agenda?.diaries.length" @click="s.section='diary'">Diário de classe</button>
-    </nav>
-    <section v-if="s.agenda" v-show="s.section==='agenda'" class="teacher-overview">
-      <section class="panel x-card"><h2>Minhas turmas</h2>
+    <section v-if="s.section==='news'" class="panel x-card"><h2>Comunicados da escola</h2><p v-if="!s.news.length&&!s.busy">Nenhuma publicação disponível.</p><article v-for="item in s.news" :key="item.id"><h3>{{item.title}}</h3><p class="preserve">{{item.content||item.summary}}</p></article><div v-if="s.newsTotal>10" class="actions"><button :disabled="s.busy||s.newsPage===1" @click="run(()=>publications(s.newsPage-1))">Anterior</button><button :disabled="s.busy||s.newsPage*10>=s.newsTotal" @click="run(()=>publications(s.newsPage+1))">Próxima</button></div></section>
+    <p v-if="s.agenda && !s.agenda.diaries.length && s.section==='diary'" class="alert">Peça à Coordenação que confira sua atribuição e abra o diário da turma.</p>
+    <section v-if="s.agenda" v-show="['overview','agenda','materials'].includes(s.section)" class="teacher-overview">
+      <section v-show="s.section!=='agenda'" class="panel x-card"><h2>Minhas turmas</h2>
         <p v-if="!s.agenda.assignments.length">A Coordenação precisa associar seu cadastro à turma e à disciplina em Atribuições docentes.</p>
         <ul class="teacher-list"><li v-for="a in s.agenda.assignments" :key="a.id"><strong>{{a.class_name}} · {{a.subject_name}}</strong><span>{{[a.shift_name,a.year_name].filter(Boolean).join(' · ')}}</span>
-          <button v-for="d in s.agenda.diaries.filter(item=>item.teacher_assignment_id===a.id)" :key="d.id" class="btn btn-secondary teacher-open" @click="s.requestedDiary={id:d.id};s.section='diary'">Abrir diário · {{d.component}}</button>
+          <button v-for="d in s.agenda.diaries.filter(item=>item.teacher_assignment_id===a.id)" :key="d.id" class="btn btn-secondary teacher-open" @click="s.requestedDiary={id:d.id,tab:s.section==='materials'?'materials':'diaries'};s.section='diary'">{{s.section==='materials'?'Abrir materiais':'Abrir diário'}} · {{d.component}}</button>
           <small v-if="!s.agenda.diaries.some(d=>d.teacher_assignment_id===a.id)">Peça à Coordenação que abra o diário desta turma e o vincule à sua atribuição.</small></li></ul>
       </section>
-      <section class="panel x-card"><div class="teacher-week"><h2>Programação da semana</h2><label>Semana de<input type="date" v-model="s.week" :disabled="s.busy" @change="run(agenda)"></label></div>
+      <section v-show="s.section!=='materials'" class="panel x-card"><div class="teacher-week"><h2>Programação da semana</h2><label>Semana de<input type="date" v-model="s.week" :disabled="s.busy" @change="run(agenda)"></label></div>
         <p>{{date(s.agenda.starts_on)}} a {{date(s.agenda.ends_on)}}</p>
         <p v-if="!s.agenda.events.length" class="muted">Nenhuma aula registrada ou avaliação marcada para esta semana.</p>
         <ul class="teacher-list"><li v-for="e in s.agenda.events" :key="e.kind+e.id"><span>{{date(e.date)}} · {{e.kind}}</span><strong>{{e.title}}</strong><small>{{group(e.diary_id)}}</small></li></ul>
@@ -44,5 +50,5 @@
     <section v-if="s.agenda?.diaries.length" v-show="s.section==='diary'" aria-label="Diário de classe">
       <school-diary :key="s.schoolId" :school-id="s.schoolId" :permissions="s.user.permissions" :teacher-portal="true" :requested-diary="s.requestedDiary"></school-diary>
     </section>
-  </main>
+  </main></div></div>
 </div>

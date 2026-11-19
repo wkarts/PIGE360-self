@@ -5,17 +5,38 @@ namespace PigeFamily {
   type Account={id:string;name:string;role:string;school_ids:string[]};
   type Post={id:string;title:string;summary:string;content:string;kind:string;publish_at:string|null;event_start:string|null;event_end:string|null;location:string};
   type Feed={items:Post[];total:number};
-  const titles:Record<string,string>={overview:'Visão geral',students:'Meus alunos',academic:'Vida acadêmica',news:'Comunicados',agenda:'Agenda escolar',finance:'Financeiro',documents:'Documentos',support:'Atendimento'};
+  const titles:Record<string,string>={materials:'Atividades',absences:'Justificativas de ausência',overview:'Visão geral',students:'Meus alunos',academic:'Vida acadêmica',news:'Comunicados',agenda:'Agenda escolar',finance:'Financeiro',documents:'Documentos',support:'Atendimento'};
   function routeSection():string{const view=new URLSearchParams(location.search).get('view');return view&&titles[view]?view:location.pathname.includes('documents')?'documents':location.pathname.includes('finance')?'finance':location.pathname.includes('academic')?'academic':'overview';}
   const s=Vue.reactive({ready:false,busy:false,error:'',contextError:false,account:null as Account|null,email:'',password:'',passwordVisible:false,menuOpen:false,schoolId:'',schools:{} as Record<string,string>,section:routeSection(),students:[] as Student[],studentId:new URLSearchParams(location.search).get('student')||'',charges:[] as {id:string;description:string;amount:string;due_on:string;status:string}[],financeNote:'',financeError:'',financeLoaded:false,news:[] as Post[],events:[] as Post[],feedItems:[] as Post[],feedTotal:0,feedPage:1,feedBusy:false,feedError:'',overviewFeedError:'',selectedPost:null as Post|null});
+  type Material={id:string;title:string;body:string;kind:string};
+  type Absence={number:string;status:string;absence_date:string};
+  const schoolwork=Vue.reactive({materials:[] as Material[],absences:[] as Absence[],day:'',reason:'',file:null as File|null,key:'',receipt:'',fileVersion:0});
+  function clearSchoolwork(){schoolwork.materials=[];schoolwork.absences=[];schoolwork.file=null;schoolwork.key='';schoolwork.day='';schoolwork.reason='';schoolwork.receipt='';schoolwork.fileVersion++;}
+  function pickEvidence(event:Event){schoolwork.file=(event.target as HTMLInputElement).files?.[0]||null;}
+  async function loadSchoolwork(){
+    const current=generation,id=s.studentId,section=s.section;
+    if(!id||!['materials','absences'].includes(section)||(section==='absences'&&s.account?.role!=='guardian'))return;
+    const path='/family/students/'+id+'/'+section;
+    if(section==='materials'){const items=await request<Material[]>(path);if(current===generation&&s.studentId===id)schoolwork.materials=items;}
+    else {const items=await request<Absence[]>(path);if(current===generation&&s.studentId===id)schoolwork.absences=items;}
+  }
+  async function submitAbsence(){await run(async()=>{
+    const id=s.studentId,current=generation,form=new FormData();
+    schoolwork.key||=crypto.randomUUID();form.set('client_key',schoolwork.key);
+    form.set('absence_date',schoolwork.day);form.set('reason',schoolwork.reason);
+    if(schoolwork.file)form.set('evidence',schoolwork.file);
+    const result=await request<{number:string}>('/family/students/'+id+'/absences',{method:'POST',body:form});
+    if(current!==generation||s.studentId!==id)return;
+    clearSchoolwork();schoolwork.receipt=result.number;await loadSchoolwork();
+  });}
   let postTrigger:HTMLElement|null=null;
   let generation=0,feedGeneration=0,authEpoch=0;let token='';
   let refreshing:{epoch:number;promise:Promise<void>}|null=null;
   class SessionChanged extends Error {constructor(){super('A sessão mudou.');this.name='AbortError';}}
   function checkAuth(epoch:number):void{if(epoch!==authEpoch)throw new SessionChanged();}
   function invalidateAuth():void{authEpoch++;refreshing=null;}
-  function clearPrivate():void{generation++;feedGeneration++;s.students=[];s.charges=[];s.financeNote='';s.financeError='';s.financeLoaded=false;s.news=[];s.events=[];s.feedItems=[];s.feedTotal=0;s.feedPage=1;s.feedBusy=false;s.selectedPost=null;s.feedError='';s.overviewFeedError='';s.menuOpen=false;}
-  async function raw(path:string,options:RequestInit={}):Promise<Response>{const headers=new Headers(options.headers);headers.set('X-CSRF-Protection','1');if(token)headers.set('Authorization','Bearer '+token);if(s.schoolId)headers.set('X-School-Id',s.schoolId);if(options.body)headers.set('Content-Type','application/json');return fetch('/api/v1'+path,{...options,headers,credentials:'same-origin',cache:'no-store'});}
+  function clearPrivate():void{generation++;feedGeneration++;clearSchoolwork();s.students=[];s.charges=[];s.financeNote='';s.financeError='';s.financeLoaded=false;s.news=[];s.events=[];s.feedItems=[];s.feedTotal=0;s.feedPage=1;s.feedBusy=false;s.selectedPost=null;s.feedError='';s.overviewFeedError='';s.menuOpen=false;}
+  async function raw(path:string,options:RequestInit={}):Promise<Response>{const headers=new Headers(options.headers);headers.set('X-CSRF-Protection','1');if(token)headers.set('Authorization','Bearer '+token);if(s.schoolId)headers.set('X-School-Id',s.schoolId);if(typeof options.body==='string')headers.set('Content-Type','application/json');return fetch('/api/v1'+path,{...options,headers,credentials:'same-origin',cache:'no-store'});}
   async function renew():Promise<void>{
     const epoch=authEpoch;
     if(!refreshing||refreshing.epoch!==epoch){
@@ -44,8 +65,8 @@ namespace PigeFamily {
     invalidateAuth();clearPrivate();
     await run(async()=>{try{await request('/auth/logout',{method:'POST'});}finally{token='';s.account=null;s.schoolId='';s.studentId='';s.password='';s.passwordVisible=false;PigeMFA.clear();}});
   }
-  async function load():Promise<void>{if(s.account?.role==='teacher'){location.replace('/professor.html');return;}clearPrivate();s.contextError=false;const current=generation;try{const data=await request<{students:Student[];schools:{id:string;name:string}[]}>('/family/context');if(current!==generation)return;s.schools=Object.fromEntries((data.schools||[]).map(x=>[x.id,x.name]));s.students=data.students;if(!s.students.some(x=>x.id===s.studentId))s.studentId=s.students[0]?.id||'';await Promise.all([finance(),overviewFeed()]);if(current===generation&&['news','agenda'].includes(s.section))await loadFeed();}catch(e){if(current===generation)s.contextError=true;throw e;}}
-  const label=(value:string):string=>({draft:'Em preparação',active:'Efetivada',suspended:'Suspensa',completed:'Concluída',pending:'Pendente',overdue:'Vencida',validated:'Validado',received:'Recebido',waived:'Dispensado',rejected:'Revisão necessária',expired:'Vencido',queued:'Em processamento',cancelled:'Cancelada',paid:'Paga',settled:'Liquidada',issued:'Emitida',registered:'Registrada'}[value]||value);
+  async function load():Promise<void>{if(s.account?.role==='teacher'){location.replace('/professor.html');return;}clearPrivate();s.contextError=false;const current=generation;try{const data=await request<{students:Student[];schools:{id:string;name:string}[]}>('/family/context');if(current!==generation)return;s.schools=Object.fromEntries((data.schools||[]).map(x=>[x.id,x.name]));s.students=data.students;if(!s.students.some(x=>x.id===s.studentId))s.studentId=s.students[0]?.id||'';await Promise.all([finance(),overviewFeed(),loadSchoolwork()]);if(current===generation&&['news','agenda'].includes(s.section))await loadFeed();}catch(e){if(current===generation)s.contextError=true;throw e;}}
+  const label=(value:string):string=>({open:'Aberto',in_progress:'Em atendimento',waiting:'Aguardando',draft:'Em preparação',active:'Efetivada',suspended:'Suspensa',completed:'Concluída',pending:'Pendente',overdue:'Vencida',validated:'Validado',received:'Recebido',waived:'Dispensado',rejected:'Revisão necessária',expired:'Vencido',queued:'Em processamento',cancelled:'Cancelada',paid:'Paga',settled:'Liquidada',issued:'Emitida',registered:'Registrada'}[value]||value);
   const student=()=>s.students.find(x=>x.id===s.studentId);
   const pendingDocuments=()=>(student()?.documents||[]).filter(x=>['pending','rejected','expired'].includes(x.status));
   const overdue=()=>s.charges.filter(x=>x.status==='overdue');
@@ -58,7 +79,7 @@ namespace PigeFamily {
   async function overviewFeed():Promise<void>{if(!s.schoolId)return;const current=generation;try{const [news,events]=await Promise.all([request<Feed>(feedPath('news',1,3)),request<Feed>(feedPath('event',1,3,true))]);if(current!==generation)return;s.news=news.items;s.events=events.items;}catch(e){if(current===generation)s.overviewFeedError=e instanceof Error?e.message:'Não foi possível carregar os comunicados e a agenda.';}}
   async function loadFeed(page=1):Promise<void>{if(!s.schoolId||s.contextError)return;const current=generation,id=++feedGeneration,kind=s.section==='agenda'?'event':'news';s.feedBusy=true;s.feedError='';s.feedItems=[];s.selectedPost=null;try{const data=await request<Feed>(feedPath(kind,page));if(current!==generation||id!==feedGeneration)return;s.feedItems=data.items;s.feedTotal=data.total;s.feedPage=page;}catch(e){if(current===generation&&id===feedGeneration)s.feedError=e instanceof Error?e.message:'Não foi possível carregar as publicações.';}finally{if(id===feedGeneration)s.feedBusy=false;}}
   function updateLocation(push=false):void{const params=new URLSearchParams({view:s.section});if(s.studentId)params.set('student',s.studentId);history[push?'pushState':'replaceState']({},'','/family.html?'+params);}
-  async function changeStudent():Promise<void>{if(s.busy)return;s.selectedPost=null;updateLocation();await run(finance);}
+  async function changeStudent():Promise<void>{if(s.busy)return;clearSchoolwork();s.selectedPost=null;updateLocation();await run(async()=>{await Promise.all([finance(),loadSchoolwork()]);});}
   async function chooseStudent(id:string):Promise<void>{if(s.busy)return;s.studentId=id;await changeStudent();section('academic');}
   async function changeSchool():Promise<void>{if(s.busy)return;s.studentId='';await run(load);updateLocation();}
   async function download(path:string,filename:string):Promise<void>{const current=generation,selected=s.studentId;const r=await response(path);const blob=await r.blob();if(current!==generation||selected!==s.studentId)return;const url=URL.createObjectURL(blob);const a=window.document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
@@ -70,7 +91,7 @@ namespace PigeFamily {
   function closeMenu(restore=true):void{s.menuOpen=false;if(restore)void Vue.nextTick(()=>{if(!s.menuOpen)window.document.getElementById('family-menu-toggle')?.focus();});}
   function openMenu():void{s.menuOpen=true;void Vue.nextTick(()=>{if(s.menuOpen)window.document.getElementById('family-menu-close')?.focus();});}
   function menuKeys(event:KeyboardEvent):void{if(!s.menuOpen)return;if(event.key==='Escape'){event.preventDefault();closeMenu();}if(event.key==='Tab'){const elements=Array.from(window.document.querySelectorAll<HTMLElement>('#family-navigation button:not(:disabled),#family-navigation a[href]'));const first=elements[0],last=elements[elements.length-1];if(event.shiftKey&&window.document.activeElement===first){event.preventDefault();last?.focus();}else if(!event.shiftKey&&window.document.activeElement===last){event.preventDefault();first?.focus();}}}
-  function section(name:string):void{if(!titles[name])return;const changed=s.section!==name;s.section=name;s.selectedPost=null;closeMenu(false);if(changed)updateLocation(true);if(['news','agenda'].includes(name))void loadFeed();void Vue.nextTick(()=>window.document.getElementById('family-title')?.focus());}
-  async function popstate():Promise<void>{s.section=routeSection();s.selectedPost=null;closeMenu(false);const id=new URLSearchParams(location.search).get('student');if(id&&s.students.some(x=>x.id===id)&&id!==s.studentId){s.studentId=id;await finance();}if(['news','agenda'].includes(s.section))await loadFeed();}
-  Vue.createApp({components:{'learning-portal':PigeLearning.component},render:PigeRenders.familyPortal,setup(){Vue.onMounted(()=>{window.addEventListener('popstate',popstate);window.addEventListener('keydown',menuKeys);window.addEventListener('resize',resized);PigeMFA.init(request,authenticated,logout);void start();});Vue.onUnmounted(()=>{window.removeEventListener('popstate',popstate);window.removeEventListener('keydown',menuKeys);window.removeEventListener('resize',resized);});return{s,label,student,title,initials,date,money,pendingDocuments,overdue,login,logout,changeSchool,changeStudent,chooseStudent,document,request,download,section,run,load,loadFeed,openPost,closePost,openMenu,closeMenu,mfa:PigeMFA,identity:PigeInstitution.state};}}).mount('#family');
+  function section(name:string):void{if(!titles[name])return;const changed=s.section!==name;s.section=name;s.selectedPost=null;closeMenu(false);if(changed)updateLocation(true);if(['materials','absences'].includes(name))void loadSchoolwork().catch(e=>{if(s.section===name)s.error=e.message;});if(['news','agenda'].includes(name))void loadFeed();void Vue.nextTick(()=>window.document.getElementById('family-title')?.focus());}
+  async function popstate():Promise<void>{s.section=routeSection();s.selectedPost=null;closeMenu(false);const id=new URLSearchParams(location.search).get('student');if(id&&s.students.some(x=>x.id===id)&&id!==s.studentId){clearSchoolwork();s.studentId=id;await finance();}await run(loadSchoolwork);if(['news','agenda'].includes(s.section))await loadFeed();}
+  Vue.createApp({components:{'learning-portal':PigeLearning.component},render:PigeRenders.familyPortal,setup(){Vue.onMounted(()=>{window.addEventListener('popstate',popstate);window.addEventListener('keydown',menuKeys);window.addEventListener('resize',resized);PigeMFA.init(request,authenticated,logout);void start();});Vue.onUnmounted(()=>{window.removeEventListener('popstate',popstate);window.removeEventListener('keydown',menuKeys);window.removeEventListener('resize',resized);});return{s,schoolwork,pickEvidence,submitAbsence,label,student,title,initials,date,money,pendingDocuments,overdue,login,logout,changeSchool,changeStudent,chooseStudent,document,request,download,section,run,load,loadFeed,openPost,closePost,openMenu,closeMenu,mfa:PigeMFA,identity:PigeInstitution.state};}}).mount('#family');
 }

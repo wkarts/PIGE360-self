@@ -5,7 +5,7 @@ namespace PigeDiary {
   type Roster={enrollment_id:string;student_id:string;number:string;name:string;enrollment_status:string;attendance?:{id?:string;version?:number;status:string;note:string}|null};
   type AssessmentResult={id?:string;version?:number;numeric_score:string|number|null;concept:string;note:string};
   type CommunicationRecipient={guardian_link_id:string;name:string;relationship:string;portal_account_count:number};
-  type Props={schoolId:string;permissions:string[];teacherPortal?:boolean;requestedDiary?:{id:string}};
+  type Props={schoolId:string;permissions:string[];teacherPortal?:boolean;requestedDiary?:{id:string;tab?:string}};
   const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bahia',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   export const component={props:['schoolId','permissions','teacherPortal','requestedDiary'],render:PigeRenders.diary,setup(props:Props){
     const state=Vue.reactive({
@@ -28,6 +28,7 @@ namespace PigeDiary {
       assessmentRules:[] as Row[],
       assessmentRuleForm:{period_id:'',method:'arithmetic',scale_max:'10',decimal_places:2,minimum_score:'',minimum_attendance_percent:'',justified_absence_counts_as_present:'',recovery_mode:'none',concept_scale:'',required_opinion:false,version:null as number|null},
       periodResults:[] as Row[],
+      materials:[] as Row[],materialForm:{client_key:PigeOnline.newId(),kind:'Atividade',title:'',body:'',enrollment_id:''},
       occurrences:[] as Row[],
       communicationRecipients:[] as CommunicationRecipient[],communications:[] as Row[],
       communicationForm:{enrollment_id:'',academic_period_id:'',occurrence_id:'',recipient_guardian_link_ids:[] as string[],title:'',message:'',client_key:PigeOnline.newId()},
@@ -55,20 +56,22 @@ namespace PigeDiary {
     async function load(){await run(loadBase);}
     async function loadDiary(d:Diary){
       const endpoint=base()+'/diaries/'+d.id;
-      const [selected,summary,history,plans,assessments,rules,occurrences,opinions,records,communications]=await Promise.all([
+      const [selected,summary,history,plans,assessments,rules,occurrences,opinions,records,communications,materials]=await Promise.all([
         PigeAPI.request<Diary>(endpoint),PigeAPI.request<any>(endpoint+'/summary'),
         PigeAPI.request<any>(endpoint+'/history'),
         PigeAPI.request<Row[]>(base()+'/curriculum-plans?class_group_id='+encodeURIComponent(d.class_group_id)+'&component_id='+encodeURIComponent(d.component_id)),
         PigeAPI.request<Row[]>(endpoint+'/assessments'),PigeAPI.request<Row[]>(endpoint+'/assessment-rules'),
         PigeAPI.request<Row[]>(endpoint+'/occurrences'),PigeAPI.request<Row[]>(endpoint+'/opinions'),
-        PigeAPI.request<Row[]>(endpoint+'/pedagogical-records'),PigeAPI.request<Row[]>(endpoint+'/communications')
+        PigeAPI.request<Row[]>(endpoint+'/pedagogical-records'),PigeAPI.request<Row[]>(endpoint+'/communications'),PigeAPI.request<Row[]>(endpoint+'/materials')
       ]);
       const changed=state.selected?.id!==d.id;
       state.selected=selected;state.summary=summary;state.history=history;state.plans=plans;
       state.assessments=assessments;state.assessmentRules=rules;state.occurrences=occurrences;
       state.opinions=opinions;state.pedagogicalRecords=records;state.communications=communications;
       state.selectedLesson=null;state.attendance=[];state.assessmentEditing=null;state.selectedAssessment=null;state.assessmentRoster=[];state.periodResults=[];
+      state.materials=materials;
       if(changed){
+        state.materialForm={client_key:PigeOnline.newId(),kind:'Atividade',title:'',body:'',enrollment_id:''};
         state.planForm={class_group_id:d.class_group_id,component_id:d.component_id,academic_period_id:'',teacher_assignment_id:d.teacher_assignment_id||'',objectives:'',thematic_units:'',knowledge_objects:'',bncc_references:'',methodology:'',resources:'',assessment_strategy:'',notes:'',status:'draft'};
         state.lessonForm={academic_period_id:'',lesson_date:today(),lesson_count:1,content:'',skills:'',methodology:'',activities:'',homework:'',notes:''};
         state.assessmentForm={academic_period_id:'',title:'',kind:'activity',assessment_date:today(),value_type:'numeric',max_score:'10',weight:'1',description:'',skills:'',status:'published'};
@@ -142,6 +145,14 @@ namespace PigeDiary {
     async function reviewDiary(){if(!state.selected)return;await run(async()=>{await PigeAPI.post(base()+'/diaries/'+state.selected!.id+'/review',{version:state.selected!.version});await loadDiary(state.selected!);state.notice='Diário marcado como revisado.';});}
     async function closeDiary(){if(!state.selected)return;await run(async()=>{const period=Boolean(state.closePeriod);await PigeAPI.post(base()+'/diaries/'+state.selected!.id+'/close',{academic_period_id:state.closePeriod||null,reason:state.closeReason,version:state.selected!.version});await loadDiary(state.selected!);state.notice=period?'Período fechado.':'Diário fechado.';});}
     async function reopenDiary(){if(!state.selected)return;await run(async()=>{await PigeAPI.post(base()+'/diaries/'+state.selected!.id+'/reopen',{reason:state.reopenReason,version:state.selected!.version});state.reopenReason='';await loadDiary(state.selected!);state.notice='Diário reaberto com registro de retificação.';});}
+    async function publishMaterial(){if(!state.selected)return;await run(async()=>{
+      const path=base()+'/diaries/'+state.selected!.id+'/materials',draft=state.materialForm;
+      await PigeAPI.post(path,{...draft,enrollment_id:draft.enrollment_id||null});
+      state.materials=await PigeAPI.request<Row[]>(path);
+      state.materialForm={client_key:PigeOnline.newId(),kind:'Atividade',title:'',body:'',enrollment_id:''};
+      state.notice='Material publicado no portal do aluno e do responsável.';
+    });}
+    async function printMaterial(id:string){if(state.selected)await run(()=>PigeAPI.download(base()+'/diaries/'+state.selected!.id+'/materials/'+id+'/print.pdf','material-escolar.pdf'));}
     async function report(){if(state.selected)await run(()=>{const q=new URLSearchParams();if(state.reportPeriod)q.set('academic_period_id',state.reportPeriod);if(state.reportType==='student_record'&&state.reportEnrollment)q.set('enrollment_id',state.reportEnrollment);const query=q.toString();return PigeAPI.download(base()+'/diaries/'+state.selected!.id+'/reports/'+state.reportType+'.pdf'+(query?'?'+query:''),'diario-'+state.reportType+'.pdf');});}
     let handled:Props['requestedDiary'];
     function openRequestedDiary():void {
@@ -149,12 +160,12 @@ namespace PigeDiary {
       if(!request||handled===request||state.busy)return;
       const diary=state.diaries.find(item=>item.id===request.id);
       if(!diary)return;
-      handled=request;state.tab='diaries';
+      handled=request;state.tab=request.tab||'diaries';
       if(state.selected?.id!==diary.id)void selectDiary(diary);
     }
     Vue.watch(()=>props.requestedDiary,openRequestedDiary);
     Vue.watch(()=>state.busy,openRequestedDiary);
     Vue.onMounted(()=>{void load().then(openRequestedDiary);});
-    return{props,state,can,str,date,label,load,selectDiary,loadCommunicationRecipients,communicationOccurrenceChanged,sendCommunication,createPeriod,createComponent,createDiary,createPlan,createLesson,openAttendance,saveAttendance,createAssessment,editAssessment,cancelAssessmentEdit,openAssessment,saveAssessmentResults,saveOpinion,createPedagogicalRecord,submitDiary,reviewDiary,closeDiary,reopenDiary,report,selectRulePeriod,saveAssessmentRule,loadPeriodResults,consolidatePeriod,saveOccurrence};
+    return{props,state,publishMaterial,printMaterial,can,str,date,label,load,selectDiary,loadCommunicationRecipients,communicationOccurrenceChanged,sendCommunication,createPeriod,createComponent,createDiary,createPlan,createLesson,openAttendance,saveAttendance,createAssessment,editAssessment,cancelAssessmentEdit,openAssessment,saveAssessmentResults,saveOpinion,createPedagogicalRecord,submitDiary,reviewDiary,closeDiary,reopenDiary,report,selectRulePeriod,saveAssessmentRule,loadPeriodResults,consolidatePeriod,saveOccurrence};
   }};
 }

@@ -1,13 +1,20 @@
 """Superfície privada de alunos e responsáveis; vínculos revalidados a cada acesso."""
 import hashlib
-from fastapi import APIRouter, Request
+from datetime import date
+from uuid import UUID
+
+from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import Response
 from sqlalchemy import select
-from . import models as m
-from .common import audit
+
+from . import class_materials, models as m
+from .common import audit, number
+from .config import settings
+from .documents import validate_upload, write_file
 from .learning_portal import own_profile_students
 from .profiles import student_summary
-from .security import Actor, DB, fail
+from .reports import protocol_event
+from .security import Actor, DB, fail, lock_school
 from .storage import read_bytes
 
 router=APIRouter(prefix='/api/v1/family',tags=['Portal privado escolar'])
@@ -58,3 +65,74 @@ def document(student_id:str,document_id:str,db:DB,user:Actor,request:Request):
     if hashlib.sha256(data).hexdigest()!=file.sha256:fail(409,'Integridade do documento divergente.')
     audit(db,request,user,'family.document_downloaded',doc,student.school_id)
     return Response(data,media_type=file.mime_type,headers={'Cache-Control':'no-store','Content-Disposition':'attachment; filename="documento-escolar"','X-Content-Type-Options':'nosniff'})
+
+
+@router.get('/students/{student_id}/materials')
+def materials(student_id: str, db: DB, user: Actor):
+    return class_materials.listed(db, class_materials.visible_to(own_student(db, user, student_id)))
+
+
+@router.get('/students/{student_id}/materials/{material_id}/print.pdf')
+def print_material(student_id: str, material_id: str, db: DB, user: Actor, request: Request):
+    student = own_student(db, user, student_id)
+    item = db.scalar(class_materials.visible_to(student).where(m.ClassMaterial.id == material_id))
+    return class_materials.printable(db, db.get(m.School, student.school_id), user, request, item)
+
+
+def guardian_student(db, user, student_id):
+    if user.role != 'guardian':
+        fail(403, 'A justificativa deve ser enviada pelo responsável.')
+    return own_student(db, user, student_id)
+
+
+@router.get('/students/{student_id}/absences')
+def absence_requests(student_id: str, db: DB, user: Actor):
+    student = guardian_student(db, user, student_id)
+    return [dict(r) for r in db.execute(select(m.Protocol.number, m.Protocol.status, m.AbsenceSubmission.absence_date)
+            .join(m.AbsenceSubmission, m.AbsenceSubmission.protocol_id == m.Protocol.id)
+            .where(m.Protocol.student_id == student.id, m.Protocol.school_id == student.school_id,
+                   m.AbsenceSubmission.author_id == user.id).order_by(m.Protocol.created_at.desc())).mappings()]
+
+
+@router.post('/students/{student_id}/absences', status_code=201)
+def submit_absence(student_id: str, db: DB, user: Actor, request: Request, absence_date: date = Form(),
+                   reason: str = Form(min_length=2, max_length=2000), client_key: UUID = Form(),
+                   evidence: UploadFile | None = File(None)):
+    student = guardian_student(db, user, student_id)
+    reason = reason.strip()
+    if len(reason) < 2:
+        fail(422, 'Informe o motivo da ausência.')
+    data = b''
+    mime = None
+    if evidence:
+        maximum = settings().max_upload_mb * 1024 * 1024
+        data = evidence.file.read(maximum + 1)
+        if len(data) > maximum:
+            fail(413, 'O comprovante excede o limite de envio.')
+        mime = validate_upload(data, evidence.filename or '')
+    digest = hashlib.sha256()
+    for field in (student.id, absence_date.isoformat(), reason, hashlib.sha256(data).hexdigest()):
+        digest.update(field.encode() + b'\0')
+    key = str(client_key)
+    lock_school(db, student.school_id)
+    previous = db.scalar(select(m.AbsenceSubmission).where(m.AbsenceSubmission.author_id == user.id,
+                                                           m.AbsenceSubmission.client_key == key))
+    if previous:
+        if previous.fingerprint != digest.hexdigest():
+            fail(409, 'Esta operação já foi utilizada para outra justificativa.')
+        return {'number': db.get(m.Protocol, previous.protocol_id).number}
+    attachment = None
+    if evidence:
+        suffix = {'application/pdf':'pdf','image/png':'png','image/jpeg':'jpg'}[mime]
+        attachment = write_file(db, student.school_id, user.id, 'comprovante.' + suffix, mime, data, 'absence_evidence')
+    protocol = m.Protocol(school_id=student.school_id, student_id=student.id, kind='Justificativa de ausência',
+                          number=number(db, student.school_id, 'protocol', 'PRO-'), status='open',
+                          description=f'{absence_date:%d/%m/%Y} — {reason}')
+    db.add(protocol)
+    db.flush()
+    db.add(m.AbsenceSubmission(protocol_id=protocol.id, author_id=user.id, client_key=key,
+                               absence_date=absence_date, file_id=attachment.id if attachment else None,
+                               fingerprint=digest.hexdigest()))
+    protocol_event(db, protocol, user, 'created', 'Justificativa recebida pelo portal da família.')
+    audit(db, request, user, 'family.absence_submitted', protocol, student.school_id)
+    return {'number': protocol.number}

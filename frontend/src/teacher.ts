@@ -5,10 +5,11 @@ namespace PigeTeacher {
   const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bahia'}).format(new Date());
   const s=Vue.reactive({ready:false,busy:false,error:'',email:'',password:'',passwordVisible:false,
     user:null as PigeAPI.User|null,schools:[] as {id:string;name:string}[],schoolId:'',
-    requestedDiary:undefined as {id:string}|undefined,section:'agenda',week:today(),agenda:null as Agenda|null});
+    requestedDiary:undefined as {id:string;tab?:string}|undefined,section:'overview',menuOpen:false,
+    news:[] as {id:string;title:string;content:string;summary:string}[],newsPage:1,newsTotal:0,week:today(),agenda:null as Agenda|null});
   function clear(){
     PigeAPI.clear();PigeMFA.clear();s.user=null;s.schools=[];s.schoolId='';s.password='';s.passwordVisible=false;
-    s.section='agenda';s.agenda=null;s.week=today();s.error='';
+    s.section='overview';s.menuOpen=false;s.news=[];s.agenda=null;s.week=today();s.error='';
   }
   async function run(work:()=>Promise<void>){
     if(s.busy)return;s.busy=true;s.error='';
@@ -20,7 +21,7 @@ namespace PigeTeacher {
     s.agenda=data;
   }
   async function school(id:string){
-    s.agenda=null;s.section='agenda';s.requestedDiary=undefined;s.schoolId=id;PigeAPI.setActiveSchool(id);
+    s.agenda=null;s.news=[];s.newsPage=1;s.section='overview';s.requestedDiary=undefined;s.schoolId=id;PigeAPI.setActiveSchool(id);
     if(!id)return;
     s.user=await PigeAPI.request<PigeAPI.User>('/auth/me');
     await agenda();
@@ -48,7 +49,30 @@ namespace PigeTeacher {
     finally{s.ready=true;}
   }
   function selectSchool(event:Event){void run(()=>school((event.target as HTMLSelectElement).value));}
-  function showAgenda(){s.section='agenda';void run(agenda);}
+  async function publications(page=1){
+    const id=s.schoolId;
+    const feed=await PigeAPI.request<{items:typeof s.news;total:number}>('/schools/'+id+'/community-feed?kind=news&page_size=10&page='+page);
+    if(id===s.schoolId){s.news=feed.items;s.newsTotal=feed.total;s.newsPage=page;}
+  }
+  function navigate(section:string){
+    s.menuOpen=false;s.section=section;
+    if(section==='news')void run(()=>publications());
+    if(section==='agenda')void run(agenda);
+  }
+  function toggleMenu(open:boolean){
+    s.menuOpen=open;
+    void Vue.nextTick(()=>document.getElementById(open?'teacher-menu-close':'teacher-menu-toggle')?.focus());
+  }
+  function menuKey(e:KeyboardEvent){
+    if(!s.menuOpen)return;
+    if(e.key==='Escape'){e.preventDefault();toggleMenu(false);}
+    if(e.key==='Tab'){
+      const items=document.querySelectorAll<HTMLButtonElement>('#teacher-navigation button:not([disabled])');
+      const first=items[0],last=items[items.length-1];
+      if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}
+      if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}
+    }
+  }
   function date(value:string){return new Intl.DateTimeFormat('pt-BR',{timeZone:'UTC',day:'2-digit',month:'2-digit',year:'numeric'}).format(new Date(value+'T12:00:00Z'));}
   function group(diaryId:string){
     const diary=s.agenda?.diaries.find(item=>item.id===diaryId);
@@ -59,8 +83,9 @@ namespace PigeTeacher {
     Vue.onMounted(()=>{
       PigeMFA.init(PigeAPI.request,data=>enter(data as unknown as PigeAPI.SessionResponse),logout);
       window.addEventListener('pige-session-expired',()=>{clear();s.error='Sessão encerrada. Entre novamente.';});
+      window.addEventListener('resize',()=>{if(innerWidth>800)s.menuOpen=false;});
       void start();
     });
-    return {s,identity:PigeInstitution.state,mfa:PigeMFA,login,logout,run,agenda,workspace,date,group,selectSchool,showAgenda};
+    return {s,navigate,toggleMenu,menuKey,publications,identity:PigeInstitution.state,mfa:PigeMFA,login,logout,run,agenda,workspace,date,group,selectSchool};
   }}).mount('#teacher');
 }

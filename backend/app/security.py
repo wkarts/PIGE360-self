@@ -188,6 +188,9 @@ def check_version(obj, expected: int):
 
 def allowed_request_origin(origin,path):
     if origin.rstrip('/')==settings().app_url.rstrip('/'):return True
+    teacher = settings().teacher_portal_public_url.rstrip('/')
+    if teacher and origin.rstrip('/') == teacher:
+        return path.startswith(('/api/v1/teacher/', '/api/v1/auth/'))
     portal=settings().portal_public_url.rstrip('/')
     if not portal or origin.rstrip('/')!=portal:return False
     return path.startswith(('/api/v1/teacher/','/api/v1/portal/','/api/v1/family/','/api/v1/profile/learning','/api/v1/invitations/','/api/v1/auth/'))

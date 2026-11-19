@@ -15,10 +15,12 @@ def free_port():
 port,website_port,portal_port=(free_port() for _ in range(3))
 URL=f'http://127.0.0.1:{port}';WEBSITE_URL=f'http://127.0.0.1:{website_port}';PORTAL_URL=f'http://127.0.0.1:{portal_port}'
 password='Synthetic-Only-Password-2026!';website_token='synthetic-website-service-token-0123456789';portal_token='synthetic-portal-service-token-0123456789'
-env={**os.environ,'PYTHONPATH':str(ROOT/'backend'),'DATABASE_URL':'sqlite:///'+str(TEMP/'e2e.db'),'ALLOW_SQLITE':'true','APP_ENV':'test','APP_URL':URL,'PORTAL_PUBLIC_URL':PORTAL_URL,'PORTAL_INTERNAL_TOKEN':portal_token,'WEBSITE_INTERNAL_TOKEN':website_token,'ALLOWED_HOSTS':'127.0.0.1,localhost','APP_SECRET_KEY':'test-only-online-secret-key-01234567890123456789','SETUP_TOKEN':'test-only-online-setup-token-0123456789','STORAGE_PATH':str(TEMP/'files'),'FRONTEND_PATH':str(TEMP/'frontend'),'COOKIE_SECURE':'false','INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(b'0'*32).decode(),'CONNECT_ALLOWED_HOSTS':'connect.example.test'}
+teacher_port=free_port()
+TEACHER_URL=f'http://localhost:{teacher_port}'
+env={**os.environ,'TEACHER_PORTAL_PUBLIC_URL':TEACHER_URL,'PYTHONPATH':str(ROOT/'backend'),'DATABASE_URL':'sqlite:///'+str(TEMP/'e2e.db'),'ALLOW_SQLITE':'true','APP_ENV':'test','APP_URL':URL,'PORTAL_PUBLIC_URL':PORTAL_URL,'PORTAL_INTERNAL_TOKEN':portal_token,'WEBSITE_INTERNAL_TOKEN':website_token,'ALLOWED_HOSTS':'127.0.0.1,localhost','APP_SECRET_KEY':'test-only-online-secret-key-01234567890123456789','SETUP_TOKEN':'test-only-online-setup-token-0123456789','STORAGE_PATH':str(TEMP/'files'),'FRONTEND_PATH':str(TEMP/'frontend'),'COOKIE_SECURE':'false','INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(b'0'*32).decode(),'CONNECT_ALLOWED_HOSTS':'connect.example.test'}
 subprocess.run([sys.executable,'-m','alembic','upgrade','head'],cwd=ROOT/'backend',env=env,check=True)
 log=(OUT/'server.log').open('w');proc=subprocess.Popen([sys.executable,'-m','uvicorn','app.main:app','--host','127.0.0.1','--port',str(port)],cwd=ROOT/'backend',env=env,stdout=log,stderr=log)
-checks=[];errors=[];responsive={};bridge=os.getenv('PIGE_UI_BRIDGE')=='1';page=None;website_proc=None;portal_proc=None;website_log=None;portal_log=None
+checks=[];errors=[];responsive={};bridge=os.getenv('PIGE_UI_BRIDGE')=='1';page=None;website_proc=None;portal_proc=None;teacher_proc=None;website_log=None;portal_log=None
 
 def record(msg):checks.append(msg);print('PASS:',msg,flush=True)
 @contextmanager
@@ -55,12 +57,17 @@ try:
     website_log=(OUT/'website.log').open('w');portal_log=(OUT/'portal.log').open('w')
     website_proc=subprocess.Popen([sys.executable,'server.py'],cwd=ROOT/'services/website',env=website_env,stdout=website_log,stderr=website_log)
     portal_proc=subprocess.Popen([sys.executable,'server.py'],cwd=ROOT/'services/portal',env=portal_env,stdout=portal_log,stderr=portal_log)
+    teacher_env={**portal_env,'PORT':str(teacher_port),'PORTAL_SURFACE':'teacher','PORTAL_PUBLIC_URL':TEACHER_URL,'FAMILY_PORTAL_PUBLIC_URL':PORTAL_URL}
+    teacher_proc=subprocess.Popen([sys.executable,'server.py'],cwd=ROOT/'services/portal',env=teacher_env,stdout=portal_log,stderr=portal_log)
     for _ in range(80):
         try:
             if httpx.get(WEBSITE_URL+'/health/ready',timeout=1).status_code==200 and httpx.get(PORTAL_URL+'/health/ready',timeout=1).status_code==200:break
         except httpx.HTTPError:pass
         time.sleep(.1)
     else:raise AssertionError('Serviços separados de website/portal não ficaram prontos')
+    assert httpx.get(TEACHER_URL+'/api/v1/family/context').status_code==404
+    assert httpx.get(TEACHER_URL+'/family.html').headers['location']==PORTAL_URL+'/family.html'
+    assert httpx.get(PORTAL_URL+'/professor').headers['location']==TEACHER_URL+'/'
     record('Website e portal separados prontos contra a API interna de teste')
     r=client.post('/api/v1/setup',headers={'X-Setup-Token':env['SETUP_TOKEN']},json={'admin_name':'Secretaria — Teste','admin_email':'secretaria@example.com','admin_password':password,'company_name':'Mantenedora Exemplo — Teste','school_name':'Escola Exemplo — Dados de Teste','academic_year':2027});assert r.status_code==201,r.text
     r=client.post('/api/v1/auth/login',json={'email':'secretaria@example.com','password':password});headers={'Authorization':'Bearer '+r.json()['access_token']}
@@ -208,6 +215,7 @@ try:
         teacher_page.goto(PORTAL_URL)
         teacher_page.get_by_role('link',name='Portal do Professor').click()
         expect(teacher_page.get_by_role('heading',name='Acesso do professor')).to_be_visible()
+        teacher_page.wait_for_url(TEACHER_URL+'/')
         teacher_page.goto(PORTAL_URL+'/professor')
         teacher_page.get_by_label('E-mail',exact=True).fill(teacher['email'])
         teacher_page.get_by_label('Senha',exact=True).fill(password)
@@ -252,6 +260,15 @@ try:
         form.get_by_role('button',name='Salvar parecer').click()
         expect(workspace.get_by_text('Parecer salvo.')).to_be_visible()
         workspace.get_by_role('button',name='Diários',exact=True).click()
+        workspace.get_by_role('button',name='Materiais da turma').click()
+        for title,target in [('Exercícios da turma',''),('Orientação individual',enrollment_id)]:
+            workspace.get_by_label('Título do material').fill(title)
+            workspace.get_by_label('Conteúdo para a família').fill('Resolva os exercícios e leve sua resposta à aula.')
+            workspace.get_by_label('Destinatário').select_option(target)
+            workspace.get_by_role('button',name='Publicar material').click()
+            expect(workspace.get_by_text(title,exact=True)).to_be_visible()
+        teacher_page.screenshot(path=str(OUT/'professor-materiais.png'))
+        workspace.get_by_role('button',name='Diários',exact=True).click()
         workspace.get_by_role('button',name='Enviar para revisão').click()
         expect(workspace.get_by_text('Diário enviado e aguardando revisão da coordenação.')).to_be_visible()
         teacher_page.screenshot(path=str(OUT/'professor-diario.png'))
@@ -259,8 +276,8 @@ try:
         teacher_page.get_by_label('Semana de').fill('2027-02-01')
         expect(teacher_page.locator('.teacher-overview')).to_contain_text('Operações fundamentais')
         expect(teacher_page.locator('.teacher-overview .teacher-list').last.locator('li')).to_have_count(2)
-        teacher_page.goto(PORTAL_URL)
-        teacher_page.wait_for_url(PORTAL_URL+'/professor.html')
+        teacher_page.goto(TEACHER_URL)
+        teacher_page.wait_for_url(TEACHER_URL+'/')
         expect(teacher_page.get_by_role('heading',name='Minhas turmas')).to_be_visible()
         teacher_page.set_viewport_size({'width':390,'height':844})
         teacher_page.get_by_label('Semana de').fill('2027-02-01')
@@ -278,7 +295,9 @@ try:
         teacher_page.get_by_label('Senha',exact=True).fill(password)
         teacher_page.get_by_role('button',name='Entrar como professor').click()
         expect(teacher_page.get_by_text('A Coordenação precisa associar',exact=False)).to_be_visible()
+        teacher_page.get_by_role('button',name='Abrir menu').click()
         expect(teacher_page.get_by_role('button',name='Diário de classe')).to_be_disabled()
+        teacher_page.keyboard.press('Escape')
         expect(teacher_page.locator('.teacher-overview')).not_to_contain_text(group['name'])
         teacher_page.screenshot(path=str(OUT/'professor-sem-atribuicao.png'))
         teacher_page.get_by_role('button',name='Sair',exact=True).click()
@@ -434,6 +453,13 @@ try:
         expect(familyPage.locator('.family-root')).to_have_attribute('aria-busy','false')
         familyPage.reload();expect(familyPage.locator('#family-title')).to_have_text('Visão geral')
         expect(familyPage.get_by_role('heading',name='Olá, Lucas.',exact=True)).to_be_visible()
+        family_nav('Atividades')
+        expect(familyPage.get_by_text('Exercícios da turma',exact=True)).to_be_visible()
+        expect(familyPage.get_by_text('Orientação individual',exact=True)).to_be_visible()
+        with familyPage.expect_download() as material:
+            familyPage.get_by_role('button',name='Baixar para imprimir').first.click()
+        assert Path(material.value.path()).read_bytes().startswith(b'%PDF')
+        family_nav('Visão geral')
         check_family_viewport(1440,950,'family-dashboard-1440')
         check_family_viewport(390,844,'family-dashboard-390')
         familyPage.get_by_role('button',name='Abrir menu',exact=True).click()
@@ -472,6 +498,40 @@ try:
         expect(familyPage.locator('#family-title')).to_have_text('Vida acadêmica')
         expect(familyPage.get_by_label('Você está acompanhando',exact=True)).to_have_value(student_id)
         expect(familyPage.get_by_role('combobox',name='Você está acompanhando',exact=True)).to_have_value(student_id)
+        family_nav('Atividades')
+        expect(familyPage.get_by_text('Orientação individual',exact=True)).to_be_visible()
+        family_nav('Justificativas de ausência')
+        familyPage.get_by_label('Data da ausência').fill('2027-02-01')
+        familyPage.get_by_label('Motivo',exact=True).fill('Justificativa fictícia de teste')
+        sample=ROOT/'frontend/public/icons/icon-192.png'
+        familyPage.get_by_label('Atestado ou comprovante').set_input_files(str(sample))
+        familyPage.get_by_role('button',name='Enviar à Secretaria').click()
+        receipt=familyPage.get_by_role('status').filter(has_text='Recebido pela Secretaria')
+        expect(receipt).to_be_visible()
+        number=re.search(r'PRO-[A-Za-z0-9-]+',receipt.inner_text())[0]
+        familyPage.screenshot(path=str(OUT/'familia-justificativa.png'))
+        clerk=adminContext.pages[0]
+        clerk.locator('aside a[href="#/diary"]').click()
+        desk_diary=clerk.locator('.diary-workspace')
+        desk_diary.locator('.x-record').filter(has_text='Matemática').first.click()
+        desk_diary.get_by_role('button',name='Materiais da turma').click()
+        with clerk.expect_download() as desk_pdf:
+            desk_diary.get_by_role('button',name='Baixar para imprimir').first.click()
+        assert Path(desk_pdf.value.path()).read_bytes().startswith(b'%PDF')
+        clerk.locator('aside a[href="#/protocols"]').click()
+        clerk.get_by_role('row').filter(has_text=number).get_by_role('button',name='Ver atendimento').click()
+        with clerk.expect_download() as proof:
+            clerk.get_by_role('button',name='Baixar comprovante da ausência').click()
+        assert Path(proof.value.path()).read_bytes()==sample.read_bytes()
+        clerk.screenshot(path=str(OUT/'secretaria-justificativa.png'))
+        clerk.get_by_role('button',name='Atualizar protocolo').click()
+        clerk.locator('.modal-form').get_by_label('Situação',exact=False).select_option('completed')
+        clerk.locator('.modal-form').get_by_role('button',name='Salvar',exact=True).click()
+        expect(clerk.get_by_role('row').filter(has_text=number)).to_contain_text('Concluído')
+        familyPage.reload()
+        expect(familyPage.get_by_text('Concluída',exact=False).first).to_be_visible()
+        record('Secretaria imprime o material do Diário, conclui o protocolo e a família confere a situação.')
+        record('Docente publica para a turma e para um aluno. Aluno imprime PDF, responsável acompanha o protocolo e Secretaria recupera o comprovante íntegro.')
         family_nav('Visão geral');expect(familyPage.get_by_role('heading',name='Olá, Mariana.',exact=True)).to_be_visible()
         family_nav('Financeiro')
         expect(familyPage.get_by_role('heading',name='Financeiro de Lucas Almeida — Teste')).to_be_visible()
@@ -508,7 +568,7 @@ except Exception:
     (OUT/'results.json').write_text(json.dumps({'status':'failed','checks':checks,'errors':errors},ensure_ascii=False,indent=2))
     raise
 finally:
-    for child in (website_proc,portal_proc,proc):
+    for child in (website_proc,portal_proc,teacher_proc,proc):
         if child and child.poll() is None:child.terminate()
         if child:
             try:child.wait(timeout=10)

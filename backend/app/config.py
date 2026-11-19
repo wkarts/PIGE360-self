@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     restore_max_upload_mb: int = 1024
     invitation_hours: int = 24
     portal_public_url: str = ''
+    teacher_portal_public_url: str = ''
     portal_internal_token: str = ''
     portal_session_hours: int = 12
     portal_max_files: int = 20
@@ -99,9 +100,11 @@ class Settings(BaseSettings):
         if not 1<=self.restore_max_upload_mb<=4096:raise ValueError('Limite de restauração deve estar entre 1 e 4096 MiB.')
         if self.portal_internal_token and len(self.portal_internal_token.encode())<32:
             raise ValueError('PORTAL_INTERNAL_TOKEN exige pelo menos 32 bytes.')
-        if self.portal_public_url:
-            if self.portal_public_url.rstrip('/')==self.app_url.rstrip('/'):raise ValueError('Portal e gestor devem usar origens distintas.')
-            portal=urlsplit(self.portal_public_url)
+        if self.teacher_portal_public_url and self.teacher_portal_public_url.rstrip('/') == self.portal_public_url.rstrip('/'):
+            raise ValueError('Configure domínios diferentes para os dois serviços de portal.')
+        for origin in filter(None, (self.portal_public_url, self.teacher_portal_public_url)):
+            if origin.rstrip('/')==self.app_url.rstrip('/'):raise ValueError('Portal e gestor devem usar origens distintas.')
+            portal=urlsplit(origin)
             if portal.scheme not in {'https','http'} or not portal.hostname or portal.username or portal.password or portal.path not in ('','/') or portal.query or portal.fragment:
                 raise ValueError('PORTAL_PUBLIC_URL exige uma origem exata HTTP(S).')
             if self.app_env=='production' and portal.hostname not in {'localhost','127.0.0.1'}:
