@@ -169,6 +169,8 @@ try:
         expect(admin.get_by_text('Inscrição aprovada; matrícula criada como rascunho.',exact=False)).to_be_visible();record('Aprovação cria aluno, responsável e matrícula sem duplicação')
         admin.evaluate('window.scrollTo(0,0)');admin.wait_for_timeout(120);admin.screenshot(path=str(OUT/'03-secretaria-analise.png'),full_page=True)
         expect(admin.get_by_role('heading',name='Efetivação da matrícula',exact=True)).to_be_visible()
+        admin.get_by_role('button',name='2 · Documentos',exact=True).click()
+        admin.get_by_role('button',name='Continuar para efetivação',exact=True).click()
         admin.get_by_role('button',name='Usar parecer de conferência').click()
         expect(admin.get_by_label('Parecer para a efetivação',exact=True)).to_have_value('Conferi os requisitos da inscrição e autorizo a efetivação na turma selecionada.')
         admin.get_by_role('button',name='Efetivar matrícula e emitir comprovante').click()

@@ -401,7 +401,7 @@
           <p v-if="state.modal.kind==='intake-settings'" class="alert info">Confira os dados sugeridos antes de salvar. A leitura auxilia o preenchimento e não valida a autenticidade dos documentos.</p>
           <div v-if="state.modal.error" class="alert error preserve" role="alert">{{ state.modal.error }}</div>
           <div v-if="state.modal.kind==='enrollment'" class="enrollment-stage"><span class="badge draft">Pré-matrícula</span><p>O rascunho permite continuar depois. Ao efetivar, o sistema confere os requisitos e ocupa a vaga.</p></div>
-          <button v-if="state.modal.kind==='enrollment' && state.modal.form.student_id && can('people.write') && can('students.read')" type="button" class="btn btn-secondary" :disabled="state.busy" @click="linkFromEnrollment">Vincular ou revisar responsável</button>
+          <button v-if="enrollmentLinkStudentId() && can('people.write') && can('students.read')" type="button" class="btn btn-secondary" :disabled="state.busy" @click="linkFromEnrollment">Vincular ou revisar responsável</button>
           <section v-if="state.modal.enrollmentReturn" class="alert info">
             <strong>Responsáveis de {{state.modal.enrollmentReturn.student.person.name}}</strong>
             <p>Ao salvar o vínculo, você voltará à matrícula com a turma e os dados preenchidos.</p>

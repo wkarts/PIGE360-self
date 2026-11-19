@@ -4316,7 +4316,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                         class: "enrollment-stage"
                       }, [_createElementVNode("span", { class: "badge draft" }, "Pré-matrícula"), _createElementVNode("p", null, "O rascunho permite continuar depois. Ao efetivar, o sistema confere os requisitos e ocupa a vaga.")]))
                     : _createCommentVNode("", true),
-                  (state.modal.kind==='enrollment' && state.modal.form.student_id && can('people.write') && can('students.read'))
+                  (enrollmentLinkStudentId() && can('people.write') && can('students.read'))
                     ? (_openBlock(), _createElementBlock("button", {
                         key: 4,
                         type: "button",
@@ -7648,7 +7648,14 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                     onClick: $event => (showReadinessStage(check.stage))
                                   }, _toDisplayString(check.label), 9, ["onClick"]), _createElementVNode("span", null, _toDisplayString(check.owner) + " · " + _toDisplayString(check.message), 1)]))
                                 }), 128))])], 8, ["open"]))
-                              : (_openBlock(), _createElementBlock("p", { key: 1 }, _toDisplayString(s.selected.status==='enrolled'?'O comprovante está disponível na ficha e no portal.':'Secretaria: registre o parecer e conclua na etapa Efetivação.'), 1))]))
+                              : (_openBlock(), _createElementBlock("p", { key: 1 }, _toDisplayString(s.selected.status==='enrolled'?'O comprovante está disponível na ficha e no portal.':'Secretaria: registre o parecer e conclua na etapa Efetivação.'), 1)), (s.selected.status==='approved' && s.finalReadiness.ready && s.admissionStage!=='finalize' && can('admissions.write') && can('enrollments.write'))
+                              ? (_openBlock(), _createElementBlock("button", {
+                                  key: 2,
+                                  type: "button",
+                                  class: "btn btn-primary",
+                                  onClick: $event => (showReadinessStage('finalize'))
+                                }, "Continuar para efetivação", 8, ["onClick"]))
+                              : _createCommentVNode("", true)]))
                           : _createCommentVNode("", true),
                         (s.selected.contract?.required||canChangeContract())
                           ? _withDirectives((_openBlock(), _createElementBlock("section", {
