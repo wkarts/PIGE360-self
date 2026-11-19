@@ -254,7 +254,7 @@ try:
         page.get_by_label('Somente prazos vencidos').check();page.get_by_role('button',name='Aplicar filtros').click()
         expect(page.get_by_text('Solicitação de declaração escolar',exact=False).first).to_be_visible()
         checks.append('Filtro de protocolo vencido e comprovante PDF')
-        nav('Alunos');page.get_by_role('button',name='Abrir ficha →').first.click()
+        nav('Alunos');expect(page.locator('h1')).to_have_text('Lucas Almeida — Teste')
         page.get_by_role('button',name='Protocolos',exact=True).click()
         expect(page.get_by_text('Protocolos deste aluno',exact=True)).to_be_visible()
         expect(page.get_by_text('Solicitação de declaração escolar',exact=False)).to_be_visible()

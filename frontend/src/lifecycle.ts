@@ -30,6 +30,6 @@ namespace PigeLifecycle {
       finally{s.busy=false;}
     }
     Vue.onMounted(()=>{void load();});
-    return{s,allowed,caption,choose,close,load,submit};
+    return{dialogTarget:Vue.inject<HTMLElement|string>('school-dialog-host','body')||'body',s,allowed,caption,choose,close,load,submit};
   }};
 }

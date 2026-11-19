@@ -164,7 +164,13 @@ def render(data):
 
     if page is not None:
         breadcrumb = '<a class="text-link" href="/">← Página inicial</a>'
-        page_copy = f'<div class="page-copy">{breadcrumb}<h1>{escape(page.get("title"))}</h1>{paragraphs(page.get("introduction"), "lead")}</div>'
+        family_actions = ''
+        if page.get('show_family_links'):
+            links = action({'url':site.get('admission_url'),'label':'Acessar matrícula online'}, 'button')
+            links += action({'url':site.get('portal_url'),'label':'Portal da família'}, 'button secondary')
+            if links:
+                family_actions = f'<div class="actions">{links}</div>'
+        page_copy = f'<div class="page-copy">{breadcrumb}<h1>{escape(page.get("title"))}</h1>{paragraphs(page.get("introduction"), "lead")}{family_actions}</div>'
         # A page may use the same cover in its leading content block; do not
         # repeat that large photograph above the page's own editorial layout.
         page_image_url = (page.get('image') or {}).get('url')
