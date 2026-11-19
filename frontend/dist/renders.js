@@ -4316,27 +4316,51 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                         class: "enrollment-stage"
                       }, [_createElementVNode("span", { class: "badge draft" }, "Pré-matrícula"), _createElementVNode("p", null, "O rascunho permite continuar depois. Ao efetivar, o sistema confere os requisitos e ocupa a vaga.")]))
                     : _createCommentVNode("", true),
+                  (enrollmentLinkStudentId() && can('people.write') && can('students.read'))
+                    ? (_openBlock(), _createElementBlock("button", {
+                        key: 4,
+                        type: "button",
+                        class: "btn btn-secondary",
+                        disabled: state.busy,
+                        onClick: linkFromEnrollment
+                      }, "Vincular ou revisar responsável", 8, ["disabled", "onClick"]))
+                    : _createCommentVNode("", true),
+                  (state.modal.enrollmentReturn)
+                    ? (_openBlock(), _createElementBlock("section", {
+                        key: 5,
+                        class: "alert info"
+                      }, [_createElementVNode("strong", null, "Responsáveis de " + _toDisplayString(state.modal.enrollmentReturn.student.person.name), 1), _createElementVNode("p", null, "Ao salvar o vínculo, você voltará à matrícula com a turma e os dados preenchidos."), (state.modal.kind==='link' && state.modal.enrollmentReturn.student.guardians?.length)
+                        ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createElementVNode("p", null, "Para alterar uma pessoa já vinculada, selecione seu nome."), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.modal.enrollmentReturn.student.guardians, (link) => {
+                            return (_openBlock(), _createElementBlock("button", {
+                              key: link.id,
+                              type: "button",
+                              class: "link-button",
+                              onClick: $event => (editLink(link))
+                            }, "Editar " + _toDisplayString(link.person.name), 9, ["onClick"]))
+                          }), 128))], 64))
+                        : _createCommentVNode("", true)]))
+                    : _createCommentVNode("", true),
                   (state.modal.kind==='draft-edit')
                     ? (_openBlock(), _createElementBlock("p", {
-                        key: 4,
+                        key: 6,
                         class: "alert info"
                       }, "Aluno e ano letivo são preservados. A alteração exige justificativa e permanece no histórico. Rascunhos não reservam vaga."))
                     : _createCommentVNode("", true),
                   (state.modal.kind==='protocol-note')
                     ? (_openBlock(), _createElementBlock("p", {
-                        key: 5,
+                        key: 7,
                         class: "alert info"
                       }, "O registro será acrescentado ao histórico sem substituir os atendimentos anteriores."))
                     : _createCommentVNode("", true),
                   (state.modal.kind==='reenroll')
                     ? (_openBlock(), _createElementBlock("p", {
-                        key: 6,
+                        key: 8,
                         class: "alert info"
                       }, "Será criada outra matrícula em um período posterior. A matrícula anterior não será sobrescrita."))
                     : _createCommentVNode("", true),
                   (state.modal.kind==='my-profile')
                     ? (_openBlock(), _createElementBlock("section", {
-                        key: 7,
+                        key: 9,
                         class: "account-summary"
                       }, [_createElementVNode("div", { class: "account-photo" }, [(!state.modal.form.remove_photo && (state.profilePhotoPreview || state.userPhotoUrl))
                         ? (_openBlock(), _createElementBlock("img", {
@@ -4364,13 +4388,13 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                     : _createCommentVNode("", true),
                   (state.modal.kind==='mfa-policy')
                     ? (_openBlock(), _createElementBlock("p", {
-                        key: 8,
+                        key: 10,
                         class: "alert info mfa-policy-hint"
                       }, "A exigência vale para todas as contas desta instalação, incluindo o portal. Quem não configurou o autenticador deve ativá-lo antes de acessar dados. Alterar a política encerra as sessões abertas; desmarcar a exigência não desativa o 2FA já configurado por cada usuário."))
                     : _createCommentVNode("", true),
                   (state.modal.kind==='embedding-security')
                     ? (_openBlock(), _createElementBlock("div", {
-                        key: 9,
+                        key: 11,
                         class: "embedding-notice"
                       }, [
                         _createElementVNode("button", {
@@ -4405,19 +4429,19 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                     : _createCommentVNode("", true),
                   (state.modal.kind==='identity')
                     ? (_openBlock(), _createElementBlock("p", {
-                        key: 10,
+                        key: 12,
                         class: "alert info"
                       }, "O nome deve ter até 160 caracteres e o nome curto até 30. Logotipo e fonte: até 2 MB cada. Nenhuma fonte externa é necessária. Use uma fonte TTF ou WOFF2 estática licenciada para tela e incorporação em PDF. Sem arquivo próprio, o PDF usa uma fonte equivalente serifada ou sem serifa."))
                     : _createCommentVNode("", true),
                   (state.modal.kind==='upload')
                     ? (_openBlock(), _createElementBlock("p", {
-                        key: 11,
+                        key: 13,
                         class: "alert info"
                       }, "Limite padrão de 10 MB. O recebimento não substitui a validação documental pela Secretaria."))
                     : _createCommentVNode("", true),
                   (state.modal.kind==='support-hub')
                     ? (_openBlock(), _createElementBlock("fieldset", {
-                        key: 12,
+                        key: 14,
                         class: "panel"
                       }, [_createElementVNode("legend", null, "Onde exibir o atendimento"), _createElementVNode("p", { class: "small muted" }, "Escolha as áreas desta escola que terão o botão de atendimento."), _createElementVNode("div", { class: "form-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(supportAreas, (area) => {
                         return (_openBlock(), _createElementBlock("label", {
@@ -4432,7 +4456,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                     : _createCommentVNode("", true),
                   (familyRelevant())
                     ? _withDirectives((_openBlock(), _createElementBlock("section", {
-                        key: 13,
+                        key: 15,
                         class: "family-editor",
                         "data-form-section": "links"
                       }, [
@@ -7614,14 +7638,24 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                               class: "btn btn-secondary small-button",
                               onClick: refreshAdmissionStatus
                             }, "Atualizar verificações", 8, ["onClick"])]), (s.finalReadiness.checks.some(c=>!c.ready))
-                              ? (_openBlock(), _createElementBlock("details", { key: 0 }, [_createElementVNode("summary", null, "Conferir " + _toDisplayString(s.finalReadiness.checks.filter(c=>!c.ready).length) + " pendência(s)", 1), _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.finalReadiness.checks.filter(c=>!c.ready), (check) => {
+                              ? (_openBlock(), _createElementBlock("details", {
+                                  key: 0,
+                                  open: s.selected.status==='approved'
+                                }, [_createElementVNode("summary", null, "Conferir " + _toDisplayString(s.finalReadiness.checks.filter(c=>!c.ready).length) + " pendência(s)", 1), _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.finalReadiness.checks.filter(c=>!c.ready), (check) => {
                                   return (_openBlock(), _createElementBlock("li", { key: check.code }, [_createElementVNode("button", {
                                     type: "button",
                                     class: "link-button",
                                     onClick: $event => (showReadinessStage(check.stage))
                                   }, _toDisplayString(check.label), 9, ["onClick"]), _createElementVNode("span", null, _toDisplayString(check.owner) + " · " + _toDisplayString(check.message), 1)]))
-                                }), 128))])]))
-                              : (_openBlock(), _createElementBlock("p", { key: 1 }, _toDisplayString(s.selected.status==='enrolled'?'O comprovante está disponível na ficha e no portal.':'Secretaria: registre o parecer e conclua na etapa Efetivação.'), 1))]))
+                                }), 128))])], 8, ["open"]))
+                              : (_openBlock(), _createElementBlock("p", { key: 1 }, _toDisplayString(s.selected.status==='enrolled'?'O comprovante está disponível na ficha e no portal.':'Secretaria: registre o parecer e conclua na etapa Efetivação.'), 1)), (s.selected.status==='approved' && s.finalReadiness.ready && s.admissionStage!=='finalize' && can('admissions.write') && can('enrollments.write'))
+                              ? (_openBlock(), _createElementBlock("button", {
+                                  key: 2,
+                                  type: "button",
+                                  class: "btn btn-primary",
+                                  onClick: $event => (showReadinessStage('finalize'))
+                                }, "Continuar para efetivação", 8, ["onClick"]))
+                              : _createCommentVNode("", true)]))
                           : _createCommentVNode("", true),
                         (s.selected.contract?.required||canChangeContract())
                           ? _withDirectives((_openBlock(), _createElementBlock("section", {
@@ -8043,10 +8077,18 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                 placeholder: "Registre a conclusão da conferência"
                               }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.reason]])]))
                             : _createCommentVNode("", true),
+                          (s.selected.status==='approved' && s.finalReadiness?.ready && !s.reason.trim() && can('admissions.write') && can('enrollments.write'))
+                            ? (_openBlock(), _createElementBlock("button", {
+                                key: 3,
+                                class: "link-button",
+                                type: "button",
+                                onClick: $event => (s.reason='Conferi os requisitos da inscrição e autorizo a efetivação na turma selecionada.')
+                              }, "Usar parecer de conferência", 8, ["onClick"]))
+                            : _createCommentVNode("", true),
                           _createTextVNode(),
                           (can('admissions.write')&&can('enrollments.write')&&s.selected.status==='approved')
                             ? (_openBlock(), _createElementBlock("div", {
-                                key: 3,
+                                key: 4,
                                 class: "x-form"
                               }, [_createElementVNode("p", null, "Se a emissão do comprovante falhar, atualize as verificações e retome esta mesma inscrição. A efetivação verifica vagas, documentos obrigatórios e pagamentos exigidos. Contratos novos recebem a assinatura A1 institucional nesta etapa. O comprovante será disponibilizado ao responsável."), (s.selected.reservation && ['expired','review','released'].includes(s.selected.reservation.status))
                                 ? (_openBlock(), _createElementBlock("button", {
