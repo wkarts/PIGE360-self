@@ -4402,7 +4402,21 @@ var PigeUI;
                 state.loginBusy = false;
             }
         }
-        async function afterMFA(result) { const session = result; PigeAPI.useSession(session); state.user = session.user; state.modal = blankModal(); await loadShell(); void loadMyPhoto(); }
+        async function afterMFA(result) {
+            const session = result;
+            PigeAPI.useSession(session);
+            const origin = currentDesk?.context.state ?? state;
+            if (origin.modal.kind === 'mfa-manage' && state.user?.id === session.user.id && session.user.school_ids.includes(state.schoolId)) {
+                // A sessão foi renovada no perfil. Confira as permissões da escola antes de retomar a guia.
+                await refreshAccess();
+                origin.modal = blankModal();
+                return;
+            }
+            state.user = session.user;
+            state.modal = blankModal();
+            await loadShell();
+            void loadMyPhoto();
+        }
         async function manageMFA() { if (state.modal.kind && modalDirty()) {
             state.modal.error = 'Salve ou cancele a edição do perfil antes de alterar o 2FA.';
             return;
