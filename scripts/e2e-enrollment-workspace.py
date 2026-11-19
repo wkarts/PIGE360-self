@@ -3,6 +3,7 @@
 import io
 import json
 import os
+import base64
 import shutil
 import socket
 import subprocess
@@ -28,7 +29,7 @@ env = {**os.environ, 'PYTHONPATH': str(ROOT/'backend'),
        'DATABASE_URL': 'sqlite:///'+str(TEMP/'app.db'), 'ALLOW_SQLITE': 'true',
        'APP_ENV': 'test', 'APP_URL': URL, 'ALLOWED_HOSTS': '127.0.0.1,localhost',
        'APP_SECRET_KEY': 'test-only-enrollment-01234567890123456789',
-       'SETUP_TOKEN': 'test-only-setup-01234567890123456789',
+       'INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(os.urandom(32)).decode(), 'SETUP_TOKEN': 'test-only-setup-01234567890123456789',
        'STORAGE_PATH': str(TEMP/'files'), 'FRONTEND_PATH': str(TEMP/'frontend'),
        'COOKIE_SECURE': 'false'}
 shutil.copytree(ROOT/'frontend/dist', TEMP/'frontend')
@@ -82,7 +83,7 @@ try:
         post('/class-groups', {'name': '6º D — Jardim 2027', 'academic_year_id': next_year['id'],
             'unit_id': other_unit['id'], 'grade_id': other_grade['id'], 'shift_id': other_shift['id'], 'capacity': 24})
         student = post('/students', {'person': {'name': 'Marina Alves — Aluna Sintética', 'birth_date': '2015-04-01'}})
-        post('/students', {'person': {'name': 'Gabriel Ferreira — Aluno Sintético', 'birth_date': '2014-08-15'}})
+        counter_student = post('/students', {'person': {'name': 'Gabriel Ferreira — Aluno Sintético', 'birth_date': '2014-08-15'}})
         guardian = post('/persons', {'name': 'Helena Alves — Responsável Sintética', 'is_guardian': True})
         post('/students/'+student['id']+'/guardians', {'person_id': guardian['id'], 'legal': True, 'financial': True})
 
@@ -123,7 +124,7 @@ try:
                 assert bounds['top'] >= -1 and bounds['bottom'] <= bounds['height']+1, bounds
                 assert bounds['left'] >= -1 and bounds['right'] <= bounds['width']+1, bounds
                 footer = page.locator('#main-dialog .modal-footer')
-                expect(footer.get_by_role('button', name='Salvar', exact=True)).to_be_in_viewport(ratio=1)
+                expect(footer.get_by_role('button', name='Salvar rascunho', exact=True)).to_be_in_viewport(ratio=1)
                 expect(page.get_by_role('button', name='Fechar janela')).to_be_in_viewport(ratio=1)
 
             try:
@@ -140,7 +141,7 @@ try:
                 assert dialog.bounding_box()['width'] >= 1100
                 expect(dialog.locator('.form-section')).to_have_count(3)
                 expect(dialog.get_by_role('navigation', name='Seções do cadastro')).to_have_count(0)
-                dialog.get_by_role('button', name='Salvar', exact=True).click()
+                dialog.get_by_role('button', name='Salvar rascunho', exact=True).click()
                 expect(dialog.get_by_role('alert')).to_contain_text('Revise o campo: Aluno')
                 expect(dialog.get_by_label('Aluno', exact=True)).to_be_focused()
                 checks.append('Modal amplo no desktop com três seções visíveis e validação do aluno antes de enviar.')
@@ -195,14 +196,14 @@ try:
 
                 # Missing required class must focus the visible field even in a short viewport.
                 dialog.get_by_label('Turma de destino').select_option('')
-                dialog.get_by_role('button', name='Salvar', exact=True).click()
+                dialog.get_by_role('button', name='Salvar rascunho', exact=True).click()
                 expect(dialog.get_by_label('Turma de destino')).to_be_focused()
                 expect(dialog.get_by_label('Turma de destino')).to_be_in_viewport(ratio=1)
                 expect(dialog.get_by_role('alert')).to_contain_text('Turma de destino')
                 safe_modal()
                 page.screenshot(path=str(OUT/'03-validacao-390x400.png'))
                 dialog.get_by_label('Turma de destino').select_option(group['id'])
-                dialog.get_by_role('button', name='Salvar', exact=True).click()
+                dialog.get_by_role('button', name='Salvar rascunho', exact=True).click()
                 expect(dialog).to_have_count(0)
                 rows = client.get(base+'/enrollments', headers=headers).json()['items']
                 assert len(rows) == 1 and rows[0]['status'] == 'draft', rows
@@ -228,6 +229,72 @@ try:
                 expect(page.locator('.app-root')).to_have_attribute('aria-busy', 'false')
                 checks.append('Ficha de matrícula PDF gerada pelo fluxo real contém aluno, responsável e turma do rascunho salvo.')
 
+                operator = post('/users', {'name': 'Secretaria de balcão', 'email': 'counter@example.com',
+                                'password': PASSWORD, 'role': 'secretary', 'school_ids': [school['id']]})
+                counter = browser.new_page(viewport={'width': 1440, 'height': 1000})
+                counter.goto(URL)
+                counter.get_by_label('E-mail', exact=True).fill(operator['email'])
+                counter.get_by_label('Senha', exact=True).fill(PASSWORD)
+                counter.get_by_role('button', name='Entrar na aplicação').click()
+                expect(counter.locator('.app-root')).to_have_attribute('aria-busy', 'false')
+                expect(counter.get_by_text('Rotina da escola', exact=True)).to_be_visible()
+                counter.locator('aside').get_by_role('link', name='Matrículas', exact=True).click()
+                counter.get_by_role('button', name='+ Nova matrícula').click()
+                form = counter.locator('#main-dialog')
+                form.get_by_label('Filtrar alunos', exact=True).fill('Gabriel')
+                form.get_by_label('Aluno', exact=True).select_option(counter_student['id'])
+                form.get_by_label('Turma de destino').select_option(group['id'])
+                counter.on('dialog', lambda prompt: prompt.accept())
+                form.get_by_role('button', name='Efetivar matrícula').click()
+                expect(form.get_by_role('alert')).to_contain_text('responsável legal')
+                lookup = base + '/enrollments?student_id=' + counter_student['id']
+                assert client.get(lookup, headers=headers).json()['total'] == 0
+                counter.screenshot(path=str(OUT/'balcao-pendencia.png'))
+                secretary_token = client.post('/api/v1/auth/login', json={'email':operator['email'],
+                                             'password': PASSWORD}).json()['access_token']
+                link = client.post(base+'/students/'+counter_student['id']+'/guardians',
+                                   headers={'Authorization':'Bearer '+secretary_token},
+                                   json={'person_id':guardian['id'],'legal':True,'financial':True})
+                assert link.status_code == 201, link.text
+                form.get_by_role('button', name='Efetivar matrícula').click()
+                expect(counter.get_by_text('Matrícula efetivada. A vaga está ocupada.')).to_be_visible()
+                rows = client.get(lookup, headers=headers).json()
+                assert rows['total'] == 1 and rows['items'][0]['status'] == 'active'
+                assert rows['items'][0]['class_group_id'] == group['id']
+                counter.screenshot(path=str(OUT/'balcao-efetivado.png'))
+                number = rows['items'][0]['number']
+                row = counter.get_by_role('row').filter(has_text=number)
+                for kind in ['Comprovante PDF', 'Declaração PDF', 'Declaração PDF']:
+                    row.get_by_role('button', name='Detalhes →').click()
+                    form.get_by_role('button', name=kind, exact=True).click()
+                    with counter.expect_download() as download:
+                        form.get_by_role('button', name='Gerar e baixar PDF').click()
+                    document = PdfReader(download.value.path())
+                    content = ' '.join(page.extract_text() for page in document.pages)
+                    assert number in content and counter_student['person']['name'] in content
+                    expect(form).to_have_count(0)
+                docs = client.get(base+'/students/'+counter_student['id']+'/documents', headers=headers).json()['issued']
+                assert len({item['id'] for item in docs if item['kind']=='enrollment_declaration'}) == 2
+                assert client.get(lookup,headers=headers).json()['total'] == 1
+                counter.locator('aside').get_by_role('link', name='Protocolos', exact=True).click()
+                counter.get_by_role('button', name='+ Abrir protocolo').click()
+                form.get_by_label('Tipo de solicitação').fill('Declaração de matrícula de teste')
+                form.get_by_label('Filtrar alunos', exact=True).fill('Gabriel')
+                form.get_by_label('Aluno (opcional)').select_option(counter_student['id'])
+                form.get_by_label('Descrição / observações').fill('Família solicita uma segunda via.')
+                form.get_by_role('button', name='Salvar', exact=True).click()
+                counter.get_by_role('button', name='Ver atendimento →').click()
+                form.get_by_role('button',name='Registrar atendimento').click()
+                form.get_by_label('Registro do atendimento').fill('Segunda via emitida para a família.')
+                form.get_by_role('button',name='Salvar',exact=True).click()
+                expect(form.get_by_text('Segunda via emitida para a família.')).to_be_visible()
+                form.get_by_role('button', name='Atualizar protocolo').click()
+                form.get_by_label('Situação').select_option('completed')
+                form.get_by_role('button',name='Salvar',exact=True).click()
+                expect(counter.get_by_role('row').filter(has_text='Declaração de matrícula de teste')).to_contain_text('Concluído')
+                checks.append('Secretaria baixou comprovante e duas emissões distintas da declaração com o mesmo número de matrícula e concluiu o protocolo vinculado.')
+                counter.close()
+                checks.append('Perfil Secretaria: bloqueio do menor sem vínculo legal; vínculo corrigido pela API da Secretaria; efetivação na mesma tela, uma matrícula ativa na turma.')
                 nav('Instituição')
                 tabs = page.get_by_role('navigation', name='Configurações da instituição')
                 for tab, heading in [('Dados da escola', 'Dados da escola'),

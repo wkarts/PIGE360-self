@@ -22,6 +22,7 @@ ROLE_LABELS = {
     'direction': 'Direção',
     'coordination': 'Coordenação',
     'secretary': 'Secretaria',
+    'finance': 'Financeiro',
     'teacher': 'Professor',
     'student': 'Aluno',
     'guardian': 'Responsável',
@@ -61,6 +62,7 @@ PERMISSIONS = {
         'communications.send', 'profile.read', 'staff.assignments.read', 'staff.assignments.write',
         'diary.read', 'diary.write', 'diary.attendance', 'diary.assessments', 'diary.review', 'diary.close', 'diary.reopen', 'diary.reports', 'diary.configure',
     },
+    'finance': {'profile.read', 'banking.read', 'banking.write', 'enrollments.read'},
     'secretary': {
         'read', 'dashboard.read', 'people.read', 'people.write', 'students.read', 'students.write',
         'guardians.read', 'guardians.write', 'academic.read', 'academic.write',

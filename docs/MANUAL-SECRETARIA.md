@@ -24,7 +24,7 @@ Não faça upload de dados de saúde sem definir previamente permissões, finali
 
 ## Matrículas e movimentações
 
-Nova matrícula seleciona aluno, turma e data e cria rascunho. A turma determina ano, série, turno e unidade, evitando seleções inconsistentes. Abra Detalhes e escolha Ativar matrícula. Para aluno menor de 18 anos, é exigido vínculo legal ativo. Vagas e documentação são verificadas no servidor.
+Em **Nova matrícula**, selecione aluno, turma e data. A turma determina ano, série, turno e unidade. **Salvar rascunho** guarda os dados para continuar em Detalhes. **Efetivar matrícula** pede confirmação e ocupa a vaga na mesma operação. Se a efetivação for recusada, corrija a pendência ou escolha salvar um rascunho. Para aluno menor de 18 anos, é exigido vínculo legal ativo. Vagas e documentação são verificadas no servidor.
 
 Ativa e suspensa ocupam vaga. Rascunho não ocupa vaga, mas impede outro rascunho/vínculo equivalente no ano. Uma tentativa repetida com a mesma versão não gera a mesma movimentação duas vezes: o servidor responde conflito e exige recarregar o registro.
 

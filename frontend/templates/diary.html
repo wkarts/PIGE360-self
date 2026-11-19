@@ -84,7 +84,7 @@
     <template v-if="state.tab==='diaries'">
       <section v-if="!state.selected" class="panel x-card">
         <div class="x-heading"><div><h2>Diários disponíveis</h2><p>Selecione a turma para continuar.</p></div></div>
-        <div v-if="!state.diaries.length" class="empty"><p>Nenhum diário disponível para esta escola.</p><p>Se você tiver permissão de configuração, crie períodos e componentes na aba <strong>Configuração</strong>. Caso contrário, solicite à coordenação que abra um diário para sua turma.</p><button v-if="can('diary.configure')" class="btn btn-secondary" @click="state.tab='setup'">Abrir configuração</button></div>
+        <div v-if="!state.diaries.length" class="empty"><p>Nenhum diário disponível para esta escola.</p><p>Se você tiver permissão de configuração, crie períodos e componentes na aba <strong>Configuração</strong>. Para o Professor, a Coordenação deve vincular sua atribuição docente ao diário da turma e do componente.</p><button v-if="can('diary.configure')" class="btn btn-secondary" @click="state.tab='setup'">Abrir configuração</button></div>
         <div class="x-list">
           <button v-for="d in state.diaries" :key="d.id" class="x-record" @click="selectDiary(d)">
             <div><strong>{{d.class_name}} · {{d.component_name}}</strong><span>{{d.year_name}} · {{d.teacher_name||'Professor não definido'}}</span></div>

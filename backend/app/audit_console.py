@@ -1,5 +1,5 @@
 """Investigação administrativa de operações, sem mutação dos registros de auditoria."""
-from datetime import datetime
+from datetime import UTC, datetime
 import csv
 import io
 import json
@@ -46,7 +46,7 @@ def statement(school_id,filters):
 
 
 def record(row,names):
-    return {**output(row,('details',)), 'created_at':utc(row.created_at).isoformat(), 'details':safe_details(row.details),
+    return {**output(row,('details',)), 'created_at':utc(row.created_at).astimezone(UTC).isoformat(), 'details':safe_details(row.details),
             'actor_name':names.get(row.actor_id,'Sistema' if row.actor_id is None else 'Usuário removido'),
             'scope':'institution' if row.school_id is None else 'school'}
 

@@ -82,6 +82,25 @@ try:
     grade=post('/grades',{'name':'3º Ano'});shift=post('/shifts',{'name':'Matutino'});group=post('/class-groups',{'name':'3º Ano A','unit_id':unit['id'],'academic_year_id':year['id'],'grade_id':grade['id'],'shift_id':shift['id'],'capacity':30})
     doc=post('/document-types',{'name':'Certidão de nascimento','required':True})
     campaign=post('/admission-campaigns',{'slug':'matriculas-2027-teste','title':'Matrículas 2027 — Dados de Teste','class_group_ids':[group['id']],'opens_on':str(date.today()-timedelta(days=1)),'closes_on':str(date.today()+timedelta(days=120)),'active':True,'require_verified_contact':False,'require_documents':True,'instructions':'Preencha os dados e envie os documentos. A Secretaria acompanhará cada etapa. Este processo utiliza exclusivamente dados fictícios para teste.','privacy_notice':'AMBIENTE DE TESTE. Dados fictícios utilizados para verificar cadastro, documentos e matrícula. Não inserir dados reais. A instituição responsável deve publicar seu aviso de privacidade antes do uso em produção.'})
+    def operator(role, person_id=None):
+        data = {'name': 'Operador ' + role, 'email': role+'@example.com', 'role': role,
+                'school_ids': [school['id']], 'password': password, 'person_id': person_id}
+        response = client.post('/api/v1/users', headers=headers, json=data)
+        assert response.status_code == 201, response.text
+        return response.json()
+
+    def login_page(page, email):
+        page.goto(URL)
+        page.get_by_label('E-mail', exact=True).fill(email)
+        page.get_by_label('Senha', exact=True).fill(password)
+        page.get_by_role('button', name='Entrar na aplicação').click()
+
+    operator('secretary')
+    operator('finance')
+    operator('direction')
+    teacher = operator('teacher', post('/persons', {'name':'Docente de Matemática'})['id'])
+    assignment = post('/teacher-assignments', {'teacher_user_id': teacher['id'],
+                      'class_group_id': group['id'], 'subject_name':'Matemática'})
     with sync_playwright() as pw, capture_browser_failure():
         binary=os.getenv('CHROMIUM_PATH') or (None if Path(pw.chromium.executable_path).exists() else shutil.which('chromium'))
         browser=pw.chromium.launch(headless=True,**({'executable_path':binary} if binary else {}),args=['--no-sandbox'])
@@ -121,12 +140,28 @@ try:
         admin=adminContext.new_page();admin.set_default_timeout(8000);admin.on('pageerror',lambda e:errors.append('admin: '+str(e)));page=admin
         if bridge:admin_http=install(admin,ROOT,URL,OUT)
         else:admin.goto(URL)
-        admin.get_by_label('E-mail',exact=True).fill('secretaria@example.com');admin.get_by_label('Senha',exact=True).fill(password);admin.get_by_role('button',name='Entrar na aplicação').click()
+        admin.get_by_label('E-mail',exact=True).fill('secretary@example.com');admin.get_by_label('Senha',exact=True).fill(password);admin.get_by_role('button',name='Entrar na aplicação').click()
         expect(admin.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible()
         admin.locator('aside').get_by_role('link',name='Inscrições online',exact=False).click()
         expect(admin.get_by_role('button',name='Processos e link público')).to_be_visible();expect(admin.locator('.x-record',has_text='Lucas Almeida — Teste')).to_be_visible();record('Fila administrativa exibe a inscrição enviada no portal')
         admin.locator('.x-record',has_text='Lucas Almeida — Teste').click()
         expect(admin.get_by_role('heading',name='Lucas Almeida — Teste')).to_be_visible()
+        admin.get_by_label('Justificativa / parecer para a próxima ação').fill('Envie uma imagem legível da certidão.')
+        with admin.expect_response(lambda r: r.url.endswith('/review') and r.ok):
+            admin.get_by_role('button',name='Rejeitar',exact=True).click()
+        admin.get_by_label('Movimentar análise').select_option('request_changes')
+        with admin.expect_response(lambda r: r.url.endswith('/actions') and r.status == 200):
+            admin.get_by_role('button', name='Aplicar com justificativa').click()
+        parent.reload()
+        parent.locator('.x-record',has_text='Lucas Almeida — Teste').click()
+        parent.locator('input[type=file]').set_input_files(str(ROOT/'frontend/public/icons/icon-192.png'))
+        parent.get_by_role('button',name='Enviar documento manualmente',exact=True).click()
+        parent.get_by_label('Li o aviso de privacidade e confirmo',exact=False).check()
+        parent.get_by_label('Declaro ser responsável legal',exact=False).check()
+        parent.get_by_role('button',name='Enviar pré-matrícula',exact=True).click()
+        expect(parent.get_by_text('Inscrição enviada. Acompanhe a análise nesta página.',exact=True)).to_be_visible()
+        admin.get_by_role('button',name='Atualizar verificações').click()
+        record('Secretaria solicita correção e família reenvia o anexo na mesma inscrição.')
         admin.get_by_label('Justificativa / parecer para a próxima ação').fill('Documento sintético conferido no teste de integração.')
         admin.get_by_role('button',name='Validar',exact=True).click();expect(admin.get_by_text('Validado',exact=False).first).to_be_visible();record('Documento do portal validado pela Secretaria')
         admin.get_by_label('Justificativa / parecer para a próxima ação').fill('Identidade, documentação e vínculo conferidos para teste.')
@@ -148,21 +183,77 @@ try:
         # Dados pedagógicos sintéticos são publicados pelo mesmo fluxo HTTP da escola.
         admission=client.get(base+'/admissions',headers=headers).json()['items'][0]
         enrollment_id=admission['enrollment_id'];student_id=admission['student_id']
+        enrollment_response=client.get(base+'/enrollments',headers=headers,params={'student_id':student_id}).json()
+        assert enrollment_response['total']==1
+        active=enrollment_response['items'][0]
+        assert (active['id'], active['status'], active['class_group_id'])==(enrollment_id,'active',group['id'])
+        admin.locator('aside a[href="#/enrollments"]').click()
+        row=admin.get_by_role('row').filter(has_text=active['number'])
+        expect(row).to_contain_text(group['name'])
+        expect(row.get_by_text('Ativa',exact=True)).to_be_visible()
+        record('Secretaria confere o mesmo número ativo na turma e a família vê Matriculada.')
         period=post('/academic-periods',{'academic_year_id':year['id'],'name':'1º Bimestre','starts_on':'2027-01-01','ends_on':'2027-04-30','order_index':1})
         component=post('/curriculum-components',{'name':'Matemática'})
-        diary=post('/diaries',{'class_group_id':group['id'],'component_id':component['id']})
+        diary=post('/diaries',{'class_group_id':group['id'],'component_id':component['id'],'teacher_assignment_id':assignment['id']})
         diary_path='/diaries/'+diary['id']
         def put(path,data):
             response=client.put(base+path,headers=headers,json=data);assert response.is_success,response.text;return response.json()
         put(diary_path+'/assessment-rules/'+period['id'],{'method':'arithmetic','scale_max':'10','decimal_places':2,'minimum_score':'6','minimum_attendance_percent':'75','justified_absence_counts_as_present':False,'recovery_mode':'none','concept_scale':[],'required_opinion':False})
-        lesson=post(diary_path+'/lessons',{'academic_period_id':period['id'],'lesson_date':'2027-02-01','lesson_count':2,'content':'Operações fundamentais'})
-        put(diary_path+'/lessons/'+lesson['id']+'/attendance',{'items':[{'enrollment_id':enrollment_id,'status':'present','note':''}]})
-        assessment=post(diary_path+'/assessments',{'academic_period_id':period['id'],'title':'Avaliação de Matemática','kind':'exam','assessment_date':'2027-02-01','value_type':'numeric','max_score':'10','weight':'1','status':'published'})
-        put(diary_path+'/assessments/'+assessment['id']+'/results',{'items':[{'enrollment_id':enrollment_id,'numeric_score':'8.5','concept':'','note':''}]})
-        post(diary_path+'/periods/'+period['id']+'/consolidate',{'version':diary['version']})
-        submitted=post(diary_path+'/submit',{'version':diary['version']})
-        reviewed=post(diary_path+'/review',{'version':submitted['version']})
-        post(diary_path+'/close',{'academic_period_id':period['id'],'version':reviewed['version'],'reason':'Fechamento sintético conferido para teste de boletim.'})
+        teacher_page = browser.new_page(viewport={'width':1440,'height':1000})
+        login_page(teacher_page, teacher['email'])
+        page = teacher_page
+        teacher_page.get_by_role('button',name='Abrir Diário Escolar →').click()
+        workspace = teacher_page.locator('.diary-workspace')
+        workspace.get_by_role('button', name='Diários', exact=True).click()
+        workspace.get_by_role('button', name=re.compile('3º Ano A · Matemática')).click()
+        lesson = workspace.locator('form').filter(has=teacher_page.get_by_label('Conteúdo ministrado'))
+        lesson.get_by_label('Data', exact=True).fill('2027-02-01')
+        lesson.get_by_label('Quantidade de aulas').fill('2')
+        lesson.get_by_label('Período').select_option(period['id'])
+        lesson.get_by_label('Conteúdo ministrado').fill('Operações fundamentais')
+        lesson.get_by_role('button', name='Registrar aula').click()
+        workspace.get_by_role('button',name='Abrir chamada').click()
+        workspace.get_by_label('Presença de Lucas',exact=False).select_option('present')
+        workspace.get_by_role('button',name='Salvar chamada').click()
+        expect(workspace.get_by_role('status')).to_have_text('Chamada salva.')
+        workspace.get_by_role('button',name='Avaliações',exact=True).click()
+        form=workspace.locator('form').filter(has=teacher_page.get_by_label('Título',exact=True))
+        form.get_by_label('Título').fill('Avaliação de Matemática')
+        form.get_by_label('Data',exact=True).fill('2027-02-01')
+        form.get_by_label('Período').select_option(period['id'])
+        form.get_by_label('Situação').select_option('published')
+        form.get_by_role('button',name='Criar avaliação').click()
+        for score in ['8', '8.5']:
+            workspace.get_by_role('button',name='Lançar notas').click()
+            workspace.get_by_label('Nota de Lucas',exact=False).fill(score)
+            with teacher_page.expect_response(lambda r: r.url.endswith('/results') and r.request.method=='PUT' and r.ok):
+                workspace.get_by_role('button',name='Salvar resultados').click()
+        workspace.get_by_role('button',name='Pareceres').click()
+        form=workspace.locator('form').filter(has=teacher_page.get_by_label('Texto',exact=True))
+        form.get_by_label('Aluno').select_option(enrollment_id)
+        form.get_by_label('Período').select_option(period['id'])
+        form.get_by_label('Texto').fill('Resolveu as operações propostas.')
+        form.get_by_role('button',name='Salvar parecer').click()
+        expect(workspace.get_by_text('Parecer salvo.')).to_be_visible()
+        workspace.get_by_role('button',name='Diários',exact=True).click()
+        workspace.get_by_role('button',name='Enviar para revisão').click()
+        expect(workspace.get_by_text('Diário enviado e aguardando revisão da coordenação.')).to_be_visible()
+        teacher_page.screenshot(path=str(OUT/'professor-diario.png'))
+        page = admin
+        teacher_page.close()
+        record('Professor registra duas aulas, chamada, nota 8 corrigida para 8,5 e parecer antes da revisão.')
+
+        direction_token=client.post('/api/v1/auth/login',json={'email':'direction@example.com','password':password}).json()['access_token']
+        direction_headers={'Authorization':'Bearer '+direction_token}
+        def direction_post(path, data):
+            response=client.post(base+diary_path+path, headers=direction_headers,json=data)
+            assert response.is_success,response.text
+            return response.json()
+        current=client.get(base+diary_path, headers=direction_headers).json()
+        reviewed=direction_post('/review', {'version':current['version']})
+        direction_post('/periods/'+period['id']+'/consolidate',{'version':reviewed['version']})
+        closed=direction_post('/close',{'academic_period_id':period['id'],'version':reviewed['version'],
+                              'reason':'Fechamento conferido pela Direção.'})
         # A entrega do código por provedor externo não integra este teste local.
         with sqlite3.connect(TEMP/'e2e.db') as db:db.execute("UPDATE portal_accounts SET email_verified=1 WHERE email='familia@example.com'")
         parent.reload();parent.get_by_role('button',name=re.compile('^Diário Escolar')).click()
@@ -182,6 +273,10 @@ try:
         expect(parent.get_by_text('Reunião de famílias — Teste',exact=True)).to_be_visible()
         parent.screenshot(path=str(OUT/'06-portal-noticias-eventos.png'),full_page=True)
         record('Notícia/evento dirigido a responsáveis aparece no portal da escola')
+        # Conexão fictícia é configurada pelo administrador; a cobrança usa conta financeira própria.
+        admin = browser.new_page(viewport={'width':1440,'height':1000},accept_downloads=True)
+        login_page(admin, 'secretaria@example.com')
+        expect(admin.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible()
         admin.locator('#integrations-menu').get_by_role('link',name='Bancária',exact=True).click()
         expect(admin.get_by_role('heading',name='Conta bancária da instituição',exact=True)).to_be_visible()
         admin.get_by_role('button',name='Conectar conta',exact=True).click()
@@ -190,20 +285,20 @@ try:
         admin.get_by_role('button',name='Salvar conta',exact=True).click()
         expect(admin.get_by_text('Configuração salva.',exact=False)).to_be_visible()
         record('Conta bancária de homologação configurada pela interface com credencial protegida')
-        finance=admin.get_by_role('button',name='Financeiro',exact=True)
-        if finance.get_attribute('aria-expanded')=='false':finance.click()
-        admin.locator('aside').get_by_role('link',name='Cobranças',exact=False).click()
-        admin.get_by_role('button',name='+ Nova cobrança',exact=True).click()
-        admin.get_by_label('Tipo de cobrança').select_option('provider')
-        admin.get_by_label('Pesquisar aluno / matrícula',exact=True).fill('Lucas')
-        admin.get_by_role('button',name='Buscar matrícula',exact=True).click()
-        admin.get_by_label('Matrícula / responsável financeiro').select_option(index=1)
-        admin.get_by_label('Valor de cada parcela (R$)',exact=True).fill('450.00')
-        admin.get_by_role('button',name='Confirmar criação da(s) cobrança(s)',exact=True).click()
-        expect(admin.locator('.table-wrap tr',has_text='Mensalidade')).to_be_visible()
-        expect(admin.locator('.table-wrap tr',has_text='Mensalidade').get_by_text('Na fila',exact=True)).to_be_visible()
-        admin.screenshot(path=str(OUT/'08-cobranca-homologacao.png'),full_page=True)
+        finance_page=browser.new_page(viewport={'width':1440,'height':1000})
+        login_page(finance_page, 'finance@example.com')
+        finance_page.get_by_role('button',name='+ Nova cobrança',exact=True).click()
+        finance_page.get_by_label('Tipo de cobrança').select_option('provider')
+        finance_page.get_by_label('Pesquisar aluno / matrícula',exact=True).fill('Lucas')
+        finance_page.get_by_role('button',name='Buscar matrícula',exact=True).click()
+        finance_page.get_by_label('Matrícula / responsável financeiro').select_option(index=1)
+        finance_page.get_by_label('Valor de cada parcela (R$)',exact=True).fill('450.00')
+        finance_page.get_by_role('button',name='Confirmar criação da(s) cobrança(s)',exact=True).click()
+        expect(finance_page.locator('.table-wrap tr',has_text='Mensalidade')).to_be_visible()
+        expect(finance_page.locator('.table-wrap tr',has_text='Mensalidade').get_by_text('Na fila',exact=True)).to_be_visible()
+        finance_page.screenshot(path=str(OUT/'08-cobranca-homologacao.png'),full_page=True)
         record('Cobrança de mensalidade criada e enfileirada pela interface, sem simular pagamento')
+        finance_page.close()
         student_record=client.get(base+'/students/'+student_id,headers=headers).json()
         response=client.post('/api/v1/users',headers=headers,json={'name':'Lucas Almeida — Teste','email':'aluno@example.com','password':password,'role':'student','school_ids':[school['id']],'person_id':student_record['person']['id']})
         assert response.status_code==201,response.text
@@ -229,6 +324,7 @@ try:
         studentPage.goto(URL);studentPage.get_by_label('E-mail',exact=True).fill('aluno@example.com');studentPage.get_by_label('Senha',exact=True).fill(password);studentPage.get_by_role('button',name='Entrar na aplicação').click()
         expect(studentPage.locator('.learning-workspace table')).to_contain_text('Matemática')
         expect(studentPage.locator('.learning-workspace table')).to_contain_text('8,5')
+        expect(studentPage.locator('.learning-workspace table')).to_contain_text('100%')
         studentPage.screenshot(path=str(OUT/'07-portal-aluno-boletim.png'),full_page=True)
         record('Aluno autenticado consulta apenas seu boletim no espaço pessoal')
         familyContext=browser.new_context(viewport={'width':320,'height':740},locale='pt-BR')
@@ -342,6 +438,13 @@ try:
         import importlib.util
         spec=importlib.util.spec_from_file_location('school_workflows',ROOT/'scripts/e2e-school-workflows.py');extra=importlib.util.module_from_spec(spec);spec.loader.exec_module(extra)
         extra.verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,post,year,group,WEBSITE_URL)
+        reopening={'version':closed['diary']['version'],'reason':'Revisão pedagógica autorizada após publicação.'}
+        teacher_token=client.post('/api/v1/auth/login',json={'email':teacher['email'],'password':password}).json()['access_token']
+        denied=client.post(base+diary_path+'/reopen',headers={'Authorization':'Bearer '+teacher_token},json=reopening)
+        assert denied.status_code == 403,denied.text
+        reopened=direction_post('/reopen',reopening)
+        assert reopened['diary']['status']=='open' and reopened['revision']['reason']==reopening['reason']
+        record('API: Professor impedido de reabrir; Direção reabre com justificativa registrada.')
         assert not failed_requests,failed_requests
         assert not bad_responses,bad_responses
         assert not errors,errors
