@@ -190,7 +190,7 @@ def allowed_request_origin(origin,path):
     if origin.rstrip('/')==settings().app_url.rstrip('/'):return True
     portal=settings().portal_public_url.rstrip('/')
     if not portal or origin.rstrip('/')!=portal:return False
-    return path.startswith(('/api/v1/portal/','/api/v1/family/','/api/v1/profile/learning','/api/v1/invitations/','/api/v1/auth/'))
+    return path.startswith(('/api/v1/teacher/','/api/v1/portal/','/api/v1/family/','/api/v1/profile/learning','/api/v1/invitations/','/api/v1/auth/'))
 
 def request_csrf(request: Request):
     if request.headers.get('X-CSRF-Protection') != '1':

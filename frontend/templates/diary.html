@@ -29,7 +29,7 @@
         <li>Preencha os demais registros e envie o diário para revisão antes do fechamento.</li>
         <li>As comunicações ficam disponíveis no portal para responsáveis com acesso autorizado.</li>
       </ol>
-      <p class="muted">Alunos da chamada precisam estar matriculados na turma. <a href="#/help">Consultar o guia de uso</a>.</p>
+      <p class="muted">Alunos da chamada precisam estar matriculados na turma. <a v-if="!props.teacherPortal" href="#/help">Consultar o guia de uso</a><span v-else>Em caso de divergência na lista, procure a Secretaria.</span></p>
     </details>
 
     <template v-if="state.tab==='setup' && can('diary.configure')">

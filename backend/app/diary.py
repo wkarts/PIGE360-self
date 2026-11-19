@@ -18,7 +18,7 @@ from .security import Actor, DB, check_version, current_user, fail, lock_school,
 from .lifecycle_models import require_available
 
 
-router = APIRouter(prefix="/api/v1/schools/{school_id}", tags=["Diário Escolar Digital"])
+router = APIRouter(prefix="/schools/{school_id}", tags=["Diário Escolar Digital"])
 
 
 def diary_school_scope(school_id: str, db: DB, user: Actor):

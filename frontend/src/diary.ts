@@ -5,9 +5,9 @@ namespace PigeDiary {
   type Roster={enrollment_id:string;student_id:string;number:string;name:string;enrollment_status:string;attendance?:{id?:string;version?:number;status:string;note:string}|null};
   type AssessmentResult={id?:string;version?:number;numeric_score:string|number|null;concept:string;note:string};
   type CommunicationRecipient={guardian_link_id:string;name:string;relationship:string;portal_account_count:number};
-  type Props={schoolId:string;permissions:string[]};
+  type Props={schoolId:string;permissions:string[];teacherPortal?:boolean;requestedDiary?:{id:string}};
   const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bahia',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-  export const component={props:['schoolId','permissions'],render:PigeRenders.diary,setup(props:Props){
+  export const component={props:['schoolId','permissions','teacherPortal','requestedDiary'],render:PigeRenders.diary,setup(props:Props){
     const state=Vue.reactive({
       busy:false,error:'',notice:'',tab:'diaries',
       diaries:[] as Diary[],selected:null as Diary|null,academicYears:[] as Row[],periods:[] as Row[],components:[] as Row[],groups:[] as Row[],assignments:[] as Row[],plans:[] as Row[],
@@ -34,7 +34,7 @@ namespace PigeDiary {
       occurrenceForm:{academic_period_id:'',enrollment_id:'',occurrence_date:today(),kind:'pedagogical',title:'',description:'',status:'draft'},
       reportType:'class_diary',reportPeriod:'',reportEnrollment:''
     });
-    const base=()=>'/schools/'+props.schoolId;
+    const base=()=>(props.teacherPortal?'/teacher':'')+'/schools/'+props.schoolId;
     const can=(p:string)=>props.permissions.includes(p);
     const str=(v:unknown)=>v==null?'':String(v);
     const date=(v:unknown)=>{const x=str(v);return x?new Intl.DateTimeFormat('pt-BR',{timeZone:'UTC'}).format(new Date(x.length===10?x+'T12:00:00Z':x)):'—';};
@@ -143,7 +143,18 @@ namespace PigeDiary {
     async function closeDiary(){if(!state.selected)return;await run(async()=>{const period=Boolean(state.closePeriod);await PigeAPI.post(base()+'/diaries/'+state.selected!.id+'/close',{academic_period_id:state.closePeriod||null,reason:state.closeReason,version:state.selected!.version});await loadDiary(state.selected!);state.notice=period?'Período fechado.':'Diário fechado.';});}
     async function reopenDiary(){if(!state.selected)return;await run(async()=>{await PigeAPI.post(base()+'/diaries/'+state.selected!.id+'/reopen',{reason:state.reopenReason,version:state.selected!.version});state.reopenReason='';await loadDiary(state.selected!);state.notice='Diário reaberto com registro de retificação.';});}
     async function report(){if(state.selected)await run(()=>{const q=new URLSearchParams();if(state.reportPeriod)q.set('academic_period_id',state.reportPeriod);if(state.reportType==='student_record'&&state.reportEnrollment)q.set('enrollment_id',state.reportEnrollment);const query=q.toString();return PigeAPI.download(base()+'/diaries/'+state.selected!.id+'/reports/'+state.reportType+'.pdf'+(query?'?'+query:''),'diario-'+state.reportType+'.pdf');});}
-    Vue.onMounted(()=>{void load();});
-    return{state,can,str,date,label,load,selectDiary,loadCommunicationRecipients,communicationOccurrenceChanged,sendCommunication,createPeriod,createComponent,createDiary,createPlan,createLesson,openAttendance,saveAttendance,createAssessment,editAssessment,cancelAssessmentEdit,openAssessment,saveAssessmentResults,saveOpinion,createPedagogicalRecord,submitDiary,reviewDiary,closeDiary,reopenDiary,report,selectRulePeriod,saveAssessmentRule,loadPeriodResults,consolidatePeriod,saveOccurrence};
+    let handled:Props['requestedDiary'];
+    function openRequestedDiary():void {
+      const request=props.requestedDiary;
+      if(!request||handled===request||state.busy)return;
+      const diary=state.diaries.find(item=>item.id===request.id);
+      if(!diary)return;
+      handled=request;state.tab='diaries';
+      if(state.selected?.id!==diary.id)void selectDiary(diary);
+    }
+    Vue.watch(()=>props.requestedDiary,openRequestedDiary);
+    Vue.watch(()=>state.busy,openRequestedDiary);
+    Vue.onMounted(()=>{void load().then(openRequestedDiary);});
+    return{props,state,can,str,date,label,load,selectDiary,loadCommunicationRecipients,communicationOccurrenceChanged,sendCommunication,createPeriod,createComponent,createDiary,createPlan,createLesson,openAttendance,saveAttendance,createAssessment,editAssessment,cancelAssessmentEdit,openAssessment,saveAssessmentResults,saveOpinion,createPedagogicalRecord,submitDiary,reviewDiary,closeDiary,reopenDiary,report,selectRulePeriod,saveAssessmentRule,loadPeriodResults,consolidatePeriod,saveOccurrence};
   }};
 }

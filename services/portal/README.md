@@ -37,3 +37,16 @@ o convite; o cookie é limpo no consumo ou na próxima consulta inválida.
 
 DNS, TLS, configuração do proxy e entrega efetiva do e-mail precisam de
 homologação na instalação. Testes locais/CI usam apenas dados e SMTP sintéticos.
+
+## Portal do Professor
+
+O mesmo serviço Compose `portal` atende a família na raiz e o professor em `/professor`. O professor usa seu usuário escolar e a autenticação de dois fatores quando exigida. Quem entra pela página inicial com uma conta docente segue para a área do professor. Na instância que serve diretamente os arquivos do gestor, a entrada é `/professor.html`.
+
+A Secretaria confere o acesso do professor à instituição e o vínculo com o cadastro da pessoa. A Coordenação atribui turma, ano e disciplina, cadastra o período letivo e vincula a atribuição ao diário do componente. Uma turma pode ter diários de componentes diferentes. Sem atribuição ou sem diário, a programação indica o encaminhamento.
+
+1. Em **Minha programação**, confira turma, turno e disciplina. Use **Abrir diário** para entrar diretamente no componente.
+2. Em **Planejamento**, informe os objetivos do período. Em **Diários**, registre o conteúdo e a data da aula, abra a chamada e salve as presenças e faltas.
+3. Em **Avaliações**, cadastre a atividade e lance os resultados dos alunos. Em **Pareceres**, registre o acompanhamento individual. Volte à programação e selecione a semana para consultar as aulas registradas e avaliações datadas.
+4. Envie o diário à revisão conforme o calendário da escola. A Coordenação ou Direção conduz o fechamento e a reabertura conforme as permissões da instituição.
+
+A agenda consulta as datas do Diário e das avaliações. Os horários fixos de uma grade semanal não são cadastrados nesta tela. Atualize juntos o aplicativo e o serviço de portal com imagens da mesma revisão. Esta alteração não requer migração, novo domínio ou novo serviço Compose.
