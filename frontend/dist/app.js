@@ -5654,7 +5654,8 @@ var PigeUI;
                 await PigeAPI.post(base() + '/students/' + studentId + '/archive', { version: target.version, data: { reason: form.reason } });
             state.modal = blankModal();
             state.success = modal.kind === 'enrollment' ? (activate ? 'Matrícula efetivada. A vaga está ocupada.' : 'Rascunho salvo. A vaga continua disponível.') : 'Operação concluída com sucesso.';
-            await loadCatalogs();
+            if (!['protocol', 'protocol-note'].includes(modal.kind))
+                await loadCatalogs();
             if (createdStudent && state.page === 'enrollments') {
                 await loadPage();
                 state.success = 'Aluno cadastrado. Pesquise o nome no assistente para continuar.';

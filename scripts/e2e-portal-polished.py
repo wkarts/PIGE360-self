@@ -511,6 +511,8 @@ try:
         number=re.search(r'PRO-[A-Za-z0-9-]+',receipt.inner_text())[0]
         familyPage.screenshot(path=str(OUT/'familia-justificativa.png'))
         clerk=adminContext.pages[0]
+        clerk.bring_to_front()
+        page=clerk
         clerk.locator('aside a[href="#/diary"]').click()
         desk_diary=clerk.locator('.diary-workspace')
         desk_diary.locator('.x-record').filter(has_text='Matemática').first.click()
@@ -526,8 +528,12 @@ try:
         clerk.screenshot(path=str(OUT/'secretaria-justificativa.png'))
         clerk.get_by_role('button',name='Atualizar protocolo').click()
         clerk.locator('.modal-form').get_by_label('Situação',exact=False).select_option('completed')
-        clerk.locator('.modal-form').get_by_role('button',name='Salvar',exact=True).click()
+        with clerk.expect_response(lambda r: '/protocols/' in r.url and r.request.method=='PATCH') as completion:
+            clerk.locator('.modal-form').get_by_role('button',name='Salvar',exact=True).click()
+        assert completion.value.ok and completion.value.json()['status']=='completed'
         expect(clerk.get_by_role('row').filter(has_text=number)).to_contain_text('Concluído')
+        page=familyPage
+        familyPage.bring_to_front()
         familyPage.reload()
         expect(familyPage.get_by_text('Concluída',exact=False).first).to_be_visible()
         record('Secretaria imprime o material do Diário, conclui o protocolo e a família confere a situação.')
