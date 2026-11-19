@@ -4,7 +4,11 @@ namespace PigeUI {
   type Value = PigeAPI.Value;
   interface Option { value: string; label: string }
   interface Field { key: string; label: string; type: string; required?: boolean; options?: Option[]; wide?: boolean; help?: string }
-  interface Modal { kind: string; title: string; fields: Field[]; form: PigeAPI.FormDataMap; target: Row | null; action: string; error: string }
+  interface EnrollmentReturn {
+    modal: Modal; initial: string; student: Student; students: Student[]; people: Row[];
+    studentQuery: string; personQuery: string;
+  }
+  interface Modal { enrollmentReturn?: EnrollmentReturn; kind: string; title: string; fields: Field[]; form: PigeAPI.FormDataMap; target: Row | null; action: string; error: string }
   interface LegacyImportTable { name: string; rows: number; destination: string }
   interface LegacyImportPreview { fingerprint: string; source_system: string; source_database: string; source_record_count: number; table_count: number; max_package_mb:number; tables: LegacyImportTable[]; media: Record<string, number>; warnings: string[] }
   interface LegacyImportRun { id: string; created_at: string; source_system: string; fingerprint: string; summary: Record<string, unknown> }
@@ -534,6 +538,7 @@ namespace PigeUI {
     if(state.busy||PigeMFA.state.busy)return;
     if(state.modal.kind==='mfa-manage'&&PigeMFA.state.codes.length){PigeMFA.state.error='Guarde os códigos e confirme para continuar.';return;}
     if(discard!==true&&state.modal.fields.length&&modalDirty()){state.discardChanges=true;return;}
+    if(state.modal.enrollmentReturn){resumeEnrollment(state.modal.enrollmentReturn);return;}
     clearProfilePreview();state.cameraTarget='';state.captureName='';state.modal=blankModal();state.discardChanges=false;
   }
   function valuesFrom(row:Row|PigeAPI.Person,fields:Field[]):PigeAPI.FormDataMap {const map:PigeAPI.FormDataMap={};for(const f of fields)map[f.key]=(row as unknown as Record<string,Value>)[f.key]??(f.type==='multiselect'?[]:'');return map;}
@@ -686,8 +691,7 @@ namespace PigeUI {
   }
   async function newEnrollment():Promise<void>{await safe(async()=>{
     await loadCatalogs();
-    await searchStudents();await searchPersons();const selected=state.selectedStudent;
-    if(selected&&!state.studentChoices.some(s=>s.id===selected.id))state.studentChoices.unshift(selected);
+    const selected=state.selectedStudent;
     const fields=[
       field('student_id','Aluno','student',true),field('class_group_id','Turma de destino','select',true,options('class-groups')),
       field('enrolled_on','Data da matrícula','date',true),
@@ -696,6 +700,7 @@ namespace PigeUI {
       field('entry_reason','Motivo / observação de entrada','textarea',false,undefined,true),field('external_reference','Referência externa'),field('notes','Observações','textarea',false,undefined,true)
     ];
     openModal('enrollment','Nova matrícula',fields,{student_id:selected?.id||'',enrolled_on:new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bahia',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),enrollment_type:'new'});
+    if(selected)state.studentChoices=[selected];
   });}
   async function viewEnrollment(id:string):Promise<void>{await safe(async()=>{const data=await PigeAPI.request<Row>(base()+'/enrollments/'+id);openModal('enrollment-detail','Matrícula '+text(data.number),[],{},data);});}
   async function contractsForEnrollment(id:string,issuedId=''):Promise<void>{state.modal=blankModal();state.contractEnrollmentId=id;state.contractReviewIssuedId=issuedId;await navigate('contracts');}
@@ -725,12 +730,35 @@ namespace PigeUI {
     const target=state.modal.target;if(!target)return;
     openModal('reenroll','Rematricular em outro ano', [field('class_group_id','Turma do novo período','select',true,options('class-groups')),field('enrolled_on','Data da rematrícula','date',true),field('notes','Observações','textarea',false,undefined,true)],{enrolled_on:new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bahia',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())},target);
   }
-  async function newLink():Promise<void>{await safe(async()=>{
-    await searchPersons();openModal('link','Vincular responsável', [field('person_id','Pessoa cadastrada','person',true),field('relationship','Parentesco / vínculo','text',true),field('legal','Responsável legal','checkbox'),field('financial','Responsável financeiro','checkbox'),field('pickup','Autorizado para retirada','checkbox'),field('primary_contact','Contato principal','checkbox')],{relationship:'Responsável',legal:true});
-  });}
+  async function linkFromEnrollment():Promise<void>{
+    const modal=state.modal,id=text(modal.form.student_id),scope=schoolSequence;
+    if(modal.kind!=='enrollment'||!id||state.busy)return;
+    state.busy=true;
+    try{
+      const student=await PigeAPI.request<Student>(base()+'/students/'+id);
+      if(state.modal!==modal||schoolSequence!==scope||modal.form.student_id!==id)return;
+      const resume:EnrollmentReturn={modal,initial:state.modalInitial,student,students:state.studentChoices,people:state.personChoices,studentQuery:state.studentSearchQuery,personQuery:state.personSearchQuery};
+      newLink();
+      state.modal.enrollmentReturn=resume;
+    }catch(error){if(state.modal===modal)modal.error=error instanceof Error?error.message:String(error);}
+    finally{if(schoolSequence===scope)state.busy=false;}
+  }
+  function resumeEnrollment(resume:EnrollmentReturn):void{
+    resetPeopleSearch();
+    state.modal=resume.modal;state.modalInitial=resume.initial;state.discardChanges=false;
+    state.studentChoices=resume.students;state.personChoices=resume.people;
+    state.studentSearchQuery=resume.studentQuery;state.personSearchQuery=resume.personQuery;
+    if(resume.students.length)state.studentSearchMessage='Confira o aluno selecionado.';
+    if(resume.people.length)state.personSearchMessage='Confira a pessoa selecionada.';
+  }
+  function newLink():void{
+    openModal('link','Vincular responsável', [field('person_id','Pessoa cadastrada','person',true),field('relationship','Parentesco / vínculo','text',true),field('legal','Responsável legal','checkbox'),field('financial','Responsável financeiro','checkbox'),field('pickup','Autorizado para retirada','checkbox'),field('primary_contact','Contato principal','checkbox')],{relationship:'Responsável',legal:true});
+  }
   function editLink(link:Row):void{
+    const resume=state.modal.enrollmentReturn;
     const fields=[field('relationship','Parentesco / vínculo','text',true),field('legal','Responsável legal','checkbox'),field('financial','Responsável financeiro','checkbox'),field('pickup','Autorizado para retirada','checkbox'),field('primary_contact','Contato principal','checkbox'),field('active','Vínculo ativo','checkbox')];
     openModal('link-edit','Editar vínculo familiar',fields,valuesFrom(link,fields),link);
+    if(resume)state.modal.enrollmentReturn=resume;
   }
   function uploadDocument():void{openModal('upload','Receber documento', [field('document_type_id','Tipo de documento','select',true,options('document-types')),field('expires_on','Validade (opcional)','date'),field('file','Arquivo PDF, PNG ou JPEG','file',true,undefined,true),field('notes','Observações','textarea',false,undefined,true)]);}
   function fileChange(event:Event):void{selectedFile=(event.target as HTMLInputElement).files?.[0]||null;state.captureName=selectedFile?.name||'';}
@@ -836,7 +864,7 @@ namespace PigeUI {
     const activate=state.modal.kind==='enrollment'&&activateEnrollment===true;
     if(activate&&!window.confirm('Efetivar a matrícula na turma selecionada e ocupar a vaga agora?'))return;
     state.busy=true;state.modal.error='';
-    const modal=state.modal,form={...modal.form},target=modal.target,studentId=state.selectedStudent?.id;let createdStudent:Student|null=null;let savedPersonId='';
+    const modal=state.modal,form={...modal.form},target=modal.target,studentId=modal.enrollmentReturn?.student.id||state.selectedStudent?.id;let createdStudent:Student|null=null;let savedPersonId='';
     try{
       const photo=selectedFile;delete form.photo;
       if(modal.kind==='ocr-target'){const source=state.assistSource;const data=await PigeAPI.request<{person:Row}>(base()+'/persons/'+form.person_id+'/dossier');editPerson(data.person);state.assistSource=source;return;}
@@ -905,6 +933,13 @@ namespace PigeUI {
         if(target)await PigeAPI.patch(base()+'/'+modal.action+'/'+target.id,{version:target.version,data:form});else await PigeAPI.post(base()+'/'+modal.action,form);
       }else if(modal.kind==='link'||modal.kind==='link-edit'){
         if(target)await PigeAPI.patch(base()+'/students/'+studentId+'/guardians/'+target.id,{version:target.version,data:{...form,person_id:target.person_id}});else await PigeAPI.post(base()+'/students/'+studentId+'/guardians',{...form,active:true});
+        if(modal.enrollmentReturn){
+          if(state.modal!==modal)return;
+          resumeEnrollment(modal.enrollmentReturn);
+          state.modal.error='';
+          state.success='Vínculo salvo. Confira a turma e efetive a matrícula.';
+          return;
+        }
       }else if(modal.kind==='enrollment'){
         form.financial_person_id=form.financial_person_id||null;
         await PigeAPI.post(base()+'/enrollments'+(activate?'?activate=true':''),form);
@@ -1018,5 +1053,5 @@ namespace PigeUI {
     }
     window.addEventListener('beforeunload',event=>{if(state.modal.kind&&modalDirty()){event.preventDefault();event.returnValue='';}});
   }
-  Vue.createApp({components:{'contract-value-field':PigeContractFields.component,'enrollment-workflow':PigeEnrollmentWorkflow.component,'academic-preparation':PigeAcademicPreparation.component,'notification-email':PigeNotificationEmail.component,'camera-capture':PigeCamera.component,'users-panel':PigeUsers.component,'institutional-email':PigeEmail.component,'audit-panel':PigeAudit.component,'lifecycle-panel':PigeLifecycle.component,'mailcow-panel':PigeMailcow.component,'school-community':PigeCommunity.component,'learning-panel':PigeLearning.component,'reports-panel':PigeReports.component,'legacy-import-panel':PigeLegacyImport.component,'diagnostics-panel':PigeDiagnostics.component,'expansion-panel':PigeExpansion.component,'diary-panel':PigeDiary.component,'contracts-panel':PigeContracts.component,'signing-panel':PigeSigning.component,'assist-panel':PigeAssist.component},render:PigeRenders.app,setup(){Vue.onMounted(()=>{PigeMFA.init(PigeAPI.request,afterMFA,logout);PigeDialogs.install();setupPWA();void initialize();});return{academicPrepared,importedDataChanged,openCamera,photoCaptured,documentPages,configurationPages,supportAreas,supportAreaLabels,refreshAccess,isEnrollmentForm,enrollmentStudent,enrollmentClass,administrationPages,institutionTabs,catalogDescriptions,adminTool,manageRecord,lifecycleCompleted,request:PigeAPI.request,download:PigeAPI.download,state,base,familyAssistFields,assistRequest,assistFields,assistEligible,assistCompany,setupCompany,setupCompanyFields,companyExtra,setupLookup,readStudentDocument,readResponsibleDocument,editIntake,mfa:PigeMFA,dossier:PigeDossier,selectedPersonTypes,availablePersonTypes,togglePersonType,lockedPersonType,familyRelevant,manageMFA,editMFAPolicy,editEmbedding,probeEmbedding,editMyProfile,myPhotoChange,profilePassword,registryPages,integrationPages,businessTypes,isBusiness,newBusiness,reusePerson,personDocument,modalSections,modalTab,visibleSection,modalFieldLabel,modalFieldRelevant,advancedPersonField,isPersonModal,personTypeOptions,personTypeLabel,modalDirty,contractDirty,identity:PigeInstitution.state,supportStatus:PigeSupport.status,editIdentity,identityFileChange,manageUnits,editMaintainer,text,can,isProfileRole,school,label,enrollmentLabel,date,cpf,initials,photoSrc,getName,options,pageLabels,catalogLabels,configure,login,logout,navigate,changeSchool,setCatalog,search,page,loadPage,openSogoWebmail,webmailFrameLoaded,saveWebmailPreference,saveWebmailDefault,legacyImportFileChange,previewLegacyImport,applyLegacyImport,populatedImportTables,downloadLegacyArchive,viewStudent,newPerson,newStudent,editStudent,newGuardian,newTeacher,editTeacher,newEmployee,editEmployee,editPerson,newCatalog,newEnrollment,viewEnrollment,contractsForEnrollment,startMovement,reenroll,newLink,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,editSupportHub,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,protocolReceipt,exportPendencies,install,updateApp};}}).mount('#app');
+  Vue.createApp({components:{'contract-value-field':PigeContractFields.component,'enrollment-workflow':PigeEnrollmentWorkflow.component,'academic-preparation':PigeAcademicPreparation.component,'notification-email':PigeNotificationEmail.component,'camera-capture':PigeCamera.component,'users-panel':PigeUsers.component,'institutional-email':PigeEmail.component,'audit-panel':PigeAudit.component,'lifecycle-panel':PigeLifecycle.component,'mailcow-panel':PigeMailcow.component,'school-community':PigeCommunity.component,'learning-panel':PigeLearning.component,'reports-panel':PigeReports.component,'legacy-import-panel':PigeLegacyImport.component,'diagnostics-panel':PigeDiagnostics.component,'expansion-panel':PigeExpansion.component,'diary-panel':PigeDiary.component,'contracts-panel':PigeContracts.component,'signing-panel':PigeSigning.component,'assist-panel':PigeAssist.component},render:PigeRenders.app,setup(){Vue.onMounted(()=>{PigeMFA.init(PigeAPI.request,afterMFA,logout);PigeDialogs.install();setupPWA();void initialize();});return{academicPrepared,importedDataChanged,openCamera,photoCaptured,documentPages,configurationPages,supportAreas,supportAreaLabels,refreshAccess,isEnrollmentForm,enrollmentStudent,enrollmentClass,administrationPages,institutionTabs,catalogDescriptions,adminTool,manageRecord,lifecycleCompleted,request:PigeAPI.request,download:PigeAPI.download,state,base,familyAssistFields,assistRequest,assistFields,assistEligible,assistCompany,setupCompany,setupCompanyFields,companyExtra,setupLookup,readStudentDocument,readResponsibleDocument,editIntake,mfa:PigeMFA,dossier:PigeDossier,selectedPersonTypes,availablePersonTypes,togglePersonType,lockedPersonType,familyRelevant,manageMFA,editMFAPolicy,editEmbedding,probeEmbedding,editMyProfile,myPhotoChange,profilePassword,registryPages,integrationPages,businessTypes,isBusiness,newBusiness,reusePerson,personDocument,modalSections,modalTab,visibleSection,modalFieldLabel,modalFieldRelevant,advancedPersonField,isPersonModal,personTypeOptions,personTypeLabel,modalDirty,contractDirty,identity:PigeInstitution.state,supportStatus:PigeSupport.status,editIdentity,identityFileChange,manageUnits,editMaintainer,text,can,isProfileRole,school,label,enrollmentLabel,date,cpf,initials,photoSrc,getName,options,pageLabels,catalogLabels,configure,login,logout,navigate,changeSchool,setCatalog,search,page,loadPage,openSogoWebmail,webmailFrameLoaded,saveWebmailPreference,saveWebmailDefault,legacyImportFileChange,previewLegacyImport,applyLegacyImport,populatedImportTables,downloadLegacyArchive,viewStudent,newPerson,newStudent,editStudent,newGuardian,newTeacher,editTeacher,newEmployee,editEmployee,editPerson,newCatalog,newEnrollment,viewEnrollment,contractsForEnrollment,startMovement,reenroll,newLink,linkFromEnrollment,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,editSupportHub,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,protocolReceipt,exportPendencies,install,updateApp};}}).mount('#app');
 }

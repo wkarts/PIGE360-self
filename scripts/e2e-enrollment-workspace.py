@@ -250,12 +250,19 @@ try:
                 lookup = base + '/enrollments?student_id=' + counter_student['id']
                 assert client.get(lookup, headers=headers).json()['total'] == 0
                 counter.screenshot(path=str(OUT/'balcao-pendencia.png'))
-                secretary_token = client.post('/api/v1/auth/login', json={'email':operator['email'],
-                                             'password': PASSWORD}).json()['access_token']
-                link = client.post(base+'/students/'+counter_student['id']+'/guardians',
-                                   headers={'Authorization':'Bearer '+secretary_token},
-                                   json={'person_id':guardian['id'],'legal':True,'financial':True})
-                assert link.status_code == 201, link.text
+                form.get_by_role('button', name='Vincular ou revisar responsável').click()
+                form.get_by_role('button', name='Cancelar', exact=True).click()
+                expect(form.get_by_label('Turma de destino')).to_have_value(group['id'])
+                form.get_by_role('button', name='Vincular ou revisar responsável').click()
+                form.get_by_label('Filtrar pessoas').fill('Helena')
+                form.get_by_label('Pessoa cadastrada', exact=True).select_option(guardian['id'])
+                form.get_by_role('button', name='Salvar', exact=True).click()
+                expect(form.get_by_label('Aluno', exact=True)).to_have_value(counter_student['id'])
+                expect(form.get_by_label('Turma de destino')).to_have_value(group['id'])
+                form.get_by_role('button', name='Vincular ou revisar responsável').click()
+                form.get_by_role('button', name='Editar Helena', exact=False).click()
+                form.get_by_label('Responsável financeiro', exact=True).check()
+                form.get_by_role('button', name='Salvar', exact=True).click()
                 form.get_by_role('button', name='Efetivar matrícula').click()
                 expect(counter.get_by_text('Matrícula efetivada. A vaga está ocupada.')).to_be_visible()
                 rows = client.get(lookup, headers=headers).json()
@@ -294,7 +301,7 @@ try:
                 expect(counter.get_by_role('row').filter(has_text='Declaração de matrícula de teste')).to_contain_text('Concluído')
                 checks.append('Secretaria baixou comprovante e duas emissões distintas da declaração com o mesmo número de matrícula e concluiu o protocolo vinculado.')
                 counter.close()
-                checks.append('Perfil Secretaria: bloqueio do menor sem vínculo legal; vínculo corrigido pela API da Secretaria; efetivação na mesma tela, uma matrícula ativa na turma.')
+                checks.append('Perfil Secretaria: bloqueio do menor sem vínculo legal; vínculo criado e revisado pela Secretaria no formulário; efetivação na mesma tela, uma matrícula ativa na turma.')
                 nav('Instituição')
                 tabs = page.get_by_role('navigation', name='Configurações da instituição')
                 for tab, heading in [('Dados da escola', 'Dados da escola'),
