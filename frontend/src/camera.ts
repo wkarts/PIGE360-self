@@ -99,7 +99,7 @@ namespace PigeCamera {
       Vue.onMounted(()=>{opener=document.activeElement instanceof HTMLElement?document.activeElement:null;previousOverflow=document.body.style.overflow;document.body.style.overflow='hidden';document.addEventListener('keydown',key);document.addEventListener('visibilitychange',hidden);void start();void Vue.nextTick(()=>document.getElementById(id+'-title')?.focus());});
       Vue.onUnmounted(()=>{disposed=true;++epoch;observer?.disconnect();stopStream();clearPhoto();document.removeEventListener('keydown',key);document.removeEventListener('visibilitychange',hidden);document.body.style.overflow=previousOverflow;if(opener?.isConnected)opener.focus({preventScroll:true});});
       Vue.watch(()=>props.contextKey,()=>close());
-      return {s,id,props,title,start,flip,changeCamera,zoom,torch,capture,rotate,choose,confirm,close};
+      return {dialogTarget:Vue.inject<HTMLElement|string>('school-dialog-host','body')||'body',s,id,props,title,start,flip,changeCamera,zoom,torch,capture,rotate,choose,confirm,close};
     }
   };
 }

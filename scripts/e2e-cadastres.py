@@ -185,7 +185,9 @@ try:
         field('Nome completo').fill('Responsável reutilizado — Teste');field('Data de nascimento').fill('1985-04-20');save()
         person=client.get(base+'/persons?q=Responsável reutilizado',headers=headers).json()['items'][0]
         people_before=client.get(base+'/persons',headers=headers).json()['total']
-        nav('Alunos');page.get_by_role('button',name='Vincular pessoa existente',exact=True).click()
+        page.get_by_role('tab',name='Alunos',exact=True).click()
+        page.get_by_role('button',name='← Todos os alunos',exact=True).click()
+        page.get_by_role('button',name='Vincular pessoa existente',exact=True).click()
         search=dialog().get_by_label('Filtrar pessoas',exact=True);search.fill('Responsável reutilizado')
         selector=dialog().get_by_label('Pessoa cadastrada',exact=True)
         expect(selector.locator('option',has_text='Responsável reutilizado — Teste')).to_have_count(1)

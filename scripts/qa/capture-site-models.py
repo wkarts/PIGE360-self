@@ -105,6 +105,6 @@ def main():
                     finally:server.shutdown();server.server_close();thread.join()
             finally:browser.close()
     (args.output/'measurements.json').write_text(json.dumps(results,indent=2))
-    print('Four home compositions + all 24 internal pages navigated, reloaded and captured in real Chromium. Human pixel review is still required.')
+    print('All five models and their 30 internal pages navigated, reloaded and captured in real Chromium. Human pixel review is still required.')
 
 if __name__=='__main__':main()

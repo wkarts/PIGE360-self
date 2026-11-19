@@ -11,6 +11,20 @@ namespace PigeDialogs {
       if(next===current)return;
       if(current){restore();current=null;if(!next&&opener?.isConnected)opener.focus({preventScroll:true});}
       if(!next){opener=null;return;}
+      if(next.closest('.school-task')&&!next.querySelector('[data-task-minimize]')&&!next.querySelector('video')&&!next.closest('.camera-dialog')){
+        const header=next.querySelector('.modal-header');
+        if(header){
+          const minimize=document.createElement('button');
+          minimize.type='button';minimize.className='btn task-minimize';minimize.dataset.taskMinimize='';
+          minimize.textContent='Minimizar';minimize.title='Manter o formulário aberto e voltar às guias';
+          minimize.onclick=()=>{
+            const backdrop=next.closest<HTMLElement>('.modal-backdrop');
+            if(!backdrop)return;
+            backdrop.dataset.taskPaused='';document.dispatchEvent(new Event('pige-pause-form'));
+          };
+          header.appendChild(minimize);
+        }
+      }
       opener=document.activeElement instanceof HTMLElement?document.activeElement:null;
       current=next;previousOverflow=document.body.style.overflow;document.body.style.overflow='hidden';
       let branch:HTMLElement=next;
@@ -25,7 +39,7 @@ namespace PigeDialogs {
       if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});}
       else next.querySelector<HTMLElement>('button,input,select,textarea')?.focus({preventScroll:true});
     }
-    new MutationObserver(update).observe(document.body,{childList:true,subtree:true});
+    new MutationObserver(update).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['data-task-paused']});
     document.addEventListener('keydown',event=>{
       if(!current)return;
       if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();current.querySelector<HTMLButtonElement>('[data-dialog-close]')?.click();return;}

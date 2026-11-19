@@ -43,19 +43,19 @@ def main():
                 encoded=base64.b64encode((models.ASSET_ROOT/(name+'.jpg')).read_bytes()).decode()
                 document=document.replace(url,'data:image/jpeg;base64,'+encoded)
             document=re.sub(r'<link[^>]*>', '',document)
-            directory=out/site['theme']/slug
+            directory=out/model['id']/slug
             directory.mkdir(parents=True,exist_ok=True)
             (directory/'index.html').write_text(document)
             routes.append({'slug':slug,'title':site_page['title'] if site_page else site['headline']})
-        document=(out/site['theme']/'index.html').read_text()
+        document=(out/model['id']/'index.html').read_text()
         # Asset inlining is confined to this QA artifact; public renderer still rejects data URLs.
         for name in models.ASSET_NAMES:
             url=models.ASSET_PREFIX+name+'.jpg'
             encoded=base64.b64encode((models.ASSET_ROOT/(name+'.jpg')).read_bytes()).decode()
             document=document.replace(url,'data:image/jpeg;base64,'+encoded)
         document=re.sub(r'<link[^>]*>', '',document)
-        path=out/(site['theme']+'.html');path.write_text(document)
-        manifest.append({'theme':site['theme'],'file':path.name,'fixture':'fictional, AI and licensed demonstration photos','widths':[390,1440],'routes':routes})
+        path=out/(model['id']+'.html');path.write_text(document)
+        manifest.append({'theme':model['id'],'file':path.name,'fixture':'fictional, AI and licensed demonstration photos','widths':[390,1440],'routes':routes})
     (out/'manifest.json').write_text(json.dumps(manifest,indent=2,ensure_ascii=False))
     print(json.dumps({'output':str(out),'models':len(manifest),'screenshots':'pending real browser'},ensure_ascii=False))
 

@@ -8,6 +8,7 @@ namespace PigeWorkspace {
     const compact=window.matchMedia('(max-width: 800px)');
     let opened=false;
     let previousPage='';
+    let previousSidebar:HTMLElement|null=null;
     let locked:HTMLElement|null=null;
     let wasInert=false;
     let pendingFocus=0;
@@ -59,7 +60,8 @@ namespace PigeWorkspace {
       const nav=sidebar();
       if(!nav){restore();opened=false;previousPage='';return;}
       const page=nav.querySelector<HTMLAnchorElement>('nav a[aria-current="page"]')?.getAttribute('href')||'';
-      const changed=Boolean(previousPage&&page&&page!==previousPage);
+      const changed=Boolean(nav===previousSidebar&&previousPage&&page&&page!==previousPage);
+      previousSidebar=nav;
       if(page)previousPage=page;
       const visible=compact.matches&&nav.classList.contains('visible');
       if(visible&&!opened){
