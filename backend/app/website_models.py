@@ -31,6 +31,46 @@ def design(theme,sections,hero=None,gallery=None):
             'footer_text':'Uma comunidade para aprender, crescer e descobrir o mundo.','sections':sections,'pages':[]}
 
 
+
+def family_services_model():
+    """Use the school's configured identity and contact channels for a family-facing site."""
+    pages = [
+        ('escola', 'A escola', 'Conheça a escola e converse com a equipe.',
+         section('apresentacao', 'split', 'Uma visita à escola', 'A secretaria pode orientar sua família sobre uma visita e sobre a proposta pedagógica.', photo='library', action=link('Falar com a secretaria', '/contato'))),
+        ('ensino', 'Ensino', 'Encontre orientações para escolher a etapa de ensino.',
+         section('etapas', 'cards', 'Para planejar o ano letivo', items=[
+             item('Etapas e turnos', 'Consulte a equipe sobre as turmas e os horários oferecidos.', label='Consultar a escola', target='/contato'),
+             item('Ingresso e continuidade', 'Confira o caminho de inscrição e acompanhe as pendências.', label='Ver matrículas', target='/matriculas')])),
+        ('matriculas', 'Matrículas', 'Saiba como iniciar e acompanhar uma inscrição.',
+         section('inscricao', 'cards', 'Como funciona a matrícula', items=[
+             item('Inicie a inscrição', 'Quando houver processo aberto, acesse a matrícula online e informe os dados da família.', label=''),
+             item('Acompanhe a conferência', 'Consulte a inscrição para verificar os documentos e corrigir o que a secretaria solicitar.', label=''),
+             item('Guarde o comprovante', 'Após a efetivação pela escola, consulte a situação e baixe o comprovante.', label='')])),
+        ('agenda', 'Agenda', 'Consulte os eventos que a escola publicou para a comunidade.',
+         section('eventos', 'agenda', 'Agenda escolar')),
+        ('noticias', 'Notícias', 'Leia as publicações da escola.',
+         section('mural', 'news', 'Notícias da escola')),
+        ('contato', 'Contato', 'Consulte os canais de atendimento da secretaria.',
+         section('atendimento', 'text', 'Atendimento às famílias', 'Para tratar de uma inscrição, tenha em mãos o número do protocolo.')),
+    ]
+    home = section('servicos', 'cards', 'O que sua família precisa?', items=[
+        item('Matrículas', 'Veja como se inscrever e acompanhar seu pedido.', label='Consultar orientações', target='/matriculas'),
+        item('Agenda escolar', 'Encontre os próximos eventos públicos.', label='Ver agenda', target='/agenda'),
+        item('Secretaria', 'Consulte os canais da escola.', label='Ver contato', target='/contato')])
+    layout = design('horizon', [home], hero='community')
+    layout.update(eyebrow='Famílias e comunidade', topline='', hero_caption='', footer_text='',
+                  menu=[link(title, '/'+slug) for slug, title, _, _ in pages],
+                  primary_action=link('Matrículas', '/matriculas'), secondary_action=None,
+                  pages=[{'slug':slug, 'model_origin':'familias:'+slug, 'title':title, 'introduction':intro,
+                          'show_contact_details':slug=='contato', 'show_family_links':slug=='matriculas', 'published':True, 'sections':[block]}
+                         for slug,title,intro,block in pages])
+    return {'id':'familias', 'name':'Central das famílias',
+            'description':'Matrículas, ensino, agenda, notícias e contato com a secretaria.',
+            'demonstration_notice':'Revise o conteúdo e a fotografia ilustrativa antes de publicar.',
+            'website':{'theme':'horizon','headline':'Escola e família','introduction':'Matrículas, agenda e atendimento em um só lugar.',
+                       'about':'','notice':'','design':layout}}
+
+
 def catalog():
     visit=section('visita','cta','Venha sentir a nossa escola.','Conheça os espaços, a equipe e nosso jeito de aprender.',eyebrow='O próximo passo pode ser uma conversa',action=link('Agendar visita','#contato'))
     horizon=[section('pilares','cards','',layout='pillars',items=[item('Aprendizagem com sentido','Projetos conectados ao mundo.',label=''),item('Olhar para cada estudante','Acompanhamento próximo e humano.',label=''),item('Família presente','Diálogo que fortalece a jornada.',label='')]),
@@ -59,7 +99,7 @@ def catalog():
 
     for entry in result['items']:
         entry['website']=multipage_website(entry['website'])
-        entry['description']='Página inicial de síntese e seis páginas temáticas completas e editáveis.'
+    result['items'].append(family_services_model())
     return result
 
 

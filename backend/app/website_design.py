@@ -97,6 +97,7 @@ class WebsitePage(Input):
     slug:str=Field(pattern=r'^[a-z][a-z0-9-]{0,59}$')
     model_origin:str=Field(default='',max_length=100)
     show_contact_details:bool=False
+    show_family_links:bool=False
     title:str=Field(default='',max_length=180)
     introduction:str=Field(default='',max_length=2000)
     image:WebsiteImage|None=None

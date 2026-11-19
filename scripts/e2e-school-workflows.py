@@ -40,11 +40,22 @@ def verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,pos
     page.close();record('Quatro composições de site renderizadas em 320, 390, 768 e 1440 px sem overflow')
     admin.goto(URL+'/#/community')
     expect(admin.get_by_role('heading',name='Site institucional',exact=True)).to_be_visible()
-    admin.get_by_role('button',name='Configurar site',exact=True).click()
+    admin.locator('aside').get_by_role('link',name='Site da escola',exact=True).click()
+    original_viewport=admin.viewport_size
+    admin.set_viewport_size({'width':390,'height':844})
+    expect(admin.get_by_role('button',name='Central das famílias',exact=True)).to_be_visible()
+    assert admin.locator('.website-editor').evaluate('el=>el.scrollWidth<=el.clientWidth+1')
+    admin.locator('.website-editor').scroll_into_view_if_needed()
+    admin.screenshot(path=str(OUT/'configuracao-site-mobile.png'))
+    admin.set_viewport_size(original_viewport)
+    admin.get_by_role('button',name='Central das famílias',exact=True).click()
+    admin.get_by_role('button',name='Ver modelo completo sem alterar',exact=True).click()
+    expect(admin.frame_locator('iframe[title]').locator('h1')).to_have_text('Escola e família')
+    admin.screenshot(path=str(OUT/'editor-central-das-familias.png'))
+    admin.get_by_role('button',name='Fechar prévia',exact=True).click()
     public_path='/api/v1/public/schools/'+base.split('/')[-1]+'/website'
     original_public=client.get(public_path).json()
-    admin.get_by_role('button',name='Carregar modelos completos',exact=True).click()
-    admin.get_by_label('Composição para experimentar',exact=True).select_option('editorial')
+    admin.get_by_role('button',name='Infância',exact=True).click()
     before_model_preview=client.get(base+'/website',headers=headers).json()['configuration']
     with admin.expect_response(lambda response:response.url.endswith('/website/preview-model') and response.request.method=='POST') as model_response:
         admin.get_by_role('button',name='Ver modelo completo sem alterar',exact=True).click()
@@ -108,9 +119,12 @@ def verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,pos
     assert client.get(base+'/website',headers=headers).json()['configuration']['has_checkpoint'] is False
     assert client.get(public_path).json()==original_public
     record('Catálogo completo: mapa de seis páginas, prévia privada da home curta e das seis páginas sem gravar, aplicação em rascunho, checkpoint durável após reload e restauração sem publicar')
+    admin.get_by_role('button',name='Menu e capa',exact=True).click()
     admin.get_by_label('Manter cabeçalho no topo durante a rolagem',exact=True).check()
     admin.get_by_label('Exibir barra de ações no celular',exact=True).uncheck()
+    admin.get_by_role('button',name='Identidade e textos',exact=True).click()
     admin.get_by_label('Chamada principal',exact=True).fill('Rascunho privado em revisão')
+    admin.get_by_role('button',name='Páginas e seções',exact=True).click()
     admin.get_by_role('button',name='Adicionar página',exact=True).click()
     admin.get_by_label('Título da página',exact=True).fill('Nossa história em comunidade')
     admin.get_by_label('Endereço da página (slug)',exact=True).fill('sobre')

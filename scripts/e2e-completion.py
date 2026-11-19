@@ -139,6 +139,7 @@ try:
         configure_site=admin.get_by_role('button',name='Configurar site',exact=True)
         expect(configure_site).to_be_enabled()
         configure_site.click()
+        admin.get_by_role('button',name='Identidade e textos',exact=True).click()
         expect(admin.get_by_label('Domínio público do site',exact=True)).to_be_visible()
         admin.get_by_label('Domínio público do site',exact=True).fill('https://escola.example.test')
         admin.get_by_label('Endereço do portal escolar',exact=True).fill('https://portal.example.test')

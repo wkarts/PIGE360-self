@@ -96,12 +96,19 @@ try:
         reverse=client.get(base+'/persons/'+daughter['id']+'/family',headers=headers).json()['items'][0]
         assert reverse['peer']['id']==mother['id'] and reverse['legal'] and not reverse['financial']
         record('Vínculo bidirecional: cadastrar aluno pela ficha da mãe reaproveita a identidade e a mesma relação')
+        search = page.get_by_role('textbox', name='Buscar registros')
+        search.fill('Paula Familiar')
+        open_tabs = page.locator('[data-work-tab]').all_text_contents()
         page.get_by_role('button',name='Meu perfil',exact=True).click();dialog().get_by_role('button',name='Segurança · 2FA',exact=True).click()
         dialog().get_by_label('Senha atual',exact=True).fill(PASSWORD);dialog().get_by_role('button',name='Configurar 2FA',exact=True).click()
         expect(dialog().locator('.mfa-qr')).to_be_visible();dialog().locator('summary').click();secret=dialog().locator('.mfa-secret').inner_text()
         dialog().get_by_label('Código de 6 dígitos').fill(totp(secret));dialog().get_by_role('button',name='Confirmar',exact=True).click()
         expect(dialog().locator('.mfa-codes code')).to_have_count(10);codes=dialog().locator('.mfa-codes code').all_inner_texts();assert len(set(codes))==10
         dialog().get_by_role('button',name='Guardei os códigos · Continuar',exact=True).click();expect(dialog()).to_have_count(0)
+        expect(page.get_by_role('tab', name='Pais e responsáveis', exact=True)).to_have_attribute('aria-selected', 'true')
+        expect(search).to_have_value('Paula Familiar')
+        assert page.locator('[data-work-tab]').all_text_contents() == open_tabs
+        record('A ativação de 2FA preserva a guia de origem, as outras guias abertas e o filtro digitado.')
         record('2FA opcional: usuário configura QR e confirma TOTP; dez códigos de recuperação exibidos uma única vez')
         page.get_by_role('button',name='Sair',exact=True).click();login();expect(page.get_by_role('heading',name='Confirme seu acesso')).to_be_visible()
         expect(page.locator('.workspace')).to_have_count(0)
