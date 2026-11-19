@@ -17,7 +17,23 @@ PUBLIC=os.environ.get('PORTAL_PUBLIC_URL','').rstrip('/')
 INTERNAL_TOKEN=os.environ.get('PORTAL_INTERNAL_TOKEN','')
 STATIC=Path(os.environ.get('FRONTEND_PATH','/portal/public')).resolve()
 MAX_BODY=20*1024*1024
-ASSETS={'auth.css','ui-icons.svg','family.js','family.css','portal.js','renders.js','app.css','institution-layout.css','portal.css','community.css','mfa.css','assist.css','camera.css','diagnostic-client.js','first-access.js','first-access.html','favicon.svg','icons/icon-192.png','icons/icon-512.png','vendor/vue-3.5.13.global.prod.js'}
+ASSETS={'teacher.js','teacher.css','auth.css','ui-icons.svg','family.js','family.css','portal.js','renders.js','app.css','institution-layout.css','portal.css','community.css','mfa.css','assist.css','camera.css','diagnostic-client.js','first-access.js','first-access.html','favicon.svg','icons/icon-192.png','icons/icon-512.png','vendor/vue-3.5.13.global.prod.js'}
+
+
+TEACHER_ONLY = os.environ.get('PORTAL_SURFACE', '') == 'teacher'
+
+
+def external_origin(variable):
+    value = os.environ.get(variable, '').rstrip('/')
+    parts = urlsplit(value)
+    if value and (parts.scheme not in ('http', 'https') or not parts.hostname or parts.username
+                  or parts.password or parts.path or parts.query or parts.fragment or any(ord(c)<33 for c in value)):
+        raise ValueError(variable + ' exige uma origem pública exata.')
+    return value
+
+
+TEACHER_URL = external_origin('TEACHER_PORTAL_PUBLIC_URL')
+FAMILY_URL = external_origin('FAMILY_PORTAL_PUBLIC_URL')
 
 
 def proxy_networks(value):
@@ -56,6 +72,26 @@ def client_headers(method,path,peer,forwarded=''):
 
 
 def allowed(path,method):
+    if TEACHER_ONLY and not (path.startswith(('/api/v1/teacher/', '/api/v1/auth/', '/api/v1/institution/'))
+            or re.fullmatch(r'/api/v1/schools/[0-9a-f-]{36}/community-feed', path)):
+        return False
+    if TEACHER_URL and not TEACHER_ONLY and path.startswith('/api/v1/teacher/'):
+        return False
+    if path=='/api/v1/teacher/schools':return method=='GET'
+    teacher=re.fullmatch(r'/api/v1/teacher/schools/[0-9a-f-]{36}/(.+)',path)
+    if teacher:
+        resource=teacher[1]
+        if resource in {'programacao','diaries','academic-periods','curriculum-components','diary-dashboard'}:return method=='GET'
+        if resource=='curriculum-plans':return method in {'GET','POST'}
+        diary=re.fullmatch(r'diaries/[0-9a-f-]{36}(?:/(.*))?',resource)
+        if not diary:return False
+        tail=diary[1] or ''
+        if tail in {'','summary','history','assessment-rules','communication-recipients'}:return method=='GET'
+        if tail in {'lessons','submit'}:return method=='POST'
+        if tail in {'materials','assessments','opinions','pedagogical-records','communications','occurrences'}:return method in {'GET','POST'}
+        if re.fullmatch(r'(lessons/[0-9a-f-]{36}/attendance|assessments/[0-9a-f-]{36}/results)',tail):return method in {'GET','PUT'}
+        if re.fullmatch(r'(lessons|assessments|occurrences)/[0-9a-f-]{36}',tail):return method=='PATCH'
+        return method=='GET' and bool(re.fullmatch(r'materials/[0-9a-f-]{36}/print\.pdf|periods/[0-9a-f-]{36}/results|reports/[a-z_]+\.pdf',tail))
     if re.fullmatch(r'/api/v1/(?:portal(?:/[^?#]*)?|family(?:/[^?#]*)?)',path):return method in {'GET','POST','PATCH','PUT','DELETE'}
     if re.fullmatch(r'/api/v1/auth/(?:login|refresh|logout|me|mfa(?:/[^?#]*)?)',path):return method in {'GET','POST'}
     if re.fullmatch(r'/api/v1/profile/learning(?:/[0-9a-f-]{36}/report.pdf)?',path):return method=='GET'
@@ -76,7 +112,7 @@ def connection(timeout=150):
 def branded_html(content,name,identity):
     """Bootstrap público, escapado, sem conta/sessão/segredo interno no HTML."""
     label=str(identity.get('display_name') or 'Sua escola')
-    suffix='Primeiro acesso' if name=='first-access.html' else 'Portal dos responsáveis' if name=='online.html' else 'Portal do aluno e responsável'
+    suffix='Portal do Professor' if name=='professor.html' else 'Primeiro acesso' if name=='first-access.html' else 'Portal dos responsáveis' if name=='online.html' else 'Portal do aluno e responsável'
     content=re.sub(r'<title>.*?</title>',lambda _: '<title>'+html.escape(label+' · '+suffix)+'</title>',content,count=1)
     primary=identity.get('primary_color','#006D77')
     if re.fullmatch(r'#[0-9a-fA-F]{6}',primary):content=re.sub(r'(<meta name="theme-color" content=")[^"]*',lambda m:m[1]+primary,content,count=1)
@@ -97,6 +133,8 @@ class Handler(BaseHTTPRequestHandler):
         parsed=urlsplit(self.path);path=parsed.path
         if path not in {'/health/ready','/health/live'} and self.headers.get('Host','')!=urlsplit(PUBLIC).netloc:return self.respond(403,b'Host invalid')
         if '%' in path or '\\' in path or '..' in path or self.path.startswith('//'):return self.respond(400,b'Invalid path')
+        if TEACHER_ONLY and path in ('/manifest.webmanifest', '/sw.js'):
+            return self.respond(404, b'Not found')
         if path=='/manifest.webmanifest':return self.proxy('/manifest.webmanifest?surface=portal')
         if path=='/sw.js':return self.respond(200,Path(__file__).with_name('sw.js').read_bytes(),'application/javascript')
         if path=='/health/live':return self.respond(200,b'ok')
@@ -107,8 +145,16 @@ class Handler(BaseHTTPRequestHandler):
                 if self.headers.get('Origin','').rstrip('/')!=PUBLIC or self.headers.get('X-CSRF-Protection')!='1':return self.respond(403,b'Origin or CSRF invalid')
             return self.proxy(self.path)
         if self.command!='GET':return self.respond(405,b'Method unavailable')
-        name='family.html' if path=='/' or re.fullmatch(r'/(?:academic|documents|finance)/?',path) else 'online.html' if path=='/online.html' else path.lstrip('/')
-        if name not in ASSETS|{'family.html','online.html'}:return self.respond(404,b'Not found')
+        name='professor.html' if path.rstrip('/')=='/professor' else 'family.html' if path=='/' or re.fullmatch(r'/(?:academic|documents|finance)/?',path) else 'online.html' if path=='/online.html' else path.lstrip('/')
+        if TEACHER_ONLY and path == '/':
+            name = 'professor.html'
+        if TEACHER_ONLY and name in {'family.html','online.html','first-access.html'}:
+            if FAMILY_URL and name == 'family.html':
+                return self.respond(302, b'', headers=[('Location', FAMILY_URL + '/family.html')])
+            return self.respond(404, b'Not found')
+        if not TEACHER_ONLY and TEACHER_URL and name == 'professor.html':
+            return self.respond(302, b'', headers=[('Location', TEACHER_URL + '/')])
+        if name not in ASSETS|{'professor.html','family.html','online.html'}:return self.respond(404,b'Not found')
         file=STATIC/name
         if not file.is_file():return self.respond(404,b'Not found')
         import mimetypes

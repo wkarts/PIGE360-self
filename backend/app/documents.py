@@ -167,6 +167,8 @@ def waive(student_id: str, data: s.WaiverInput, db: DB, user: Actor, school: Sco
 def download(file_id: str, db: DB, user: Actor, school: Scope, request: Request):
     require(user, 'documents.read')
     obj = scoped(db, m.FileRecord, file_id, school.id)
+    if obj.file_kind == 'absence_evidence':
+        require(user, 'protocols.read')
     if obj.file_kind == 'fiscal_xml':
         from .fiscal_signing import authorize_fiscal
         authorize_fiscal(user)

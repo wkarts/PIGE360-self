@@ -12,7 +12,7 @@ namespace PigeInstitution {
   export function apply(value:Identity):void {
     Object.assign(state,value);
     const surface=document.documentElement?.dataset?.institutionSurface;
-    document.title=value.display_name+' · '+(location.pathname==='/online.html'?'Portal dos responsáveis':surface==='portal'?'Portal do aluno e responsável':'Gestão escolar');
+    document.title=value.display_name+' · '+(location.pathname==='/online.html'?'Portal dos responsáveis':surface==='teacher'?'Portal do Professor':surface==='portal'?'Portal do aluno e responsável':'Gestão escolar');
     document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute('content',value.primary_color);
     const theme=document.querySelector<HTMLLinkElement>('link[data-institution-theme]');
     if(theme && !theme.href.endsWith('/api/v1/institution/theme.css?v='+value.version))theme.href='/api/v1/institution/theme.css?v='+value.version;

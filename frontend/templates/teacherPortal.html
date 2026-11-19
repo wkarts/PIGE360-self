@@ -1,0 +1,54 @@
+<div class="family-root" :aria-busy="s.busy">
+  <a class="skip" href="#teacher-content">Ir para conteúdo</a>
+  <main v-if="!s.ready" id="teacher-content" class="loading-screen" role="status">Carregando seu espaço…</main>
+  <main v-else-if="!s.user" id="teacher-content" class="auth-layout family-auth">
+    <section class="auth-intro"><div class="official-brand"><img v-if="identity.logo_url" :src="identity.logo_url" :alt="identity.display_name"><strong v-else class="institution-name">{{identity.display_name}}</strong></div><div class="auth-copy"><p class="eyebrow">PORTAL DO PROFESSOR</p><h1>Seu diário<br>de classe.</h1></div></section>
+    <section class="auth-panel">
+      <section v-if="mfa.state.challenge" class="auth-form"><!-- MFA-CHALLENGE --></section>
+      <form v-else class="auth-form" @submit.prevent="login">
+        <header class="auth-heading"><p class="eyebrow">{{identity.display_name}}</p><h2>Acesso do professor</h2><p class="muted">Informe suas credenciais para continuar.</p></header>
+        <p v-if="s.error" class="alert error" role="alert">{{s.error}}</p>
+        <label class="field">E-mail<input type="email" v-model="s.email" inputmode="email" autocapitalize="none" :spellcheck="false" enterkeyhint="next" required autocomplete="username" placeholder="seu.email@exemplo.com" :disabled="s.busy"></label>
+        <div class="field"><label for="teacher-password">Senha</label><div class="password-control"><input id="teacher-password" v-model="s.password" :type="s.passwordVisible?'text':'password'" required maxlength="128" autocomplete="current-password" enterkeyhint="go" placeholder="Sua senha de acesso" :disabled="s.busy"><button class="password-toggle" type="button" :aria-label="s.passwordVisible?'Ocultar senha':'Mostrar senha'" :aria-pressed="s.passwordVisible" aria-controls="teacher-password" @click="s.passwordVisible=!s.passwordVisible">{{s.passwordVisible?'Ocultar':'Mostrar'}}</button></div></div>
+        <button class="btn btn-primary full" :disabled="s.busy">{{s.busy?'Autenticando…':'Entrar como professor'}} <span aria-hidden="true">→</span></button>
+        <p class="auth-help muted">Precisa recuperar seu acesso? Fale com a secretaria da escola.</p>
+        <a href="/family.html">Portal do aluno e responsável</a>
+      </form>
+    </section>
+  </main>
+  <div v-else class="family-shell" @keydown="menuKey">
+    <button v-if="s.menuOpen" class="family-shade" aria-label="Fechar navegação" @click="toggleMenu(false)"></button>
+    <aside id="teacher-navigation" class="family-sidebar" :class="{visible:s.menuOpen}">
+      <div class="family-sidebar-brand"><button id="teacher-menu-close" type="button" class="icon-button family-menu-close" @click="toggleMenu(false)" aria-label="Fechar menu">×</button><div><strong>{{identity.display_name}}</strong><small>PORTAL DO PROFESSOR</small></div></div>
+      <div class="family-sidebar-scroll"><p class="family-nav-label">ROTINA DOCENTE</p><nav aria-label="Rotina do professor">
+      <button v-for="item in [{id:'overview',label:'Visão geral',icon:'dashboard'},{id:'agenda',label:'Minha programação',icon:'clock'},{id:'diary',label:'Diário de classe',icon:'academic'},{id:'materials',label:'Atividades e trabalhos',icon:'documents'},{id:'news',label:'Avisos e publicações',icon:'bell'}]" :key="item.id" :aria-current="s.section===item.id?'page':undefined" :disabled="s.busy || (['diary','materials'].includes(item.id) && !s.agenda?.diaries.length) || (!s.schoolId && item.id!=='overview')" @click="navigate(item.id)"><svg class="ui-icon" aria-hidden="true"><use :href="'/ui-icons.svg#'+item.icon"/></svg>{{item.label}}</button>
+      </nav></div><footer class="family-sidebar-footer">{{identity.short_name}}<small>Portal do Professor</small></footer>
+    </aside>
+    <div class="family-main" :inert="s.menuOpen?true:undefined"><main id="teacher-content" class="teacher-main">
+    <header class="teacher-header">
+      <button id="teacher-menu-toggle" class="icon-button family-menu-toggle" aria-label="Abrir menu" aria-controls="teacher-navigation" :aria-expanded="s.menuOpen" @click="toggleMenu(true)"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#menu"/></svg></button><div class="teacher-brand"><img v-if="identity.logo_url" :src="identity.logo_url" alt=""><span>{{identity.display_name}}</span></div>
+      <div class="teacher-account"><span>{{s.user.name}}</span><button class="btn btn-secondary" :disabled="s.busy" @click="logout">Sair</button></div>
+    </header>
+    <div class="teacher-heading"><h1>{{({overview:'Visão geral',agenda:'Minha programação',diary:'Diário de classe',materials:'Atividades e trabalhos',news:'Avisos e publicações'})[s.section]}}</h1><label v-if="s.schools.length>1">Instituição<select :value="s.schoolId" :disabled="s.busy" @change="selectSchool"><option v-for="item in s.schools" :key="item.id" :value="item.id">{{item.name}}</option></select></label></div>
+    <p v-if="s.error" class="alert error" role="alert">{{s.error}} <button class="btn" :disabled="s.busy" @click="run(workspace)">Tentar novamente</button></p>
+    <p v-if="!s.schools.length&&!s.error&&!s.busy" class="alert">Peça à Secretaria que vincule sua conta de Professor à instituição.</p>
+    <section v-if="s.section==='news'" class="panel x-card"><h2>Comunicados da escola</h2><p v-if="!s.news.length&&!s.busy">Nenhuma publicação disponível.</p><article v-for="item in s.news" :key="item.id"><h3>{{item.title}}</h3><p class="preserve">{{item.content||item.summary}}</p></article><div v-if="s.newsTotal>10" class="actions"><button :disabled="s.busy||s.newsPage===1" @click="run(()=>publications(s.newsPage-1))">Anterior</button><button :disabled="s.busy||s.newsPage*10>=s.newsTotal" @click="run(()=>publications(s.newsPage+1))">Próxima</button></div></section>
+    <p v-if="s.agenda && !s.agenda.diaries.length && s.section==='diary'" class="alert">Peça à Coordenação que confira sua atribuição e abra o diário da turma.</p>
+    <section v-if="s.agenda" v-show="['overview','agenda','materials'].includes(s.section)" class="teacher-overview">
+      <section v-show="s.section!=='agenda'" class="panel x-card"><h2>Minhas turmas</h2>
+        <p v-if="!s.agenda.assignments.length">A Coordenação precisa associar seu cadastro à turma e à disciplina em Atribuições docentes.</p>
+        <ul class="teacher-list"><li v-for="a in s.agenda.assignments" :key="a.id"><strong>{{a.class_name}} · {{a.subject_name}}</strong><span>{{[a.shift_name,a.year_name].filter(Boolean).join(' · ')}}</span>
+          <button v-for="d in s.agenda.diaries.filter(item=>item.teacher_assignment_id===a.id)" :key="d.id" class="btn btn-secondary teacher-open" @click="s.requestedDiary={id:d.id,tab:s.section==='materials'?'materials':'diaries'};s.section='diary'">{{s.section==='materials'?'Abrir materiais':'Abrir diário'}} · {{d.component}}</button>
+          <small v-if="!s.agenda.diaries.some(d=>d.teacher_assignment_id===a.id)">Peça à Coordenação que abra o diário desta turma e o vincule à sua atribuição.</small></li></ul>
+      </section>
+      <section v-show="s.section!=='materials'" class="panel x-card"><div class="teacher-week"><h2>Programação da semana</h2><label>Semana de<input type="date" v-model="s.week" :disabled="s.busy" @change="run(agenda)"></label></div>
+        <p>{{date(s.agenda.starts_on)}} a {{date(s.agenda.ends_on)}}</p>
+        <p v-if="!s.agenda.events.length" class="muted">Nenhuma aula registrada ou avaliação marcada para esta semana.</p>
+        <ul class="teacher-list"><li v-for="e in s.agenda.events" :key="e.kind+e.id"><span>{{date(e.date)}} · {{e.kind}}</span><strong>{{e.title}}</strong><small>{{group(e.diary_id)}}</small></li></ul>
+      </section>
+    </section>
+    <section v-if="s.agenda?.diaries.length" v-show="s.section==='diary'" aria-label="Diário de classe">
+      <school-diary :key="s.schoolId" :school-id="s.schoolId" :permissions="s.user.permissions" :teacher-portal="true" :requested-diary="s.requestedDiary"></school-diary>
+    </section>
+  </main></div></div>
+</div>
