@@ -383,6 +383,8 @@ try:
         expect(familyPage.get_by_role('heading',name='Olá, Lucas.',exact=True)).to_be_visible()
         expect(familyPage.get_by_label('Você está acompanhando',exact=True)).to_have_value(student_id)
         expect(familyPage.get_by_role('combobox',name='Você está acompanhando',exact=True)).to_have_value(student_id)
+        # The student selector appears before the dashboard feed finishes loading.
+        expect(familyPage.locator('.family-root')).to_have_attribute('aria-busy','false')
         familyPage.reload();expect(familyPage.locator('#family-title')).to_have_text('Visão geral')
         expect(familyPage.get_by_role('heading',name='Olá, Lucas.',exact=True)).to_be_visible()
         check_family_viewport(1440,950,'family-dashboard-1440')
