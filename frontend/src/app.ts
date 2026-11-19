@@ -370,7 +370,21 @@ namespace PigeUI {
     try{const result=await PigeAPI.post<Record<string,unknown>>('/auth/login',state.login);state.login.password='';if(await PigeMFA.accept(result))return;await afterMFA(result);}
     catch(error){notify(error);}finally{state.loginBusy=false;}
   }
-  async function afterMFA(result:Record<string,unknown>):Promise<void>{const session=result as unknown as PigeAPI.SessionResponse;PigeAPI.useSession(session);state.user=session.user;state.modal=blankModal();await loadShell();void loadMyPhoto();}
+  async function afterMFA(result:Record<string,unknown>):Promise<void>{
+    const session=result as unknown as PigeAPI.SessionResponse;
+    PigeAPI.useSession(session);
+    const origin=currentDesk?.context.state??state;
+    if(origin.modal.kind==='mfa-manage' && state.user?.id===session.user.id && session.user.school_ids.includes(state.schoolId)){
+      // A sessão foi renovada no perfil. Confira as permissões da escola antes de retomar a guia.
+      await refreshAccess();
+      origin.modal=blankModal();
+      return;
+    }
+    state.user=session.user;
+    state.modal=blankModal();
+    await loadShell();
+    void loadMyPhoto();
+  }
   async function manageMFA():Promise<void>{if(state.modal.kind&&modalDirty()){state.modal.error='Salve ou cancele a edição do perfil antes de alterar o 2FA.';return;}openModal('mfa-manage','Segurança da minha conta',[]);await PigeMFA.manage();}
   async function editMFAPolicy():Promise<void>{await safe(async()=>{const cfg=await PigeAPI.request<Row>('/institution/mfa');if(!cfg.own_enabled){state.error='Ative primeiro seu 2FA em Meu perfil → Segurança. Depois defina a obrigatoriedade para a instituição.';return;}openModal('mfa-policy','Política de autenticação em duas etapas',[field('required','Exigir 2FA de todos os usuários e contas do portal','checkbox'),field('current_password','Sua senha atual','password',true),field('code','Código do seu autenticador ou de recuperação','text',true)],{required:Boolean(cfg.required)},cfg);});}
   async function configure():Promise<void>{
