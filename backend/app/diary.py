@@ -47,6 +47,7 @@ def diary_school_scope(school_id: str, db: DB, user: Actor):
         ))
         if own:
             return school
+        fail(403, "Solicite à Coordenação uma atribuição docente ativa em sua turma para acessar o Diário.")
     fail(403, "Acesso não autorizado ao Diário Escolar desta escola.")
 
 

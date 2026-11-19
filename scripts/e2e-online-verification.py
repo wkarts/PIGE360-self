@@ -82,6 +82,7 @@ try:
   admin.locator('.x-record',has_text='Aluno Exemplo').click()
   admin.get_by_label('Justificativa / parecer para a próxima ação',exact=True).fill('Identidade e documentação sintéticas conferidas pela Direção.')
   admin.get_by_label('Conferi a identidade, os documentos e a legitimidade',exact=False).check();admin.get_by_role('button',name='Aprovar e criar matrícula em preparação',exact=True).click()
+  admin.get_by_role('button',name='3 · Contrato',exact=True).click()
   admin.get_by_text('Atualizar versão ou trocar modelo',exact=True).click()
   choice=admin.get_by_role('form',name='Alterar contrato vinculado')
   expect(choice).to_be_visible()

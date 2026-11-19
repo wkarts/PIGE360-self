@@ -389,3 +389,41 @@ def test_http_transport_error_safety(monkeypatch,status):
     with pytest.raises(IntegrationFailure) as error:call_json('asaas','https://api-sandbox.asaas.com/v3','/payments',method='POST',api_key='test-only-key',data={})
     assert str(error.value)==f'PROVIDER_HTTP_{status}'
     assert error.value.uncertain is (status>=500)
+
+
+def test_manual_activation_of_approved_admission_delivers_one_family_receipt(online):
+    context = online
+    api = context['api']
+    approved = approve(context, submit(context, draft(context)))
+    original = api.get('/enrollments/' + approved['enrollment_id'])
+    assert original['status'] == 'draft'
+    assert api.move(original, 'activate')['status'] == 'active'
+    admission = api.get('/admissions/' + approved['id'])
+    assert admission['status'] == 'enrolled'
+    assert admission['enrollment_id'] == original['id']
+    api.post('/admissions/' + approved['id'] + '/finalize', {
+        'version': approved['version'], 'reason': 'Retentativa após perda da resposta.'}, 200)
+    issued = api.get('/students/' + original['student_id'] + '/documents')['issued']
+    assert len([d for d in issued if d['kind'] == 'enrollment_receipt']) == 1
+
+
+def test_failed_receipt_can_resume_same_approved_enrollment(online, monkeypatch):
+    from app import documents
+    from fastapi import HTTPException
+    context = online
+    api = context['api']
+    approved = approve(context, submit(context, draft(context)))
+    path = '/admissions/' + approved['id']
+    request = {'version': approved['version'], 'reason': 'Emitir comprovante da mesma matrícula.'}
+
+    def unavailable(*args):
+        raise HTTPException(503, 'PDF indisponível durante o teste.')
+
+    with monkeypatch.context() as patch:
+        patch.setattr(documents, 'issue', unavailable)
+        api.post(path + '/finalize', request, 503)
+    assert api.get(path)['status'] == 'approved'
+    assert api.get('/enrollments/' + approved['enrollment_id'])['status'] == 'draft'
+    result = api.post(path + '/finalize', request, 200)
+    assert result['enrollment_id'] == approved['enrollment_id']
+    assert result['status'] == 'enrolled'

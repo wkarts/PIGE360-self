@@ -87,8 +87,8 @@ try:
             if section and not locator.is_visible():
                 dialog().locator(f'[data-section-target="{section}"]').click()
             return locator
-        def save():
-            dialog().get_by_role('button',name='Salvar',exact=True).click();expect(dialog()).to_have_count(0);expect(page.locator('.app-root')).to_have_attribute('aria-busy','false');expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
+        def save(label='Salvar'):
+            dialog().get_by_role('button',name=label,exact=True).click();expect(dialog()).to_have_count(0);expect(page.locator('.app-root')).to_have_attribute('aria-busy','false');expect(page.locator('.app-root')).to_have_attribute('aria-busy','false')
         nav('Cadastro único')
         page.get_by_role('button',name='+ Nova pessoa').click()
         expect(dialog().get_by_role('heading',name='Cadastrar pessoa')).to_be_visible()
@@ -174,7 +174,7 @@ try:
         student_option=dialog().locator('select').first.locator('option:has-text("Lucas Almeida — Teste")')
         expect(student_option).to_have_count(1)
         dialog().locator('select').first.select_option(index=1)
-        form_field('Turma de destino').select_option(index=1);save()
+        form_field('Turma de destino').select_option(index=1);save('Salvar rascunho')
         page.get_by_role('button',name='Detalhes →').first.click()
         dialog().get_by_role('button',name='Editar pré-matrícula',exact=True).click()
         form_field('Observações',exact=False).fill('Cadastro revisado antes de ativar.')
