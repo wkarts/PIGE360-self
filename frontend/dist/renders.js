@@ -55,11 +55,13 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
     }, [
       _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Matrícula orientada"), _createElementVNode("p", null, "Reutilize cadastros existentes. Matrícula, financeiro e contrato têm estados independentes.")]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
         class: "btn btn-primary",
+        disabled: s.busy,
         onClick: $event => (start('single'))
-      }, "Assistente manual", 8, ["onClick"]), _createElementVNode("button", {
+      }, "Assistente manual", 8, ["disabled", "onClick"]), _createElementVNode("button", {
         class: "btn btn-secondary",
+        disabled: s.busy,
         onClick: $event => (start('batch'))
-      }, "Matricular selecionados", 8, ["onClick"])])]),
+      }, "Matricular selecionados", 8, ["disabled", "onClick"])])]),
       (s.error)
         ? (_openBlock(), _createElementBlock("p", {
             key: 0,
