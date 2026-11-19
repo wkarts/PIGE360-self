@@ -532,3 +532,19 @@ td .link-button { text-align: left; }
   .mailcow-page .x-card > .actions > .btn { flex: 1; }
   .mailcow-page .table-wrap { margin-top: 16px; }
 }
+
+/* Task navigation belongs to the workspace, above its scrolling content. */
+.work-tabs{display:flex;align-items:stretch;gap:3px;min-width:0;margin:0;padding:4px clamp(6px,2vw,28px) 0;background:var(--surface,#fff);border-bottom:1px solid var(--border);flex:none}
+.work-tabs-list{display:flex;flex:1;min-width:0;gap:3px;overflow-x:auto;scrollbar-width:none;overscroll-behavior-inline:contain}
+.work-tabs-list::-webkit-scrollbar{display:none}
+.work-tab{display:inline-flex;align-items:stretch;flex:none;border-bottom:2px solid transparent}
+.work-tabs button{border:0;background:transparent;color:var(--muted);font:inherit;cursor:pointer}
+.work-tab [role=tab]{padding:9px 10px;font-size:.82rem;font-weight:600}
+.work-tab.current{border-color:var(--primary);background:var(--surface-subtle,#f3f7f7);border-radius:6px 6px 0 0}
+.work-tab.current [role=tab]{color:var(--primary-dark)}
+.work-tab .work-tab-close{font-size:1rem;padding:0 7px}
+.work-tabs .work-tabs-step{padding:0;width:24px;font-size:1.35rem}
+.work-tabs button:focus-visible,.site-editor-guides button:focus-visible{outline:2px solid var(--primary);outline-offset:-2px}
+.work-tabs .work-resume{color:var(--primary-dark);font-size:.8rem;font-weight:700}
+[data-task-paused]{display:none!important}
+.task-minimize{margin-inline-start:auto;font-size:.8rem}

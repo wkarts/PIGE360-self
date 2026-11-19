@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 RUNNER_ARCHIVE = re.compile(
-    r'(?<!\S)https?://(?:azure|us-east-2\.ec2)\.archive\.ubuntu\.com/ubuntu(?=/|\s|$)'
+    r'(?<!\S)https?://(?:azure|us-east-2\.ec2)\.archive\.ubuntu\.com/ubuntu(?=/?(?:\s|$))'
 )
 
 NETWORK_CONFIG = '''Acquire::Retries "3";

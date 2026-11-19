@@ -1,0 +1,17 @@
+#teacher{min-height:100dvh}
+.teacher-main{max-width:78rem;margin:auto;padding:0 clamp(1rem,4vw,3rem) 3rem;color:var(--text)}
+.teacher-header,.teacher-heading,.teacher-week,.teacher-brand,.teacher-account,.teacher-nav{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+.teacher-header,.teacher-heading,.teacher-week{justify-content:space-between}
+.teacher-header{min-height:4.5rem;border-bottom:1px solid var(--border);padding:.75rem 0}
+.teacher-open{justify-self:start}.teacher-brand{font-weight:700}.teacher-brand img{max-width:7rem;max-height:2.75rem;object-fit:contain}
+.teacher-heading{margin:2rem 0 1.25rem}.teacher-heading h1{margin:0}
+.teacher-nav{gap:.3rem;border-bottom:1px solid var(--border);margin-bottom:1.25rem}
+.teacher-nav button{font:inherit;background:transparent;border:0;border-bottom:3px solid transparent;padding:.8rem;color:inherit;cursor:pointer}
+.teacher-nav [aria-pressed=true]{border-color:var(--primary);font-weight:700}.teacher-nav button:disabled{opacity:.5;cursor:default}
+.teacher-overview{display:grid;grid-template-columns:minmax(15rem,2fr) minmax(0,3fr);gap:1rem}
+.teacher-overview h2{margin:0}.teacher-list{list-style:none;margin:0;padding:0}
+.teacher-list li{display:grid;gap:.3rem;padding:.85rem 0;border-bottom:1px solid var(--border);overflow-wrap:anywhere}.teacher-list li:last-child{border-bottom:0}
+.teacher-overview p,.teacher-list span,.teacher-list small{color:var(--muted)}
+.teacher-week label,.teacher-heading label{display:grid;gap:.3rem}.teacher-main .tabs{flex-wrap:wrap}
+.teacher-main .diary-workspace,.teacher-main fieldset,.teacher-main .x-card{min-width:0}
+@media(max-width:700px){.teacher-overview{grid-template-columns:minmax(0,1fr)}.teacher-heading{margin:1.25rem 0}.teacher-main .x-grid{grid-template-columns:minmax(0,1fr)}.teacher-main input,.teacher-main select,.teacher-main textarea{max-width:100%;box-sizing:border-box}}

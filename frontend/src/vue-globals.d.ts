@@ -1,6 +1,8 @@
 declare const Vue: {
+  provide(key:string,value:unknown):void;
+  inject<T>(key:string,fallback:T):T;
   reactive<T extends object>(value: T): T;
-  createApp(options: { setup: () => object; render: Function; components?: Record<string,object> }): { mount: (selector: string) => void };
+  createApp(options: { setup: () => object; render: Function; components?: Record<string,object> }): { mount: (selector: string|Element) => void; unmount:()=>void };
   nextTick(callback?: () => void): Promise<void>;
   onMounted(callback: () => void): void;
   onUnmounted(callback: () => void): void;
@@ -8,4 +10,6 @@ declare const Vue: {
   watch<T>(source: () => T, callback: (value: T, previous: T) => void): () => void;
   computed<T>(getter: () => T): { readonly value: T };
 };
-declare const PigeRenders: { contractValue: Function; enrollmentWorkflow: Function; academicPreparation: Function; notificationEmail: Function; familyPortal: Function; app: Function; camera: Function; users: Function; portal: Function; expansion: Function; diagnostics: Function; assist: Function; diary: Function; contracts: Function; signing: Function; reports: Function; legacyImport: Function; learning: Function; community: Function; news: Function; mailcow: Function; audit: Function; email: Function; lifecycle: Function };
+declare const PigeRenders: { contractValue: Function; enrollmentWorkflow: Function; academicPreparation: Function; notificationEmail: Function; familyPortal: Function; teacherPortal: Function; app: Function; camera: Function; users: Function; portal: Function; expansion: Function; diagnostics: Function; assist: Function; diary: Function; contracts: Function; signing: Function; reports: Function; legacyImport: Function; learning: Function; community: Function; news: Function; mailcow: Function; audit: Function; email: Function; lifecycle: Function };
+
+interface HTMLElement { moveBefore?(node:Node, before:Node|null):void }

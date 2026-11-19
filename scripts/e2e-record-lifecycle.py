@@ -111,7 +111,7 @@ try:
         navigate('Cadastro único')
         dialog = open_manage(person['name'])
         expect(dialog.get_by_role('heading', name='Arquivar ou excluir', exact=True)).to_be_focused()
-        assert page.locator('#app').evaluate('el => el.inert'), 'Fundo do modal deve ficar inerte'
+        assert page.locator('#main-content').evaluate("el => !!el.closest('[inert]')"), 'Fundo do modal deve ficar inerte'
         close = dialog.get_by_role('button', name='Fechar gerenciamento do cadastro', exact=True)
         close.focus()
         page.keyboard.press('Shift+Tab')

@@ -1,4 +1,4 @@
-<teleport to="body">
+<teleport :to="dialogTarget">
   <div class="modal-backdrop" @click.self="close">
     <section class="modal lifecycle-dialog" role="dialog" aria-modal="true" aria-labelledby="lifecycle-title" :aria-busy="s.busy">
       <header class="modal-header"><div><p class="eyebrow">GERENCIAR CADASTRO</p><h2 id="lifecycle-title" data-dialog-title>Arquivar ou excluir</h2></div><button class="icon-button" type="button" data-dialog-close aria-label="Fechar gerenciamento do cadastro" :disabled="s.busy" @click="close">×</button></header>

@@ -15,11 +15,27 @@
         <button :class="{active:state.tab==='opinions'}" @click="state.tab='opinions'">Pareceres</button>
         <button :class="{active:state.tab==='records'}" @click="state.tab='records'">Registros pedagógicos</button>
         <button :class="{active:state.tab==='occurrences'}" @click="state.tab='occurrences'">Ocorrências</button>
+        <button :class="{active:state.tab==='materials'}" @click="state.tab='materials'">Materiais da turma</button>
         <button v-if="can('communications.send')" :class="{active:state.tab==='communications'}" @click="state.tab='communications'">Comunicações</button>
         <button v-if="can('diary.configure')" :class="{active:state.tab==='setup'}" @click="state.tab='setup'">Configuração</button>
       </div>
     </section>
 
+    <section v-if="state.tab==='materials'" class="panel x-card">
+      <h2>Materiais da turma</h2>
+      <p v-if="!state.selected">Abra o diário da turma em Diários para publicar ou imprimir.</p>
+      <template v-else><h3>{{state.selected.class_name}} · {{state.selected.component_name}}</h3>
+        <form v-if="can('diary.write') && state.selected.status==='open'" class="x-form" @submit.prevent="publishMaterial">
+          <div class="x-grid"><label>Tipo de material<select v-model="state.materialForm.kind"><option v-for="k in ['Atividade','Trabalho','Orientação','Aviso']" :key="k">{{k}}</option></select></label>
+          <label>Destinatário<select v-model="state.materialForm.enrollment_id"><option value="">Toda a turma</option><option v-for="r in (state.selected.roster||[]).filter(x=>x.enrollment_status==='active')" :key="r.enrollment_id" :value="r.enrollment_id">{{r.name}}</option></select></label></div>
+          <label>Título do material<input required minlength="2" maxlength="160" v-model="state.materialForm.title"></label>
+          <label>Conteúdo para a família<textarea required minlength="2" maxlength="8000" rows="5" v-model="state.materialForm.body"></textarea></label>
+          <button class="btn btn-primary">Publicar material</button>
+        </form>
+        <h3>Materiais publicados</h3><p v-if="!state.materials.length">Nenhum material publicado neste diário.</p>
+        <article v-for="item in state.materials" :key="item.id" class="family-line"><div><strong>{{item.title}}</strong><p>{{item.kind}} · {{item.enrollment_id?(state.selected.roster||[]).find(r=>r.enrollment_id===item.enrollment_id)?.name||'Individual':'Toda a turma'}}</p></div><button class="btn btn-secondary" @click="printMaterial(item.id)">Baixar para imprimir</button></article>
+      </template>
+    </section>
     <details class="panel x-card diary-help">
       <summary>Como usar o Diário</summary>
       <ol>
@@ -29,7 +45,7 @@
         <li>Preencha os demais registros e envie o diário para revisão antes do fechamento.</li>
         <li>As comunicações ficam disponíveis no portal para responsáveis com acesso autorizado.</li>
       </ol>
-      <p class="muted">Alunos da chamada precisam estar matriculados na turma. <a href="#/help">Consultar o guia de uso</a>.</p>
+      <p class="muted">Alunos da chamada precisam estar matriculados na turma. <a v-if="!props.teacherPortal" href="#/help">Consultar o guia de uso</a><span v-else>Em caso de divergência na lista, procure a Secretaria.</span></p>
     </details>
 
     <template v-if="state.tab==='setup' && can('diary.configure')">
