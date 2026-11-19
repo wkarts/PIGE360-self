@@ -93,7 +93,7 @@ class User(Record, Base):
     # Perfis de autoatendimento apontam para a pessoa correspondente.
     person_id: Mapped[str | None] = mapped_column(ForeignKey('persons.id'), index=True)
     __table_args__ = (CheckConstraint(
-        "role IN ('admin','direction','coordination','secretary','teacher','student','guardian','viewer')",
+        "role IN ('admin','direction','coordination','secretary','finance','teacher','student','guardian','viewer')",
         name='valid_role'
     ),)
 

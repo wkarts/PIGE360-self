@@ -24,7 +24,11 @@ def enrollment_readiness(id: str, db: DB, user: Actor, school: Scope):
     admission = scoped(db, m.Admission, id, school.id)
     checks = []
     def add(code, label, ready, message, stage):
-        checks.append({'code': code, 'label': label, 'ready': ready, 'message': message, 'stage': stage})
+        owners = {'approval': 'Secretaria', 'reservation': 'Secretaria', 'capacity': 'Secretaria',
+                  'payment': 'Financeiro', 'contract': 'Secretaria, responsável e Direção',
+                  'documents': 'Secretaria e responsável', 'certificate': 'Direção', 'authority': 'Direção'}
+        checks.append({'code': code, 'label': label, 'ready': ready, 'message': message,
+                       'stage': stage, 'owner': owners[code]})
     if admission.status == 'enrolled':
         return {'ready': True, 'checks': [], 'enrolled': True}
     if admission.status != 'approved' or not admission.enrollment_id:
@@ -267,7 +271,7 @@ def finalize(id:str,data:s.FinalizeAdmission,db:DB,user:Actor,school:Scope,reque
     gate(db,obj.enrollment_id)
     payment_gate(db,school.id,obj.enrollment_id)
     contract_gate(db,school.id,obj.enrollment_id)
-    from .enrollments import movement
+    from .enrollments import apply_movement
     enrollment=scoped(db,m.Enrollment,obj.enrollment_id,school.id)
     from .enrollments import activation_validation
     if enrollment.status!='active':
@@ -281,7 +285,7 @@ def finalize(id:str,data:s.FinalizeAdmission,db:DB,user:Actor,school:Scope,reque
             m.IssuedDocument.template_version==str(obj.contract_template_version)).order_by(m.IssuedDocument.created_at.desc()).limit(1))
         auto_sign_issued_document(db,contract,user.id,request)
     if enrollment.status!='active':
-        movement(enrollment.id,schemas.MovementInput(version=enrollment.version,action='reactivate' if enrollment.status=='cancelled' else 'activate',reason=data.reason),db,user,school,request)
+        apply_movement(enrollment,schemas.MovementInput(version=enrollment.version,action='reactivate' if enrollment.status=='cancelled' else 'activate',reason=data.reason),db,user,school,request)
     # Comprovante persistido: a família recebe exatamente o documento emitido.
     from .documents import issue
     issue(obj.student_id,schemas.IssueInput(kind='enrollment_receipt',enrollment_id=enrollment.id),db,user,school,request)

@@ -394,7 +394,7 @@ class UserInput(Input):
     def optional_initial_password(cls,value):
         if value and len(value)<12:raise ValueError('A senha deve ter pelo menos 12 caracteres.')
         return value
-    role: Literal['admin','direction','coordination','secretary','teacher','student','guardian','viewer'] = 'secretary'
+    role: Literal['admin','direction','coordination','secretary','finance','teacher','student','guardian','viewer'] = 'secretary'
     school_ids: list[str] = Field(default_factory=list, max_length=100)
     person_id: str | None = None
     create_mailbox: bool = False
@@ -405,7 +405,7 @@ class UserInput(Input):
 
 class UserEdit(Input):
     name: str = Field(min_length=2, max_length=160)
-    role: Literal['admin','direction','coordination','secretary','teacher','student','guardian','viewer']
+    role: Literal['admin','direction','coordination','secretary','finance','teacher','student','guardian','viewer']
     active: bool
     school_ids: list[str] = Field(default_factory=list, max_length=100)
     person_id: str | None = None

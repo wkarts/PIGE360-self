@@ -94,9 +94,14 @@ def list_enrollments(db: DB, user: Actor, school: Scope, status: str = '', class
     return {'items': [enrollment_output(db, x) for x in db.scalars(stmt.order_by(m.Enrollment.created_at.desc()).offset((page-1)*page_size).limit(page_size))], 'total': total, 'page': page, 'page_size': page_size}
 
 @router.post('/enrollments', status_code=201)
-def create_enrollment(data: s.EnrollmentInput, db: DB, user: Actor, school: Scope, request: Request):
+def create_enrollment(data: s.EnrollmentInput, db: DB, user: Actor, school: Scope, request: Request, activate: bool = False):
     require(user, 'enrollments.write')
-    return enrollment_output(db, create_record(data, school, db, user, request))
+    enrollment = create_record(data, school, db, user, request)
+    if activate:
+        action = s.MovementInput(version=enrollment.version, action='activate',
+                                 reason='Efetivação confirmada pela Secretaria no cadastro da matrícula.')
+        return movement(enrollment.id, action, db, user, school, request)
+    return enrollment_output(db, enrollment)
 
 @router.get('/enrollments/{enrollment_id}')
 def enrollment_detail(enrollment_id: str, db: DB, user: Actor, school: Scope):
@@ -132,6 +137,19 @@ def activation_validation(db, school, obj, group, institution_required=True):
 def movement(enrollment_id: str, data: s.MovementInput, db: DB, user: Actor, school: Scope, request: Request):
     require(user, 'enrollments.write'); lock_school(db, school.id)
     obj = scoped(db, m.Enrollment, enrollment_id, school.id); check_version(obj, data.version)
+    if data.action in ('activate', 'reactivate') and data.action in ALLOWED[obj.status]:
+        admission = db.scalar(select(m.Admission).where(m.Admission.enrollment_id == obj.id,
+                              m.Admission.school_id == school.id, m.Admission.status == 'approved'))
+        if admission:
+            from .admissions import finalize
+            from .online_schemas import FinalizeAdmission
+            finalize(admission.id, FinalizeAdmission(version=admission.version, reason=data.reason),
+                     db, user, school, request)
+            return enrollment_output(db, obj)
+    return apply_movement(obj, data, db, user, school, request)
+
+
+def apply_movement(obj, data, db, user, school, request):
     if data.action not in ALLOWED[obj.status]:
         fail(409, 'Movimentação não permitida para a situação atual.')
     group = scoped(db, m.ClassGroup, obj.class_group_id, school.id)

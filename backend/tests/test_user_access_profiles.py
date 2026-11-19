@@ -132,3 +132,14 @@ def test_self_changes_stale_version_and_profile_delete_guard(api):
     api.post('/access-profiles/'+profile['id']+'/delete',{'action':'delete','version':profile['version'],'reason':'Excluir perfil utilizado','confirmation':profile['name']},expect=409)
     action(api,linked,'delete_access')
     api.post('/access-profiles/'+profile['id']+'/delete',{'action':'delete','version':profile['version'],'reason':'Excluir perfil sem vínculos','confirmation':profile['name']},expect=200)
+
+
+def test_financial_operator_permissions(api):
+    user = create(api, role='finance')
+    headers = login(api, user)
+    for path in ['/bank-charges', '/bank-summary', '/enrollments']:
+        assert api.client.get(api.base + path, headers=headers).status_code == 200
+    for path in ['/users', '/diaries', '/integrations', '/students']:
+        assert api.client.get(api.base + path, headers=headers).status_code == 403
+    post = api.client.post(api.base + '/units', headers=headers, json={'name': 'Unidade de teste'})
+    assert post.status_code == 403

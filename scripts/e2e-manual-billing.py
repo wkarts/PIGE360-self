@@ -3,6 +3,7 @@
 import io
 import json
 import os
+import base64
 import shutil
 import socket
 import subprocess
@@ -26,7 +27,7 @@ PASSWORD='Synthetic-Billing-Password-2026!'
 env={**os.environ,'PYTHONPATH':str(ROOT/'backend'),'DATABASE_URL':'sqlite:///'+str(TEMP/'app.db'),
      'ALLOW_SQLITE':'true','APP_ENV':'test','APP_URL':URL,'ALLOWED_HOSTS':'127.0.0.1,localhost',
      'APP_SECRET_KEY':'test-only-manual-billing-01234567890123456789',
-     'SETUP_TOKEN':'test-only-setup-01234567890123456789','STORAGE_PATH':str(TEMP/'files'),
+     'INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(os.urandom(32)).decode(), 'SETUP_TOKEN':'test-only-setup-01234567890123456789','STORAGE_PATH':str(TEMP/'files'),
      'FRONTEND_PATH':str(TEMP/'frontend'),'COOKIE_SECURE':'false'}
 shutil.copytree(ROOT/'frontend/dist',TEMP/'frontend')
 subprocess.run([sys.executable,'-m','alembic','upgrade','head'],cwd=ROOT/'backend',env=env,check=True)
@@ -62,6 +63,9 @@ try:
         post('/students/'+student['id']+'/guardians',{'person_id':guardian['id'],'legal':True,'financial':True})
         enrollment=post('/enrollments',{'student_id':student['id'],'class_group_id':group['id'],'enrolled_on':'2026-09-01'})
         assert not client.get(base+'/banking-status',headers=headers).json()['configured']
+        operator=post('/users', {'name':'Operador financeiro', 'email':'finance@example.com', 'password':PASSWORD,
+                      'role':'finance', 'school_ids':[school['id']]})
+        initial_jobs = client.get(base+'/integration-jobs',headers=headers).json()
         with sync_playwright() as pw:
             binary=os.getenv('CHROMIUM_PATH') or (None if Path(pw.chromium.executable_path).exists() else shutil.which('chromium'))
             browser=pw.chromium.launch(headless=True,**({'executable_path':binary} if binary else {}),args=['--no-sandbox'])
@@ -69,13 +73,10 @@ try:
             page=context.new_page();page.set_default_timeout(10000)
             page.on('pageerror',lambda error:errors.append(str(error)))
             page.goto(URL)
-            page.get_by_label('E-mail',exact=True).fill('billing@example.com')
+            page.get_by_label('E-mail',exact=True).fill(operator['email'])
             page.get_by_label('Senha',exact=True).fill(PASSWORD)
             page.get_by_role('button',name='Entrar na aplicação').click()
-            expect(page.locator('h1')).to_have_text('Visão geral')
-            page.get_by_role('button',name='Abrir menu').click()
-            page.get_by_role('button',name='Financeiro',exact=True).click()
-            page.locator('aside').get_by_role('link',name='Cobranças',exact=True).click()
+            expect(page.locator('h1')).to_have_text('Cobranças')
             page.get_by_role('button',name='+ Nova cobrança',exact=True).click()
             dialog=page.get_by_role('dialog')
             expect(dialog.get_by_label('Tipo de cobrança')).to_have_value('manual')
@@ -132,7 +133,7 @@ try:
             expect(dialog).to_have_count(0)
             assert client.get(base+'/bank-charges/'+rows[1]['id'],headers=headers).json()['status']=='cancelled'
             assert client.get(base+'/integrations',headers=headers).json()==[]
-            assert client.get(base+'/integration-jobs',headers=headers).json()['total']==0
+            assert client.get(base+'/integration-jobs',headers=headers).json()==initial_jobs
             checks.append('Cancelamento interno auditável e formulários acessíveis em 320px/janela baixa; nenhuma conexão ou tarefa externa criada.')
             assert not errors,errors
             browser.close()
