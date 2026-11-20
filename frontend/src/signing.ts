@@ -3,7 +3,7 @@ namespace PigeSigning {
   type Certificate=Row&{subject:string;expires_at:string;certificate_sha256:string;configured_by:string};
   type QueueItem={document_id:string;student_id:string;student_name:string;enrollment_id:string;kind:string;signature_status:string;file_id:string;created_at:string};
   type Revision=Row&{file_id:string;source:string;sha256:string;signer:string;trust_status:string;created_at:string;validated_at?:string|null;validation_evidence_file_id?:string|null;validation_reference?:string;rejection_reason?:string};
-  type Review={document_id:string;status:string;file_id:string;signature_valid:boolean|null;cryptographic_valid:boolean|null;trust_status:string;revocation_checked?:boolean;signatures:Row[];revisions:Revision[]};
+  type Review={document_id:string;status:string;file_id:string|null;superseded?:boolean;signature_valid:boolean|null;cryptographic_valid:boolean|null;trust_status:string;revocation_checked?:boolean;signatures:Row[];revisions:Revision[]};
   type Mode='certificate'|'pending-signatures'|'signature-review'|'document';
   type Props={schoolId:string;permissions:string[];role:string;mode?:Mode;enrollmentId?:string;issuedId?:string};
   const str=(value:unknown):string=>value==null?'':String(value);
