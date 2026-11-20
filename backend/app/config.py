@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     max_upload_mb: int = 16
     max_photo_mb: int = 5
     legacy_import_max_mb: int = 128
+    educacenso_training_schools: set[str] = set()
     portability_enabled: bool = False
     allow_sqlite: bool = False
     integration_encryption_key: str = ''
