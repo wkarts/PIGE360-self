@@ -2,7 +2,7 @@ from app import models as m
 from app.db import SessionLocal
 
 
-def test_diary_lesson_attendance_close_and_reopen(api):
+def test_diary_lesson_attendance_close_and_reopen(api, monkeypatch):
     catalog = api.catalogs(capacity=30)
     student = api.student("Aluno Diário")
     enrollment = api.enroll(student, catalog["group"])
@@ -119,6 +119,12 @@ def test_diary_lesson_attendance_close_and_reopen(api):
     assert full_close["scope"] == "diary"
     assert full_close["diary"]["status"] == "closed"
     assert len(full_close["closure"]["snapshot_hash"]) == 64
+    from app.config import settings
+    monkeypatch.setattr(settings(), 'diary_catalog_schools', {api.school['id']})
+    original_report = api.get('/diaries/'+diary['id']+'/history')
+    api.post('/diary-catalog/'+component['id']+'/decisions',
+             {'action':'retire', 'version':component['version'], 'reason':'Currículo encerrado'}, 200)
+    assert api.get('/diaries/'+diary['id']+'/history') == original_report
     with SessionLocal() as db:
         closure = db.get(m.DiaryClosure, full_close["closure"]["id"])
         assert len(closure.snapshot["assessments"]) == 1
