@@ -387,6 +387,7 @@ var PigeDiary;
         { label: 'Configuração', pages: [
                 { id: 'setup', label: 'Períodos', tab: 'setup', permission: 'diary.configure' },
                 { id: 'components', label: 'Componentes', tab: 'setup', permission: 'diary.configure' },
+                { id: 'catalog', label: 'Catálogo e vigência', tab: 'setup', permission: 'diary.configure' },
                 { id: 'new-diary', label: 'Abrir diário', tab: 'setup', permission: 'diary.configure' },
                 { id: 'rules', label: 'Regras', tab: 'assessments', permission: 'diary.configure' }
             ] }
@@ -402,7 +403,7 @@ var PigeDiary;
         history.replaceState(history.state, '', url.pathname + url.search + url.hash);
     }
     PigeDiary.clearPilotContext = clearPilotContext;
-    PigeDiary.component = { props: ['schoolId', 'schoolName', 'permissions', 'teacherPortal', 'requestedDiary'], render: PigeRenders.diary, setup(props) {
+    PigeDiary.component = { props: ['schoolId', 'schoolName', 'catalogEnabled', 'permissions', 'teacherPortal', 'requestedDiary'], render: PigeRenders.diary, setup(props) {
             const state = Vue.reactive({
                 busy: false, error: '', notice: '', tab: 'diaries', page: 'diaries', diaryFilter: '', lessonPeriod: '', dirty: false,
                 diaries: [], selected: null, academicYears: [], periods: [], components: [], groups: [], assignments: [], plans: [],
@@ -432,9 +433,52 @@ var PigeDiary;
             });
             const base = () => (props.teacherPortal ? '/teacher' : '') + '/schools/' + props.schoolId;
             const can = (p) => props.permissions.includes(p);
+            const catalog = Vue.reactive({ drafts: [], name: '', code: '', hours: 0, reason: '', target: '',
+                impact: null });
+            async function catalogList() { catalog.drafts = await PigeAPI.request(base() + '/diary-catalog/suggestions'); }
+            function catalogImpact() {
+                catalog.impact = null;
+                catalog.reason = '';
+                if (catalog.target)
+                    void run(async () => {
+                        catalog.impact = await PigeAPI.request(base() + '/diary-catalog/' + catalog.target + '/impact');
+                    });
+            }
+            function suggest() {
+                return run(async () => {
+                    const row = await PigeAPI.post(base() + '/diary-catalog/suggestions', {
+                        name: catalog.name, code: catalog.code, workload_hours: catalog.hours
+                    });
+                    await catalogList();
+                    catalog.name = '';
+                    catalog.code = '';
+                    catalog.hours = 0;
+                    catalog.target = row.id;
+                    catalog.impact = await PigeAPI.request(base() + '/diary-catalog/' + row.id + '/impact');
+                    catalog.reason = '';
+                    state.notice = 'Sugestão guardada em rascunho.';
+                });
+            }
+            function decide(action) {
+                const impact = catalog.impact;
+                if (!impact || catalog.reason.trim().length < 3)
+                    return;
+                const verbs = { retire: 'Desativar', publish: 'Publicar', discard: 'Descartar' };
+                if (!window.confirm(verbs[action] + ' este componente curricular?'))
+                    return;
+                return run(async () => {
+                    await PigeAPI.post(base() + '/diary-catalog/' + impact.id + '/decisions', { action, version: impact.version, reason: catalog.reason });
+                    catalog.impact = null;
+                    catalog.target = '';
+                    catalog.reason = '';
+                    await loadBase();
+                    await catalogList();
+                    state.notice = 'Decisão registrada no histórico do componente.';
+                });
+            }
             const initial = new URLSearchParams(location.search);
             const pilot = Boolean(props.schoolId) && initial.get('diarioPiloto') === props.schoolId;
-            const navigation = Vue.computed(() => groups.map(group => ({ ...group, pages: group.pages.filter(page => !page.permission || can(page.permission)) })).filter(group => group.pages.length));
+            const navigation = Vue.computed(() => groups.map(group => ({ ...group, pages: group.pages.filter(page => (!page.permission || can(page.permission)) && (page.id !== 'catalog' || props.catalogEnabled === true)) })).filter(group => group.pages.length));
             const activeGroup = Vue.computed(() => navigation.value.find(group => group.pages.some(page => page.id === state.page)));
             const filteredDiaries = Vue.computed(() => {
                 const term = state.diaryFilter.trim().toLocaleLowerCase('pt-BR');
@@ -476,8 +520,13 @@ var PigeDiary;
                 state.tab = page.tab;
                 return true;
             }
-            function go(id) { if (navigatePage(id))
-                syncLink(); }
+            function go(id) {
+                if (navigatePage(id)) {
+                    syncLink();
+                    if (id === 'catalog')
+                        void run(catalogList);
+                }
+            }
             function show(...pages) { return !pilot || pages.includes(state.page); }
             const draftPages = new Set();
             async function save(action) {
@@ -737,6 +786,8 @@ var PigeDiary;
                 if (pilot)
                     window.addEventListener('beforeunload', beforeUnload);
                 await load();
+                if (pilot && state.page === 'catalog')
+                    await run(catalogList);
                 if (props.requestedDiary) {
                     openRequestedDiary();
                     return;
@@ -757,7 +808,7 @@ var PigeDiary;
             });
             Vue.onUnmounted(() => { if (pilot)
                 window.removeEventListener('beforeunload', beforeUnload); });
-            return { props, state, pilot, lessons, filterPeriod, save, navigation, activeGroup, filteredDiaries, pageLink, go, show, chooseAnother, markDraft, publishMaterial, printMaterial, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, editAssessment, cancelAssessmentEdit, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
+            return { props, state, pilot, catalog, catalogImpact, suggest, decide, lessons, filterPeriod, save, navigation, activeGroup, filteredDiaries, pageLink, go, show, chooseAnother, markDraft, publishMaterial, printMaterial, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, editAssessment, cancelAssessmentEdit, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
         } };
 })(PigeDiary || (PigeDiary = {}));
 var PigeTeacher;
