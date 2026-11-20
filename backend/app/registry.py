@@ -4,7 +4,6 @@ from sqlalchemy import func, select
 from pydantic import ValidationError
 from fastapi.exceptions import RequestValidationError
 from . import models as m, schemas as s
-from .config import settings
 from .common import audit, output
 from .security import Actor, DB, Scope, check_version, fail, lock_school, require, scoped
 from .lifecycle_models import ArchiveFilter, archive_output, filter_archived, require_available
@@ -16,12 +15,7 @@ def schools(db: DB, user: Actor):
     stmt = select(m.School).where(m.School.active.is_(True))
     stmt = stmt.join(m.SchoolAccess, m.SchoolAccess.school_id == m.School.id).where(
         m.SchoolAccess.user_id == user.id, m.SchoolAccess.active.is_(True), m.SchoolAccess.archived_at.is_(None))
-    cfg = settings()
-    # Cada piloto pode estar instalado e habilitado independentemente.
-    return [{**output(school),
-             'educacenso_training': school.id in getattr(cfg, 'educacenso_training_schools', ()),
-             'diary_catalog': school.id in getattr(cfg, 'diary_catalog_schools', ())}
-            for school in db.scalars(stmt.order_by(m.School.name))]
+    return [output(x) for x in db.scalars(stmt.order_by(m.School.name))]
 
 @router.get('/companies')
 def companies(db: DB, user: Actor):
