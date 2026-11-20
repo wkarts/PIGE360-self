@@ -1,13 +1,15 @@
 from datetime import date
 
-from app.config import settings
 
 
-def test_draft_publication_retirement_and_history(api, monkeypatch):
+def test_draft_publication_retirement_and_history(api):
     catalog = api.catalogs()
     payload = {'name': 'Oficina de Leitura'}
     api.post('/diary-catalog/suggestions', payload, 404)
-    monkeypatch.setattr(settings(), 'diary_catalog_schools', {api.school['id']})
+    api.update_school(diary_catalog=True)
+    api.patch('', {'version': api.school['version'] - 1, 'data': {
+        'company_id': api.school['company_id'], 'name': api.school['name'], 'diary_catalog': False}}, 409)
+    assert api.update_school(name='Escola renomeada')['diary_catalog']
     component = api.post('/diary-catalog/suggestions', payload)
     root = '/diary-catalog/' + component['id']
     diary_data = {'class_group_id': catalog['group']['id'], 'component_id': component['id']}
@@ -32,11 +34,11 @@ def test_draft_publication_retirement_and_history(api, monkeypatch):
     api.post(entry + '/lessons', {'lesson_date': effective.isoformat(), 'content': 'Fora de vigência'}, 409)
     decision('discard', retired['component']['version'], 409)
     # Pausar a administração do catálogo não reativa componentes arquivados.
-    monkeypatch.setattr(settings(), 'diary_catalog_schools', set())
+    api.update_school(diary_catalog=False)
     api.post('/diaries', diary_data, 409)
 
-def test_discard_only_unused_new_draft(api, monkeypatch):
-    monkeypatch.setattr(settings(), 'diary_catalog_schools', {api.school['id']})
+def test_discard_only_unused_new_draft(api):
+    api.update_school(diary_catalog=True)
     old = api.post('/curriculum-components', {'name': 'Inativo anterior ao piloto', 'active': False})
     decision = {'action':'discard', 'version':1, 'reason':'Decisão da coordenação'}
     api.post('/diary-catalog/'+old['id']+'/decisions', decision, 409)

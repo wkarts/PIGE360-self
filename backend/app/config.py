@@ -60,7 +60,6 @@ class Settings(BaseSettings):
     allow_sqlite: bool = False
     integration_encryption_key: str = ''
     signature_trust_roots_dir: Path | None = Path('/data/trust-roots')
-    diary_catalog_schools: set[str] = set()
     crm_bridge_enabled: bool = False
     crm_bridge_connections: str = '{}'
     integration_timeout_seconds: int = 15

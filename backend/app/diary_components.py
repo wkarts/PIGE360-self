@@ -8,7 +8,6 @@ from sqlalchemy import select
 
 from . import models as m
 from .common import audit, output
-from .config import settings
 from .lifecycle_models import RecordArchive, archive_record
 from .record_lifecycle import reference_counts
 from .schemas import Input
@@ -29,9 +28,9 @@ class Decision(Input):
     reason: str = Field(min_length=3, max_length=1000)
 
 
-def authorize(user, school_id):
+def authorize(user, school):
     require(user, 'diary.configure')
-    if school_id not in settings().diary_catalog_schools:
+    if not school.diary_catalog:
         fail(404, 'Catálogo piloto desativado nesta escola.')
 
 
@@ -62,7 +61,7 @@ def available_on(db, component, on_date: date | None = None):
 
 @router.get('/suggestions')
 def suggestions(db: DB, user: Actor, school: Scope):
-    authorize(user, school.id)
+    authorize(user, school)
     rows = db.scalars(select(m.CurriculumComponent).where(m.CurriculumComponent.school_id == school.id,
         m.CurriculumComponent.id.in_(drafts_for(school.id))).order_by(m.CurriculumComponent.name))
     return [output(row) for row in rows]
@@ -70,7 +69,7 @@ def suggestions(db: DB, user: Actor, school: Scope):
 
 @router.post('/suggestions', status_code=201)
 def suggest(data: Suggestion, db: DB, user: Actor, school: Scope, request: Request):
-    authorize(user, school.id)
+    authorize(user, school)
     lock_school(db, school.id)
     if db.scalar(select(m.CurriculumComponent.id).where(
             m.CurriculumComponent.school_id == school.id, m.CurriculumComponent.name == data.name)):
@@ -86,7 +85,7 @@ def suggest(data: Suggestion, db: DB, user: Actor, school: Scope, request: Reque
 
 @router.get('/{component_id}/impact')
 def impact(component_id: str, db: DB, user: Actor, school: Scope):
-    authorize(user, school.id)
+    authorize(user, school)
     obj = scoped(db, m.CurriculumComponent, component_id, school.id)
     status, archive = lifecycle(db, obj)
     refs, _ = reference_counts(db, obj)
@@ -97,7 +96,7 @@ def impact(component_id: str, db: DB, user: Actor, school: Scope):
 
 @router.post('/{component_id}/decisions')
 def decide(component_id: str, data: Decision, db: DB, user: Actor, school: Scope, request: Request):
-    authorize(user, school.id)
+    authorize(user, school)
     lock_school(db, school.id)
     obj = scoped(db, m.CurriculumComponent, component_id, school.id)
     check_version(obj, data.version)

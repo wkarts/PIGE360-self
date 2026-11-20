@@ -1,6 +1,6 @@
 from sqlalchemy import LargeBinary
 from datetime import date, datetime
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, JSON, UniqueConstraint, CheckConstraint, Index
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, JSON, UniqueConstraint, CheckConstraint, Index, false
 from sqlalchemy.orm import Mapped, mapped_column
 from .db import Base, Record, now
 
@@ -79,6 +79,7 @@ class School(Record, Base):
     address: Mapped[str] = mapped_column(String(400), default='')
     phone: Mapped[str] = mapped_column(String(32), default='')
     email: Mapped[str] = mapped_column(String(254), default='')
+    diary_catalog: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     document_policy: Mapped[str] = mapped_column(String(16), default='warn')
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     __table_args__ = (CheckConstraint("document_policy IN ('warn','block')", name='document_policy'),)

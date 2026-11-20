@@ -55,6 +55,11 @@ class API:
     def get(self,path):return self.call('GET',path)
     def post(self,path,data,expect=201):return self.call('POST',path,data,expect)
     def patch(self,path,data,expect=200):return self.call('PATCH',path,data,expect)
+    def update_school(self, **changes):
+        data = {'company_id': self.school['company_id'], 'name': self.school['name'], **changes}
+        self.school = self.patch('', {'version': self.school['version'], 'data': data})
+        return self.school
+
     def catalogs(self,capacity=1,year='2026'):
         unit=self.post('/units',{'name':'Unidade Centro'})
         period=self.post('/academic-years',{'name':year,'starts_on':year+'-01-01','ends_on':year+'-12-31'})
