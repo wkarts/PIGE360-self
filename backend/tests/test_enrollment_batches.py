@@ -80,3 +80,20 @@ def test_cancel_and_export_keep_completed_items(api):
     assert len(cancelled['results'])==2 and all(row['status']=='cancelled' for row in cancelled['results'])
     exported=api.get('/enrollment-batches/'+job['id']+'/result.csv')
     assert exported.status_code==200 and exported.text.count('Cancelado')==2
+
+
+def test_retry_reaches_later_items_even_with_twenty_persistent_failures(api):
+    payload = batch(api, count=21)
+    preview = api.post('/enrollment-batches/preview', payload, 200)
+    job = api.post('/enrollment-batches', {**payload, 'preview_hash':preview['preview_hash'],
+                   'client_key':'synthetic-queue-fairness'})
+    for item in payload['items'][:20]:
+        api.post('/enrollments', {**item, 'enrolled_on':payload['enrolled_on']})
+    url = '/enrollment-batches/' + job['id'] + '/process'
+    first = api.post(url, {}, 200)
+    assert len(first['results']) == 20 and first['status'] == 'failed'
+    second = api.post(url, {}, 200)
+    assert second['results'][20]['status'] == 'completed'
+    before = counts()
+    third = api.post(url, {}, 200)
+    assert third['results'][20] == second['results'][20] and counts() == before
