@@ -30,6 +30,9 @@ namespace PigeDiary {
       {id:'new-diary',label:'Abrir diário',tab:'setup',permission:'diary.configure'},
       {id:'rules',label:'Regras',tab:'assessments',permission:'diary.configure'}]}
   ];
+  export function pilotForSchool(schoolId:string){
+    return Boolean(schoolId) && new URLSearchParams(location.search).get('diarioPiloto')===schoolId;
+  }
   export function clearPilotContext(schoolId:string){
     const url=new URL(location.href);
     if(url.searchParams.get('diarioPiloto')!==schoolId)return;
@@ -97,7 +100,7 @@ namespace PigeDiary {
       });
     }
     const initial=new URLSearchParams(location.search);
-    const pilot=Boolean(props.schoolId) && initial.get('diarioPiloto')===props.schoolId;
+    const pilot=pilotForSchool(props.schoolId);
     const navigation=Vue.computed(()=>groups.map(group=>({...group,pages:group.pages.filter(
       page=>(!page.permission || can(page.permission)) && (page.id!=='catalog' || props.catalogEnabled===true)
     )})).filter(group=>group.pages.length));

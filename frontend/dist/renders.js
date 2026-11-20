@@ -7729,11 +7729,16 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                     _createElementVNode("strong", null, _toDisplayString(a.class_name) + " · " + _toDisplayString(a.subject_name), 1),
                     _createElementVNode("span", null, _toDisplayString([a.shift_name,a.year_name].filter(Boolean).join(' · ')), 1),
                     (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.agenda.diaries.filter(item=>item.teacher_assignment_id===a.id), (d) => {
-                      return (_openBlock(), _createElementBlock("button", {
-                        key: d.id,
+                      return (_openBlock(), _createElementBlock(_Fragment, { key: d.id }, [_createElementVNode("button", {
                         class: "btn btn-secondary teacher-open",
                         onClick: $event => {s.requestedDiary={id:d.id,tab:s.section==='materials'?'materials':'diaries'};s.section='diary'}
-                      }, _toDisplayString(s.section==='materials'?'Abrir materiais':'Abrir diário') + " · " + _toDisplayString(d.component), 9, ["onClick"]))
+                      }, _toDisplayString(s.section==='materials'?'Abrir materiais':'Abrir diário') + " · " + _toDisplayString(d.component), 9, ["onClick"]), (s.section==='overview' && pilotForSchool(s.schoolId))
+                        ? (_openBlock(), _createElementBlock("button", {
+                            key: 0,
+                            class: "btn btn-secondary teacher-open",
+                            onClick: $event => {s.requestedDiary={id:d.id,tab:'attendance'};s.section='diary'}
+                          }, "Fazer chamada · " + _toDisplayString(d.component), 9, ["onClick"]))
+                        : _createCommentVNode("", true)], 64))
                     }), 128)),
                     (!s.agenda.diaries.some(d=>d.teacher_assignment_id===a.id))
                       ? (_openBlock(), _createElementBlock("small", { key: 0 }, "Peça à Coordenação que abra o diário desta turma e o vincule à sua atribuição."))

@@ -91,6 +91,6 @@ namespace PigeTeacher {
       window.addEventListener('resize',()=>{if(innerWidth>800)s.menuOpen=false;});
       void start();
     });
-    return {s,navigate,toggleMenu,menuKey,publications,identity:PigeInstitution.state,mfa:PigeMFA,login,logout,run,agenda,workspace,date,group,selectSchool};
+    return {s,pilotForSchool:PigeDiary.pilotForSchool,navigate,toggleMenu,menuKey,publications,identity:PigeInstitution.state,mfa:PigeMFA,login,logout,run,agenda,workspace,date,group,selectSchool};
   }}).mount('#teacher');
 }

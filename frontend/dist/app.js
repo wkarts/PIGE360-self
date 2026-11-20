@@ -1999,6 +1999,10 @@ var PigeDiary;
                 { id: 'rules', label: 'Regras', tab: 'assessments', permission: 'diary.configure' }
             ] }
     ];
+    function pilotForSchool(schoolId) {
+        return Boolean(schoolId) && new URLSearchParams(location.search).get('diarioPiloto') === schoolId;
+    }
+    PigeDiary.pilotForSchool = pilotForSchool;
     function clearPilotContext(schoolId) {
         const url = new URL(location.href);
         if (url.searchParams.get('diarioPiloto') !== schoolId)
@@ -2084,7 +2088,7 @@ var PigeDiary;
                 });
             }
             const initial = new URLSearchParams(location.search);
-            const pilot = Boolean(props.schoolId) && initial.get('diarioPiloto') === props.schoolId;
+            const pilot = pilotForSchool(props.schoolId);
             const navigation = Vue.computed(() => groups.map(group => ({ ...group, pages: group.pages.filter(page => (!page.permission || can(page.permission)) && (page.id !== 'catalog' || props.catalogEnabled === true)) })).filter(group => group.pages.length));
             const activeGroup = Vue.computed(() => navigation.value.find(group => group.pages.some(page => page.id === state.page)));
             const filteredDiaries = Vue.computed(() => {
