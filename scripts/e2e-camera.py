@@ -16,6 +16,8 @@ from playwright.sync_api import expect, sync_playwright
 ROOT = Path(__file__).resolve().parents[1]
 OUT = Path(os.getenv('PIGE_E2E_OUT', str(ROOT / 'evidence/camera')))
 OUT.mkdir(parents=True, exist_ok=True)
+# O Chromium pode levar mais de cinco segundos para codificar um quadro 4K em JPEG.
+PHOTO_PREVIEW_TIMEOUT_MS = 15_000
 checks = []
 errors = []
 
@@ -59,7 +61,8 @@ Vue.createApp({components:{'camera-capture':PigeCamera.component},render:host,se
             open_camera();fits();page.screenshot(path=str(OUT/'camera-documento-desktop.png'))
             native=page.locator('.camera-dialog video').evaluate('(v)=>({width:v.videoWidth,height:v.videoHeight})')
             assert native['width']>=640 and native['height']>=480
-            page.get_by_role('button',name='Fotografar',exact=True).click();expect(page.locator('.camera-stage img')).to_be_visible()
+            page.get_by_role('button',name='Fotografar',exact=True).click()
+            expect(page.locator('.camera-stage img')).to_be_visible(timeout=PHOTO_PREVIEW_TIMEOUT_MS)
             assert page.evaluate("activeTestTrack.readyState==='ended'")
             original=page.locator('.camera-stage img').evaluate('(img)=>({width:img.naturalWidth,height:img.naturalHeight})')
             assert original==native
@@ -74,7 +77,8 @@ Vue.createApp({components:{'camera-capture':PigeCamera.component},render:host,se
             page.set_viewport_size({'width':844,'height':390});page.wait_for_timeout(100);fits()
             assert page.evaluate("document.querySelector('.camera-dialog video').srcObject.getVideoTracks()[0]===activeTestTrack && activeTestTrack.readyState==='live'")
             page.screenshot(path=str(OUT/'camera-pessoa-paisagem.png'))
-            page.get_by_role('button',name='Fotografar',exact=True).click();expect(page.get_by_role('button',name='Usar foto',exact=True)).to_be_enabled()
+            page.get_by_role('button',name='Fotografar',exact=True).click()
+            expect(page.get_by_role('button',name='Usar foto',exact=True)).to_be_enabled(timeout=PHOTO_PREVIEW_TIMEOUT_MS)
             page.get_by_role('button',name='Refazer foto',exact=True).click();expect(page.get_by_role('button',name='Fotografar',exact=True)).to_be_enabled()
             assert page.evaluate("activeTestTrack.readyState==='ended'")
             page.evaluate("window.activeTestTrack=document.querySelector('.camera-dialog video').srcObject.getVideoTracks()[0]")
