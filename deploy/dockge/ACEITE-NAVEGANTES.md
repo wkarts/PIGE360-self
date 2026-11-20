@@ -72,3 +72,19 @@ python3 scripts/verify_backup.py /caminho/privado/backup-pre-atualizacao
 Para restaurar um backup local v1, confirme primeiro que a stack selecionada é a cópia de recuperação e que as referências das imagens já correspondem ao snapshot. Execute `sh scripts/restore.sh /caminho/privado/backup-pre-atualizacao --confirm-restore`. Para um pacote v2 use o procedimento offline `python -m app.backup_restore /caminho/no-container/pacote.zip --confirm-offline-restore` em container de manutenção da aplicação com os volumes, bucket e ambiente do destino. O serviço de banco e o armazenamento precisam estar disponíveis. Preserve o pacote e a proteção pré-restauração. As sessões são revogadas e as operações externas incertas precisam de conciliação antes de reativar workers. Revalide login, números de matrículas, arquivos e boletins.
 
 O ensaio entregue cobre restauração com PostgreSQL em banco independente e PDF em armazenamento local. A subida desta candidata em Docker/Dockge e a recuperação do bucket específico do colégio dependem do ambiente de infraestrutura.
+
+### Revisão com vigência curricular e prévia do Educacenso
+
+Construa a aplicação, o site e os portais a partir do mesmo commit da PR e configure as imagens privadas da stack. Identifique a candidata pelo SHA de origem e pelo ID ou digest efetivamente obtido na construção. A abertura de uma PR em rascunho não fornece digest de candidata no GHCR.
+
+As migrations Alembic `0060_component_validity` e `0061_census_preview` acrescentam a primeira data sem oferta do componente e a habilitação da prévia por escola. Na atualização, preserve as chaves, os volumes de documentos e o banco. Antes de subir, guarde as referências das imagens em uso, a configuração protegida e a cópia consistente. Para storage local, na raiz do checkout, ajuste os caminhos da stack:
+
+```sh
+export PIGE_STACK_DIR=deploy/dockge
+export PIGE_ENV_FILE=deploy/dockge/.env
+sh scripts/backup.sh /caminho/privado/backup-pre-atualizacao
+```
+
+Para S3/MinIO use o procedimento de portabilidade de banco e objetos da instalação. Em uma segunda stack com dados próprios e comunicações externas bloqueadas, valide prontidão e autenticação por perfil, a mesma matrícula ativa, a turma, o PDF e o histórico. Confirme a revisão do banco com `alembic current` no serviço da aplicação. A Direção pode pausar a prévia em Integrações → Educacenso.
+
+Se a candidata precisar ser retirada, pause as gravações, os consumidores de filas e as emissões externas. Volte às imagens anteriores registradas. Se a compatibilidade com o esquema anterior ou os dados gravados depois da atualização exigir restaurar o banco, reconcilie essas gravações e recupere banco e documentos do mesmo ponto. Para storage local, `sh scripts/restore.sh /caminho/privado/backup-pre-atualizacao --confirm-restore` substitui os dados da stack selecionada. Faça o ensaio primeiro na cópia isolada. Confira o histórico, o PDF e as ordens financeiras pendentes antes de liberar os trabalhadores de fila.

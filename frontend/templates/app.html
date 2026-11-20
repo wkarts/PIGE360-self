@@ -82,11 +82,12 @@
           <button type="button" class="nav-group-toggle" aria-label="Financeiro" @click="state.financeOpen=!state.financeOpen" :aria-expanded="state.financeOpen || state.page==='banking'" aria-controls="finance-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#billing"></use></svg><span>Financeiro</span><svg class="nav-chevron ui-icon" :class="{expanded:state.financeOpen || state.page==='banking'}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
           <div id="finance-menu" class="nav-group-items" v-show="state.financeOpen || state.page==='banking'"><a href="#/banking" :class="{active:state.page==='banking'}" :aria-current="state.page==='banking'?'page':undefined" @click.prevent="navigate('banking')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#billing"></use></svg>Cobranças</a></div>
         </div>
-        <div v-if="can('connect.manage') || can('integrations.manage') || state.user?.role==='admin'" class="nav-group" :class="{selected:integrationPages.includes(state.page)}">
+        <div v-if="can('connect.manage') || can('integrations.manage') || can('educacenso.preview') || state.user?.role==='admin'" class="nav-group" :class="{selected:integrationPages.includes(state.page)}">
           <button type="button" class="nav-group-toggle" aria-label="Integrações" @click="state.integrationsOpen=!state.integrationsOpen" :aria-expanded="state.integrationsOpen" aria-controls="integrations-menu"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#integrations"></use></svg><span>Integrações</span><svg class="nav-chevron ui-icon" :class="{expanded:state.integrationsOpen}" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#chevron"></use></svg></button>
           <div id="integrations-menu" class="nav-group-items" v-show="state.integrationsOpen">
             <a v-if="can('connect.manage')" href="#/connect" :class="{active:state.page==='connect'}" :aria-current="state.page==='connect'?'page':undefined" @click.prevent="navigate('connect')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#whatsapp"></use></svg>WhatsApp</a>
             <a v-if="state.user?.role==='admin'" href="#/email" :class="{active:state.page==='email'}" :aria-current="state.page==='email'?'page':undefined" @click.prevent="navigate('email')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#integrations"></use></svg>Parâmetros de e-mail</a>
+            <a v-if="can('educacenso.preview')" href="#/educacenso" :class="{active:state.page==='educacenso'}" :aria-current="state.page==='educacenso'?'page':undefined" @click.prevent="navigate('educacenso')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#integrations"></use></svg>Educacenso</a>
             <a v-if="can('integrations.manage')" href="#/integrations" :class="{active:state.page==='integrations'}" :aria-current="state.page==='integrations'?'page':undefined" @click.prevent="navigate('integrations')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#bank"></use></svg>Bancária</a>
           </div>
         </div>
@@ -175,6 +176,7 @@
             </select>
           </label>
         </section>
+        <census-preview v-if="state.page==='educacenso' && can('educacenso.preview')" :key="state.schoolId+':educacenso'" :school-id="state.schoolId" :can-configure="can('schools.manage')"></census-preview>
         <notification-email v-if="state.page==='email' && can('integrations.manage')" :key="state.schoolId+':notification-email'" :school-id="state.schoolId"></notification-email>
         <mailcow-panel v-if="state.page==='email' && state.user?.role==='admin'" :key="state.schoolId" :school-id="state.schoolId"></mailcow-panel>
         <section v-if="state.page==='email' && state.user?.role==='admin'" class="panel x-card" aria-labelledby="smtp-title">

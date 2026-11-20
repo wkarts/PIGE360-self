@@ -77,6 +77,11 @@ class DiaryTransitionInput(Input):
     version: int = Field(ge=1)
 
 
+class ComponentRetirement(DiaryTransitionInput):
+    retired_from: date
+    reason: str = Field(min_length=5, max_length=500)
+
+
 class CloseDiaryInput(DiaryTransitionInput):
     academic_period_id: str | None = None
     reason: str = Field(min_length=3,max_length=1000)

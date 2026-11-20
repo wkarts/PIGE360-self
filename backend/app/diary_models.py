@@ -31,6 +31,7 @@ class CurriculumComponent(Record, Scoped, Base):
     code: Mapped[str] = mapped_column(String(40), default="")
     workload_hours: Mapped[int] = mapped_column(Integer, default=0)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    retired_from: Mapped[date | None] = mapped_column(Date)
     __table_args__ = (
         UniqueConstraint("school_id", "name", name="uq_curriculum_component_name"),
         CheckConstraint("workload_hours >= 0", name="curriculum_component_workload"),

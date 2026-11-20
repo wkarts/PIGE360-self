@@ -1,3 +1,4 @@
+from sqlalchemy import false
 from sqlalchemy import LargeBinary
 from datetime import date, datetime
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, JSON, UniqueConstraint, CheckConstraint, Index
@@ -80,6 +81,7 @@ class School(Record, Base):
     phone: Mapped[str] = mapped_column(String(32), default='')
     email: Mapped[str] = mapped_column(String(254), default='')
     document_policy: Mapped[str] = mapped_column(String(16), default='warn')
+    census_preview_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     __table_args__ = (CheckConstraint("document_policy IN ('warn','block')", name='document_policy'),)
 

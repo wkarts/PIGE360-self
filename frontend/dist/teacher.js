@@ -368,9 +368,10 @@ var PigeDiary;
     const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bahia', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
     PigeDiary.component = { props: ['schoolId', 'permissions', 'teacherPortal', 'requestedDiary'], render: PigeRenders.diary, setup(props) {
             const state = Vue.reactive({
-                busy: false, error: '', notice: '', tab: 'diaries',
+                busy: false, error: '', notice: '', tab: 'diaries', section: 'lessons',
                 diaries: [], selected: null, academicYears: [], periods: [], components: [], groups: [], assignments: [], plans: [],
                 periodForm: { academic_year_id: '', name: '', starts_on: '', ends_on: '', order_index: 1, active: true },
+                retirement: null,
                 componentForm: { name: '', code: '', workload_hours: 0, active: true },
                 diaryForm: { class_group_id: '', component_id: '', teacher_assignment_id: '', notes: '' },
                 planForm: { class_group_id: '', component_id: '', academic_period_id: '', teacher_assignment_id: '', objectives: '', thematic_units: '', knowledge_objects: '', bncc_references: '', methodology: '', resources: '', assessment_strategy: '', notes: '', status: 'draft' },
@@ -454,14 +455,16 @@ var PigeDiary;
                 state.opinions = opinions;
                 state.pedagogicalRecords = records;
                 state.communications = communications;
-                state.selectedLesson = null;
-                state.attendance = [];
-                state.assessmentEditing = null;
-                state.selectedAssessment = null;
-                state.assessmentRoster = [];
                 state.periodResults = [];
                 state.materials = materials;
                 if (changed) {
+                    state.section = 'lessons';
+                    state.selectedLesson = null;
+                    state.attendance = [];
+                    state.assessmentEditing = null;
+                    state.selectedAssessment = null;
+                    state.assessmentRoster = [];
+                    state.reopenReason = '';
                     state.materialForm = { client_key: PigeOnline.newId(), kind: 'Atividade', title: '', body: '', enrollment_id: '' };
                     state.planForm = { class_group_id: d.class_group_id, component_id: d.component_id, academic_period_id: '', teacher_assignment_id: d.teacher_assignment_id || '', objectives: '', thematic_units: '', knowledge_objects: '', bncc_references: '', methodology: '', resources: '', assessment_strategy: '', notes: '', status: 'draft' };
                     state.lessonForm = { academic_period_id: '', lesson_date: today(), lesson_count: 1, content: '', skills: '', methodology: '', activities: '', homework: '', notes: '' };
@@ -471,12 +474,12 @@ var PigeDiary;
                     state.reportPeriod = '';
                     state.reportEnrollment = '';
                     state.closePeriod = '';
+                    state.occurrenceForm = { academic_period_id: '', enrollment_id: '', occurrence_date: today(), kind: 'pedagogical', title: '', description: '', status: 'draft' };
+                    const firstPeriod = state.periods.find(p => p.academic_year_id === d.academic_year_id);
+                    selectRulePeriod(firstPeriod ? str(firstPeriod.id) : '');
+                    state.communicationRecipients = [];
+                    state.communicationForm = { enrollment_id: '', academic_period_id: '', occurrence_id: '', recipient_guardian_link_ids: [], title: '', message: '', client_key: PigeOnline.newId() };
                 }
-                state.occurrenceForm = { academic_period_id: '', enrollment_id: '', occurrence_date: today(), kind: 'pedagogical', title: '', description: '', status: 'draft' };
-                const firstPeriod = state.periods.find(p => p.academic_year_id === d.academic_year_id);
-                selectRulePeriod(firstPeriod ? str(firstPeriod.id) : '');
-                state.communicationRecipients = [];
-                state.communicationForm = { enrollment_id: '', academic_period_id: '', occurrence_id: '', recipient_guardian_link_ids: [], title: '', message: '', client_key: PigeOnline.newId() };
             }
             async function selectDiary(d) { await run(() => loadDiary(d)); }
             function selectRulePeriod(periodId) { const rule = state.assessmentRules.find(x => x.academic_period_id === periodId); state.assessmentRuleForm = { period_id: periodId, method: str(rule?.method) || 'arithmetic', scale_max: str(rule?.scale_max) || '10', decimal_places: Number(rule?.decimal_places ?? 2), minimum_score: str(rule?.minimum_score), minimum_attendance_percent: str(rule?.minimum_attendance_percent), justified_absence_counts_as_present: rule?.justified_absence_counts_as_present == null ? '' : String(rule.justified_absence_counts_as_present), recovery_mode: str(rule?.recovery_mode) || 'none', concept_scale: Array.isArray(rule?.concept_scale) ? rule.concept_scale.join(', ') : '', required_opinion: Boolean(rule?.required_opinion), version: rule?.version == null ? null : Number(rule.version) }; }
@@ -498,6 +501,25 @@ var PigeDiary;
             async function sendCommunication() { if (!state.selected)
                 return; await run(async () => { const f = state.communicationForm; const result = await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/communications', { ...f, academic_period_id: f.academic_period_id || null, occurrence_id: f.occurrence_id || null }); state.communications = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/communications'); state.communicationForm = { ...f, occurrence_id: '', recipient_guardian_link_ids: [], title: '', message: '', client_key: PigeOnline.newId() }; state.communicationRecipients = []; state.notice = result.created ? 'Comunicado disponibilizado no portal para ' + result.created + ' conta(s).' : 'Esta operação já havia sido processada; nenhum comunicado duplicado foi criado.'; }); }
             async function createPeriod() { await run(async () => { await PigeAPI.post(base() + '/academic-periods', state.periodForm); state.periodForm = { academic_year_id: state.periodForm.academic_year_id, name: '', starts_on: '', ends_on: '', order_index: state.periodForm.order_index + 1, active: true }; await loadBase(); state.notice = 'Período letivo criado.'; }); }
+            async function reviewRetirement(component) {
+                await run(async () => {
+                    const impact = await PigeAPI.request(base() + '/curriculum-components/' + component.id + '/impact');
+                    state.retirement = { component, ...impact, date: '', reason: '' };
+                });
+            }
+            async function retireComponent() {
+                const draft = state.retirement;
+                if (!draft)
+                    return;
+                await run(async () => {
+                    await PigeAPI.post(base() + '/curriculum-components/' + draft.component.id + '/retire', {
+                        retired_from: draft.date, reason: draft.reason, version: draft.component.version
+                    });
+                    state.retirement = null;
+                    await loadBase();
+                    state.notice = 'Vigência registrada. O histórico do componente está preservado.';
+                });
+            }
             async function createComponent() { await run(async () => { await PigeAPI.post(base() + '/curriculum-components', state.componentForm); state.componentForm = { name: '', code: '', workload_hours: 0, active: true }; await loadBase(); state.notice = 'Componente curricular criado.'; }); }
             async function createDiary() { await run(async () => { const body = { ...state.diaryForm, teacher_assignment_id: state.diaryForm.teacher_assignment_id || null }; const d = await PigeAPI.post(base() + '/diaries', body); state.diaryForm = { class_group_id: '', component_id: '', teacher_assignment_id: '', notes: '' }; await loadBase(); await loadDiary(d); state.tab = 'diaries'; state.notice = 'Diário aberto.'; }); }
             async function createPlan() { if (!state.selected)
@@ -507,7 +529,7 @@ var PigeDiary;
             async function openAttendance(lesson) { if (!state.selected)
                 return; await run(async () => { const result = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/lessons/' + lesson.id + '/attendance'); state.selectedLesson = result.lesson; state.attendance = result.roster.map(r => ({ ...r, attendance: r.attendance || { status: 'present', note: '' } })); }); }
             async function saveAttendance() { if (!state.selected || !state.selectedLesson)
-                return; await run(async () => { await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/lessons/' + state.selectedLesson.id + '/attendance', { method: 'PUT', body: JSON.stringify({ items: state.attendance.map(r => ({ enrollment_id: r.enrollment_id, status: r.attendance?.status || 'present', note: r.attendance?.note || '', version: r.attendance?.version ?? null })) }) }); state.notice = 'Chamada salva.'; await loadDiary(state.selected); }); }
+                return; await run(async () => { await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/lessons/' + state.selectedLesson.id + '/attendance', { method: 'PUT', body: JSON.stringify({ items: state.attendance.map(r => ({ enrollment_id: r.enrollment_id, status: r.attendance?.status || 'present', note: r.attendance?.note || '', version: r.attendance?.version ?? null })) }) }); state.selectedLesson = null; state.attendance = []; state.notice = 'Chamada salva.'; await loadDiary(state.selected); }); }
             function editAssessment(assessment) {
                 state.assessmentEditing = assessment;
                 state.assessmentForm = { academic_period_id: str(assessment.academic_period_id), title: str(assessment.title), kind: str(assessment.kind), assessment_date: str(assessment.assessment_date), value_type: str(assessment.value_type), max_score: str(assessment.max_score), weight: str(assessment.weight), description: str(assessment.description), skills: str(assessment.skills), status: str(assessment.status) };
@@ -549,6 +571,8 @@ var PigeDiary;
                         throw new Error('Informe ao menos uma nota ou conceito para salvar.');
                     const assessment = state.selectedAssessment;
                     await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/assessments/' + assessment.id + '/results', { method: 'PUT', body: JSON.stringify({ items: rows.map(r => ({ enrollment_id: r.enrollment_id, numeric_score: numeric ? r.result.numeric_score : null, concept: numeric ? '' : str(r.result?.concept).trim(), note: str(r.result?.note), version: r.result?.version ?? null })) }) });
+                    state.selectedAssessment = null;
+                    state.assessmentRoster = [];
                     await loadDiary(state.selected);
                     state.notice = rows.length + ' resultado(s) salvo(s).';
                 });
@@ -582,6 +606,12 @@ var PigeDiary;
                 await run(() => { const q = new URLSearchParams(); if (state.reportPeriod)
                     q.set('academic_period_id', state.reportPeriod); if (state.reportType === 'student_record' && state.reportEnrollment)
                     q.set('enrollment_id', state.reportEnrollment); const query = q.toString(); return PigeAPI.download(base() + '/diaries/' + state.selected.id + '/reports/' + state.reportType + '.pdf' + (query ? '?' + query : ''), 'diario-' + state.reportType + '.pdf'); }); }
+            async function downloadClosure(closure) {
+                if (!state.selected || !closure.academic_period_id)
+                    return;
+                const q = new URLSearchParams({ closure_id: str(closure.id), academic_period_id: str(closure.academic_period_id) });
+                await run(() => PigeAPI.download(base() + '/diaries/' + state.selected.id + '/reports/period_consolidation.pdf?' + q, 'consolidacao-' + closure.id + '.pdf'));
+            }
             let handled;
             function openRequestedDiary() {
                 const request = props.requestedDiary;
@@ -595,10 +625,41 @@ var PigeDiary;
                 if (state.selected?.id !== diary.id)
                     void selectDiary(diary);
             }
+            function updateDiaryLink() {
+                if (props.teacherPortal || !/^#\/diary(?:\?|$)/.test(location.hash))
+                    return;
+                const params = new URLSearchParams({ school: props.schoolId, tab: state.tab, section: state.section });
+                if (state.selected)
+                    params.set('diary', state.selected.id);
+                history.replaceState(null, '', '#/diary?' + params);
+            }
+            async function restoreDiaryLink() {
+                if (props.teacherPortal || !location.hash.startsWith('#/diary?'))
+                    return;
+                const params = new URLSearchParams(location.hash.slice('#/diary?'.length));
+                if (params.get('school') !== props.schoolId) {
+                    updateDiaryLink();
+                    return;
+                }
+                const diary = state.diaries.find(row => row.id === params.get('diary'));
+                const tab = params.get('tab') || 'diaries';
+                const section = params.get('section');
+                if (diary)
+                    await selectDiary(diary);
+                const tabs = ['dashboard', 'diaries', 'planning', 'assessments', 'opinions', 'records', 'occurrences', 'materials'];
+                if (can('communications.send'))
+                    tabs.push('communications');
+                if (can('diary.configure'))
+                    tabs.push('setup');
+                state.tab = tabs.includes(tab) ? tab : 'diaries';
+                state.section = section === 'closure' || (section === 'reports' && can('diary.reports')) ? section : 'lessons';
+                updateDiaryLink();
+            }
+            Vue.watch(() => [state.tab, state.section, state.selected?.id], updateDiaryLink);
             Vue.watch(() => props.requestedDiary, openRequestedDiary);
             Vue.watch(() => state.busy, openRequestedDiary);
-            Vue.onMounted(() => { void load().then(openRequestedDiary); });
-            return { props, state, publishMaterial, printMaterial, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, editAssessment, cancelAssessmentEdit, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
+            Vue.onMounted(() => { void load().then(restoreDiaryLink).then(openRequestedDiary); });
+            return { props, state, downloadClosure, reviewRetirement, retireComponent, publishMaterial, printMaterial, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, editAssessment, cancelAssessmentEdit, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
         } };
 })(PigeDiary || (PigeDiary = {}));
 var PigeTeacher;

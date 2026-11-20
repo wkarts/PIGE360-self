@@ -471,7 +471,7 @@ var PigeExpansion;
     const emptyCampaign = () => ({ academic_year_id: '', id: '', version: 1, slug: '', title: '', instructions: defaultGuardianInstructions, privacy_notice: defaultPrivacyNotice, terms_version: '1', class_group_ids: [], opens_on: new Date().toISOString().slice(0, 10), closes_on: '', active: false, show_student_portal_button: true, require_verified_contact: true, require_documents: false, require_payment_before_enrollment: false, payment_reservation_hours: null, contract_template_id: '' });
     const connectConfig = () => ({ base_url: '', instance: '', send_text_path: '', connection_state_path: '', api_key_header: 'apikey', auth_scheme: '', number_field: 'number', text_field: 'text', message_id_path: 'key.id', contract_confirmed: false });
     PigeExpansion.component = { get components() { return { 'contract-value-field': PigeContractFields.component, 'signing-panel': PigeSigning.component }; }, props: ['schoolId', 'page', 'permissions', 'role'], emits: ['view-student'], render: PigeRenders.expansion, setup(props, context) {
-            const s = Vue.reactive({ bridgeConfig: { enabled: false, base_url: '', issuer_id: '', account_id: '', environment: 'sandbox' }, bridgeSecret: '', bridgeMessage: '', bridgeCharge: '', bridgeClient: '', bridgeInvoice: '', bridgePayer: '', bridgeBilling: 'PIX', bridgeProvider: 'asaas', bridgeBB: { payer_address: '', payer_district: '', payer_zip: '', payer_city: '', payer_state: '', species: '', acceptance: '' }, bridgeRecovery: {}, bridgeExternal: [], bridgeRequests: [], readiness: null, busy: false, error: '', notice: '', q: '', status: '', page: 1, total: 0, tab: 'queue', rows: [], selected: null, campaigns: [], campaignForm: emptyCampaign(), editingCampaign: false, groups: [], campaignYears: [], campaignUnits: [], admissionStage: 'documents', contractDraftKey: '', contractDraftVersion: 0, contractDraftDirty: false, finalReadiness: null, contractTargetId: '', contractChangeReason: '', contractTemplates: [], contractFields: [], contractPreview: null, contractValues: {}, contractPreviewStale: false, counts: {}, reason: '', action: 'review', identity: false, existingStudent: '', existingGuardian: '', matchQ: '', studentMatchQ: '', guardianMatchQ: '', matchWarnings: [], matchNotice: '', matchError: '', matchTruncated: false, reviewPreset: '', studentMatches: [], guardianMatches: [], message: '', internal: false, charges: [], bankSummary: [], bankDueFrom: '', bankDueTo: '', bankingStatus: null, webhookEmail: '', showBankOperations: false, selectedCharge: null, bankEvents: [], receiptForm: { amount: '', paid_on: '', payment_method: 'cash', reference: '', client_key: PigeOnline.newId() }, bankReason: '', chargeOpen: false, chargeInitial: '', discardCharge: false, chargeForm: { admission_id: '', enrollment_id: '', amount: '', due_on: '', description: '', collection_mode: 'manual', billing_type: 'MANUAL', client_key: PigeOnline.newId(), installment_count: 1, required_for_enrollment: false }, enrollmentQ: '', enrollmentMatches: [], connections: [], jobs: [], jobTotal: 0, jobPage: 1, jobStatus: '', provider: 'asaas', connectionForm: { version: undefined, enabled: false, environment: 'sandbox', api_key: '', webhook_token: '', config: connectConfig() }, editingConnection: false, connect: { configured: false, base_url: '', api_key_configured: false, instance_prefix: 'PG360', host_policy: 'base_url', effective_host: '' }, connectInstances: [], connectRemote: [], connectInventoryLoaded: false, connectAdoptName: '', connectLegacyReview: false, connectLegacyConfirm: false, connectLegacyReason: '', connectUnits: [], connectJobs: [], connectJobTotal: 0, connectJobPage: 1, connectJobStatus: '', connectLabel: '', connectPrimary: false, connectCreatePhone: '', connectPhoneDrafts: {}, connectOperation: { instanceId: '', kind: '' }, connectQr: { instanceId: '', base64: '', code: '', pairingCode: '', pending: false, connected: false, kind: '' } });
+            const s = Vue.reactive({ bridgeHistoryOpen: false, bridgeConfig: { enabled: false, base_url: '', issuer_id: '', account_id: '', environment: 'sandbox' }, bridgeSecret: '', bridgeMessage: '', bridgeCharge: '', bridgeClient: '', bridgeInvoice: '', bridgePayer: '', bridgeBilling: 'PIX', bridgeProvider: 'asaas', bridgeBB: { payer_address: '', payer_district: '', payer_zip: '', payer_city: '', payer_state: '', species: '', acceptance: '' }, bridgeRecovery: {}, bridgeExternal: [], bridgeRequests: [], readiness: null, busy: false, error: '', notice: '', q: '', status: '', page: 1, total: 0, tab: 'queue', rows: [], selected: null, campaigns: [], campaignForm: emptyCampaign(), editingCampaign: false, groups: [], campaignYears: [], campaignUnits: [], admissionStage: 'documents', contractDraftKey: '', contractDraftVersion: 0, contractDraftDirty: false, finalReadiness: null, contractTargetId: '', contractChangeReason: '', contractTemplates: [], contractFields: [], contractPreview: null, contractValues: {}, contractPreviewStale: false, counts: {}, reason: '', action: 'review', identity: false, existingStudent: '', existingGuardian: '', matchQ: '', studentMatchQ: '', guardianMatchQ: '', matchWarnings: [], matchNotice: '', matchError: '', matchTruncated: false, reviewPreset: '', studentMatches: [], guardianMatches: [], message: '', internal: false, charges: [], bankSummary: [], bankDueFrom: '', bankDueTo: '', bankingStatus: null, webhookEmail: '', showBankOperations: false, selectedCharge: null, bankEvents: [], receiptForm: { amount: '', paid_on: '', payment_method: 'cash', reference: '', client_key: PigeOnline.newId() }, bankReason: '', chargeOpen: false, chargeInitial: '', discardCharge: false, chargeForm: { admission_id: '', enrollment_id: '', amount: '', due_on: '', description: '', collection_mode: 'manual', billing_type: 'MANUAL', client_key: PigeOnline.newId(), installment_count: 1, required_for_enrollment: false }, enrollmentQ: '', enrollmentMatches: [], connections: [], jobs: [], jobTotal: 0, jobPage: 1, jobStatus: '', provider: 'asaas', connectionForm: { version: undefined, enabled: false, environment: 'sandbox', api_key: '', webhook_token: '', config: connectConfig() }, editingConnection: false, connect: { configured: false, base_url: '', api_key_configured: false, instance_prefix: 'PG360', host_policy: 'base_url', effective_host: '' }, connectInstances: [], connectRemote: [], connectInventoryLoaded: false, connectAdoptName: '', connectLegacyReview: false, connectLegacyConfirm: false, connectLegacyReason: '', connectUnits: [], connectJobs: [], connectJobTotal: 0, connectJobPage: 1, connectJobStatus: '', connectLabel: '', connectPrimary: false, connectCreatePhone: '', connectPhoneDrafts: {}, connectOperation: { instanceId: '', kind: '' }, connectQr: { instanceId: '', base64: '', code: '', pairingCode: '', pending: false, connected: false, kind: '' } });
             const draftDirty = () => s.contractDraftDirty;
             if (props.page === 'online')
                 PigeExpansion.hasUnsavedChanges = draftDirty;
@@ -724,11 +724,35 @@ var PigeExpansion;
                 }
                 else {
                     s.connections = await PigeAPI.request(base() + '/integrations');
-                    await Promise.all([jobs(), bankHealth(), loadBridge()]);
+                    await Promise.all([jobs(), can('banking.read') ? bankHealth() : Promise.resolve(), loadBridge()]);
                 }
             }
-            async function loadBridge() { const [configuration, requests] = await Promise.all([PigeAPI.request(base() + '/crm-bridge/configuration'), PigeAPI.request(base() + '/crm-bridge/requests')]); if (configuration.configuration)
-                s.bridgeConfig = configuration.configuration; s.bridgeMessage = configuration.message; s.bridgeRequests = requests.items; const external = await PigeAPI.request(base() + '/crm-bridge/charges'); s.bridgeExternal = external.items; }
+            async function loadBridgeHistory() {
+                if (!can('banking.read'))
+                    return;
+                const [requests, charges] = await Promise.all([
+                    PigeAPI.request(base() + '/crm-bridge/requests'),
+                    PigeAPI.request(base() + '/crm-bridge/charges')
+                ]);
+                s.bridgeRequests = requests.items;
+                s.bridgeExternal = charges.items;
+            }
+            async function loadBridge() {
+                if (props.page === 'integrations') {
+                    const result = await PigeAPI.request(base() + '/crm-bridge/configuration');
+                    if (result.configuration)
+                        s.bridgeConfig = result.configuration;
+                    s.bridgeMessage = result.message;
+                }
+                await loadBridgeHistory();
+            }
+            async function toggleBridgeHistory() {
+                if (s.bridgeHistoryOpen) {
+                    s.bridgeHistoryOpen = false;
+                    return;
+                }
+                await run(async () => { await loadBridgeHistory(); s.bridgeHistoryOpen = true; });
+            }
             async function saveBridge() { await run(async () => { const { id, secret_configured, ...data } = s.bridgeConfig; await PigeAPI.request(base() + '/crm-bridge/configuration', { method: 'PUT', body: JSON.stringify({ ...data, secret: s.bridgeSecret }) }); s.bridgeSecret = ''; await loadBridge(); s.notice = 'Configuração da ponte salva. Cobranças nativas permanecem independentes.'; }); }
             async function testBridge() { await run(async () => { const result = await PigeAPI.post(base() + '/crm-bridge/connection-test', {}); s.notice = result.message; }); }
             async function issueExternal() { await run(async () => { const payer = Number(s.bridgePayer); if (!Number.isSafeInteger(payer) || payer < 1)
@@ -884,7 +908,7 @@ var PigeExpansion;
             Vue.onMounted(() => { window.addEventListener('beforeunload', warnUnsaved); void run(load); });
             Vue.onUnmounted(() => { window.removeEventListener('beforeunload', warnUnsaved); if (PigeExpansion.hasUnsavedChanges === draftDirty)
                 PigeExpansion.hasUnsavedChanges = () => false; });
-            return { dialogTarget: Vue.inject('school-dialog-host', 'body') || 'body', s, props, closeAdmission, reloadContractRegistry, openStudentRegistry, contractFieldGroups: PigeContractFields.groups, contractFieldMeta, contractGroupKeys, setContractFieldValue, saveContractDraft, showReadinessStage, refreshAdmissionStatus, reviewPresets, useReviewPreset, saveBridge, testBridge, queueBridge, retryBridge, statusBridge, loadBridge, issueExternal, externalCommand, campaignSlug, campaignGroupLabel, campaignGroups, admissionActions, bankCards, bankPeriod, reconcileBank, bankError, bankOperation, activateBankWebhook, identity: PigeInstitution.state, changeCollectionMode, chargeMethod, chargeStatus, receiptMethods, receiptDate, receiveManualCharge, receiptPdf, closeCharge, chargeTotal, can, str, run, load, search, paginate, paginateJobs, newCampaign, editCampaign, saveCampaign, campaignYearId, changeCampaignYear, eligibleContractTemplates, templateName, selectedContractVersion, canChangeContract, admissionContractTemplates, contractChoiceChanged, reloadContractTemplates, applyContractChoice, downloadContractHistory, contractStatus, contractPreviewKeys, contractFieldLabel, contractValue, contractAutomatic, setContractValue, previewFrozenContract, previewFrozenPdf, issueFrozenContract, downloadSignedContract, view, action, match, approve, finalize, reviseContract, renewReservation, reviewDoc, message, whatsapp, download, newCharge, findEnrollments, createCharge, inspectCharge, chargeAction, configure, saveConnection, testConnection, retry, copy, connectionFor, jobs, connectLoad, connectJobs, connectInventory, connectAdopt, connectAdoptNamed, connectReleaseLegacy, connectPrefer, connectPreferUnit, connectRestart, connectCreate, connectSync, connectQr, connectPairingCode, connectSavePhone, connectLogout, connectDelete, connectTest, connectRetry, clearConnectQr, label: PigeOnline.label, date: PigeOnline.date, dateTime: PigeOnline.dateTime, money: PigeOnline.money, publicURL: PigeOnline.publicURL, safeLink: PigeOnline.safeLink, origin: location.origin, statuses: PigeOnline.statuses };
+            return { dialogTarget: Vue.inject('school-dialog-host', 'body') || 'body', s, props, closeAdmission, reloadContractRegistry, openStudentRegistry, contractFieldGroups: PigeContractFields.groups, contractFieldMeta, contractGroupKeys, setContractFieldValue, saveContractDraft, showReadinessStage, refreshAdmissionStatus, reviewPresets, useReviewPreset, toggleBridgeHistory, saveBridge, testBridge, queueBridge, retryBridge, statusBridge, loadBridge, issueExternal, externalCommand, campaignSlug, campaignGroupLabel, campaignGroups, admissionActions, bankCards, bankPeriod, reconcileBank, bankError, bankOperation, activateBankWebhook, identity: PigeInstitution.state, changeCollectionMode, chargeMethod, chargeStatus, receiptMethods, receiptDate, receiveManualCharge, receiptPdf, closeCharge, chargeTotal, can, str, run, load, search, paginate, paginateJobs, newCampaign, editCampaign, saveCampaign, campaignYearId, changeCampaignYear, eligibleContractTemplates, templateName, selectedContractVersion, canChangeContract, admissionContractTemplates, contractChoiceChanged, reloadContractTemplates, applyContractChoice, downloadContractHistory, contractStatus, contractPreviewKeys, contractFieldLabel, contractValue, contractAutomatic, setContractValue, previewFrozenContract, previewFrozenPdf, issueFrozenContract, downloadSignedContract, view, action, match, approve, finalize, reviseContract, renewReservation, reviewDoc, message, whatsapp, download, newCharge, findEnrollments, createCharge, inspectCharge, chargeAction, configure, saveConnection, testConnection, retry, copy, connectionFor, jobs, connectLoad, connectJobs, connectInventory, connectAdopt, connectAdoptNamed, connectReleaseLegacy, connectPrefer, connectPreferUnit, connectRestart, connectCreate, connectSync, connectQr, connectPairingCode, connectSavePhone, connectLogout, connectDelete, connectTest, connectRetry, clearConnectQr, label: PigeOnline.label, date: PigeOnline.date, dateTime: PigeOnline.dateTime, money: PigeOnline.money, publicURL: PigeOnline.publicURL, safeLink: PigeOnline.safeLink, origin: location.origin, statuses: PigeOnline.statuses };
         } };
 })(PigeExpansion || (PigeExpansion = {}));
 var PigeDialogs;
@@ -1975,9 +1999,10 @@ var PigeDiary;
     const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bahia', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
     PigeDiary.component = { props: ['schoolId', 'permissions', 'teacherPortal', 'requestedDiary'], render: PigeRenders.diary, setup(props) {
             const state = Vue.reactive({
-                busy: false, error: '', notice: '', tab: 'diaries',
+                busy: false, error: '', notice: '', tab: 'diaries', section: 'lessons',
                 diaries: [], selected: null, academicYears: [], periods: [], components: [], groups: [], assignments: [], plans: [],
                 periodForm: { academic_year_id: '', name: '', starts_on: '', ends_on: '', order_index: 1, active: true },
+                retirement: null,
                 componentForm: { name: '', code: '', workload_hours: 0, active: true },
                 diaryForm: { class_group_id: '', component_id: '', teacher_assignment_id: '', notes: '' },
                 planForm: { class_group_id: '', component_id: '', academic_period_id: '', teacher_assignment_id: '', objectives: '', thematic_units: '', knowledge_objects: '', bncc_references: '', methodology: '', resources: '', assessment_strategy: '', notes: '', status: 'draft' },
@@ -2061,14 +2086,16 @@ var PigeDiary;
                 state.opinions = opinions;
                 state.pedagogicalRecords = records;
                 state.communications = communications;
-                state.selectedLesson = null;
-                state.attendance = [];
-                state.assessmentEditing = null;
-                state.selectedAssessment = null;
-                state.assessmentRoster = [];
                 state.periodResults = [];
                 state.materials = materials;
                 if (changed) {
+                    state.section = 'lessons';
+                    state.selectedLesson = null;
+                    state.attendance = [];
+                    state.assessmentEditing = null;
+                    state.selectedAssessment = null;
+                    state.assessmentRoster = [];
+                    state.reopenReason = '';
                     state.materialForm = { client_key: PigeOnline.newId(), kind: 'Atividade', title: '', body: '', enrollment_id: '' };
                     state.planForm = { class_group_id: d.class_group_id, component_id: d.component_id, academic_period_id: '', teacher_assignment_id: d.teacher_assignment_id || '', objectives: '', thematic_units: '', knowledge_objects: '', bncc_references: '', methodology: '', resources: '', assessment_strategy: '', notes: '', status: 'draft' };
                     state.lessonForm = { academic_period_id: '', lesson_date: today(), lesson_count: 1, content: '', skills: '', methodology: '', activities: '', homework: '', notes: '' };
@@ -2078,12 +2105,12 @@ var PigeDiary;
                     state.reportPeriod = '';
                     state.reportEnrollment = '';
                     state.closePeriod = '';
+                    state.occurrenceForm = { academic_period_id: '', enrollment_id: '', occurrence_date: today(), kind: 'pedagogical', title: '', description: '', status: 'draft' };
+                    const firstPeriod = state.periods.find(p => p.academic_year_id === d.academic_year_id);
+                    selectRulePeriod(firstPeriod ? str(firstPeriod.id) : '');
+                    state.communicationRecipients = [];
+                    state.communicationForm = { enrollment_id: '', academic_period_id: '', occurrence_id: '', recipient_guardian_link_ids: [], title: '', message: '', client_key: PigeOnline.newId() };
                 }
-                state.occurrenceForm = { academic_period_id: '', enrollment_id: '', occurrence_date: today(), kind: 'pedagogical', title: '', description: '', status: 'draft' };
-                const firstPeriod = state.periods.find(p => p.academic_year_id === d.academic_year_id);
-                selectRulePeriod(firstPeriod ? str(firstPeriod.id) : '');
-                state.communicationRecipients = [];
-                state.communicationForm = { enrollment_id: '', academic_period_id: '', occurrence_id: '', recipient_guardian_link_ids: [], title: '', message: '', client_key: PigeOnline.newId() };
             }
             async function selectDiary(d) { await run(() => loadDiary(d)); }
             function selectRulePeriod(periodId) { const rule = state.assessmentRules.find(x => x.academic_period_id === periodId); state.assessmentRuleForm = { period_id: periodId, method: str(rule?.method) || 'arithmetic', scale_max: str(rule?.scale_max) || '10', decimal_places: Number(rule?.decimal_places ?? 2), minimum_score: str(rule?.minimum_score), minimum_attendance_percent: str(rule?.minimum_attendance_percent), justified_absence_counts_as_present: rule?.justified_absence_counts_as_present == null ? '' : String(rule.justified_absence_counts_as_present), recovery_mode: str(rule?.recovery_mode) || 'none', concept_scale: Array.isArray(rule?.concept_scale) ? rule.concept_scale.join(', ') : '', required_opinion: Boolean(rule?.required_opinion), version: rule?.version == null ? null : Number(rule.version) }; }
@@ -2105,6 +2132,25 @@ var PigeDiary;
             async function sendCommunication() { if (!state.selected)
                 return; await run(async () => { const f = state.communicationForm; const result = await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/communications', { ...f, academic_period_id: f.academic_period_id || null, occurrence_id: f.occurrence_id || null }); state.communications = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/communications'); state.communicationForm = { ...f, occurrence_id: '', recipient_guardian_link_ids: [], title: '', message: '', client_key: PigeOnline.newId() }; state.communicationRecipients = []; state.notice = result.created ? 'Comunicado disponibilizado no portal para ' + result.created + ' conta(s).' : 'Esta operação já havia sido processada; nenhum comunicado duplicado foi criado.'; }); }
             async function createPeriod() { await run(async () => { await PigeAPI.post(base() + '/academic-periods', state.periodForm); state.periodForm = { academic_year_id: state.periodForm.academic_year_id, name: '', starts_on: '', ends_on: '', order_index: state.periodForm.order_index + 1, active: true }; await loadBase(); state.notice = 'Período letivo criado.'; }); }
+            async function reviewRetirement(component) {
+                await run(async () => {
+                    const impact = await PigeAPI.request(base() + '/curriculum-components/' + component.id + '/impact');
+                    state.retirement = { component, ...impact, date: '', reason: '' };
+                });
+            }
+            async function retireComponent() {
+                const draft = state.retirement;
+                if (!draft)
+                    return;
+                await run(async () => {
+                    await PigeAPI.post(base() + '/curriculum-components/' + draft.component.id + '/retire', {
+                        retired_from: draft.date, reason: draft.reason, version: draft.component.version
+                    });
+                    state.retirement = null;
+                    await loadBase();
+                    state.notice = 'Vigência registrada. O histórico do componente está preservado.';
+                });
+            }
             async function createComponent() { await run(async () => { await PigeAPI.post(base() + '/curriculum-components', state.componentForm); state.componentForm = { name: '', code: '', workload_hours: 0, active: true }; await loadBase(); state.notice = 'Componente curricular criado.'; }); }
             async function createDiary() { await run(async () => { const body = { ...state.diaryForm, teacher_assignment_id: state.diaryForm.teacher_assignment_id || null }; const d = await PigeAPI.post(base() + '/diaries', body); state.diaryForm = { class_group_id: '', component_id: '', teacher_assignment_id: '', notes: '' }; await loadBase(); await loadDiary(d); state.tab = 'diaries'; state.notice = 'Diário aberto.'; }); }
             async function createPlan() { if (!state.selected)
@@ -2114,7 +2160,7 @@ var PigeDiary;
             async function openAttendance(lesson) { if (!state.selected)
                 return; await run(async () => { const result = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/lessons/' + lesson.id + '/attendance'); state.selectedLesson = result.lesson; state.attendance = result.roster.map(r => ({ ...r, attendance: r.attendance || { status: 'present', note: '' } })); }); }
             async function saveAttendance() { if (!state.selected || !state.selectedLesson)
-                return; await run(async () => { await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/lessons/' + state.selectedLesson.id + '/attendance', { method: 'PUT', body: JSON.stringify({ items: state.attendance.map(r => ({ enrollment_id: r.enrollment_id, status: r.attendance?.status || 'present', note: r.attendance?.note || '', version: r.attendance?.version ?? null })) }) }); state.notice = 'Chamada salva.'; await loadDiary(state.selected); }); }
+                return; await run(async () => { await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/lessons/' + state.selectedLesson.id + '/attendance', { method: 'PUT', body: JSON.stringify({ items: state.attendance.map(r => ({ enrollment_id: r.enrollment_id, status: r.attendance?.status || 'present', note: r.attendance?.note || '', version: r.attendance?.version ?? null })) }) }); state.selectedLesson = null; state.attendance = []; state.notice = 'Chamada salva.'; await loadDiary(state.selected); }); }
             function editAssessment(assessment) {
                 state.assessmentEditing = assessment;
                 state.assessmentForm = { academic_period_id: str(assessment.academic_period_id), title: str(assessment.title), kind: str(assessment.kind), assessment_date: str(assessment.assessment_date), value_type: str(assessment.value_type), max_score: str(assessment.max_score), weight: str(assessment.weight), description: str(assessment.description), skills: str(assessment.skills), status: str(assessment.status) };
@@ -2156,6 +2202,8 @@ var PigeDiary;
                         throw new Error('Informe ao menos uma nota ou conceito para salvar.');
                     const assessment = state.selectedAssessment;
                     await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/assessments/' + assessment.id + '/results', { method: 'PUT', body: JSON.stringify({ items: rows.map(r => ({ enrollment_id: r.enrollment_id, numeric_score: numeric ? r.result.numeric_score : null, concept: numeric ? '' : str(r.result?.concept).trim(), note: str(r.result?.note), version: r.result?.version ?? null })) }) });
+                    state.selectedAssessment = null;
+                    state.assessmentRoster = [];
                     await loadDiary(state.selected);
                     state.notice = rows.length + ' resultado(s) salvo(s).';
                 });
@@ -2189,6 +2237,12 @@ var PigeDiary;
                 await run(() => { const q = new URLSearchParams(); if (state.reportPeriod)
                     q.set('academic_period_id', state.reportPeriod); if (state.reportType === 'student_record' && state.reportEnrollment)
                     q.set('enrollment_id', state.reportEnrollment); const query = q.toString(); return PigeAPI.download(base() + '/diaries/' + state.selected.id + '/reports/' + state.reportType + '.pdf' + (query ? '?' + query : ''), 'diario-' + state.reportType + '.pdf'); }); }
+            async function downloadClosure(closure) {
+                if (!state.selected || !closure.academic_period_id)
+                    return;
+                const q = new URLSearchParams({ closure_id: str(closure.id), academic_period_id: str(closure.academic_period_id) });
+                await run(() => PigeAPI.download(base() + '/diaries/' + state.selected.id + '/reports/period_consolidation.pdf?' + q, 'consolidacao-' + closure.id + '.pdf'));
+            }
             let handled;
             function openRequestedDiary() {
                 const request = props.requestedDiary;
@@ -2202,10 +2256,41 @@ var PigeDiary;
                 if (state.selected?.id !== diary.id)
                     void selectDiary(diary);
             }
+            function updateDiaryLink() {
+                if (props.teacherPortal || !/^#\/diary(?:\?|$)/.test(location.hash))
+                    return;
+                const params = new URLSearchParams({ school: props.schoolId, tab: state.tab, section: state.section });
+                if (state.selected)
+                    params.set('diary', state.selected.id);
+                history.replaceState(null, '', '#/diary?' + params);
+            }
+            async function restoreDiaryLink() {
+                if (props.teacherPortal || !location.hash.startsWith('#/diary?'))
+                    return;
+                const params = new URLSearchParams(location.hash.slice('#/diary?'.length));
+                if (params.get('school') !== props.schoolId) {
+                    updateDiaryLink();
+                    return;
+                }
+                const diary = state.diaries.find(row => row.id === params.get('diary'));
+                const tab = params.get('tab') || 'diaries';
+                const section = params.get('section');
+                if (diary)
+                    await selectDiary(diary);
+                const tabs = ['dashboard', 'diaries', 'planning', 'assessments', 'opinions', 'records', 'occurrences', 'materials'];
+                if (can('communications.send'))
+                    tabs.push('communications');
+                if (can('diary.configure'))
+                    tabs.push('setup');
+                state.tab = tabs.includes(tab) ? tab : 'diaries';
+                state.section = section === 'closure' || (section === 'reports' && can('diary.reports')) ? section : 'lessons';
+                updateDiaryLink();
+            }
+            Vue.watch(() => [state.tab, state.section, state.selected?.id], updateDiaryLink);
             Vue.watch(() => props.requestedDiary, openRequestedDiary);
             Vue.watch(() => state.busy, openRequestedDiary);
-            Vue.onMounted(() => { void load().then(openRequestedDiary); });
-            return { props, state, publishMaterial, printMaterial, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, editAssessment, cancelAssessmentEdit, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
+            Vue.onMounted(() => { void load().then(restoreDiaryLink).then(openRequestedDiary); });
+            return { props, state, downloadClosure, reviewRetirement, retireComponent, publishMaterial, printMaterial, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, editAssessment, cancelAssessmentEdit, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
         } };
 })(PigeDiary || (PigeDiary = {}));
 var PigeContracts;
@@ -3806,6 +3891,64 @@ var PigeAcademicPreparation;
             return { s, props, preview, apply, targetChanged, close };
         } };
 })(PigeAcademicPreparation || (PigeAcademicPreparation = {}));
+var PigeCensus;
+(function (PigeCensus) {
+    PigeCensus.component = {
+        props: ['schoolId', 'canConfigure'], render: PigeRenders.censusPreview,
+        setup(props) {
+            const state = Vue.reactive({ configuration: null, years: [], year: '', reference: '', busy: false, error: '', result: null });
+            function clear() { state.error = ''; state.result = null; }
+            async function preview() {
+                if (state.busy)
+                    return;
+                clear();
+                state.busy = true;
+                try {
+                    const params = new URLSearchParams({ academic_year_id: state.year, reference_date: state.reference });
+                    state.result = await PigeAPI.request('/schools/' + props.schoolId + '/educacenso/preview?' + params);
+                }
+                catch (e) {
+                    state.error = e instanceof Error ? e.message : String(e);
+                }
+                finally {
+                    state.busy = false;
+                }
+            }
+            const base = '/schools/' + props.schoolId + '/educacenso';
+            async function load() {
+                state.configuration = await PigeAPI.request(base + '/configuration');
+                state.years = state.configuration.enabled ? await PigeAPI.request(base + '/years') : [];
+            }
+            async function configure() {
+                if (!state.configuration || state.busy)
+                    return;
+                state.busy = true;
+                clear();
+                try {
+                    await PigeAPI.request(base + '/configuration', { method: 'PUT', body: JSON.stringify({
+                            enabled: !state.configuration.enabled, version: state.configuration.version
+                        }) });
+                    await load();
+                }
+                catch (e) {
+                    state.error = e instanceof Error ? e.message : String(e);
+                }
+                finally {
+                    state.busy = false;
+                }
+            }
+            Vue.onMounted(async () => {
+                try {
+                    await load();
+                }
+                catch (e) {
+                    state.error = e instanceof Error ? e.message : String(e);
+                }
+            });
+            return { state, props, preview, clear, configure };
+        }
+    };
+})(PigeCensus || (PigeCensus = {}));
 var PigeNotificationEmail;
 (function (PigeNotificationEmail) {
     const empty = () => ({ mode: 'inherit', host: '', port: 587, username: '', from_address: '', allow_private_network: false, version: null, password_configured: false, available: false, installation_configured: false, checked_at: null, last_error: '' });
@@ -3924,8 +4067,8 @@ var PigeUI;
     const catalogLabels = { 'units': 'Unidades', 'academic-years': 'Anos letivos', 'grades': 'Séries e etapas', 'shifts': 'Turnos', 'class-groups': 'Turmas', 'document-types': 'Tipos de documento' };
     const registryPages = ['people', 'students', 'teachers', 'employees', 'guardians', 'suppliers', 'providers', 'customers', 'partners'];
     const businessTypes = { suppliers: { code: 'supplier', singular: 'fornecedor', category: 'Categoria de fornecimento' }, providers: { code: 'service_provider', singular: 'prestador de serviços', category: 'Especialidade / serviço' }, customers: { code: 'customer', singular: 'cliente', category: 'Categoria do cliente' }, partners: { code: 'partner', singular: 'sócio', category: 'Vínculo societário' } };
-    const pageLabels = { diagnostics: 'Diagnóstico', online: 'Inscrições online', banking: 'Cobranças', integrations: 'Bancária', connect: 'WhatsApp', email: 'E-mail', webmail: 'E-mail', dashboard: 'Visão geral', help: 'Guia de uso', people: 'Cadastro único', students: 'Alunos', teachers: 'Professores', employees: 'Funcionários', guardians: 'Pais e responsáveis', suppliers: 'Fornecedores', providers: 'Prestadores de serviços', customers: 'Clientes', partners: 'Sócios', academic: 'Estrutura acadêmica', diary: 'Diário Escolar', enrollments: 'Matrículas', documents: 'Pendências documentais', contracts: 'Modelos e contratos', protocols: 'Protocolos', community: 'Notícias e eventos', certificate: 'Certificados A1', 'pending-signatures': 'Assinaturas pendentes', 'signature-review': 'Conferência de assinaturas', reports: 'Relatórios', settings: 'Instituição', users: 'Usuários e acessos', audit: 'Auditoria', 'legacy-import': 'Portabilidade de dados' };
-    const integrationPages = ['connect', 'email', 'integrations'];
+    const pageLabels = { diagnostics: 'Diagnóstico', online: 'Inscrições online', banking: 'Cobranças', educacenso: 'Educacenso', integrations: 'Bancária', connect: 'WhatsApp', email: 'E-mail', webmail: 'E-mail', dashboard: 'Visão geral', help: 'Guia de uso', people: 'Cadastro único', students: 'Alunos', teachers: 'Professores', employees: 'Funcionários', guardians: 'Pais e responsáveis', suppliers: 'Fornecedores', providers: 'Prestadores de serviços', customers: 'Clientes', partners: 'Sócios', academic: 'Estrutura acadêmica', diary: 'Diário Escolar', enrollments: 'Matrículas', documents: 'Pendências documentais', contracts: 'Modelos e contratos', protocols: 'Protocolos', community: 'Notícias e eventos', certificate: 'Certificados A1', 'pending-signatures': 'Assinaturas pendentes', 'signature-review': 'Conferência de assinaturas', reports: 'Relatórios', settings: 'Instituição', users: 'Usuários e acessos', audit: 'Auditoria', 'legacy-import': 'Portabilidade de dados' };
+    const integrationPages = ['connect', 'email', 'integrations', 'educacenso'];
     const administrationPages = ['diagnostics', 'audit', 'legacy-import'];
     const documentPages = ['documents', 'contracts', 'pending-signatures', 'signature-review'];
     const configurationPages = ['certificate'];
@@ -3949,6 +4092,8 @@ var PigeUI;
     function activateDesk(desk) {
         if (!shell || desk === currentDesk)
             return;
+        if (currentDesk.context.state.page === 'diary' && location.hash.startsWith('#/diary?'))
+            currentDesk.diaryHash = location.hash;
         currentDesk.scroll = currentDesk.node.querySelector('main')?.scrollTop || 0;
         currentDesk.context.state.menuOpen = false;
         moveDesk(parking, currentDesk.node);
@@ -3957,7 +4102,8 @@ var PigeUI;
         taskState.active = desk.context.state.page;
         taskState.paused = false;
         desk.node.querySelectorAll('[data-task-paused]').forEach(el => el.removeAttribute('data-task-paused'));
-        history.replaceState({}, '', '#/' + taskState.active);
+        const route = taskState.active === 'diary' ? (desk.diaryHash || (location.hash.startsWith('#/diary?') ? location.hash : '#/diary')) : '#/' + taskState.active;
+        history.replaceState({}, '', route);
         void Vue.nextTick(() => {
             if (currentDesk !== desk)
                 return;
@@ -4145,6 +4291,8 @@ var PigeUI;
                 return can('documents.read');
             if (page === 'reports')
                 return can('reports.read');
+            if (page === 'educacenso')
+                return can('educacenso.preview');
             if (page === 'academic')
                 return can('academic.read');
             if (page === 'enrollments')
@@ -4495,8 +4643,9 @@ var PigeUI;
             }
             catch { /* Navegador pode restringir armazenamento no iframe. */ }
             state.schoolId = state.schools.some(s => s.id === saved) ? saved : state.schools[0]?.id || '';
+            const diaryHash = location.hash.startsWith('#/diary?') ? location.hash : '';
             const siteShortcut = location.hash === '#/community/site';
-            const hash = siteShortcut ? 'community' : canonicalPage(location.hash.replace(/^#\/?/, ''));
+            const hash = diaryHash ? 'diary' : siteShortcut ? 'community' : canonicalPage(location.hash.replace(/^#\/?/, ''));
             state.page = shell ? landingPage() : pageLabels[hash] && pageAllowed(hash) ? hash : landingPage();
             if (state.page !== hash)
                 history.replaceState({}, '', '#/' + state.page);
@@ -4506,8 +4655,11 @@ var PigeUI;
                     const target = pageLabels[hash] && pageAllowed(hash) ? hash : landingPage();
                     if (siteShortcut && can('schools.manage'))
                         await openSiteEditor();
-                    else if (target !== state.page)
+                    else if (target !== state.page) {
+                        if (diaryHash && target === 'diary')
+                            history.replaceState({}, '', diaryHash);
                         await openDesk(target);
+                    }
                 }
             }
             else {
@@ -4718,7 +4870,7 @@ var PigeUI;
                     if (current === sequence && sid === state.schoolId && !state.sogoFallback)
                         await openSogoWebmail();
                 }
-                else if (['online', 'banking', 'integrations', 'connect', 'diagnostics', 'diary', 'contracts', 'certificate', 'pending-signatures', 'signature-review', 'community', 'help', 'audit', 'users'].includes(state.page)) {
+                else if (['online', 'banking', 'integrations', 'educacenso', 'connect', 'diagnostics', 'diary', 'contracts', 'certificate', 'pending-signatures', 'signature-review', 'community', 'help', 'audit', 'users'].includes(state.page)) {
                     state.total = 0;
                 }
                 else if (state.page === 'dashboard') {
@@ -6055,7 +6207,7 @@ var PigeUI;
             window.addEventListener('pige:email-account-changed', event => { if (event.detail?.schoolId === state.schoolId)
                 void loadPersonalTools(); });
             window.addEventListener('pige-session-expired', () => { void logout(); state.error = 'Sua sessão expirou. Entre novamente.'; });
-            window.addEventListener('hashchange', () => { const target = canonicalPage(location.hash.replace(/^#\/?/, '')); const ctx = currentDesk.context; if (target === 'community/site') {
+            window.addEventListener('hashchange', () => { const target = location.hash.startsWith('#/diary?') ? 'diary' : canonicalPage(location.hash.replace(/^#\/?/, '')); const ctx = currentDesk.context; if (target === 'community/site') {
                 void ctx.openSiteEditor();
                 return;
             } if (pageLabels[target] && target !== ctx.state.page)
@@ -6091,7 +6243,7 @@ var PigeUI;
         }
         return { openSiteEditor, studentList, studentSection, selectSchool, taskState, openDesk, closeDesk, resumeForm, keyTabs, scrollTabs, pageAllowed, loadShell, landingPage, safe, initialize, setupPWA, dispose, afterMFA, dialogHost, academicPrepared, importedDataChanged, openCamera, photoCaptured, documentPages, configurationPages, supportAreas, supportAreaLabels, refreshAccess, isEnrollmentForm, enrollmentStudent, enrollmentClass, administrationPages, institutionTabs, catalogDescriptions, adminTool, manageRecord, lifecycleCompleted, request: PigeAPI.request, download: PigeAPI.download, state, base, familyAssistFields, assistRequest, assistFields, assistEligible, assistCompany, setupCompany, setupCompanyFields, companyExtra, setupLookup, readStudentDocument, readResponsibleDocument, editIntake, mfa: PigeMFA, dossier, selectedPersonTypes, availablePersonTypes, togglePersonType, lockedPersonType, familyRelevant, manageMFA, editMFAPolicy, editEmbedding, probeEmbedding, editMyProfile, myPhotoChange, profilePassword, registryPages, integrationPages, businessTypes, isBusiness, newBusiness, reusePerson, personDocument, modalSections, modalTab, visibleSection, modalFieldLabel, modalFieldRelevant, advancedPersonField, isPersonModal, personTypeOptions, personTypeLabel, modalDirty, contractDirty, identity: PigeInstitution.state, supportStatus: PigeSupport.status, editIdentity, identityFileChange, manageUnits, editMaintainer, text, can, isProfileRole, school, label, enrollmentLabel, date, cpf, initials, photoSrc, getName, options, pageLabels, catalogLabels, configure, login, logout, navigate, changeSchool, setCatalog, search, page, loadPage, openSogoWebmail, webmailFrameLoaded, saveWebmailPreference, saveWebmailDefault, legacyImportFileChange, previewLegacyImport, applyLegacyImport, populatedImportTables, downloadLegacyArchive, viewStudent, newPerson, newStudent, editStudent, newGuardian, newTeacher, editTeacher, newEmployee, editEmployee, editPerson, newCatalog, newEnrollment, viewEnrollment, contractsForEnrollment, startMovement, reenroll, newLink, enrollmentLinkStudentId, linkFromEnrollment, editLink, uploadDocument, fileChange, reviewDocument, waiveDocument, issueDocument, downloadFile, newProtocol, newCompany, newSchool, editSupportHub, password, archiveStudent, closeModal, saveModal, loadReport, exportStudents, exportClass, searchStudents, searchPersons, filteredClasses, clearFilters, yearChanged, editDraft, viewProtocol, protocolNote, protocolReceipt, exportPendencies, install, updateApp };
     }
-    const components = { 'contract-value-field': PigeContractFields.component, 'enrollment-workflow': PigeEnrollmentWorkflow.component, 'academic-preparation': PigeAcademicPreparation.component, 'notification-email': PigeNotificationEmail.component, 'camera-capture': PigeCamera.component, 'users-panel': PigeUsers.component, 'institutional-email': PigeEmail.component, 'audit-panel': PigeAudit.component, 'lifecycle-panel': PigeLifecycle.component, 'mailcow-panel': PigeMailcow.component, 'school-community': PigeCommunity.component, 'learning-panel': PigeLearning.component, 'reports-panel': PigeReports.component, 'legacy-import-panel': PigeLegacyImport.component, 'diagnostics-panel': PigeDiagnostics.component, 'expansion-panel': PigeExpansion.component, 'diary-panel': PigeDiary.component, 'contracts-panel': PigeContracts.component, 'signing-panel': PigeSigning.component, 'assist-panel': PigeAssist.component };
+    const components = { 'contract-value-field': PigeContractFields.component, 'enrollment-workflow': PigeEnrollmentWorkflow.component, 'academic-preparation': PigeAcademicPreparation.component, 'census-preview': PigeCensus.component, 'notification-email': PigeNotificationEmail.component, 'camera-capture': PigeCamera.component, 'users-panel': PigeUsers.component, 'institutional-email': PigeEmail.component, 'audit-panel': PigeAudit.component, 'lifecycle-panel': PigeLifecycle.component, 'mailcow-panel': PigeMailcow.component, 'school-community': PigeCommunity.component, 'learning-panel': PigeLearning.component, 'reports-panel': PigeReports.component, 'legacy-import-panel': PigeLegacyImport.component, 'diagnostics-panel': PigeDiagnostics.component, 'expansion-panel': PigeExpansion.component, 'diary-panel': PigeDiary.component, 'contracts-panel': PigeContracts.component, 'signing-panel': PigeSigning.component, 'assist-panel': PigeAssist.component };
     function mountDesk(page, shared) {
         const node = document.createElement('div');
         const layer = shell ? document.createElement('div') : null;

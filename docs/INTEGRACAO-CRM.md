@@ -1,5 +1,7 @@
 # Ponte opcional PIGE360 ↔ ARGWS-CRM, contrato v1
 
+Novas integrações financeiras destinam-se exclusivamente ao [ARGWS-CRM-Finance](https://github.com/wkarts/ARGWS-CRM-Finance). Configure a origem HTTPS da instalação homologada. Antes de habilitar uma carteira, confira emitente, conta, ambiente e versão dos contratos em sandbox. Preserve as origens históricas para consulta e conciliação. Após timeout, consulte a origem existente antes de decidir qualquer ação sobre a dívida.
+
 ## Estado e limites
 
 Fundação **opt-in e desativada por padrão**. O financeiro nativo PIGE, suas cobranças manuais/Asaas e as regras acadêmicas permanecem independentes. Não existe emissão de fatura, boleto, Pix, baixa ou ativação de matrícula através desta ponte nesta versão.

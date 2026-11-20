@@ -66,12 +66,20 @@
         <section class="panel x-card">
           <h2>Componentes curriculares</h2>
           <form class="x-form" @submit.prevent="createComponent">
-            <label>Nome<input v-model="state.componentForm.name" required maxlength="120" placeholder="Ex.: Língua Portuguesa"></label>
+            <label>Nome<input list="diary-component-suggestions" v-model="state.componentForm.name" required maxlength="120" placeholder="Ex.: Língua Portuguesa"></label>
+            <datalist id="diary-component-suggestions"><option value="Projeto de leitura"></option><option value="Oficina de artes"></option><option value="Matemática"></option></datalist>
             <label>Código<input v-model="state.componentForm.code" maxlength="40"></label>
             <label>Carga horária<input type="number" min="0" v-model.number="state.componentForm.workload_hours"></label>
             <button class="btn btn-primary">Criar componente</button>
           </form>
-          <div class="x-list"><div v-for="c in state.components" :key="c.id" class="x-record"><strong>{{c.name}}</strong><span>{{c.code||'Sem código'}} · {{c.workload_hours||0}}h</span></div></div>
+          <div class="x-list"><div v-for="c in state.components" :key="c.id" class="x-record"><strong>{{c.name}}</strong><span>{{c.code||'Sem código'}} · {{c.workload_hours||0}}h</span><span v-if="c.retired_from">Oferta encerrada a partir de {{date(c.retired_from)}}</span><button type="button" class="btn btn-secondary" @click="reviewRetirement(c)">Revisar vigência de {{c.name}}</button></div></div>
+          <form v-if="state.retirement" class="x-form" @submit.prevent="retireComponent">
+            <h3>Vigência de {{state.retirement.component.name}}</h3>
+            <p>{{state.retirement.diaries}} diário(s) vinculado(s). Última aula ou avaliação registrada em {{date(state.retirement.last_activity)}}. A partir da data escolhida, novas aulas e avaliações ficam bloqueadas.</p>
+            <label>Encerrar oferta a partir de<input required type="date" v-model="state.retirement.date"></label>
+            <label>Motivo<textarea required minlength="5" maxlength="500" v-model="state.retirement.reason"></textarea></label>
+            <div class="actions"><button class="btn btn-primary">Confirmar vigência</button><button type="button" class="btn btn-secondary" @click="state.retirement=null">Cancelar</button></div>
+          </form>
         </section>
       </div>
 
@@ -118,7 +126,13 @@
           <div v-if="state.summary" class="stats-grid"><div class="stat-card"><span>Registros de aula</span><strong>{{state.summary.lessons}}</strong><small>{{state.summary.lesson_count}} aula(s)</small></div><div class="stat-card"><span>Alunos</span><strong>{{state.summary.roster}}</strong><small>matrículas ativas/suspensas</small></div><div class="stat-card"><span>Faltas</span><strong>{{state.summary.absences}}</strong><small>não justificadas</small></div><div class="stat-card"><span>Faltas justificadas</span><strong>{{state.summary.justified_absences}}</strong><small>registros atuais</small></div></div>
         </section>
 
-        <section v-if="can('diary.reports')" class="panel x-card">
+        <nav class="tabs diary-sections" aria-label="Tarefas do diário selecionado">
+          <button type="button" :class="{active:state.section==='lessons'}" :aria-pressed="state.section==='lessons'" @click="state.section='lessons'">Aulas e chamada</button>
+          <button type="button" :class="{active:state.section==='closure'}" :aria-pressed="state.section==='closure'" @click="state.section='closure'">Fechamento</button>
+          <button v-if="can('diary.reports')" type="button" :class="{active:state.section==='reports'}" :aria-pressed="state.section==='reports'" @click="state.section='reports'">Relatórios</button>
+        </nav>
+
+        <section v-if="state.section==='reports' && can('diary.reports')" class="panel x-card">
           <h2>Relatórios oficiais</h2>
           <div class="x-grid">
             <label>Relatório<select v-model="state.reportType"><option value="class_diary">Diário da turma/componente</option><option value="lessons">Registro de aulas</option><option value="attendance">Mapa de frequência</option><option value="assessments">Mapa de avaliações/notas/conceitos</option><option value="opinions">Pareceres descritivos</option><option value="occurrences">Ocorrências pedagógicas</option><option value="communications">Comunicações à família</option><option value="student_record">Ficha individual</option><option value="period_consolidation">Consolidação por período</option><option value="closure">Relatório de fechamento</option><option value="pending">Relatório de pendências</option><option value="revision_history">Histórico de retificações</option><option value="audit_validation">Auditoria e validação</option></select></label>
@@ -128,6 +142,7 @@
           <button class="btn btn-primary" @click="report" :disabled="(state.reportType==='period_consolidation'&&!state.reportPeriod)||(state.reportType==='student_record'&&!state.reportEnrollment)">Baixar PDF</button>
         </section>
 
+        <template v-if="state.section==='lessons'">
         <section v-if="state.selected.status==='open' && can('diary.write')" class="panel x-card">
           <h2>Registrar aula</h2>
           <form class="x-form" @submit.prevent="createLesson">
@@ -153,7 +168,9 @@
           <button v-if="state.selected.status==='open' && can('diary.attendance')" class="btn btn-primary" @click="saveAttendance" :disabled="!state.attendance.length">Salvar chamada</button>
         </section>
 
-        <section class="panel x-card">
+        </template>
+
+        <section v-if="state.section==='closure'" class="panel x-card">
           <h2>Revisão e fechamento</h2>
           <template v-if="state.selected.status==='open'">
             <p>O diário está aberto para lançamentos. Envie-o para revisão quando estiver pronto.</p>
@@ -176,7 +193,7 @@
             <button class="btn btn-secondary" :disabled="state.reopenReason.length<10" @click="reopenDiary">Reabrir com justificativa</button>
           </div>
           <h3>Histórico</h3>
-          <div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Data</th><th>Hash / motivo</th></tr></thead><tbody><tr v-for="c in state.history.closures" :key="'c'+c.id"><td>Fechamento</td><td>{{date(c.closed_at)}}</td><td><code>{{c.snapshot_hash}}</code></td></tr><tr v-for="r in state.history.revisions" :key="'r'+r.id"><td>Reabertura</td><td>{{date(r.reopened_at)}}</td><td>{{r.reason}}</td></tr></tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Data</th><th>Hash / motivo</th></tr></thead><tbody><tr v-for="c in state.history.closures" :key="'c'+c.id"><td>Fechamento</td><td>{{date(c.closed_at)}}</td><td><code>{{c.snapshot_hash}}</code><button v-if="c.academic_period_id && can('diary.reports')" class="btn btn-secondary" @click="downloadClosure(c)">Reemitir consolidação desta revisão</button></td></tr><tr v-for="r in state.history.revisions" :key="'r'+r.id"><td>Reabertura</td><td>{{date(r.reopened_at)}}</td><td>{{r.reason}}</td></tr></tbody></table></div>
         </section>
       </template>
     </template>

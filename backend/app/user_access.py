@@ -314,6 +314,7 @@ def lifecycle(user_id: str, data: AccessAction, db: DB, user: Actor, scope: Scop
 PERMISSION_GROUPS = {
     'read': ('Geral', 'Acessar o sistema'), 'dashboard.read': ('Geral', 'Visualizar painel'),
     'users.manage': ('Administração', 'Gerenciar usuários e acessos'), 'schools.manage': ('Administração', 'Gerenciar instituição'),
+    'educacenso.preview': ('Acadêmico', 'Conferir dados locais do Educacenso'),
     'integrations.manage': ('Administração', 'Configurar integrações'), 'connect.manage': ('Administração', 'Gerenciar WhatsApp'),
     'audit.read': ('Administração', 'Consultar auditoria'), 'profile.read': ('Conta', 'Consultar perfil'), 'profile.self': ('Conta', 'Atualizar próprio perfil'),
 }

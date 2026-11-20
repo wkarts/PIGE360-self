@@ -110,3 +110,70 @@ def test_teacher_only_reads_and_moves_plans_within_own_assignments(api, client, 
         "teacher_assignment_id": assignment["id"], "objectives": "Tentativa fora da turma", "version": own["version"],
     })
     assert response.status_code == 422
+
+
+def test_component_retirement_preserves_existing_work_and_rejects_future_lessons(api):
+    _, enrollment, _, diary = diary_fixture(api)
+    path = '/diaries/' + diary['id']
+    lesson = {'content': 'Aula de teste', 'lesson_date': '2026-10-15'}
+    saved = api.post(path + '/lessons', lesson)
+    component = '/curriculum-components/' + diary['component_id']
+    assert api.get(component + '/impact') == {'diaries': 1, 'last_activity': '2026-10-15'}
+    payload = {'retired_from': '2026-10-15', 'reason': 'Mudança de oferta curricular', 'version': 1}
+    api.post(component + '/retire', payload, 409)
+    payload['retired_from'] = '2026-10-16'
+    api.post(component + '/retire', payload, 200)
+    api.post(component + '/retire', payload, 409)
+    api.post(path + '/lessons', dict(lesson, lesson_date='2026-10-16'), 409)
+    api.post(path + '/assessments', {'title':'Atividade de teste', 'assessment_date':'2026-10-16', 'max_score':10}, 409)
+    api.call('PUT', path + '/lessons/' + saved['id'] + '/attendance', {
+        'items': [{'enrollment_id': enrollment['id'], 'status':'present'}]})
+    assert api.get(path)['lessons'][0]['content'] == lesson['content']
+
+
+def test_reissue_after_reopening_uses_only_saved_rule_and_original_period(api, monkeypatch):
+    _, enrollment, period, diary = diary_fixture(api)
+    path = '/diaries/' + diary['id']
+    rules = path + '/assessment-rules/' + period['id']
+    first = api.call('PUT', rules, {'method':'arithmetic', 'scale_max':10, 'decimal_places':2})
+    lesson = api.post(path + '/lessons', {'academic_period_id':period['id'], 'lesson_date':'2026-10-15', 'content':'Revisão'})
+    api.call('PUT', path + '/lessons/' + lesson['id'] + '/attendance',
+             {'items':[{'enrollment_id':enrollment['id'], 'status':'present'}]})
+    submitted = api.post(path + '/submit', {'version':diary['version']}, 200)
+    reviewed = api.post(path + '/review', {'version':submitted['version']}, 200)
+    closed = api.post(path + '/close', {'version':reviewed['version'], 'academic_period_id':period['id'],
+                                        'reason':'Conferido pela Coordenação'}, 200)
+    api.post(path + '/reopen', {'version':closed['diary']['version'], 'reason':'Ajustar os critérios do período'}, 200)
+    api.call('PUT', rules, {'version':first['version'], 'method':'weighted', 'scale_max':100, 'decimal_places':1})
+    captured = {}
+    def capture_pdf(school, title, rows, note, actor, **options):
+        captured.update(rows)
+        captured['note'] = note
+        return b'%PDF-test'
+    monkeypatch.setattr('app.diary.render_pdf', capture_pdf)
+    url = path + '/reports/period_consolidation.pdf?academic_period_id=' + period['id']
+    api.get(url)
+    assert captured['Regra'] == 'weighted'
+    api.get(url + '&closure_id=' + closed['closure']['id'])
+    assert captured['Regra'] == 'arithmetic'
+    assert captured['Versão da regra'] == str(first['version'])
+    assert closed['closure']['snapshot_hash'] in captured['note']
+    api.call('GET', url + '&closure_id=' + diary['id'], expect=404)
+
+
+def test_unrelated_mark_cannot_complete_attendance(api):
+    _, enrollment, period, diary = diary_fixture(api)
+    path = '/diaries/' + diary['id']
+    lesson = api.post(path + '/lessons', {'academic_period_id':period['id'], 'lesson_date':'2026-10-15', 'content':'Ciências'})
+    api.call('PUT', path + '/lessons/' + lesson['id'] + '/attendance',
+             {'items':[{'enrollment_id':enrollment['id'], 'status':'present'}]})
+    # A conferência posterior passa a incluir outro aluno, mantendo o total anterior.
+    other = api.enroll(api.student('Aluno recém-vinculado'), {'id':diary['class_group_id']})
+    with SessionLocal() as db:
+        db.get(m.Enrollment, enrollment['id']).status = 'cancelled'
+        db.get(m.Enrollment, other['id']).status = 'active'
+        db.commit()
+    submitted = api.post(path + '/submit', {'version':diary['version']}, 200)
+    reviewed = api.post(path + '/review', {'version':submitted['version']}, 200)
+    api.post(path + '/close', {'version':reviewed['version'], 'academic_period_id':period['id'],
+                                'reason':'Verificar a composição da chamada'}, 409)

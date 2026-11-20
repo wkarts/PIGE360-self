@@ -1,0 +1,18 @@
+<section class="panel x-card" aria-labelledby="census-preview-title">
+  <h2 id="census-preview-title">Prévia local da Matrícula Inicial</h2>
+  <p>Confira os vínculos ativos ou suspensos na data de referência. Os identificadores do Inep são consultados no cadastro atual. A exportação oficial depende do leiaute homologado do ano e da etapa.</p>
+  <p v-if="state.configuration && !state.configuration.enabled">Prévia desativada nesta escola. A Direção pode habilitar a conferência local.</p>
+  <button v-if="state.configuration && props.canConfigure" class="btn btn-secondary" type="button" :disabled="state.busy" @click="configure">{{state.configuration.enabled?'Pausar prévia nesta escola':'Habilitar prévia nesta escola'}}</button>
+  <form v-if="state.configuration?.enabled" class="x-form" @submit.prevent="preview"><fieldset class="x-grid" :disabled="state.busy">
+    <legend>Período da conferência</legend>
+    <label>Ano letivo<select aria-label="Ano letivo" required v-model="state.year" @change="clear"><option value="">Selecione</option><option v-for="year in state.years" :key="year.id" :value="year.id">{{year.name}}</option></select></label>
+    <label>Data de referência<input type="date" required v-model="state.reference" @input="clear"></label>
+    <button type="submit" class="btn btn-secondary">Conferir matrículas</button>
+  </fieldset></form>
+  <p v-if="state.error" class="alert error" role="alert">{{state.error}}</p>
+  <section v-if="state.result" aria-label="Resultado da prévia">
+    <p role="status">{{state.result.students}} aluno(s) · {{state.result.enrollments}} matrícula(s) na data informada.</p>
+    <p v-if="state.result.students_without_local_inep_id">A Secretaria deve conferir a identificação no cadastro de {{state.result.students_without_local_inep_id}} aluno(s) sem código local do Inep.</p>
+    <div v-if="state.result.groups.length" class="table-wrap"><table><thead><tr><th>Turma</th><th>Matrículas</th></tr></thead><tbody><tr v-for="(group,i) in state.result.groups" :key="i"><td>{{group.name}}</td><td>{{group.enrollments}}</td></tr></tbody></table></div>
+  </section>
+</section>

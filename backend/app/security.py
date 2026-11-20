@@ -35,7 +35,7 @@ ALL_PERMISSIONS = {
     'read', 'dashboard.read',
     'people.read', 'people.write', 'students.read', 'students.write',
     'guardians.read', 'guardians.write',
-    'academic.read', 'academic.write',
+    'academic.read', 'academic.write', 'educacenso.preview',
     'enrollments.read', 'enrollments.write',
     'documents.read', 'documents.write', 'documents.validate', 'documents.waive', 'documents.generate',
     'protocols.read', 'protocols.write',
@@ -55,7 +55,7 @@ PERMISSIONS = {
     'direction': set(ALL_PERMISSIONS) - {'integrations.manage', 'audit.read'},
     'coordination': {
         'read', 'dashboard.read', 'people.read', 'people.write', 'students.read', 'students.write',
-        'guardians.read', 'guardians.write', 'academic.read', 'academic.write',
+        'guardians.read', 'guardians.write', 'academic.read', 'academic.write', 'educacenso.preview',
         'enrollments.read', 'enrollments.write', 'documents.read', 'documents.validate',
         'documents.waive', 'documents.generate', 'protocols.read', 'protocols.write',
         'reports.read', 'admissions.read', 'admissions.manage',
@@ -65,7 +65,7 @@ PERMISSIONS = {
     'finance': {'profile.read', 'banking.read', 'banking.write', 'enrollments.read'},
     'secretary': {
         'read', 'dashboard.read', 'people.read', 'people.write', 'students.read', 'students.write',
-        'guardians.read', 'guardians.write', 'academic.read', 'academic.write',
+        'guardians.read', 'guardians.write', 'academic.read', 'academic.write', 'educacenso.preview',
         'enrollments.read', 'enrollments.write', 'documents.read', 'documents.write',
         'documents.validate', 'documents.waive', 'documents.generate',
         'protocols.read', 'protocols.write', 'reports.read',
