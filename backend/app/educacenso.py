@@ -59,9 +59,9 @@ class Selection(Input):
         return self
 
 
-def authorize(user, school_id):
+def authorize(user, school):
     require(user, 'educacenso.manage')
-    if school_id not in settings().educacenso_training_schools:
+    if not school.educacenso_training:
         fail(404, 'Treinamento do Educacenso desativado para esta escola.')
 
 
@@ -103,13 +103,13 @@ def preview(data, db, school):
 
 @router.post('/preview')
 def make_preview(data: Selection, db: DB, user: Actor, school: Scope):
-    authorize(user, school.id)
+    authorize(user, school)
     return preview(data, db, school)
 
 
 @router.post('/drafts')
 def save_draft(data: Selection, db: DB, user: Actor, school: Scope, request: Request):
-    authorize(user, school.id)
+    authorize(user, school)
     lock_school(db, school.id)
     snapshot = preview(data, db, school)
     digest = sha256(json.dumps(snapshot, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
@@ -125,7 +125,7 @@ def save_draft(data: Selection, db: DB, user: Actor, school: Scope, request: Req
 
 @router.get('/drafts')
 def drafts(db: DB, user: Actor, school: Scope, offset: int = 0):
-    authorize(user, school.id)
+    authorize(user, school)
     rows = db.scalars(select(Draft).where(Draft.school_id == school.id).order_by(
         Draft.created_at.desc(), Draft.id.desc()).offset(max(0, offset)).limit(50))
     return [output(row, ('snapshot',)) for row in rows]
@@ -133,7 +133,7 @@ def drafts(db: DB, user: Actor, school: Scope, offset: int = 0):
 
 @router.get('/drafts/{draft_id}')
 def read_draft(draft_id: str, db: DB, user: Actor, school: Scope):
-    authorize(user, school.id)
+    authorize(user, school)
     draft = scoped(db, Draft, draft_id, school.id)
     evidence = db.scalars(select(Evidence).where(Evidence.school_id == school.id,
         Evidence.draft_id == draft.id).order_by(Evidence.created_at, Evidence.id))
@@ -142,7 +142,7 @@ def read_draft(draft_id: str, db: DB, user: Actor, school: Scope):
 
 @router.post('/drafts/{draft_id}/evidence')
 async def attach(draft_id: str, file: UploadFile, db: DB, user: Actor, school: Scope, request: Request):
-    authorize(user, school.id)
+    authorize(user, school)
     scoped(db, Draft, draft_id, school.id)
     limit = min(4, settings().max_upload_mb) * 1024 * 1024
     raw = await file.read(limit + 1)

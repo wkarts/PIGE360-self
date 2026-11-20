@@ -169,7 +169,7 @@ def download(file_id: str, db: DB, user: Actor, school: Scope, request: Request)
     obj = scoped(db, m.FileRecord, file_id, school.id)
     if obj.file_kind == 'educacenso_evidence':
         from .educacenso import authorize
-        authorize(user, school.id)
+        authorize(user, school)
     if obj.file_kind == 'absence_evidence':
         require(user, 'protocols.read')
     if obj.file_kind == 'fiscal_xml':

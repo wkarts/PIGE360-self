@@ -1,13 +1,11 @@
-from app.config import settings
-
-
-def test_training_drafts_are_scoped_idempotent_and_never_export(api, monkeypatch):
+def test_training_drafts_are_scoped_idempotent_and_never_export(api):
     catalogs = api.catalogs()
     school_id = api.school['id']
     payload = {'year_id': catalogs['year']['id'], 'stage': 'matricula_inicial',
                'environment': 'treinamento', 'reference_date': '2026-09-23'}
     api.post('/educacenso/preview', payload, 404)
-    monkeypatch.setattr(settings(), 'educacenso_training_schools', {school_id})
+    api.update_school(educacenso_training=True)
+    assert api.update_school(name='Escola renomeada')['educacenso_training']
     api.post('/educacenso/preview', dict(payload, environment='producao'), 422)
     api.post('/educacenso/preview', dict(payload, class_group_ids=[]), 422)
     api.post('/educacenso/preview', dict(payload, class_group_ids=['outra-escola']), 422)
@@ -31,15 +29,17 @@ def test_training_drafts_are_scoped_idempotent_and_never_export(api, monkeypatch
     assert result['status'] == 'rascunho' and len(result['evidence']) == 1
     assert api.get('/files/' + evidence['file_id'] + '/download').content == files['file'][1]
     assert len(api.get('/educacenso/drafts')) == 1
-    monkeypatch.setattr(settings(), 'educacenso_training_schools', set())
+    api.update_school(educacenso_training=False)
     api.call('GET', '/files/' + evidence['file_id'] + '/download', expect=404)
 
 
-def test_draft_and_opaque_file_require_the_operator_and_original_school(api, client, admin, monkeypatch):
+def test_draft_and_opaque_file_require_the_operator_and_original_school(api, client, admin):
     from test_profiles import create_user, login
     other = client.post('/api/v1/schools', headers=admin, json={
         'company_id': api.school['company_id'], 'name':'Outra escola de treinamento'}).json()
-    monkeypatch.setattr(settings(), 'educacenso_training_schools', {api.school['id'], other['id']})
+    api.update_school(educacenso_training=True)
+    from conftest import API
+    API(client, admin, other).update_school(educacenso_training=True)
     catalog = api.catalogs()
     draft = api.post('/educacenso/drafts', {'year_id':catalog['year']['id'], 'stage':'situacao_aluno',
         'reference_date':'2026-12-01', 'environment':'treinamento'}, 200)
@@ -52,5 +52,8 @@ def test_draft_and_opaque_file_require_the_operator_and_original_school(api, cli
     operator = create_user(client, admin, name='Secretaria', email=person['id']+'@example.com',
                            role='secretary', school_id=api.school['id'], person_id=person['id'])
     headers = login(client, operator['email'], 'Profile-Test-Password-2026!')
+    denied = client.patch(api.base, headers=headers, json={'version':api.school['version'],
+        'data':{'company_id':api.school['company_id'], 'name':api.school['name'], 'educacenso_training':False}})
+    assert denied.status_code == 403
     for route in (path, download):
         assert client.get(api.base+route, headers=headers).status_code == 403
