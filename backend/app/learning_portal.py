@@ -79,7 +79,8 @@ def _period_data(snapshot, enrollment, period, closure):
                    and row.get('academic_period_id') == period.id), None)
     lessons = {row['id']: row for row in snapshot.get('lessons', [])
                if row.get('academic_period_id') == period.id
-               and str(row.get('lesson_date', '')) >= enrollment.enrolled_on.isoformat()}
+               and str(row.get('lesson_date', '')) >= enrollment.enrolled_on.isoformat()
+               and ('expected_enrollment_ids' not in row or enrollment.id in row['expected_enrollment_ids'])}
     counts = {'present': 0, 'absent': 0, 'justified_absence': 0, 'unrecorded': 0, 'total': 0}
     marks = {row['lesson_id']: row for row in snapshot.get('attendance', [])
              if row.get('enrollment_id') == enrollment.id
@@ -125,9 +126,18 @@ def learning_data(db, students):
                 m.AcademicPeriod.school_id == student.school_id,
                 m.AcademicPeriod.academic_year_id == enrollment.academic_year_id,
             ).order_by(m.AcademicPeriod.order_index, m.AcademicPeriod.starts_on)))
+            class_ids = {enrollment.class_group_id}
+            moves = db.execute(select(m.EnrollmentEvent.before, m.EnrollmentEvent.after).where(
+                m.EnrollmentEvent.school_id == student.school_id,
+                m.EnrollmentEvent.enrollment_id == enrollment.id,
+                m.EnrollmentEvent.action == 'change_class'))
+            for before, after in moves:
+                for state in (before, after):
+                    if isinstance(state, dict) and state.get('class_group_id'):
+                        class_ids.add(state['class_group_id'])
             diaries = list(db.scalars(select(m.SchoolDiary).where(
                 m.SchoolDiary.school_id == student.school_id,
-                m.SchoolDiary.class_group_id == enrollment.class_group_id,
+                m.SchoolDiary.class_group_id.in_(class_ids),
                 m.SchoolDiary.academic_year_id == enrollment.academic_year_id,
             )))
             subjects = []
@@ -143,15 +153,21 @@ def learning_data(db, students):
                     if not closure:
                         continue
                     snapshot = closure.snapshot or {}
-                    if not any(row.get('enrollment_id') == enrollment.id for key in ('roster', 'attendance', 'period_results') for row in snapshot.get(key, [])):
+                    if not any(row.get('enrollment_id') == enrollment.id and row.get('student_id') == student.id for key in ('roster', 'attendance', 'period_results') for row in snapshot.get(key, [])):
                         continue
                     if not any(row.get('academic_period_id') == period.id for row in snapshot.get('lessons', [])):
                         continue
                     # Nenhum resultado de outro estudante, anotação interna ou rascunho é serializado.
-                    published.append(_period_data(snapshot, enrollment, period, closure))
+                    item = _period_data(snapshot, enrollment, period, closure)
+                    origin = snapshot.get('diary') or {}
+                    item['class_name'] = origin.get('class_name') or ''
+                    item['component_name'] = origin.get('component_name') or ''
+                    if closure.academic_period_id == period.id and snapshot.get('period'):
+                        item['period_name'] = snapshot['period'].get('name') or period.name
+                    published.append(item)
                 if published:
                     component = db.get(m.CurriculumComponent, diary.component_id)
-                    subjects.append({'diary_id': diary.id, 'component_name': component.name if component else '', 'periods': published})
+                    subjects.append({'diary_id': diary.id, 'component_name': published[-1]['component_name'] or (component.name if component else ''), 'periods': published})
             items.append({'enrollment_id': enrollment.id, 'number': enrollment.number,
                           'class_name': group.name if group else '', 'year_name': year.name if year else '',
                           'status': enrollment.status, 'subjects': sorted(subjects, key=lambda item: item['component_name'])})
@@ -174,8 +190,8 @@ def report_response(db, students, student_id, enrollment_id, issuer):
         for subject in enrollment['subjects']:
             for period in subject['periods']:
                 a = period['attendance']
-                rows.append({'year': enrollment['year_name'], 'class': enrollment['class_name'],
-                             'subject': subject['component_name'], 'period': period['period_name'],
+                rows.append({'year': enrollment['year_name'], 'class': period['class_name'] or enrollment['class_name'],
+                             'subject': period['component_name'] or subject['component_name'], 'period': period['period_name'],
                              'grade': period['grade_display'], 'present': a['present'], 'absent': a['absent'],
                              'justified': a['justified_absence'], 'attendance': f"{a['percentage']:.2f}%".replace('.', ',') if a['percentage'] is not None else 'Não consolidada',
                              'result': period['result_label']})

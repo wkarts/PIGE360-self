@@ -1,7 +1,9 @@
 """Operação interna das inscrições: análise, conciliação cadastral e efetivação auditada."""
 from datetime import date, datetime, UTC
 from fastapi import APIRouter, Query, Request, HTTPException
-from sqlalchemy import func, select
+from pydantic import BaseModel, ConfigDict, Field
+from .db import now
+from sqlalchemy import func, select, update
 from . import models as m, schemas, online_schemas as s
 from .common import audit, output, number
 from .security import DB, Actor, Scope, scoped, require, fail, check_version, lock_school
@@ -387,16 +389,92 @@ def revise_contract(id:str,data:s.ContractRevisionInput,db:DB,user:Actor,school:
     issued=db.scalar(select(m.IssuedDocument).where(m.IssuedDocument.school_id==school.id,
         m.IssuedDocument.enrollment_id==enrollment.id,m.IssuedDocument.template_id==template.id,
         m.IssuedDocument.template_version==str(data.template_version)).limit(1))
-    if issued and issued.signature_status!='unsigned':
-        fail(409,'Esta revisão já recebeu assinatura fora deste fluxo. Crie outra revisão para iniciar um reenvio inequívoco.')
+    if issued:
+        fail(409,'Esta revisão já possui via emitida. Crie outra revisão para iniciar um reenvio inequívoco.')
+    previous = db.scalar(select(m.IssuedDocument).where(
+        m.IssuedDocument.school_id == school.id,
+        m.IssuedDocument.enrollment_id == enrollment.id,
+        m.IssuedDocument.template_id == obj.contract_template_id,
+        m.IssuedDocument.template_version == str(obj.contract_template_version)).limit(1))
     before={'template_id':obj.contract_template_id,'version':obj.contract_template_version,'sha256':obj.contract_template_revision_sha256}
-    obj.contract_template_id=template.id
-    obj.contract_template_version=revision.version_number;obj.contract_template_revision_sha256=revision.sha256
-    obj.contract_signing_order='applicant_first';obj.reviewed_by=user.id;obj.version+=1
+    # CAS complementa o lock da escola e não permite gravar uma revisão baseada
+    # em uma versão que outra requisição já substituiu.
+    result = db.execute(update(m.Admission).where(
+        m.Admission.id == obj.id, m.Admission.school_id == school.id,
+        m.Admission.version == data.version, m.Admission.status == 'approved').values(
+            contract_template_id=template.id, contract_template_version=revision.version_number,
+            contract_template_revision_sha256=revision.sha256, contract_signing_order='applicant_first',
+            reviewed_by=user.id, version=data.version + 1))
+    if result.rowcount != 1:
+        fail(409, 'O registro foi alterado por outro usuário. Recarregue antes de salvar.')
+    db.refresh(obj)
+    if previous and previous.superseded_at is None:
+        previous.superseded_at = now()
     add_message(db,obj,'O contrato foi corrigido pela escola. Aguarde a nova via e assine novamente o PDF disponibilizado. '+data.reason,
         'contract_revision',user=user)
     audit(db,request,user,'admission.contract_revision_changed',obj,school.id,
-        {'before':before,'after':{'template_id':template.id,'version':revision.version_number,'sha256':revision.sha256},'reason':data.reason})
+        {'before':before,'superseded_document_id':previous.id if previous else None,'after':{'template_id':template.id,'version':revision.version_number,'sha256':revision.sha256},'reason':data.reason})
     admission_notification(db,obj,'O contrato da sua inscrição foi atualizado. Confira a nova via e as orientações da escola.',
         'contract-revision-'+str(revision.version_number))
     db.flush();return admission_output(db,obj,False)
+
+class ContractHistoryPolicyInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    allow_removal: bool = Field(strict=True)
+
+
+class ContractHistoryRemovalInput(BaseModel):
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+    reason: str = Field(min_length=10, max_length=1000)
+
+
+@router.get('/contract-history/policy')
+def contract_history_policy(db: DB, user: Actor, school: Scope):
+    require(user, 'admissions.read')
+    from .contract_history import is_installation_owner
+    company = db.get(m.Company, school.company_id)
+    return {'allow_removal': company.allow_contract_history_removal,
+            'can_manage': is_installation_owner(db, user)}
+
+
+@router.put('/contract-history/policy')
+def set_contract_history_policy(data: ContractHistoryPolicyInput, db: DB, user: Actor, school: Scope, request: Request):
+    require(user, 'schools.manage')
+    from .contract_history import is_installation_owner
+    if not is_installation_owner(db, user):
+        fail(403, 'Somente o administrador original comprovado da instalação pode alterar esta política.')
+    lock_school(db, school.id)
+    company = db.scalar(select(m.Company).where(m.Company.id == school.company_id)
+                        .with_for_update().execution_options(populate_existing=True))
+    if company.allow_contract_history_removal != data.allow_removal:
+        before = company.allow_contract_history_removal
+        company.allow_contract_history_removal = data.allow_removal
+        audit(db, request, user, 'contract_history.policy_changed', company, school.id,
+              {'before': before, 'after': data.allow_removal})
+    return {'allow_removal': company.allow_contract_history_removal, 'can_manage': True}
+
+
+@router.post('/admissions/{id}/issued/{document_id}/remove-history')
+def remove_contract_history(id: str, document_id: str, data: ContractHistoryRemovalInput,
+                            db: DB, user: Actor, school: Scope, request: Request):
+    require(user, 'schools.manage')
+    from .contract_history import ensure_removable, is_installation_owner
+    if not is_installation_owner(db, user):
+        fail(403, 'Somente o administrador original comprovado da instalação pode remover esta via.')
+    lock_school(db, school.id)
+    company = db.scalar(select(m.Company).where(m.Company.id == school.company_id)
+                        .with_for_update().execution_options(populate_existing=True))
+    if not company.allow_contract_history_removal:
+        fail(409, 'A política da empresa preserva todas as vias substituídas.')
+    admission = scoped(db, m.Admission, id, school.id)
+    document = scoped(db, m.IssuedDocument, document_id, school.id)
+    if not admission.enrollment_id or document.enrollment_id != admission.enrollment_id:
+        fail(404, 'Documento não encontrado nesta inscrição.')
+    if document.history_removed_at is None:
+        ensure_removable(db, document)
+        document.history_removed_at = now()
+        stored = scoped(db, m.FileRecord, document.file_id, school.id)
+        audit(db, request, user, 'contract_history.removed', document, school.id, {
+            'admission_id': admission.id, 'template_id': document.template_id,
+            'version': document.template_version, 'sha256': stored.sha256, 'reason': data.reason})
+    return {'removed': True}

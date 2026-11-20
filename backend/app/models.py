@@ -1,6 +1,6 @@
 from sqlalchemy import LargeBinary
 from datetime import date, datetime
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, JSON, UniqueConstraint, CheckConstraint, Index
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, JSON, UniqueConstraint, CheckConstraint, Index, false
 from sqlalchemy.orm import Mapped, mapped_column
 from .db import Base, Record, now
 
@@ -23,6 +23,7 @@ class EmbeddingSettings(Base):
 
 class Company(Record, Base):
     __tablename__ = 'companies'
+    allow_contract_history_removal: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     name: Mapped[str] = mapped_column(String(160))
     document: Mapped[str | None] = mapped_column(String(24))
     trade_name: Mapped[str] = mapped_column(String(180), default='')
@@ -74,11 +75,17 @@ class SchoolSupportSettings(Record, Base):
 
 class School(Record, Base):
     __tablename__ = 'schools'
+    # Colunas das primeiras revisões da instalação, mantidas só para preservar o histórico.
+    educacenso_training: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(),
+                                                       info={'legacy_internal': True})
+    allow_contract_history_removal: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(),
+                                                                 info={'legacy_internal': True})
     company_id: Mapped[str] = mapped_column(ForeignKey('companies.id'))
     name: Mapped[str] = mapped_column(String(160))
     address: Mapped[str] = mapped_column(String(400), default='')
     phone: Mapped[str] = mapped_column(String(32), default='')
     email: Mapped[str] = mapped_column(String(254), default='')
+    diary_catalog: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     document_policy: Mapped[str] = mapped_column(String(16), default='warn')
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     __table_args__ = (CheckConstraint("document_policy IN ('warn','block')", name='document_policy'),)
@@ -434,6 +441,8 @@ class IssuedDocument(Record, Scoped, Base):
     template_id: Mapped[str | None] = mapped_column(ForeignKey('document_templates.id'), index=True)
     idempotency_key: Mapped[str | None] = mapped_column(String(120))
     signature_status: Mapped[str] = mapped_column(String(24), default='unsigned')
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    history_removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
         UniqueConstraint('school_id', 'idempotency_key', name='uq_issued_document_idempotency'),
         UniqueConstraint('school_id', 'enrollment_id', 'template_id', 'template_version', name='uq_issued_document_template_enrollment_version'),

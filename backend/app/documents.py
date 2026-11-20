@@ -109,17 +109,20 @@ def documents(student_id: str, db: DB, user: Actor, school: Scope):
     enrollment = db.scalar(select(m.Enrollment).where(m.Enrollment.student_id == student_id, m.Enrollment.school_id == school.id).order_by(m.Enrollment.created_at.desc()).limit(1))
     grade_id = db.get(m.ClassGroup, enrollment.class_group_id).grade_id if enrollment else None
     docs = [doc_output(db, doc) for doc in db.scalars(select(m.StudentDocument).where(m.StudentDocument.student_id == student_id, m.StudentDocument.school_id == school.id).order_by(m.StudentDocument.created_at.desc()))]
+    from .contract_history import access_state
     issued = []
     for x in db.scalars(select(m.IssuedDocument).where(
-            m.IssuedDocument.student_id == student_id, m.IssuedDocument.school_id == school.id
+            m.IssuedDocument.student_id == student_id, m.IssuedDocument.school_id == school.id,
+            m.IssuedDocument.history_removed_at.is_(None)
     ).order_by(m.IssuedDocument.created_at.desc())):
-        current_file_id = x.file_id
+        access = access_state(db, x)
+        current_file_id = x.file_id if access['downloadable'] else None
         if x.kind == 'template' and x.signature_status != 'unsigned':
             from .contract_signatures import latest_signed_file
             current = latest_signed_file(db, x)
             if current:
                 current_file_id = current.id
-        issued.append({**output(x), 'current_file_id': current_file_id,
+        issued.append({**output(x, ('file_id', 'snapshot') if not access['downloadable'] else ()), **access, 'current_file_id': current_file_id,
                        'template_name': x.snapshot.get('template_name', '') if x.kind == 'template' else ''})
     return {'items': docs, 'checklist': checklist(db, school.id, student_id, grade_id), 'issued': issued}
 
@@ -167,6 +170,17 @@ def waive(student_id: str, data: s.WaiverInput, db: DB, user: Actor, school: Sco
 def download(file_id: str, db: DB, user: Actor, school: Scope, request: Request):
     require(user, 'documents.read')
     obj = scoped(db, m.FileRecord, file_id, school.id)
+    if obj.file_kind == 'educacenso_evidence':
+        from .educacenso import authorize
+        authorize(user, school)
+    from .contract_history import access_state
+    issued = db.scalars(select(m.IssuedDocument).where(
+        m.IssuedDocument.school_id == school.id, m.IssuedDocument.file_id == obj.id)).all()
+    for document in issued:
+        if document.history_removed_at is not None:
+            fail(404, 'Arquivo não encontrado.')
+        if not access_state(db, document)['downloadable']:
+            fail(409, 'Esta via substituída não está disponível para download.')
     if obj.file_kind == 'absence_evidence':
         require(user, 'protocols.read')
     if obj.file_kind == 'fiscal_xml':

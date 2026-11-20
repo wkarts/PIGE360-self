@@ -7,7 +7,7 @@ from .models import AuditEvent, Sequence, User
 def output(obj, exclude=()):
     result = {}
     for column in obj.__table__.columns:
-        if column.name in exclude or column.name == 'imported_number':
+        if column.name in exclude or column.name == 'imported_number' or column.info.get('legacy_internal'):
             continue
         value = getattr(obj, column.name)
         result[column.name] = value.isoformat() if isinstance(value, (date, datetime)) else value
