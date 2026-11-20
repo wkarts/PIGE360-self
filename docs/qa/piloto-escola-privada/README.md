@@ -2,7 +2,7 @@
 
 ## Identificação da revisão
 
-Base do produto 0.12.1, `develop` em `a19673e4c84dc1570641399bcbb1068f6ea77b77`. A referência recebida em 20/11/2026 tem SHA-256 `0361b99423f017d3becf7ee2b43bcb618e42986e0b4ce123d0434da41232eefa`. O ensaio combinou as branches em checkout descartável, com escolas, pessoas, cobranças e documentos fictícios. Árvore Git da combinação de código `d478a4e5ce848ff8ae72facf1b8bc4803a0b2d22`, build da PWA `fef65810750f6a80`. Os testes dos provedores usam dados sintéticos. As PRs apontam para `develop`.
+Base do produto 0.12.1, `develop` em `a19673e4c84dc1570641399bcbb1068f6ea77b77`. A referência recebida em 20/11/2026 tem SHA-256 `0361b99423f017d3becf7ee2b43bcb618e42986e0b4ce123d0434da41232eefa`. O ensaio combinou as branches em checkout descartável, com escolas, pessoas, cobranças e documentos fictícios. Árvore Git do primeiro ensaio de código `d478a4e5ce848ff8ae72facf1b8bc4803a0b2d22`, build da PWA `fef65810750f6a80`. Os testes dos provedores usam dados sintéticos. As PRs apontam para `develop`.
 
 ## Percursos e permissões
 
@@ -47,8 +47,14 @@ O resultado anexado registra 42 verificações do portal. Executar `python scrip
 
 1. Revisar #99 antes da #104, que contém a mesma base de navegação. A tela de catálogo exige a API da #100. A tela do Censo exige API e migration aditiva da #101. A revisão documental é independente.
 2. Para o piloto de navegação, abrir `/?diarioPiloto=ID_DA_ESCOLA&guia=attendance#/diary` no gestor. No portal docente usar a mesma consulta com `#diario`. Remover os parâmetros do piloto para voltar à interface anterior. A autorização de dados continua no servidor.
-3. Para habilitar as ferramentas em homologação, fornecer uma lista JSON de IDs de escolas em `DIARY_CATALOG_SCHOOLS` e/ou `EDUCACENSO_TRAINING_SCHOOLS`. Começar com listas vazias. Para reverter, retirar a escola das listas e recarregar a configuração do serviço. Preservar os registros, anexos e a migration.
+3. Em **Instituição → Dados da escola → Editar dados**, uma pessoa com a permissão `schools.manage` pode marcar **Habilitar catálogo curricular do Diário** e **Habilitar treinamento do Educacenso** separadamente. Salvar aplica a escolha à escola no banco e registra a alteração na auditoria. Escolas novas e existentes começam com ambos desligados. Para pausar, desmarcar a opção e salvar. Um cliente anterior que edite a escola sem esses campos preserva os valores. Os documentos, rascunhos e controles de acesso permanecem válidos.
 4. Para o Finance, manter comandos externos desligados até atestar capacidades, recibos, idempotência, baixa, conciliação e política de coexistência com cobranças antigas na carteira piloto.
 5. Para o Censo, exigir revisão e hash do leiaute da etapa, mapeamento campo a campo, amostra autorizada de retorno e teste de cobertura no ambiente oficial de treinamento. A seleção de turma serve ao diagnóstico local. O tratamento do conjunto omitido precisa ser verificado para o ano e a etapa. [Matrícula Inicial](https://www.gov.br/inep/pt-br/areas-de-atuacao/pesquisas-estatisticas-e-indicadores/censo-escolar/orientacoes/matricula-inicial/migracao) e [Situação do Aluno](https://www.gov.br/inep/pt-br/areas-de-atuacao/pesquisas-estatisticas-e-indicadores/censo-escolar/orientacoes/situacao-do-aluno).
 
 O aceite do Navegantes continua pendente. Ainda é preciso exercitar a mesma imagem candidata, identificada por digest OCI, na stack isolada com os perfis da escola, conferir o regimento e registrar as exceções. As proteções de integridade dos fechamentos, dos lotes e da recuperação passam a fazer parte do comportamento normal quando as respectivas correções forem adotadas.
+
+## Validação das preferências por escola
+
+A árvore combinada desta correção é `6ba35e84e95af831806abb2b003e92b53f034e39`, com build da PWA `c65052bb9e32dec3`. Em Chromium, o operador abriu o cadastro da escola, habilitou ambos os recursos e usou o catálogo e o Educacenso. Depois pausou somente o Educacenso. A consulta à API confirmou o catálogo ativo e o treinamento desativado no mesmo processo.
+
+Em PostgreSQL 16.2, a atualização de uma cópia da base de testes passou da revisão `0060_educacenso_training` para `0061_school_census_options`. Todas as 609 escolas existentes receberam ambos os campos desativados, e os dois anexos de evidência continuaram registrados. A migration `0060_school_pilot_options` é comum às PRs de backend. A revisão de junção preserva instalações que já executaram a migration de rascunhos.
