@@ -284,7 +284,12 @@ var PigeCommunity;
     const newDesign = () => ({ pages: [], configured: false, header_sticky: false, mobile_actions: false, eyebrow: '', hero_image: null, hero_gallery: [], primary_action: null, secondary_action: null, menu: [], footer_text: '', sections: [] });
     const sectionLabels = { cards: 'Etapas e cartões', split: 'Texto e fotografia', gallery: 'Galeria de imagens', steps: 'Jornada e passos', cta: 'Convite e botão', news: 'Notícias publicadas', agenda: 'Agenda publicada', text: 'Texto de conteúdo' };
     PigeCommunity.component = { props: ['schoolId', 'permissions', 'publicMode', 'portalMode', 'request', 'compact', 'websiteRequest'], render: PigeRenders.community, setup(props) {
-            const s = Vue.reactive({ siteGuide: 'models', models: [], modelChoice: 'horizon', resolvedModel: null, modelPreviewInput: '', modelPreviewPage: '', modelPreviewActive: false, hasModelCheckpoint: false, demoConfirmed: false, sitePageIndex: -1, assets: [], websiteInitial: '', sectionKind: 'cards', previewHtml: '', previewWidth: '100%', publishedVersion: 0, publishedUrl: '', published: false, hasDraft: false, website: { design: newDesign(), enabled: false, theme: 'horizon', headline: '', introduction: '', about: '', public_url: '', portal_url: '', notice: '', admission_url: '', brand: { display_name: '', primary_color: '', secondary_color: '', font_family: '' } }, websiteOpen: false, busy: false, error: '', notice: '', items: [], page: 1, total: 0, q: '', kind: '', status: '', upcoming: false, selected: null, editing: false, discard: false, deleteConfirm: false, initial: '', form: empty() });
+            const editorSteps = [
+                { id: 'content', number: '1', label: 'Conteúdo', description: 'Defina o tipo, público, título, resumo e texto da publicação.' },
+                { id: 'media', number: '2', label: 'Imagem', description: 'Adicione uma fotografia acessível ou reutilize uma imagem da biblioteca.' },
+                { id: 'publish', number: '3', label: 'Publicação', description: 'Escolha o período, destaque e situação da publicação antes de salvar.' },
+            ];
+            const s = Vue.reactive({ siteGuide: 'models', models: [], modelChoice: 'horizon', resolvedModel: null, modelPreviewInput: '', modelPreviewPage: '', modelPreviewActive: false, hasModelCheckpoint: false, demoConfirmed: false, sitePageIndex: -1, assets: [], admissionReadiness: null, websiteInitial: '', sectionKind: 'cards', previewHtml: '', previewWidth: '100%', publishedVersion: 0, publishedUrl: '', published: false, hasDraft: false, website: { design: newDesign(), enabled: false, theme: 'horizon', headline: '', introduction: '', about: '', public_url: '', portal_url: '', notice: '', admission_url: '', brand: { display_name: '', primary_color: '', secondary_color: '', font_family: '' } }, websiteOpen: false, busy: false, error: '', notice: '', items: [], page: 1, total: 0, q: '', kind: '', status: '', upcoming: false, selected: null, editing: false, editorStep: 'content', discard: false, deleteConfirm: false, initial: '', form: empty() });
             const manage = () => !props.publicMode && !props.portalMode && Boolean(props.permissions?.includes('schools.manage'));
             const endpoint = () => props.portalMode ? '/portal/community-feed' : props.publicMode ? '/public/schools/' + props.schoolId + '/community-feed' : '/schools/' + props.schoolId + (manage() ? '/community-posts' : '/community-feed');
             const transport = (path, options) => (props.request || request)(path, options);
@@ -359,6 +364,8 @@ var PigeCommunity;
             } }
             function websitePayload() { const { version, enabled, theme, headline, introduction, about, public_url, portal_url, notice, admission_url, brand, design } = s.website; return { version, enabled, theme, headline, introduction, about, public_url, portal_url, notice, admission_url, brand, design }; }
             async function loadSiteAssets() { await run(async () => { const data = await transport('/schools/' + props.schoolId + '/website/assets'); s.assets = data.items; }); }
+            async function loadAdmissionReadiness() { if (!manage() || !props.permissions?.includes('admissions.read'))
+                return; await run(async () => { s.admissionReadiness = await transport('/schools/' + props.schoolId + '/admission-readiness'); s.notice = 'Situação da matrícula atualizada. O CTA continua apontando para o endereço configurado, sem criar outro processo.'; }); }
             async function removeSiteAsset(asset) { if (!window.confirm('Excluir esta fotografia da biblioteca? Somente fotos sem uso em rascunhos, sites ou publicações podem ser excluídas.'))
                 return; await run(async () => { await transport('/schools/' + props.schoolId + '/website/assets/' + asset.id, { method: 'DELETE' }); s.assets = s.assets.filter(x => x.id !== asset.id); s.notice = 'Fotografia sem uso excluída.'; }); }
             async function uploadSiteImage(event, target) { const input = event.target; const file = input.files?.[0]; if (!file)
@@ -468,6 +475,7 @@ var PigeCommunity;
                 return; s.website.brand = { display_name: '', primary_color: '', secondary_color: '', font_family: '' }; s.previewHtml = ''; }
             function editorialCheck() { if (/^(https?:\/\/|www\.)/i.test(s.website.headline.trim()))
                 throw new Error('Use um título na chamada principal. Informe a URL no endereço do botão.'); }
+            function admissionReasonLabel(reason) { return { not_published: 'não publicado', not_started: 'abertura futura', closed: 'prazo encerrado', no_active_groups: 'sem turma ativa', inactive_school: 'unidade inativa' }[reason] || reason; }
             async function saveWebsite() { await run(async () => { await transport('/schools/' + props.schoolId + '/website/draft', { method: 'PUT', body: JSON.stringify(websitePayload()) }); await loadWebsite(); s.notice = 'Rascunho salvo. A versão pública permanece a mesma até você publicar.'; }); }
             async function publishWebsite() { if (s.website.design?.demonstration && !s.demoConfirmed) {
                 s.error = 'Confirme explicitamente a publicação de conteúdo demonstrativo ou substitua e revise os exemplos.';
@@ -481,10 +489,22 @@ var PigeCommunity;
             async function search() { s.page = 1; await run(load); }
             async function page(delta) { s.page += delta; await run(load); }
             function open(post) { s.selected = post; s.error = ''; }
+            function editorStepSummary() { return editorSteps.find(step => step.id === s.editorStep)?.description || ''; }
+            function setEditorStep(step) {
+                if (!editorSteps.some(item => item.id === step))
+                    return;
+                s.editorStep = step;
+                void Vue.nextTick(() => { const field = document.querySelector('.community-editor [data-editor-step="' + step + '"]'); field?.scrollIntoView?.({ block: 'start' }); });
+            }
+            function nextEditorStep() { const index = editorSteps.findIndex(step => step.id === s.editorStep); if (index < editorSteps.length - 1)
+                setEditorStep(editorSteps[index + 1].id); }
+            function previousEditorStep() { const index = editorSteps.findIndex(step => step.id === s.editorStep); if (index > 0)
+                setEditorStep(editorSteps[index - 1].id); }
             function edit(post) {
                 s.form = post ? { image: post.image ? { ...post.image } : null, id: post.id, version: post.version || 1, title: post.title, summary: post.summary, content: post.content, kind: post.kind, audience: post.audience, status: post.status || 'draft', pinned: post.pinned, publish_at: local(post.publish_at), expires_at: local(post.expires_at), event_start: local(post.event_start), event_end: local(post.event_end), location: post.location } : empty();
                 s.initial = JSON.stringify(s.form);
                 s.editing = true;
+                s.editorStep = 'content';
                 s.discard = false;
                 s.deleteConfirm = false;
                 s.selected = null;
@@ -523,7 +543,7 @@ var PigeCommunity;
             Vue.watch(() => props.websiteRequest, openRequestedSite);
             Vue.watch(() => s.busy, openRequestedSite);
             Vue.onMounted(() => { void run(async () => { await load(); await loadWebsite(); }).then(openRequestedSite); });
-            return { dialogTarget: Vue.inject('school-dialog-host', 'body') || 'body', siteGuides, modelCover, revealInvalidSiteField, s, props, manage, run, load, toggleWebsite, loadSiteAssets, removeSiteAsset, uploadSiteImage, move, removeSiteItem, addSection, loadSiteModels, selectedModel, modelReady, clearModelPreview, modelNewPages, modelRenames, previewModel, previewModelPage, bindPreviewLinks, closePreview, applyModel, restoreModelCheckpoint, markDemoReplaced, editingPage, contentSections, selectSitePage, addSitePage, moveSitePage, removeSitePage, addPageToMenu, inheritBrand, newImage, newLink, newItem, sectionLabels, saveWebsite, publishWebsite, previewWebsite, unpublishWebsite, search, page, open, edit, closeEditor, save, remove, date, audienceLabels, statusLabels, scheduled, expired, paragraphs };
+            return { dialogTarget: Vue.inject('school-dialog-host', 'body') || 'body', siteGuides, editorSteps, modelCover, revealInvalidSiteField, s, props, manage, run, load, toggleWebsite, loadSiteAssets, loadAdmissionReadiness, removeSiteAsset, uploadSiteImage, move, removeSiteItem, addSection, loadSiteModels, selectedModel, modelReady, clearModelPreview, modelNewPages, modelRenames, previewModel, previewModelPage, bindPreviewLinks, closePreview, applyModel, restoreModelCheckpoint, markDemoReplaced, editingPage, contentSections, selectSitePage, addSitePage, moveSitePage, removeSitePage, addPageToMenu, inheritBrand, newImage, newLink, newItem, sectionLabels, saveWebsite, publishWebsite, previewWebsite, unpublishWebsite, search, page, open, edit, closeEditor, save, remove, date, audienceLabels, statusLabels, scheduled, expired, paragraphs, admissionReasonLabel, editorStepSummary, setEditorStep, nextEditorStep, previousEditorStep };
         } };
 })(PigeCommunity || (PigeCommunity = {}));
 /** Segredos transitórios ficam apenas na memória da tela, nunca no armazenamento do navegador. */

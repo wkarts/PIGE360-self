@@ -19,6 +19,9 @@ sandbox.Vue.onMounted=()=>{};sandbox.Vue.createApp=()=>({mount(){}});
 vm.runInContext(fs.readFileSync(path.join(dist,'app.js'),'utf8'),sandbox);
 const pageSlugs=['historia','ensino','espacos','noticias','agenda','contato'];
 const models=['horizon','editorial','culture','campus'].map(id=>({id,name:id,description:'Composição completa',website:{theme:id,headline:'Exemplo '+id,design:{configured:true,composition_version:2,demonstration:true,sections:[{id:'exemplo',kind:'cards',layout:'default',visible:true,title:'Exemplo preenchido',text:'Conteúdo demonstrativo',image:null,action:null,items:[]}],menu:pageSlugs.map(slug=>({label:slug,url:'/'+slug})),pages:pageSlugs.map(slug=>({slug,title:'Página '+slug,published:true,show_contact_details:slug==='contato',sections:[{id:'conteudo-'+slug,kind:slug==='noticias'?'news':slug==='agenda'?'agenda':'text',title:'Conteúdo '+slug,text:'Texto demonstrativo',visible:true,items:[]}]}))}}}));
+for(const [id,theme,direction] of [['familias','horizon','standard'],['atelier','horizon','atelier'],['rota','editorial','rota'],['nucleo','campus','nucleo']]){
+ const prototype=structuredClone(models[0]);prototype.id=id;prototype.name=id;prototype.website.theme=theme;prototype.website.headline='Exemplo '+id;prototype.website.design.direction=direction;models.push(prototype);
+}
 const resolveModel=input=>{
  const preset=structuredClone(models.find(m=>m.id===input.model_id).website);
  const pages=structuredClone(input.website.design.pages);const mapped={};
@@ -26,10 +29,11 @@ const resolveModel=input=>{
  preset.design.menu=preset.design.menu.map(link=>({...link,url:mapped[link.url]||link.url}));
  return {...input.website,...preset,design:{...input.website.design,...preset.design,header_sticky:input.website.design.header_sticky,mobile_actions:input.website.design.mobile_actions,pages}};
 };
-const calls=[];let saved=null;let version=1;let checkpoint=null;let failModelPreview=false;
+const calls=[];let saved=null;let version=1;let checkpoint=null;let failModelPreview=false;let readinessOpen=true;
 const request=async(url,options={})=>{
  calls.push({url,options});
  if(url.includes('/community-posts?'))return {items:[],total:0,page:1,page_size:12};
+ if(url.endsWith('/admission-readiness'))return {ready:readinessOpen,campaigns:[{id:'campaign-1',title:'Matrículas 2027',slug:'matriculas-2027',opens_on:'2027-01-01',closes_on:'2027-12-31',ready:readinessOpen,reasons:readinessOpen?[]:['closed']}],issues:readinessOpen?[]:[{code:'no_open_campaigns',message:'Nenhum processo disponível.'}]};
  if(url.endsWith('/website/draft')){saved=JSON.parse(options.body);return {};}
  if(url.endsWith('/website/models'))return {items:models};
  if(url.endsWith('/website/preview-model')){if(failModelPreview)throw Error('Prévia indisponível');return {website:resolveModel(JSON.parse(options.body)),html:'<p>Model preview</p>'};}
@@ -40,12 +44,15 @@ const request=async(url,options={})=>{
  if(url.endsWith('/website'))return {configuration:{...saved,version:++version,draft:saved,enabled:false,model_checkpoint:checkpoint,has_checkpoint:Boolean(checkpoint)}};
  throw Error('Unexpected '+url);
 };
-const ctx=sandbox.PigeCommunity.component.setup({schoolId:'school-test',permissions:['schools.manage'],request});
+const ctx=sandbox.PigeCommunity.component.setup({schoolId:'school-test',permissions:['schools.manage','admissions.read'],request});
 const render=()=>sandbox.PigeRenders.community.call(ctx,ctx,[]);
+assert.match(communityTemplate,/class="editor-steps"/);assert.match(communityTemplate,/aria-label="Estado da publicação e matrícula"/);
+ctx.edit();assert.equal(ctx.s.editorStep,'content');ctx.nextEditorStep();assert.equal(ctx.s.editorStep,'media');ctx.nextEditorStep();assert.equal(ctx.s.editorStep,'publish');ctx.previousEditorStep();assert.equal(ctx.s.editorStep,'media');ctx.closeEditor(true);
 render();await ctx.toggleWebsite();render();
-await ctx.loadSiteModels();assert.equal(ctx.s.models.length,4);
+await ctx.loadSiteModels();assert.equal(ctx.s.models.length,8);await ctx.loadAdmissionReadiness();assert.equal(ctx.s.admissionReadiness.ready,true);readinessOpen=false;await ctx.loadAdmissionReadiness();assert.equal(ctx.s.admissionReadiness.campaigns[0].ready,false);assert.deepEqual(ctx.s.admissionReadiness.campaigns[0].reasons,['closed']);readinessOpen=true;
 ctx.s.website.design.header_sticky=true;ctx.s.website.design.mobile_actions=true;ctx.s.website.headline='Conteúdo original';ctx.s.website.public_url='https://school.test';ctx.s.website.design.pages=[{slug:'historia',title:'História existente',published:true,sections:[]}];
 for(const theme of ['horizon','editorial','culture','campus']){ctx.s.modelChoice=theme;const before=JSON.stringify(ctx.s.website);await ctx.previewModel();const previewBody=JSON.parse(calls.at(-1).options.body);assert.equal(calls.at(-1).url.endsWith('/website/preview-model'),true);assert.equal(previewBody.website.design.header_sticky,true);assert.equal(previewBody.website.design.mobile_actions,true);assert.equal(ctx.s.resolvedModel.design.pages.length,7);assert.equal(ctx.modelNewPages().length,6);assert.equal(ctx.modelRenames()[0],'/historia → /historia-2');assert.equal(ctx.s.resolvedModel.design.menu[0].url,'/historia-2');assert.equal(ctx.s.resolvedModel.design.pages.at(-1).show_contact_details,true);let onPreviewClick;ctx.bindPreviewLinks({currentTarget:{contentDocument:{addEventListener(name,handler){assert.equal(name,'click');onPreviewClick=handler;}}}});let prevented=false;onPreviewClick({button:0,target:{closest:()=>({getAttribute:()=>'/historia-2'})},preventDefault(){prevented=true;}});while(ctx.s.busy)await new Promise(resolve=>setTimeout(resolve,0));assert.equal(prevented,true);assert.equal(ctx.s.modelPreviewPage,'historia-2');for(const target of ['#contato','/#contato','https://other.test','/unknown','/historia-2?x=1']){let intercepted=false;onPreviewClick({button:0,target:{closest:()=>({getAttribute:()=>target})},preventDefault(){intercepted=true;}});assert.equal(intercepted,false,target);}ctx.s.modelPreviewPage='historia-2';await ctx.previewModelPage();assert.ok(calls.at(-1).url.endsWith('/website/preview?page=historia-2'));assert.equal(JSON.parse(calls.at(-1).options.body).design.pages.length,7);render();assert.deepEqual(JSON.parse(JSON.stringify(ctx.s.website)),JSON.parse(before),'Catalog preview never mutates editor');sandbox.confirm=()=>false;await ctx.applyModel();assert.deepEqual(JSON.parse(JSON.stringify(ctx.s.website)),JSON.parse(before),'Cancel never overwrites');sandbox.confirm=()=>true;await ctx.applyModel();assert.equal(ctx.s.website.design.composition_version,2);assert.equal(ctx.s.website.design.sections[0].title,'Exemplo preenchido');assert.equal(ctx.s.website.public_url,'https://school.test');assert.equal(ctx.s.website.design.pages[0].slug,'historia');assert.equal(ctx.s.website.design.pages.length,7);assert.equal(ctx.s.website.design.menu[0].url,'/historia-2');assert.equal(ctx.s.website.design.demonstration,true);render();await ctx.restoreModelCheckpoint();assert.equal(ctx.s.website.headline,JSON.parse(before).headline);assert.equal(ctx.s.website.design.pages[0].slug,'historia');assert.equal(ctx.s.hasModelCheckpoint,false);}
+for(const [id,direction] of [['atelier','atelier'],['rota','rota'],['nucleo','nucleo']]){ctx.s.modelChoice=id;await ctx.previewModel();assert.equal(ctx.s.resolvedModel.design.direction,direction);assert.equal(ctx.s.resolvedModel.design.pages.length,7);ctx.clearModelPreview();}
 await ctx.previewModel();ctx.s.website.headline='Alteração após a prévia';assert.equal(ctx.modelReady(),false);const writesBefore=calls.filter(c=>c.url.endsWith('/website/apply-model')).length;await ctx.applyModel();assert.equal(calls.filter(c=>c.url.endsWith('/website/apply-model')).length,writesBefore,'Changed content must be previewed again, not applied silently');ctx.clearModelPreview();
 const beforeFailure=JSON.stringify(ctx.s.website);failModelPreview=true;await ctx.previewModel();assert.match(ctx.s.error,/Prévia indisponível/);assert.equal(ctx.modelReady(),false);assert.equal(ctx.s.resolvedModel,null);assert.equal(JSON.stringify(ctx.s.website),beforeFailure);failModelPreview=false;
 ctx.s.website.design.pages=Array.from({length:20},(_,i)=>({slug:'p-'+i,title:'Página',published:false,sections:[]}));ctx.addSitePage();assert.equal(ctx.s.website.design.pages.length,20);
@@ -122,4 +129,4 @@ toggleNode().props.onClick();assert.equal(readiness.s.websiteOpen,true);
 assert.ok(delayed[2].url.endsWith('/website/models'));delayed[2].resolve({items:models});await tick();
 toggleNode().props.onClick();assert.equal(readiness.s.websiteOpen,false,'Close remains available once idle');
 sandbox.Vue.onMounted=()=>{};
-console.log('Website editor: four models, independent pages, sections, order, photo focus, persistence, preview, cancel and no implicit publish OK.');
+console.log('Website editor: five preserved models plus three opt-in directions, independent pages, editor steps, sections, order, photo focus, persistence, preview, cancel and no implicit publish OK.');

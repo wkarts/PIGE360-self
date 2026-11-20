@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 
 THEMES = {'horizon', 'editorial', 'culture', 'campus'}
+DIRECTIONS = {'standard', 'atelier', 'rota', 'nucleo'}
 SECTION_KINDS = {'cards', 'split', 'gallery', 'steps', 'cta', 'news', 'agenda', 'text'}
 
 
@@ -118,6 +119,7 @@ def render(data):
     custom_design = sections_configured or any(design.get(key) for key in ('eyebrow', 'hero_image', 'hero_gallery', 'primary_action', 'secondary_action', 'menu', 'footer_text', 'header_sticky', 'mobile_actions'))
     name = brand.get('display_name') or school['name']
     theme = site.get('theme') if site.get('theme') in THEMES else 'horizon'
+    direction = design.get('direction') if design.get('direction') in DIRECTIONS else 'standard'
     def color(key, fallback):
         value = brand.get(key)
         return value if isinstance(value, str) and re.fullmatch(r'#[0-9a-fA-F]{6}', value) else fallback
@@ -138,7 +140,17 @@ def render(data):
             if isinstance(global_action.get('url'), str) and global_action['url'].startswith('#'):
                 global_action['url'] = '/' + global_action['url']
     actions = action(primary_action, 'button') + action(secondary_action, 'button secondary')
-    hero_copy = f'<div class="hero-copy"><p class="eyebrow">{escape(design.get("eyebrow"))}</p><h1>{escape(site.get("headline"))}</h1>{paragraphs(site.get("introduction"), "lead")}<div class="actions">{actions}</div></div>'
+    admission_url = safe_url(site.get('admission_url'))
+    configured_action_urls = {
+        safe_url(candidate.get('url')) for candidate in (primary_action, secondary_action)
+        if isinstance(candidate, dict)
+    }
+    admission_action = ({'url': admission_url, 'label': 'Matrículas'}
+                        if admission_url and admission_url not in configured_action_urls else None)
+    admission_cta = action(admission_action, 'button admission-button')
+    hero_actions = actions + admission_cta
+    header_actions = admission_cta + actions
+    hero_copy = f'<div class="hero-copy"><p class="eyebrow">{escape(design.get("eyebrow"))}</p><h1>{escape(site.get("headline"))}</h1>{paragraphs(site.get("introduction"), "lead")}<div class="actions">{hero_actions}</div></div>'
     hero_image = picture(design.get('hero_image'), 'hero-photo', eager=True)
     def captioned(image, css='', eager=False):
         media = picture(image, css, eager)
@@ -178,6 +190,14 @@ def render(data):
         repeated_cover = page_image_url and page_image_url == (leading_section.get('image') or {}).get('url')
         page_media = f'<div class="page-media">{hero_image}</div>' if hero_image and not (composition_v2 and repeated_cover) else ''
         hero = f'<section class="hero internal-cover container">{page_copy}{page_media}</section>'
+    elif direction == 'atelier':
+        hero = f'<section class="hero atelier-cover container"><div class="atelier-copy">{hero_copy}</div><div class="atelier-media">{hero_image or ""}</div></section>'
+    elif direction == 'rota':
+        route_items = ''.join(f'<span class="route-node"><b>{index:02}</b>{escape(item.get("title"))}</span>'
+                             for index, item in enumerate((design.get('sections') or [{}])[0].get('items', [])[:3], 1))
+        hero = f'<section class="hero route-cover container"><div class="route-copy">{hero_copy}</div><div class="route-path">{route_items}{hero_image or ""}</div></section>'
+    elif direction == 'nucleo':
+        hero = f'<section class="hero nucleus-cover container"><div class="nucleus-copy">{hero_copy}</div><div class="nucleus-media">{hero_image or ""}</div></section>'
     elif theme == 'editorial':
         mosaic = gallery or ([hero_image] if hero_image else [])
         hero = f'<section class="hero editorial-cover"><div class="container">{hero_copy}<div class="hero-mosaic">{"".join(mosaic)}</div></div></section>'
@@ -298,7 +318,7 @@ def render(data):
     navigation = ''.join(action(item, 'nav-link') for item in menu)
     desktop_nav = f'<nav class="desktop-nav" aria-label="Navegação principal">{navigation}</nav>'
     mobile_nav = f'<details class="mobile-menu"><summary aria-label="Abrir ou fechar menu"><span aria-hidden="true">☰</span> Menu</summary><nav aria-label="Navegação móvel">{navigation}{action(secondary_action, "nav-link")}</nav></details>'
-    header = f'<header id="topo" class="site-header {"is-sticky" if design.get("header_sticky") else ""}"><div class="container header-inner"><a class="wordmark" href="/">{logo}<span>{escape(name)}</span></a>{desktop_nav}<div class="header-action">{action(primary_action, "button")}</div>{mobile_nav}</div></header>'
+    header = f'<header id="topo" class="site-header {"is-sticky" if design.get("header_sticky") else ""}"><div class="container header-inner"><a class="wordmark" href="/">{logo}<span>{escape(name)}</span></a>{desktop_nav}<div class="header-action">{header_actions}</div>{mobile_nav}</div></header>'
     topline = f'<div class="site-topline"><div class="container"><span>{escape(design.get("topline"))}</span>{action(secondary_action, "topline-link")}</div></div>' if composition_v2 and design.get('topline') else ''
     notice = f'<aside class="notice container" role="status">{escape(site["notice"])}</aside>' if site.get('notice') else ''
     contact = ''.join(f'<p>{escape(school.get(key))}</p>' for key in ('address', 'phone', 'email') if school.get(key))
@@ -327,7 +347,8 @@ def render(data):
         contact_section = ''
     heading_style = design.get('heading_style') if composition_v2 else 'inherit'
     heading_font = 'Georgia,serif' if heading_style == 'editorial' and brand.get('font_family', 'system') == 'system' else font
-    mobile_actions = f'<nav class="mobile-actions" aria-label="Ações rápidas">{actions}</nav>' if design.get('mobile_actions') else ''
+    mobile_actions = f'<nav class="mobile-actions" aria-label="Ações rápidas">{hero_actions}</nav>' if design.get('mobile_actions') else ''
     title = f'{page.get("title", "")} · {name}' if page is not None else name
     css = Path(__file__).with_name('website.css').read_text()
-    return f'''<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{escape(title)}</title><meta name="description" content="{escape(site.get('introduction'))}"><meta name="theme-color" content="{primary}"><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/api/v1/institution/icon.png?size=180"><link rel="stylesheet" href="/api/v1/institution/theme.css"><link rel="icon" href="/api/v1/institution/icon.png?size=32"><style>{css}:root{{--brand:{primary};--ink:{secondary};--font:{font};--heading-font:{heading_font}}}</style></head><body class="{theme}{' composition-v2' if composition_v2 else ''}{' is-internal' if composition_v2 and page is not None else ''}{' with-mobile-actions' if mobile_actions else ''}"><a class="skip" href="#conteudo">Ir para o conteúdo</a>{demonstration}{topline}{header}<main id="conteudo">{hero}{notice}{page_contact}{''.join(item[2] for item in visible_sections)}{contact_section}</main>{footer}{mobile_actions}</body></html>'''
+    direction_class = f' direction-{direction}' if direction != 'standard' else ''
+    return f'''<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{escape(title)}</title><meta name="description" content="{escape(site.get('introduction'))}"><meta name="theme-color" content="{primary}"><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/api/v1/institution/icon.png?size=180"><link rel="stylesheet" href="/api/v1/institution/theme.css"><link rel="icon" href="/api/v1/institution/icon.png?size=32"><style>{css}:root{{--brand:{primary};--ink:{secondary};--font:{font};--heading-font:{heading_font}}}</style></head><body class="{theme}{direction_class}{' composition-v2' if composition_v2 else ''}{' is-internal' if composition_v2 and page is not None else ''}{' with-mobile-actions' if mobile_actions else ''}"><a class="skip" href="#conteudo">Ir para o conteúdo</a>{demonstration}{topline}{header}<main id="conteudo">{hero}{notice}{page_contact}{''.join(item[2] for item in visible_sections)}{contact_section}</main>{footer}{mobile_actions}</body></html>'''

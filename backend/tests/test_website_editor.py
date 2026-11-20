@@ -50,6 +50,18 @@ def test_renderer_escapes_long_content_and_separates_actions(api):
         assert 'class="about"' not in preview['html']
 
 
+def test_opt_in_direction_models_preview_and_apply_without_changing_published_site(api,client):
+    original=api.call('PUT','/website',website('Publicação anterior','direction.example.test'))
+    for model_id,marker in [('atelier','atelier-cover'),('rota','route-cover'),('nucleo','nucleus-cover')]:
+        preview=api.post('/website/preview-model',{'model_id':model_id,'website':{'version':original['version']}},200)
+        assert preview['website']['design']['direction']==model_id
+        assert marker in preview['html']
+        assert api.get('/website')['configuration']['version']==original['version']
+    applied=api.post('/website/apply-model',{'model_id':'atelier','website':{'version':original['version']}},200)
+    assert applied['draft']['design']['direction']=='atelier'
+    assert client.get('/api/v1/public/schools/'+api.school['id']+'/website').json()['website']['headline']=='Publicação anterior'
+
+
 def test_unpublish_preserves_unsaved_draft_atomically(api,client):
     config=website('Publicação preservada','unpublish.example.test')
     row=api.call('PUT','/website',config)
