@@ -36,6 +36,23 @@ function nodes(vnode) {
   if(!vnode || typeof vnode!=='object')return [];
   return [vnode,...(Array.isArray(vnode.children)?vnode.children.flatMap(nodes):[])];
 }
+// Ambos os atalhos ficam indisponíveis enquanto o assistente conclui a operação atual.
+const workflow = sandbox.PigeEnrollmentWorkflow.component;
+const enrollment = workflow.setup({schoolId:'school', permissions:[], role:'secretary'}, {emit(){}});
+function checkEnrollmentLaunchers(busy) {
+  const tree = workflow.render.call(enrollment, enrollment, []);
+  for (const label of ['Assistente manual', 'Matricular selecionados']) {
+    const button = nodes(tree).find(node => node.type === 'button' && node.children === label);
+    assert.ok(button, label);
+    assert.equal(Boolean(button.props?.disabled), busy, label);
+  }
+}
+let finishEnrollment;
+const pendingEnrollment = enrollment.run(() => new Promise(resolve => { finishEnrollment = resolve; }));
+checkEnrollmentLaunchers(true);
+finishEnrollment();
+await pendingEnrollment;
+checkEnrollmentLaunchers(false);
 function loginLink(tree){return nodes(tree).filter(n=>n.type==='a' && n.props?.href==='/online.html');}
 function loginText(tree){return nodes(tree).map(n=>typeof n.children==='string'?n.children:'').join(' ');}
 let loginTree=render();
