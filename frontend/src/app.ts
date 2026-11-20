@@ -410,6 +410,7 @@ namespace PigeUI {
     if([...desks.values()].some(hasDraft)&&!window.confirm('Trocar de escola e fechar as guias com alterações não salvas?')){
       select.value=state.schoolId;return;
     }
+    PigeDiary.clearPilotContext(state.schoolId);
     const page=state.page;
     const home=primaryDesk.context;
     resetDesks();
