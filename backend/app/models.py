@@ -74,6 +74,7 @@ class SchoolSupportSettings(Record, Base):
 
 class School(Record, Base):
     __tablename__ = 'schools'
+    educacenso_training: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     company_id: Mapped[str] = mapped_column(ForeignKey('companies.id'))
     name: Mapped[str] = mapped_column(String(160))
     address: Mapped[str] = mapped_column(String(400), default='')
