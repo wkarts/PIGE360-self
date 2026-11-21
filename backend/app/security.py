@@ -32,7 +32,7 @@ ROLE_LABELS = {
 # Catálogo único de capacidades. Os endpoints continuam autorizando por capacidade,
 # nunca por texto apresentado no perfil.
 ALL_PERMISSIONS = {
-    'read', 'dashboard.read',
+    'educacenso.manage', 'read', 'dashboard.read',
     'people.read', 'people.write', 'students.read', 'students.write',
     'guardians.read', 'guardians.write',
     'academic.read', 'academic.write',
