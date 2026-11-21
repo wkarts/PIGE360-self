@@ -651,6 +651,17 @@ def remove_letterhead(template_id: str, db: DB, user: Actor, school: Scope, requ
     return output(obj)
 
 
+def ensure_bound_contract(db, school, template, enrollment):
+    if not enrollment or not _is_contract_kind(template.kind):
+        return
+    admission = db.scalar(select(m.Admission).where(
+        m.Admission.school_id == school.id, m.Admission.enrollment_id == enrollment.id))
+    if (admission and admission.contract_template_id and
+            (admission.contract_template_id, admission.contract_template_version, admission.contract_template_revision_sha256)
+            != (template.id, template.version, template.revision_sha256)):
+        fail(409, 'Use somente a revisão contratual atualmente vinculada à matrícula.')
+
+
 @router.post('/document-templates/{template_id}/preview')
 def preview_template(template_id: str, data: RenderInput, db: DB, user: Actor, school: Scope):
     require(user, 'documents.read')
@@ -664,6 +675,7 @@ def preview_pdf(template_id: str, data: RenderInput, db: DB, user: Actor, school
     require(user, 'documents.read')
     obj = _versioned_template(db, scoped(db, m.DocumentTemplate, template_id, school.id), data.template_version)
     enrollment = scoped(db, m.Enrollment, data.enrollment_id, school.id) if data.enrollment_id else None
+    ensure_bound_contract(db, school, obj, enrollment)
     preview = _render_with_context(db, school, obj, enrollment, data.values, user)
     if preview['missing_fields']:
         fail(422, 'Preencha os campos obrigatórios antes de gerar o PDF: ' + ', '.join(preview['field_meta'][key]['label'] for key in preview['missing_fields']))
@@ -683,12 +695,15 @@ def issue_template(template_id: str, data: IssueInput, db: DB, user: Actor, scho
          'revision_sha256': obj.revision_sha256,
          'enrollment': enrollment.id, 'values': data.values}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     admission = db.scalar(select(m.Admission).where(m.Admission.enrollment_id==enrollment.id))
+    ensure_bound_contract(db, school, obj, enrollment)
     applicant_first = bool(admission and admission.contract_signing_order=='applicant_first'
         and admission.contract_template_id==obj.id)
     key = data.idempotency_key or input_hash
     existing = db.scalar(select(m.IssuedDocument).where(m.IssuedDocument.school_id == school.id,
          m.IssuedDocument.idempotency_key == key))
     if existing:
+        from .contract_signatures import ensure_current_contract
+        ensure_current_contract(db, existing)
         if existing.snapshot.get('input_hash') != input_hash:
             fail(409, 'A chave de idempotência já foi usada para outro conteúdo.')
         if not applicant_first and _is_contract_kind(obj.kind) and existing.signature_status == 'unsigned':
@@ -703,6 +718,8 @@ def issue_template(template_id: str, data: IssueInput, db: DB, user: Actor, scho
         m.IssuedDocument.template_version == str(obj.version),
     ).limit(1))
     if issued_for_version:
+        from .contract_signatures import ensure_current_contract
+        ensure_current_contract(db, issued_for_version)
         if issued_for_version.snapshot.get('input_hash') == input_hash:
             if not applicant_first and _is_contract_kind(obj.kind) and issued_for_version.signature_status == 'unsigned':
                 from .contract_signatures import auto_sign_issued_document
@@ -752,6 +769,11 @@ def issue_template(template_id: str, data: IssueInput, db: DB, user: Actor, scho
 def verify_document(document_id: str, db: DB, user: Actor, school: Scope):
     require(user, 'documents.read')
     document = scoped(db, m.IssuedDocument, document_id, school.id)
+    if document.history_removed_at is not None:
+        fail(404, 'Documento não encontrado.')
+    from .contract_history import access_state
+    if not access_state(db, document)['downloadable']:
+        fail(409, 'Esta via substituída não está disponível para verificação operacional.')
     stored = scoped(db, m.FileRecord, document.file_id, school.id)
     try:
         current_hash = hashlib.sha256(read_bytes(stored)).hexdigest()

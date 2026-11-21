@@ -221,13 +221,17 @@ def superseded_contract_filter(school_id):
         m.Admission.contract_template_id.is_not(None),
         or_(m.Admission.contract_template_id!=m.IssuedDocument.template_id,
             cast(m.Admission.contract_template_version,String)!=m.IssuedDocument.template_version)).exists()
-    return is_contract & replaced
+    return or_(m.IssuedDocument.superseded_at.is_not(None), is_contract & replaced)
 
 
-def ensure_current_contract(db,issued):
-    if db.scalar(select(m.IssuedDocument.id).where(m.IssuedDocument.id==issued.id,
-        superseded_contract_filter(issued.school_id))):
-        fail(409,'Esta via está no histórico. Utilize o contrato atualmente vinculado à matrícula.')
+def is_superseded(db, issued):
+    return issued.superseded_at is not None or bool(db.scalar(select(m.IssuedDocument.id).where(
+        m.IssuedDocument.id == issued.id, superseded_contract_filter(issued.school_id))))
+
+
+def ensure_current_contract(db, issued):
+    if issued.history_removed_at is not None or is_superseded(db, issued):
+        fail(409, 'Esta via está no histórico. Utilize o contrato atualmente vinculado à matrícula.')
 
 
 def auto_sign_issued_document(db, issued, actor_id, request):
@@ -490,6 +494,7 @@ def sign_school_document(document_id: str, db: DB, user: Actor, school: Scope, r
         fail(403, 'Somente direção ou administração pode assinar em nome da escola.')
     lock_school(db, school.id)
     issued = scoped(db, m.IssuedDocument, document_id, school.id)
+    ensure_current_contract(db, issued)
     if applicant_first(issued):
         fail(409,'A assinatura institucional deste contrato ocorre ao efetivar a matrícula.')
     previous = _company_revision(db, issued)
@@ -505,12 +510,16 @@ def sign_school_document(document_id: str, db: DB, user: Actor, school: Scope, r
 def signatures(document_id: str, db: DB, user: Actor, school: Scope):
     require(user, 'documents.read')
     issued = scoped(db, m.IssuedDocument, document_id, school.id)
-    current = verify_document_signatures(db, issued)
+    from .contract_history import access_state
+    state = access_state(db, issued)
+    if issued.history_removed_at is not None:
+        fail(404, 'Documento não encontrado.')
+    current = verify_document_signatures(db, issued) if state['downloadable'] else {'file_id': None, 'signatures': []}
     revisions = db.scalars(select(IssuedDocumentSignature).where(
         IssuedDocumentSignature.school_id == school.id,
         IssuedDocumentSignature.issued_document_id == issued.id,
     ).order_by(IssuedDocumentSignature.created_at, IssuedDocumentSignature.id)).all()
-    return {'document_id': issued.id, 'status': issued.signature_status, **current,
+    return {'document_id': issued.id, 'status': issued.signature_status, **current, **state,
             'revisions': [output(row) for row in revisions]}
 
 

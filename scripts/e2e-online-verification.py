@@ -100,7 +100,9 @@ try:
   choose_contract(first['id'],'Vincular contrato conferido para esta matrícula sintética.')
   issue_contract()
   a=client.get(base+'/admissions/'+data['id'],headers=headers).json();old_id=a['contract']['issued_document_id']
-  old_pdf=client.get('/api/v1/portal/admissions/'+data['id']+'/issued/'+old_id).content
+  portal_issued='/api/v1/portal/admissions/'+data['id']+'/issued/'
+  original=client.get(portal_issued+old_id)
+  assert original.status_code==200 and original.content.startswith(b'%PDF-')
   response=client.patch(base+'/document-templates/'+first['id'],headers=headers,json={'version':first['version'],'body':'Contrato inicial atualizado de {{aluno.nome}} com {{escola.nome}}.'});assert response.is_success,response.text
   if not admin.locator('.admission-model-settings').evaluate('(element)=>element.open'):admin.get_by_text('Atualizar versão ou trocar modelo',exact=True).click()
   admin.get_by_role('button',name='Atualizar modelos disponíveis',exact=True).click()
@@ -112,10 +114,15 @@ try:
   a=client.get(base+'/admissions/'+data['id'],headers=headers).json();assert a['contract_template_id']==other['id'] and a['contract_template_version']==1
   issue_contract()
   a=client.get(base+'/admissions/'+data['id'],headers=headers).json();assert len([d for d in a['issued_documents'] if d['kind']=='template'])==3
-  assert client.get('/api/v1/portal/admissions/'+data['id']+'/issued/'+old_id).content==old_pdf
+  historical=next(doc for doc in a['issued_documents'] if doc['id']==old_id)
+  assert historical['superseded'] and not historical['downloadable']
+  blocked=client.get(portal_issued+old_id)
+  assert blocked.status_code==409 and 'substituída' in blocked.json()['detail']
+  current=client.get(portal_issued+a['contract']['issued_document_id'])
+  assert current.status_code==200 and current.content.startswith(b'%PDF-') and current.content!=original.content
   assert client.get(base+'/admission-campaigns',headers=headers).json()[0]['contract_template_id'] is None
   admin.get_by_text('Histórico de contratos emitidos',exact=True).click()
-  expect(admin.get_by_text('Histórico preservado',exact=False).first).to_be_visible()
+  expect(admin.get_by_text('Via substituída · histórico',exact=False)).to_have_count(2)
   for width in (390,1440):
    admin.set_viewport_size({'width':width,'height':1000});assert admin.evaluate('document.documentElement.scrollWidth<=innerWidth')
    admin.screenshot(path=str(OUT/f'contract-choice-{width}.png'),full_page=True)
@@ -167,7 +174,7 @@ try:
   expect(admin.get_by_role('heading',name='Efetivação da matrícula',exact=True)).to_be_visible()
   expect(admin.get_by_role('button',name='Efetivar matrícula e emitir comprovante',exact=True)).to_be_disabled()
   assert not errors,errors
-  result={'status':'passed','checks':['Instância preexistente compartilhada selecionada sem integração legada','Botão WhatsApp disponível no fluxo da matrícula','Dois documentos anexados manualmente sem catálogo','Confirmação de código mantém inscrição aberta','Inscrição concluída pela interface com contato confirmado','Contrato vinculado na análise sem alterar campanha','Revisão atualizada pela interface após recarregar modelos','Troca para outro modelo v1 preserva três vias e downloads históricos','Obrigatoriedade configurada por variável no editor real','Rascunho retomado após recarregar a aplicação','Calendário e seletor UF conforme o campo','PDF real sem marcadores, rótulos vazios ou contratantes inventados','Efetivação mostra os requisitos restantes na mesma matrícula'],'responsive':responsive,'javascript_errors':errors,'browser':browser.version,'external_delivery':'Não executada; código sintético da fila usado na confirmação','database':'SQLite temporário'}
+  result={'status':'passed','checks':['Instância preexistente compartilhada selecionada sem integração legada','Botão WhatsApp disponível no fluxo da matrícula','Dois documentos anexados manualmente sem catálogo','Confirmação de código mantém inscrição aberta','Inscrição concluída pela interface com contato confirmado','Contrato vinculado na análise sem alterar campanha','Revisão atualizada pela interface após recarregar modelos','Troca para outro modelo v1 preserva três registros e permite baixar a via vigente','Obrigatoriedade configurada por variável no editor real','Rascunho retomado após recarregar a aplicação','Calendário e seletor UF conforme o campo','PDF real sem marcadores, rótulos vazios ou contratantes inventados','Efetivação mostra os requisitos restantes na mesma matrícula'],'responsive':responsive,'javascript_errors':errors,'browser':browser.version,'external_delivery':'Não executada; código sintético da fila usado na confirmação','database':'SQLite temporário'}
   (OUT/'results.json').write_text(json.dumps(result,ensure_ascii=False,indent=2));print(json.dumps(result,ensure_ascii=False));browser.close()
 finally:
  proc.terminate();proc.wait(timeout=10);log.close()

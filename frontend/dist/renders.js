@@ -2619,10 +2619,13 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                             class: "link-button",
                                             onClick: $event => (contractsForEnrollment(d.enrollment_id,d.id))
                                           }, "Conferir assinaturas →", 8, ["onClick"]))
-                                        : _createCommentVNode("", true), _createElementVNode("button", {
-                                        class: "link-button",
-                                        onClick: $event => (downloadFile(d.current_file_id || d.file_id))
-                                      }, "Baixar PDF →", 8, ["onClick"])])]))
+                                        : _createCommentVNode("", true), (d.downloadable!==false)
+                                        ? (_openBlock(), _createElementBlock("button", {
+                                            key: 1,
+                                            class: "link-button",
+                                            onClick: $event => (downloadFile(d.current_file_id || d.file_id))
+                                          }, "Baixar PDF →", 8, ["onClick"]))
+                                        : _createCommentVNode("", true)])]))
                                     }), 128))]))
                                   : _createCommentVNode("", true)
                               ]))
@@ -6350,7 +6353,18 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                             class: "btn btn-secondary",
                             onClick: $event => (download('/admissions/'+state.selected.id+'/issued/'+d.id,'documento-escolar.pdf'))
                           }, "Baixar documento escolar", 8, ["onClick"])]))
-                        }), 128))
+                        }), 128)),
+                        (state.selected.preserved_contracts?.length)
+                          ? (_openBlock(), _createElementBlock("details", { key: 3 }, [_createElementVNode("summary", null, "Vias anteriores assinadas · apenas consulta"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.selected.preserved_contracts, (d) => {
+                              return (_openBlock(), _createElementBlock("div", {
+                                key: d.id,
+                                class: "x-heading"
+                              }, [_createElementVNode("span", null, "Revisão v" + _toDisplayString(d.template_version) + " · " + _toDisplayString(date(d.created_at)), 1), _createElementVNode("button", {
+                                class: "btn btn-secondary",
+                                onClick: $event => (download('/admissions/'+state.selected.id+'/issued/'+d.id,'contrato-historico.pdf'))
+                              }, "Baixar PDF preservado", 8, ["onClick"])]))
+                            }), 128))]))
+                          : _createCommentVNode("", true)
                       ]),
                       (state.selected.reservation && state.selected.reservation.status!=='none')
                         ? (_openBlock(), _createElementBlock("section", {
@@ -8391,16 +8405,48 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                 ? (_openBlock(), _createElementBlock("details", {
                                     key: 8,
                                     class: "spaced"
-                                  }, [_createElementVNode("summary", null, "Histórico de contratos emitidos"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.selected.issued_documents.filter(d=>d.kind==='template'), (d) => {
-                                    return (_openBlock(), _createElementBlock("div", {
-                                      key: d.id,
-                                      class: "x-line"
-                                    }, [_createElementVNode("span", null, [_createTextVNode(_toDisplayString(templateName(d.template_id)) + " · revisão v" + _toDisplayString(d.template_version) + " · " + _toDisplayString(contractStatus(d.signature_status)), 1), _createElementVNode("small", null, _toDisplayString(dateTime(d.created_at)) + " · " + _toDisplayString(d.id===s.selected.contract.issued_document_id?'Via atual':'Histórico preservado'), 1)]), _createElementVNode("button", {
-                                      type: "button",
-                                      class: "btn btn-secondary",
-                                      onClick: $event => (downloadContractHistory(d.id))
-                                    }, "Baixar via do histórico", 8, ["onClick"])]))
-                                  }), 128))]))
+                                  }, [
+                                    _createElementVNode("summary", null, "Histórico de contratos emitidos"),
+                                    (!contractHistoryPolicy.value && can('schools.manage'))
+                                      ? (_openBlock(), _createElementBlock("button", {
+                                          key: 0,
+                                          type: "button",
+                                          class: "btn btn-secondary",
+                                          onClick: loadContractHistoryPolicy
+                                        }, "Consultar política de histórico", 8, ["onClick"]))
+                                      : _createCommentVNode("", true),
+                                    (contractHistoryPolicy.value?.can_manage)
+                                      ? (_openBlock(), _createElementBlock("label", {
+                                          key: 1,
+                                          class: "field checkbox-field"
+                                        }, [_createElementVNode("input", {
+                                          type: "checkbox",
+                                          checked: contractHistoryPolicy.value.allow_removal,
+                                          disabled: s.busy,
+                                          onChange: $event => (setContractHistoryPolicy($event.target.checked))
+                                        }, null, 40, ["checked", "disabled", "onChange"]), _createTextVNode("Permitir retirada administrativa de vias substituídas sem assinatura")]))
+                                      : _createCommentVNode("", true),
+                                    (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.selected.issued_documents.filter(d=>d.kind==='template'), (d) => {
+                                      return (_openBlock(), _createElementBlock("div", {
+                                        key: d.id,
+                                        class: "x-line"
+                                      }, [_createElementVNode("span", null, [_createTextVNode(_toDisplayString(templateName(d.template_id)) + " · revisão v" + _toDisplayString(d.template_version) + " · " + _toDisplayString(contractStatus(d.signature_status)), 1), _createElementVNode("small", null, _toDisplayString(dateTime(d.created_at)) + " · " + _toDisplayString(d.superseded?'Via substituída · histórico':'Via emitida'), 1)]), (d.downloadable!==false)
+                                        ? (_openBlock(), _createElementBlock("button", {
+                                            key: 0,
+                                            type: "button",
+                                            class: "btn btn-secondary",
+                                            onClick: $event => (downloadContractHistory(d.id))
+                                          }, _toDisplayString(d.superseded?'Baixar PDF preservado':'Baixar via emitida'), 9, ["onClick"]))
+                                        : _createCommentVNode("", true), (d.superseded && d.signature_status==='unsigned' && d.downloadable===false && contractHistoryPolicy.value?.can_manage && contractHistoryPolicy.value.allow_removal)
+                                        ? (_openBlock(), _createElementBlock("button", {
+                                            key: 1,
+                                            type: "button",
+                                            class: "btn btn-secondary",
+                                            onClick: $event => (removeContractHistory(d.id))
+                                          }, "Retirar do histórico", 8, ["onClick"]))
+                                        : _createCommentVNode("", true)]))
+                                    }), 128))
+                                  ]))
                                 : _createCommentVNode("", true)
                             ], 512)), [[_vShow, s.admissionStage==='contract']])
                           : _createCommentVNode("", true),
@@ -13357,11 +13403,11 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                 return (_openBlock(), _createElementBlock("div", {
                   key: document.id,
                   class: "contract-queue-row"
-                }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(document.template_name||kindLabel(document.kind)), 1), _createElementVNode("small", null, _toDisplayString(date(document.created_at)) + " · " + _toDisplayString(label(document.signature_status)), 1)]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(document.template_name||kindLabel(document.kind)), 1), _createElementVNode("small", null, _toDisplayString(date(document.created_at)) + " · " + _toDisplayString(label(document.signature_status)) + _toDisplayString(document.superseded?' · Via substituída':''), 1)]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
                   type: "button",
                   class: "btn btn-secondary small-button",
                   onClick: $event => (openReview(document.id))
-                }, "Consultar documento", 8, ["onClick"]), (document.signature_status==='unsigned' && canSign())
+                }, "Consultar documento", 8, ["onClick"]), (document.signature_status==='unsigned' && !document.superseded && canSign())
                   ? (_openBlock(), _createElementBlock("button", {
                       key: 0,
                       type: "button",
@@ -13423,7 +13469,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                 class: "panel x-card",
                 "aria-label": "Revisão de assinatura"
               }, [
-                _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "HISTÓRICO DO DOCUMENTO"), _createElementVNode("h3", null, _toDisplayString(state.reviewTitle), 1), _createElementVNode("p", null, "Assinaturas e histórico do documento")]), _createElementVNode("span", { class: _normalizeClass(["badge", state.review.status==='verified'?'active':state.review.status==='rejected'?'rejected':'pending']) }, _toDisplayString(label(state.review.status)), 3)]),
+                _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "HISTÓRICO DO DOCUMENTO"), _createElementVNode("h3", null, _toDisplayString(state.reviewTitle), 1), _createElementVNode("p", null, _toDisplayString(state.review.superseded?'Via substituída. Histórico somente para consulta.':'Assinaturas e histórico do documento'), 1)]), _createElementVNode("span", { class: _normalizeClass(["badge", state.review.status==='verified'?'active':state.review.status==='rejected'?'rejected':'pending']) }, _toDisplayString(label(state.review.status)), 3)]),
                 _createElementVNode("div", { class: "contract-verification" }, [_createElementVNode("div", null, [_createElementVNode("small", null, "Integridade criptográfica"), _createElementVNode("strong", null, _toDisplayString(state.review.cryptographic_valid===true?'Válida':state.review.cryptographic_valid===false?'Inválida':'Ainda não assinada'), 1)]), _createElementVNode("div", null, [_createElementVNode("small", null, "Cadeia de confiança"), _createElementVNode("strong", null, _toDisplayString(state.review.trust_status||'Não informada'), 1)]), _createElementVNode("div", null, [_createElementVNode("small", null, "Revogação consultada"), _createElementVNode("strong", null, _toDisplayString(state.review.revocation_checked===true?'Sim':state.review.revocation_checked===false?'Não':'Não disponível'), 1)])]),
                 (state.review.status==='pending_validation')
                   ? (_openBlock(), _createElementBlock("p", {
@@ -13442,8 +13488,8 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                       key: 0,
                       type: "button",
                       class: "btn btn-secondary",
-                      onClick: $event => (download(state.review.file_id,'documento-revisao-atual.pdf'))
-                    }, "Baixar PDF atual", 8, ["onClick"]))
+                      onClick: $event => (download(state.review.file_id,'documento-revisao.pdf'))
+                    }, _toDisplayString(state.review.superseded?'Baixar PDF preservado':'Baixar PDF atual'), 9, ["onClick"]))
                   : _createCommentVNode("", true)]),
                 (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.review.revisions, (revision) => {
                   return (_openBlock(), _createElementBlock("div", {
@@ -13472,7 +13518,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                       }, "Relatório VALIDAR/ITI", 8, ["onClick"]))
                     : _createCommentVNode("", true)])]))
                 }), 128)),
-                (state.review.status==='pending_validation' && canDecide())
+                (state.review.status==='pending_validation' && !state.review.superseded && canDecide())
                   ? (_openBlock(), _createElementBlock("section", {
                       key: 2,
                       class: "contract-decision"
