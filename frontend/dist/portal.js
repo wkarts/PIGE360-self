@@ -303,11 +303,13 @@ var PigeCommunity;
             finally {
                 s.busy = false;
             } }
+            let previewAnchor = '';
             let previewEpoch = 0;
             let previewController = null;
             function closePreview() {
                 s.previewHtml = '';
                 s.modelPreviewActive = false;
+                previewAnchor = '';
                 if (previewController) {
                     const controller = previewController;
                     previewController = null;
@@ -375,7 +377,17 @@ var PigeCommunity;
             const siteGuides = [{ id: 'models', label: 'Modelos' }, { id: 'identity', label: 'Identidade e textos' }, { id: 'navigation', label: 'Menu e capa' }, { id: 'pages', label: 'Páginas e seções' }, { id: 'photos', label: 'Fotografias' }];
             function modelCover(model) {
                 const design = model.website.design;
-                return design?.hero_image?.url || design?.hero_gallery?.[0]?.url || design?.sections.find(section => section.image)?.image?.url || '';
+                if (!design)
+                    return '';
+                const cover = design.hero_image?.url || design.hero_gallery?.[0]?.url;
+                if (cover)
+                    return cover;
+                for (const section of design.sections) {
+                    const photo = section.image?.url || section.items.find(item => item.image?.url)?.image?.url;
+                    if (photo)
+                        return photo;
+                }
+                return '';
             }
             function revealInvalidSiteField(event) {
                 const field = event.target;
@@ -400,7 +412,7 @@ var PigeCommunity;
             function selectedModel() { return s.models.find(model => model.id === s.modelChoice); }
             function modelInput() { return JSON.stringify({ model_id: s.modelChoice, website: websitePayload() }); }
             function modelReady() { return Boolean(s.resolvedModel && s.modelPreviewInput === modelInput()); }
-            function clearModelPreview() { s.resolvedModel = null; s.modelPreviewInput = ''; s.modelPreviewPage = ''; s.modelPreviewActive = false; s.previewHtml = ''; }
+            function clearModelPreview() { previewAnchor = ''; s.resolvedModel = null; s.modelPreviewInput = ''; s.modelPreviewPage = ''; s.modelPreviewActive = false; s.previewHtml = ''; }
             function modelNewPages() { const existing = new Set(s.website.design?.pages.map(page => page.slug) || []); return s.resolvedModel?.design?.pages.filter(page => !existing.has(page.slug)) || []; }
             function modelRenames() { const proposed = selectedModel()?.website.design?.menu || []; const resolved = s.resolvedModel?.design?.menu || []; return proposed.flatMap((link, index) => resolved[index] && link.url !== resolved[index].url ? [link.url + ' → ' + resolved[index].url] : []); }
             async function previewModel() { if (!selectedModel()) {
@@ -408,33 +420,64 @@ var PigeCommunity;
                 return;
             } await runPreview(async (signal, current) => { clearModelPreview(); const input = modelInput(); const result = await transport('/schools/' + props.schoolId + '/website/preview-model', { method: 'POST', signal, body: input }); if (!current())
                 return; s.resolvedModel = result.website; s.modelPreviewInput = input; s.modelPreviewActive = true; s.previewHtml = result.html; s.notice = 'Prévia sem gravação: confira a página inicial curta, cada página interna e o mapa do menu antes de aplicar. Nenhum campo do seu rascunho foi alterado.'; }); }
-            async function previewModelPage() { if (!modelReady()) {
-                s.error = 'O conteúdo ou modelo mudou. Gere novamente a prévia completa antes de escolher uma página.';
-                return;
-            } await runPreview(async (signal, current) => { const result = await transport('/schools/' + props.schoolId + '/website/preview' + (s.modelPreviewPage ? '?page=' + encodeURIComponent(s.modelPreviewPage) : ''), { method: 'POST', signal, body: JSON.stringify(s.resolvedModel) }); if (!current())
-                return; s.modelPreviewActive = true; s.previewHtml = result.html; }); }
+            async function previewPage(slug, model) {
+                if (model && !modelReady()) {
+                    s.error = 'Gere novamente a prévia do modelo após editar o rascunho.';
+                    return;
+                }
+                await runPreview(async (signal, current) => {
+                    editorialCheck();
+                    const website = model ? s.resolvedModel : websitePayload();
+                    const path = '/schools/' + props.schoolId + '/website/preview' + (slug ? '?page=' + encodeURIComponent(slug) : '');
+                    const result = await transport(path, { method: 'POST', signal, body: JSON.stringify(website) });
+                    if (!current())
+                        return;
+                    s.modelPreviewActive = model;
+                    s.modelPreviewPage = slug;
+                    s.previewHtml = result.html;
+                });
+            }
+            function previewModelPage() { return previewPage(s.modelPreviewPage, true); }
             function bindPreviewLinks(event) {
-                let document;
+                let frameDoc;
                 try {
-                    document = event.currentTarget.contentDocument;
+                    frameDoc = event.currentTarget.contentDocument;
                 }
                 catch {
                     return;
                 }
-                if (!document)
+                if (!frameDoc)
                     return;
-                document.addEventListener('click', (event) => {
-                    if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || !s.modelPreviewActive || !modelReady())
+                if (previewAnchor) {
+                    frameDoc.getElementById(previewAnchor)?.scrollIntoView();
+                    previewAnchor = '';
+                }
+                frameDoc.addEventListener('click', (click) => {
+                    if (click.defaultPrevented || click.button !== 0)
                         return;
-                    const anchor = event.target?.closest?.('a[href]');
-                    const href = anchor?.getAttribute('href') || '';
-                    if (href !== '/' && (!/^\/[a-z][a-z0-9-]{0,59}$/.test(href) || !s.resolvedModel?.design?.pages.some(page => '/' + page.slug === href)))
+                    const href = click.target?.closest?.('a[href]')?.getAttribute('href');
+                    if (!href)
                         return;
-                    event.preventDefault();
+                    click.preventDefault();
                     if (s.busy)
                         return;
-                    s.modelPreviewPage = href === '/' ? '' : href.slice(1);
-                    void previewModelPage();
+                    if (href.startsWith('#')) {
+                        frameDoc.getElementById(href.slice(1))?.scrollIntoView();
+                        return;
+                    }
+                    const match = /^\/([a-z][a-z0-9-]{0,59})?(?:#([a-zA-Z0-9_-]+))?$/.exec(href);
+                    const website = s.modelPreviewActive ? s.resolvedModel : s.website;
+                    if (!match || (match[1] && !website?.design?.pages.some(page => page.slug === match[1]))) {
+                        s.notice = 'Este destino está fora das páginas da prévia privada.';
+                        return;
+                    }
+                    previewAnchor = match[2] || '';
+                    if ((match[1] || '') === s.modelPreviewPage && previewAnchor) {
+                        frameDoc.getElementById(previewAnchor)?.scrollIntoView();
+                        previewAnchor = '';
+                        return;
+                    }
+                    void previewPage(match[1] || '', s.modelPreviewActive);
                 });
             }
             async function applyModel() { if (!modelReady()) {
@@ -482,8 +525,7 @@ var PigeCommunity;
                 return;
             } if (!window.confirm(s.website.design?.demonstration ? 'Publicar EXEMPLOS DEMONSTRATIVOS com identificação visível?' : 'Publicar este conteúdo no site da escola?'))
                 return; await run(async () => { editorialCheck(); await transport('/schools/' + props.schoolId + '/website/draft', { method: 'PUT', body: JSON.stringify(websitePayload()) }); await loadWebsite(); await transport('/schools/' + props.schoolId + '/website/publish', { method: 'POST', body: JSON.stringify({ version: s.website.version, confirm_demonstration: s.demoConfirmed }) }); await loadWebsite(); s.notice = 'Site publicado com sucesso.'; }); }
-            async function previewWebsite() { await runPreview(async (signal, current) => { s.modelPreviewActive = false; editorialCheck(); const result = await transport('/schools/' + props.schoolId + '/website/preview' + (editingPage() ? '?page=' + encodeURIComponent(editingPage().slug) : ''), { method: 'POST', signal, body: JSON.stringify(websitePayload()) }); if (!current())
-                return; s.previewHtml = result.html; }); }
+            function previewWebsite() { previewAnchor = ''; return previewPage(editingPage()?.slug || '', false); }
             async function unpublishWebsite() { if (!window.confirm('Retirar o site do ar? O conteúdo será preservado em rascunho.'))
                 return; await run(async () => { await transport('/schools/' + props.schoolId + '/website/unpublish', { method: 'POST', body: JSON.stringify(websitePayload()) }); await loadWebsite(); s.notice = 'Site retirado da publicação. Rascunho preservado.'; }); }
             async function search() { s.page = 1; await run(load); }

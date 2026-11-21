@@ -84,3 +84,35 @@ body.composition-v2>main{flex:1}
    existing classes; these variants are separate structural layouts. */
 .composition-v2.direction-atelier .atelier-cover{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(280px,.92fr);gap:clamp(28px,6vw,92px);align-items:stretch;padding-block:54px 70px;background:#f2eee5}.composition-v2.direction-atelier .atelier-copy{display:flex;align-items:center;padding:clamp(12px,4vw,64px) 0}.composition-v2.direction-atelier .atelier-copy .hero-copy{max-width:650px}.composition-v2.direction-atelier .atelier-cover h1{max-width:12ch;font-size:clamp(2.7rem,5.2vw,5.2rem);font-weight:500}.composition-v2.direction-atelier .atelier-cover .lead{max-width:45ch}.composition-v2.direction-atelier .atelier-media{min-height:480px;position:relative}.composition-v2.direction-atelier .atelier-media .hero-photo{height:100%;min-height:480px;aspect-ratio:4/5;object-fit:cover;border-radius:48% 10px 10px 10px}.composition-v2.direction-atelier .atelier-media:before{content:"";position:absolute;inset:22px -20px -22px 22px;border:1px solid var(--brand);border-radius:10px;opacity:.45}.composition-v2.direction-atelier .hero .actions .admission-button{background:var(--brand);color:#fff}.composition-v2.direction-rota .route-cover{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(260px,.9fr);gap:clamp(32px,7vw,100px);align-items:center;padding-block:68px 82px;background:#f7f5ed}.composition-v2.direction-rota .route-copy{min-width:0}.composition-v2.direction-rota .route-cover h1{max-width:18ch;font-size:clamp(2.5rem,4.8vw,4.8rem);font-weight:500}.composition-v2.direction-rota .route-cover .lead{max-width:48ch}.composition-v2.direction-rota .route-path{display:grid;gap:0;position:relative;padding-block:12px}.composition-v2.direction-rota .route-path:before{content:"";position:absolute;left:19px;top:22px;bottom:22px;width:1px;background:var(--brand);opacity:.45}.composition-v2.direction-rota .route-node{position:relative;display:flex;align-items:center;gap:18px;min-height:78px;padding:14px 0;color:var(--ink);font:1.1rem var(--heading-font)}.composition-v2.direction-rota .route-node b{display:grid;place-items:center;z-index:1;width:40px;height:40px;border-radius:50%;background:var(--paper);border:1px solid var(--brand);color:var(--brand);font:700 .72rem var(--font)}.composition-v2.direction-rota .route-path .hero-photo{margin-top:28px;aspect-ratio:1.55;height:auto;border-radius:10px}.composition-v2.direction-rota .hero .actions .admission-button{background:var(--ink);color:#fff}.composition-v2.direction-nucleo .nucleus-cover{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,.78fr);gap:clamp(30px,6vw,86px);align-items:center;padding-block:62px 74px;background:var(--ink);color:#fff}.composition-v2.direction-nucleo .nucleus-copy .hero-copy{max-width:660px}.composition-v2.direction-nucleo .nucleus-cover h1{max-width:15ch;font-size:clamp(2.7rem,5vw,5rem);font-weight:750}.composition-v2.direction-nucleo .nucleus-cover .eyebrow,.composition-v2.direction-nucleo .nucleus-cover .lead{color:#fff}.composition-v2.direction-nucleo .nucleus-media .hero-photo{height:auto;aspect-ratio:1.05;object-fit:cover;border-radius:50% 50% 12px 50%;border:12px solid #ffffff18}.composition-v2.direction-nucleo .nucleus-cover .button{background:#fff;color:var(--ink)}.composition-v2.direction-nucleo .nucleus-cover .button.secondary{color:#fff;border-color:#ffffff99;background:transparent}.composition-v2.direction-nucleo .nucleus-cover .admission-button{background:var(--brand);color:#fff}.composition-v2.direction-nucleo .layout-magazine .section-inner{max-width:1240px}
 @media(max-width:760px){.composition-v2.direction-atelier .atelier-cover,.composition-v2.direction-rota .route-cover,.composition-v2.direction-nucleo .nucleus-cover{display:block;padding-block:38px 44px}.composition-v2.direction-atelier .atelier-copy,.composition-v2.direction-rota .route-copy,.composition-v2.direction-nucleo .nucleus-copy{padding:0}.composition-v2.direction-atelier .atelier-cover h1,.composition-v2.direction-rota .route-cover h1,.composition-v2.direction-nucleo .nucleus-cover h1{font-size:clamp(2.2rem,10vw,3.5rem);max-width:18ch}.composition-v2.direction-atelier .atelier-media{min-height:0;margin-top:34px;padding:0 10px 16px}.composition-v2.direction-atelier .atelier-media .hero-photo{min-height:0;aspect-ratio:1.05;border-radius:42% 10px 10px 10px}.composition-v2.direction-atelier .atelier-media:before{inset:14px 0 -8px 20px}.composition-v2.direction-rota .route-path{margin-top:32px}.composition-v2.direction-rota .route-node{min-height:66px;font-size:1rem}.composition-v2.direction-rota .route-path .hero-photo{margin-top:24px}.composition-v2.direction-nucleo .nucleus-media{margin:32px auto 0;max-width:420px}.composition-v2.direction-nucleo .nucleus-media .hero-photo{aspect-ratio:1.15}}
+
+/* Each opt-in composition keeps its rhythm beyond the cover. */
+.composition-v2.direction-atelier .section-gallery .items-grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: clamp(1rem, 3vw, 3rem);
+  align-items: start;
+}
+.composition-v2.direction-atelier .section-gallery .content-item:first-child {
+  grid-row: span 2;
+}
+.composition-v2.direction-atelier .section-gallery .content-item:first-child img {
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+}
+.composition-v2.direction-rota .section-steps .content-item {
+  border-inline-start: 2px solid var(--brand);
+  padding-inline-start: clamp(1rem, 3vw, 2.5rem);
+}
+.composition-v2.direction-nucleo .nucleus-cover {
+  padding-inline: clamp(1rem, 5vw, 4.5rem);
+}
+.composition-v2.direction-nucleo .section-news .section-heading,
+.composition-v2.direction-nucleo .section-agenda .section-heading {
+  border-top: 3px solid var(--ink);
+  padding-top: 1.25rem;
+}
+@media (max-width: 760px) {
+  .composition-v2.direction-atelier .section-gallery .items-grid { grid-template-columns: 1fr; }
+  .composition-v2.direction-atelier .section-gallery .content-item:first-child { grid-row: auto; }
+  .composition-v2.direction-atelier .section-gallery .content-item:first-child img { aspect-ratio: 4 / 3; }
+}

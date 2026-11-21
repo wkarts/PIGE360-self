@@ -194,7 +194,8 @@ def render(data):
         hero = f'<section class="hero atelier-cover container"><div class="atelier-copy">{hero_copy}</div><div class="atelier-media">{hero_image or ""}</div></section>'
     elif direction == 'rota':
         route_items = ''.join(f'<span class="route-node"><b>{index:02}</b>{escape(item.get("title"))}</span>'
-                             for index, item in enumerate((design.get('sections') or [{}])[0].get('items', [])[:3], 1))
+                             for index, item in enumerate(next((section.get('items', []) for section in design.get('sections', [])
+                                                               if section.get('visible', True) and section.get('kind') == 'steps'), [])[:3], 1))
         hero = f'<section class="hero route-cover container"><div class="route-copy">{hero_copy}</div><div class="route-path">{route_items}{hero_image or ""}</div></section>'
     elif direction == 'nucleo':
         hero = f'<section class="hero nucleus-cover container"><div class="nucleus-copy">{hero_copy}</div><div class="nucleus-media">{hero_image or ""}</div></section>'

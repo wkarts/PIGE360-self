@@ -327,3 +327,20 @@ def test_family_services_use_school_links_only_when_configured():
     assert 'href="https://ingresso.example.test/online">Acessar matrícula online<span' in page
     assert 'href="https://familia.example.test/">Portal da família<span' in page
     assert 'Acessar matrícula online<span' not in render({**data, 'page': pages['ensino']})
+
+
+def test_directions_keep_their_own_pages_when_applied_over_parent_theme():
+    from app.school_website import resolve_website_model
+    models = {model['id']: model['website'] for model in catalog()['items']}
+    for model_id, theme in [('atelier','horizon'), ('rota','editorial'), ('nucleo','campus')]:
+        original = website_values(WebsiteInput(**models[theme]), exclude_enabled=True)
+        result = resolve_website_model(model_id, original)
+        pages = result['design']['pages']
+        assert pages[:6] == original['design']['pages']
+        assert len(pages) == 12
+        own_pages = {p['slug'] for p in pages if p['model_origin'].startswith(model_id + ':')}
+        assert own_pages == {link['url'][1:] for link in result['design']['menu']}
+        assert resolve_website_model(model_id, result)['design']['pages'] == pages
+    assert [s['kind'] for s in models['atelier']['design']['sections']] == ['split', 'gallery']
+    assert [s['kind'] for s in models['rota']['design']['sections']] == ['steps', 'split']
+    assert [s['kind'] for s in models['nucleo']['design']['sections']] == ['news', 'agenda']

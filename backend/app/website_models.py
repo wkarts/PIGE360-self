@@ -180,7 +180,8 @@ def multipage_website(website):
         'visita':'Conheça os espaços, converse sobre a proposta e compartilhe as perguntas da sua família.',
         'contato':'Encontre os canais institucionais e comece uma conversa com a equipe da escola.',
     }
-    pages=[{'slug':slug,'model_origin':theme+':'+slug,'show_contact_details':slug=='contato','title':title,'introduction':introductions[slug],'published':True,'image':None,'sections':deepcopy(sections)} for slug,title,sections in groups]
+    origin=d['direction'] if d['direction']!='standard' else theme
+    pages=[{'slug':slug,'model_origin':origin+':'+slug,'show_contact_details':slug=='contato','title':title,'introduction':introductions[slug],'published':True,'image':None,'sections':deepcopy(sections)} for slug,title,sections in groups]
     # The cover carries the identity; the home contains summaries, not entire pages.
     summary_groups=groups[1:4] if theme=='culture' else groups[:3]
     summaries=[item(title,introductions[slug],label='Conheça mais',target='/'+slug) for slug,title,_ in summary_groups]
@@ -195,6 +196,13 @@ def multipage_website(website):
         for index,story in enumerate(lead['items']):story['action']=link('Leia a história','/'+('historias' if index==0 else 'vivencias'))
         home=[lead,section('convite','cta','Conheça as histórias e participe.','Explore a vida escolar, consulte a agenda e converse com a equipe.',action=link('Ver agenda','/agenda'))]
     else:home=[first]
+    if d['direction']=='atelier':
+        home=[source['pilares'],source['espacos']]
+    elif d['direction']=='rota':
+        home=[source['jornada'],source['rotina']]
+    elif d['direction']=='nucleo':
+        home=[section('historias','news','Notícias da escola',layout='magazine',action=link('Todas as notícias','/noticias')),
+              section('agenda','agenda','Na agenda',action=link('Consultar agenda','/agenda'))]
     d.update(sections=home,pages=pages,menu=[link(title,'/'+slug) for slug,title,_ in groups],primary_action=link('Agende uma visita','/visita'),secondary_action=None)
     result['design']=rewrite_links(d,mapping)
     for page in result['design']['pages']:
