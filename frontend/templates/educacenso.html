@@ -1,0 +1,44 @@
+<section class="panel x-card" aria-label="Educacenso">
+  <h2>Educacenso</h2><p>{{props.schoolName}}</p>
+  <div v-if="state.error" role="alert" class="alert error">{{state.error}}</div>
+  <fieldset class="portal-fieldset" :disabled="state.busy">
+    <label>Ambiente do lote<select v-model="state.environment" @change="changeEnvironment"><option value="treinamento">Treinamento</option><option value="producao">Preparação da declaração oficial</option></select></label>
+    <p>Confira a declaração existente antes da migração. Um envio pode substituir dados já declarados. A exportação exige leiaute e domínios validados para o ano e a etapa.</p>
+    <div class="tabs"><button @click="state.tab='prepare'">Dados a declarar</button><button @click="state.tab='history'">Histórico</button></div>
+    <template v-if="state.tab==='prepare'">
+      <form @submit.prevent="preview" class="x-form" @change="reset">
+        <label>Etapa<select v-model="state.stage"><option value="matricula_inicial">Matrícula Inicial</option><option value="situacao_aluno">Situação do Aluno</option></select></label>
+        <label>Ano letivo<select v-model="state.year" @change="state.group=''" required><option v-for="year in state.years" :key="year.id" :value="year.id">{{year.name}}</option></select></label>
+        <label>Data de referência<input type="date" v-model="state.day" required></label>
+        <label>Turma<select v-model="state.group"><option value="">Todas as turmas do ano</option><option v-for="g in state.groups.filter(g=>g.academic_year_id===state.year)" :key="g.id" :value="g.id">{{g.name}}</option></select></label>
+        <button class="btn btn-primary">Validar prévia</button>
+      </form>
+    </template>
+    <template v-if="state.tab==='history'">
+      <h3>Histórico de rascunhos</h3>
+      <p v-if="!state.history.length">Nenhum rascunho nesta página.</p>
+      <div class="x-list"><button class="x-record" v-for="item in state.history" :key="item.id" @click="open(item.id)">{{stageLabel(item.stage)}} · {{item.reference_date}} · {{item.digest.slice(0,12)}}</button></div>
+      <button :disabled="state.offset===0" @click="page(-50)">Anterior</button><button :disabled="state.history.length!==50" @click="page(50)">Próxima</button>
+    </template>
+    <template v-if="(state.tab==='prepare' && state.preview) || (state.tab==='detail' && state.draft)">
+      <section v-for="snap in [state.tab==='detail'?state.draft.snapshot:state.preview]" :key="state.tab">
+        <h3>{{state.tab==='detail'?'Rascunho do lote':'Prévia da seleção'}}</h3>
+        <p v-if="snap.replacement_rule==='substitui_declaracao_da_escola'">Nesta coleta, a importação substitui a declaração da escola. Confira a cobertura de todos os alunos antes de enviar pelo Educacenso.</p>
+        <p v-else>Regra de substituição pendente de confirmação para este ano e etapa.</p>
+        <p>{{snap.rows.length}} matrícula(s) na data de referência.</p>
+        <ul><li v-for="block in snap.blocks" :key="block">{{reasons[block]||block}}</li></ul>
+        <a :href="snap.official_source" target="_blank" rel="noopener noreferrer">Consultar orientações oficiais do Inep</a>
+        <details><summary>Conferir matrículas e turmas</summary><table><thead><tr><th>Matrícula (ID local)</th><th>Turma</th><th>Situação local</th></tr></thead><tbody>
+          <tr v-for="row in snap.rows.slice(0,state.visibleRows)" :key="row.enrollment_id"><td>{{row.enrollment_id}}</td><td>{{state.groups.find(g=>g.id===row.class_group_id)?.name||row.class_group_id}}</td><td>{{row.local_status}}</td></tr>
+        </tbody></table><button v-if="state.visibleRows<snap.rows.length" @click="state.visibleRows+=25">Mostrar mais 25</button></details>
+      </section>
+      <button class="btn btn-primary" v-if="state.tab==='prepare'" @click="save">Guardar rascunho</button>
+      <section v-else><p>{{stageLabel(state.draft.stage)}} · {{state.draft.reference_date}}</p><p>SHA-256 <code>{{state.draft.digest}}</code></p>
+        <button @click="diagnostic">Baixar diagnóstico local (JSON)</button>
+        <h3>Retornos e comprovantes anexados</h3><p>Os anexos ficam disponíveis para conferência manual. Anexar um retorno não confirma a aceitação pelo Inep.</p>
+        <form @submit.prevent="attach" class="x-form"><label v-if="state.draft.snapshot.return_statuses?.length">Situação informada pelo operador conforme o retorno<select v-model="state.reportedStatus"><option value="">Somente anexar</option><option v-for="status in state.draft.snapshot.return_statuses" :key="status">{{status}}</option></select></label><label>Arquivo de evidência (até 4 MiB)<input type="file" :key="state.draft.id+':'+(state.draft.evidence||[]).length" @change="fileChanged" required></label><button class="btn btn-secondary" :disabled="!state.file">Anexar evidência</button></form>
+        <div class="x-list"><button v-for="item in state.draft.evidence" :key="item.id" @click="download(item)">Baixar evidência {{item.reported_status||''}} · {{item.digest.slice(0,12)}}</button></div>
+      </section>
+    </template>
+  </fieldset>
+</section>

@@ -81,6 +81,32 @@
         </section>
       </div>
 
+      <section v-if="pilot && props.catalogEnabled && state.page==='catalog'" class="panel x-card">
+        <h2>Catálogo e vigência</h2>
+        <form class="x-form" @submit.prevent="save(suggest)">
+          <label>Nome sugerido<input required minlength="2" maxlength="120" list="curriculum-suggestions" v-model="catalog.name"></label>
+          <datalist id="curriculum-suggestions"><option value="Projeto de Leitura"></option><option value="Oficina de Artes"></option></datalist>
+          <label>Código interno<input v-model="catalog.code" maxlength="40"></label>
+          <label>Carga horária planejada<input v-model.number="catalog.hours" type="number" min="0" max="10000"></label>
+          <button class="btn btn-primary">Guardar sugestão</button>
+        </form>
+        <label>Componente para conferência<select v-model="catalog.target" @change="catalogImpact">
+          <option value="">Selecione</option><optgroup label="Em rascunho"><option v-for="c in catalog.drafts" :key="c.id" :value="c.id">{{c.name}}</option></optgroup>
+          <optgroup label="Cadastrados"><option v-for="c in state.components" :key="c.id" :value="c.id">{{c.name}}</option></optgroup>
+        </select></label>
+        <div v-if="catalog.impact" class="x-form">
+          <p v-if="catalog.impact.effective_on">Desativado em {{date(catalog.impact.effective_on)}}.</p>
+          <p v-else-if="catalog.impact.catalog_status==='draft'">Rascunho aguardando decisão.</p>
+          <p v-else>A desativação vale a partir da data de registro e preserva o histórico.</p>
+          <ul v-if="catalog.impact.references.length"><li v-for="dep in catalog.impact.references" :key="dep.key">{{dep.label}} · {{dep.count}}</li></ul><p v-else>Sem vínculos registrados.</p>
+          <template v-if="!catalog.impact.effective_on"><label>Justificativa da decisão<textarea v-model="catalog.reason" minlength="3" maxlength="1000"></textarea></label>
+            <div class="actions"><button v-if="catalog.impact.catalog_status==='draft'" class="btn btn-primary" :disabled="catalog.reason.trim().length<3" @click="save(()=>decide('publish'))">Publicar componente</button>
+              <button v-if="catalog.impact.discard_allowed" class="btn btn-secondary" :disabled="catalog.reason.trim().length<3" @click="save(()=>decide('discard'))">Descartar rascunho</button>
+              <button v-if="catalog.impact.catalog_status==='available'" class="btn btn-secondary" :disabled="catalog.reason.trim().length<3" @click="save(()=>decide('retire'))">Desativar componente</button></div>
+          </template>
+        </div>
+      </section>
+
       <section v-if="show('new-diary')" class="panel x-card">
         <h2>Abrir diário</h2>
         <form class="x-form" @submit.prevent="save(createDiary)">
@@ -181,7 +207,8 @@
             </div>
           </template>
           <p v-else-if="state.selected.status==='closed'" class="alert info">Diário fechado. Alterações exigem reabertura formal e ficam registradas no histórico.</p>
-          <div v-if="state.selected.status!=='open' && can('diary.reopen')" class="x-form">
+          <div v-if="(state.selected.status!=='open' || state.history.closures.some(c=>c.active)) && can('diary.reopen')" class="x-form">
+            <label v-if="state.history.closures.some(c=>c.active)">Fechamento a reabrir<select v-model="state.reopenPeriod"><option value="">{{state.history.closures.some(c=>c.active&&!c.academic_period_id)?'Diário completo':'Selecione o período'}}</option><option v-for="c in state.history.closures.filter(c=>c.active&&c.academic_period_id)" :key="c.id" :value="c.academic_period_id">{{state.periods.find(p=>p.id===c.academic_period_id)?.name}}</option></select></label>
             <label>Motivo da reabertura<textarea v-model="state.reopenReason" minlength="10" maxlength="1000" rows="2"></textarea></label>
             <button class="btn btn-secondary" :disabled="state.reopenReason.length<10" @click="save(reopenDiary)">Reabrir com justificativa</button>
           </div>

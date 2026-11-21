@@ -2,6 +2,8 @@
 
 Backend FastAPI/Python 3.13, cliente Vue 3 Web/PWA. Preserve arquitetura, cadastros, permissões, migrations e branding existentes. Não criar aplicativos nativos nem introduzir nova plataforma de hospedagem.
 
+Novas variáveis de ambiente na aplicação exigem concordância explícita de Wallace. O catálogo do Diário é configurado no cadastro da escola. O Educacenso segue as permissões do operador em cada escola.
+
 ## Git e CI/CD
 
 Use `feature/*`, `fix/*`, `ci/*`, `chore/*` ou outro prefixo aceito pelo validador para PR em `develop`. Produção recebe PR de `develop` para `main`, com título `release(patch|minor|major): descrição`. Toda PR deve conter `## Descrição` e `## Branch`.

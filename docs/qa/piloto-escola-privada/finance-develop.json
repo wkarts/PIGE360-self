@@ -1,0 +1,27 @@
+{
+  "repository": "wkarts/ARGWS-CRM-Finance",
+  "commit": "35ab71cd66b9a4d0284634bc4d818f85bea421a0",
+  "fixture_v1_igual": true,
+  "rotas_pendentes_de_comprovacao": {
+    "recepcao_v1": [],
+    "diagnostico_v1": [
+      "v1/diagnostics"
+    ],
+    "fatura_v2": [
+      "v2/invoices",
+      "v2/invoices/status"
+    ],
+    "cobranca_v3": [
+      "v3/charges",
+      "v3/charges/status",
+      "v3/charges/sync",
+      "v3/charges/instruments",
+      "v3/charges/reconcile"
+    ]
+  },
+  "homologado_em_sandbox": false,
+  "bloqueios": [
+    "Conferir implementações e recibos na versão instalada.",
+    "Homologar carteira, estorno, duplicatas e reconciliação em sandbox."
+  ]
+}

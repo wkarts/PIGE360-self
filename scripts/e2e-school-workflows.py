@@ -40,7 +40,11 @@ def verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,pos
     page.close();record('Quatro composições de site renderizadas em 320, 390, 768 e 1440 px sem overflow')
     admin.goto(URL+'/#/community')
     expect(admin.get_by_role('heading',name='Site institucional',exact=True)).to_be_visible()
-    admin.locator('aside').get_by_role('link',name='Site da escola',exact=True).click()
+    sidebar = admin.locator('aside')
+    publicity = sidebar.get_by_role('button', name='Publicidade', exact=True)
+    if publicity.get_attribute('aria-expanded') == 'false':
+        publicity.click()
+    sidebar.get_by_role('link', name='Site da escola', exact=True).click()
     catalog_cards = admin.locator('.site-model-cards button')
     expect(catalog_cards).to_have_count(10)
     thumbnails = catalog_cards.locator('img').evaluate_all("""async images => {
