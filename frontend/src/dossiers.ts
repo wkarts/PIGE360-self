@@ -1,7 +1,7 @@
 namespace PigeDossier {
   type Row=PigeAPI.Row;
   export interface FamilyRow { id:string;version?:number;direction:'guardian'|'student';peer:{id:string;name:string;phone?:string;cpf?:string};relationship:string;legal:boolean;financial:boolean;pickup:boolean;primary_contact:boolean;active:boolean;new_person?:Record<string,unknown>;local?:boolean }
-  interface Reply {person:Row;profiles:Record<string,Row>;family:{items:FamilyRow[];page:number;total:number}}
+  export interface Reply {person:Row;profiles:Record<string,Row>;family:{items:FamilyRow[];page:number;total:number}}
   const emptyDraft=()=>({direction:'guardian' as 'guardian'|'student',person_id:'',relationship:'Responsável',legal:false,financial:false,pickup:false,primary_contact:false,active:true,newMode:false,name:'',cpf:'',birth_date:'',phone:'',email:'',rg:'',rg_issuer:'',birth_certificate:'',mother_name:'',father_name:'',postal_code:'',street:'',address_number:'',address_complement:'',district:'',city:'',state:'',country:'',address:''});
   export function create(){
     const state=Vue.reactive({active:false,loading:false,error:'',personId:'',personVersion:0,profiles:{} as Record<string,Row>,rows:[] as FamilyRow[],operations:{} as Record<string,FamilyRow>,editor:false,editId:'',query:'',matches:[] as Row[],searching:false,draft:emptyDraft(),page:1,total:0});

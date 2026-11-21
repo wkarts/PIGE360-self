@@ -81,6 +81,7 @@ assert.deepEqual(Array.from(context.state.supportHub.enabled_areas),['online_enr
 context.closeModal(true);context.editSupportHub();await Promise.resolve();
 assert.deepEqual(Array.from(context.state.modal.form.enabled_areas),['online_enrollment','news'],'Cancelar e reabrir restaura as áreas salvas');
 context.closeModal(true);
+await (await import('./person-record-flow.mjs')).testPersonRecords({context,sandbox,render,nodes});
 const originalObjectUrl=sandbox.PigeAPI.objectUrl;
 let activePhotos=0,maxActivePhotos=0;
 const photoRequests=[];
