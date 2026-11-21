@@ -44,7 +44,9 @@ def student_photo(db, school_id, person):
     return content
 
 
-def compose_student_document(db, school, student, person, enrollment_id, kind, issuer, title):
+def compose_student_document(db, school, student, person, enrollment_id, kind, issuer, title, orientation=None):
+    from .report_preferences import preferences
+    orientation = orientation or preferences(school)['student']
     enrollment = None
     if enrollment_id:
         enrollment = scoped(db, m.Enrollment, enrollment_id, school.id)
@@ -57,7 +59,7 @@ def compose_student_document(db, school, student, person, enrollment_id, kind, i
             fail(409, 'Comprovantes e declarações exigem matrícula ativa.')
     identity = public_identity(db)
     snapshot = {'school': output(school), 'person': output(person), 'student': output(student), 'issuer': issuer,
-                'template_version': '3', 'layout_version': '6', 'institution_identity': identity, 'brand': identity['display_name']}
+                'template_version': '3', 'orientation': orientation, 'layout_version': '8', 'institution_identity': identity, 'brand': identity['display_name']}
     detailed = kind in {'student_record', 'enrollment_form'}
     sections = []
     basic = [('Nome completo', person.name), ('Data de nascimento', date_text(person.birth_date))]
@@ -66,9 +68,9 @@ def compose_student_document(db, school, student, person, enrollment_id, kind, i
                   ('Naturalidade', '/'.join(value for value in [person.birth_city, person.birth_state] if value)),
                   ('Nacionalidade', person.nationality)]
         if person.rg:
-            basic += [('RG / órgão expedidor', ' / '.join(value for value in [person.rg, person.rg_issuer, person.rg_state] if value))]
+            basic += [('RG / órgão expedidor', ' / '.join(value for value in ['***' + person.rg[-2:], person.rg_issuer, person.rg_state] if value))]
         if person.birth_certificate:
-            basic += [('Certidão de nascimento', person.birth_certificate)]
+            basic += [('Certidão de nascimento', 'Cadastrada')]
     sections.append({'title': 'Identificação do aluno', 'fields': basic})
     if detailed:
         sections.extend([
@@ -125,14 +127,24 @@ def compose_student_document(db, school, student, person, enrollment_id, kind, i
                    'change_class':'Mudança de turma', 'suspend':'Suspensão', 'cancel':'Cancelamento',
                    'transfer':'Transferência', 'complete':'Conclusão', 'reenrolled':'Rematrícula',
                    'draft_updated':'Atualização da pré-matrícula', 'legacy_import':'Importação do histórico'}
-        timeline = [{'date': date_text(event.created_at), 'number': number,
-                     'action': actions.get(event.action, event.action),
-                     'status': ENROLLMENT_LABELS.get((event.after or {}).get('status'), '—')}
-                    for event, number in db.execute(query)]
+        events = db.execute(query).all()
+        class_ids = {state['class_group_id'] for event, _ in events for state in (event.before, event.after)
+                     if isinstance(state, dict) and state.get('class_group_id')}
+        group_names = dict(db.execute(select(m.ClassGroup.id, m.ClassGroup.name).where(
+            m.ClassGroup.school_id == school.id, m.ClassGroup.id.in_(class_ids))).all())
+        timeline = []
+        for event, number in events:
+            before, after = event.before or {}, event.after or {}
+            origin = group_names.get(before.get('class_group_id'))
+            target = group_names.get(after.get('class_group_id'))
+            classroom = ' → '.join([origin, target]) if origin and target and origin != target else target or origin
+            timeline.append({'date': date_text(event.created_at), 'number': number,
+                             'action': actions.get(event.action, event.action), 'classroom': classroom,
+                             'status': ENROLLMENT_LABELS.get(after.get('status'), '—')})
         if timeline:
             sections.append({'title':'Movimentação escolar', 'columns':[
                 {'key':'date','label':'Data'}, {'key':'number','label':'Matrícula'},
-                {'key':'action','label':'Movimento','width':1.5}, {'key':'status','label':'Situação após registro'}],
+                {'key':'action','label':'Movimento','width':1.4}, {'key':'classroom','label':'Turma de origem / destino','width':1.5}, {'key':'status','label':'Situação após registro'}],
                 'rows':timeline})
     if detailed:
         from .documents import checklist
@@ -158,6 +170,7 @@ def compose_student_document(db, school, student, person, enrollment_id, kind, i
         profile={'name': person.name, 'detail': f'Aluno {student.number} | Situação cadastral: ' + ('Ativo' if student.status == 'active' else 'Inativo')},
         photo=student_photo(db, school.id, person) if detailed else None,
         signatures=['Responsável / aluno maior de idade', 'Secretaria / instituição'] if detailed else ['Secretaria / representante da instituição'],
-        notes=notes, notes_title='', issuer=issuer, db=db)
+        notes=notes, notes_title='', issuer=issuer, db=db, kit=detailed, layout='record' if detailed else '',
+        orientation=orientation if detailed else 'portrait', reserve_photo=detailed)
     snapshot['report_sections'] = sections
     return content, snapshot

@@ -10,11 +10,12 @@ from fastapi.responses import Response
 from sqlalchemy import func, select
 
 from .diary_components import available_on, drafts_for
+from . import diary_report_sections as paper
+from .school_reports import format_value, render_table
 from . import class_materials
 from . import diary_schemas as s, models as m
 from .common import audit, output
 from .db import now
-from .documents import render_pdf
 from .portal_access import PORTAL_DIARY_ACCESS_CONSENT_VERSION, verified_guardian_contact_matches
 from .security import Actor, DB, check_version, current_user, fail, lock_school, require
 from .lifecycle_models import require_available
@@ -101,13 +102,22 @@ def _require_open_diary(diary):
         fail(409, "O diário precisa estar aberto para alterações.")
 
 
-def _period(db, school_id, period_id, year_id=None):
+def _period(db, school_id, period_id, year_id=None, group_id=None):
     if not period_id:
         return None
     obj = _scoped(db, m.AcademicPeriod, period_id, school_id)
     if year_id and obj.academic_year_id != year_id:
         fail(422, "O período não pertence ao ano letivo do diário.")
+    if group_id:
+        group = _scoped(db, m.ClassGroup, group_id, school_id)
+        if not period_applies(group, obj):
+            fail(422, 'O período não pertence ao calendário da turma.')
     return obj
+
+
+def period_applies(group, period):
+    ids = group.academic_period_ids
+    return period.id in ids if ids else not period.class_calendar_only
 
 
 def _diary_output(db, obj):
@@ -122,6 +132,7 @@ def _diary_output(db, obj):
         teacher = person.name if person else user.name if user else ""
     return {
         **output(obj),
+        "academic_period_ids": group.academic_period_ids if group else [],
         "class_name": group.name if group else "",
         "component_name": component.name if component else "",
         "year_name": year.name if year else "",
@@ -350,6 +361,40 @@ def periods(db: DB, user: Actor, school: DiaryScope, academic_year_id: str = "")
     return [output(x) for x in db.scalars(stmt.order_by(m.AcademicPeriod.order_index, m.AcademicPeriod.starts_on))]
 
 
+def assign_calendar(db, group, periods):
+    """Preserva períodos que já têm escrituração nesta turma."""
+    ids = [p.id for p in periods]
+    diaries = select(m.SchoolDiary.id).where(m.SchoolDiary.school_id == group.school_id,
+                                              m.SchoolDiary.class_group_id == group.id)
+    for entity in (m.DiaryLesson, m.DiaryClosure, m.AssessmentInstrument, m.DescriptiveOpinion,
+                   m.PeriodAssessmentRule, m.DiaryOccurrence):
+        used = select(entity.id).where(entity.diary_id.in_(diaries), entity.academic_period_id.is_not(None),
+                                       entity.academic_period_id.not_in(ids)).limit(1)
+        if db.scalar(used):
+            fail(409, 'O calendário deve incluir os períodos com escrituração existente nesta turma.')
+    if db.scalar(select(m.CurriculumPlan.id).where(m.CurriculumPlan.class_group_id == group.id,
+                 m.CurriculumPlan.academic_period_id.is_not(None), m.CurriculumPlan.academic_period_id.not_in(ids)).limit(1)):
+        fail(409, 'O calendário deve incluir os períodos com planejamento existente.')
+    group.academic_period_ids = ids
+    group.version += 1
+
+
+@router.put('/class-groups/{group_id}/calendar')
+def set_calendar(group_id: str, data: s.CalendarInput, request: Request, db: DB, user: Actor, school: DiaryScope):
+    require(user, 'diary.configure')
+    lock_school(db, school.id)
+    group = _scoped(db, m.ClassGroup, group_id, school.id)
+    check_version(group, data.version)
+    periods = list(db.scalars(select(m.AcademicPeriod).where(m.AcademicPeriod.school_id == school.id,
+        m.AcademicPeriod.academic_year_id == group.academic_year_id, m.AcademicPeriod.id.in_(data.period_ids))))
+    if len(periods) != len(data.period_ids):
+        fail(422, 'Selecione períodos distintos do mesmo ano e escola.')
+    previous = list(group.academic_period_ids)
+    assign_calendar(db, group, periods)
+    audit(db, request, user, 'diary.calendar.updated', group, school.id, {'before': previous, 'after': group.academic_period_ids})
+    return output(group)
+
+
 @router.post("/academic-periods", status_code=201)
 def create_period(data: s.AcademicPeriodInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     require(user, "diary.configure")
@@ -358,8 +403,13 @@ def create_period(data: s.AcademicPeriodInput, db: DB, user: Actor, school: Diar
     require_available(db, year)
     if data.starts_on < year.starts_on or data.ends_on > year.ends_on:
         fail(422, "O período deve estar contido nas datas do ano letivo.")
-    obj = m.AcademicPeriod(school_id=school.id, **data.model_dump())
+    group = _scoped(db, m.ClassGroup, data.class_group_id, school.id) if data.class_group_id else None
+    if group and group.academic_year_id != year.id:
+        fail(422, 'A turma pertence a outro ano letivo.')
+    obj = m.AcademicPeriod(school_id=school.id, class_calendar_only=bool(group), **data.model_dump(exclude={'class_group_id'}))
     db.add(obj); db.flush()
+    if group:
+        assign_calendar(db, group, [*(db.get(m.AcademicPeriod, pid) for pid in group.academic_period_ids), obj])
     audit(db, request, user, "diary.period.created", obj, school.id)
     return output(obj)
 
@@ -409,7 +459,7 @@ def create_plan(data: s.CurriculumPlanInput, db: DB, user: Actor, school: DiaryS
     require_available(db, group)
     require_available(db, _scoped(db, m.AcademicYear, group.academic_year_id, school.id))
     available_on(db, _scoped(db, m.CurriculumComponent, data.component_id, school.id))
-    if data.academic_period_id: _period(db, school.id, data.academic_period_id, group.academic_year_id)
+    if data.academic_period_id: _period(db, school.id, data.academic_period_id, group.academic_year_id, group.id)
     if data.teacher_assignment_id:
         assignment = _scoped(db, m.TeacherAssignment, data.teacher_assignment_id, school.id)
         if not assignment.active:
@@ -454,7 +504,7 @@ def edit_plan(plan_id: str, data: s.PlanEdit, db: DB, user: Actor, school: Diary
     if data.component_id != obj.component_id:
         available_on(db, _scoped(db, m.CurriculumComponent, data.component_id, school.id))
     if data.academic_period_id:
-        _period(db, school.id, data.academic_period_id, group.academic_year_id)
+        _period(db, school.id, data.academic_period_id, group.academic_year_id, group.id)
     if data.teacher_assignment_id:
         target = _scoped(db, m.TeacherAssignment, data.teacher_assignment_id, school.id)
         if not target.active or target.class_group_id != group.id:
@@ -570,7 +620,7 @@ def create_lesson(diary_id: str, data: s.LessonInput, db: DB, user: Actor, schoo
     if data.lesson_date < year.starts_on or data.lesson_date > year.ends_on:
         fail(422, "A data da aula está fora do ano letivo.")
     if data.academic_period_id:
-        period = _period(db,school.id,data.academic_period_id,diary.academic_year_id)
+        period = _period(db,school.id,data.academic_period_id,diary.academic_year_id, diary.class_group_id)
         if data.lesson_date < period.starts_on or data.lesson_date > period.ends_on:
             fail(422, "A data da aula está fora do período informado.")
     obj = m.DiaryLesson(school_id=school.id,diary_id=diary.id,recorded_by=user.id,**data.model_dump())
@@ -592,7 +642,7 @@ def edit_lesson(diary_id: str, lesson_id: str, data: s.LessonEdit, db: DB, user:
     available_on(db, db.get(m.CurriculumComponent, diary.component_id), data.lesson_date)
     values=data.model_dump(exclude={"version"})
     if values.get("academic_period_id"):
-        period=_period(db,school.id,values["academic_period_id"],diary.academic_year_id)
+        period=_period(db,school.id,values["academic_period_id"],diary.academic_year_id, diary.class_group_id)
         if values["lesson_date"] < period.starts_on or values["lesson_date"] > period.ends_on:
             fail(422,"A data da aula está fora do período informado.")
     for key,value in values.items(): setattr(obj,key,value)
@@ -652,7 +702,7 @@ def create_assessment(diary_id: str, data: s.AssessmentInstrumentInput, db: DB, 
     _require_unclosed_period(db, diary, data.academic_period_id)
     available_on(db, db.get(m.CurriculumComponent, diary.component_id), data.assessment_date)
     if data.academic_period_id:
-        period=_period(db,school.id,data.academic_period_id,diary.academic_year_id)
+        period=_period(db,school.id,data.academic_period_id,diary.academic_year_id, diary.class_group_id)
         if data.assessment_date < period.starts_on or data.assessment_date > period.ends_on:
             fail(422,"A data da avaliação está fora do período informado.")
     year=db.get(m.AcademicYear,diary.academic_year_id)
@@ -678,7 +728,7 @@ def edit_assessment(diary_id: str, instrument_id: str, data: s.AssessmentInstrum
     if not year.starts_on <= data.assessment_date <= year.ends_on:
         fail(422,"A data da avaliação está fora do ano letivo.")
     if data.academic_period_id:
-        period=_period(db,school.id,data.academic_period_id,diary.academic_year_id)
+        period=_period(db,school.id,data.academic_period_id,diary.academic_year_id, diary.class_group_id)
         if not period.starts_on <= data.assessment_date <= period.ends_on:
             fail(422,"A data da avaliação está fora do período informado.")
     results=list(db.scalars(select(m.AssessmentResult).where(m.AssessmentResult.instrument_id==obj.id)))
@@ -752,7 +802,7 @@ def save_opinion(diary_id: str, data: s.DescriptiveOpinionInput, db: DB, user: A
     enrollment=_enrollment_for_diary(db,diary,data.enrollment_id)
     if data.status in ("reviewed","final"):
         require(user,"diary.review")
-    if data.academic_period_id: _period(db,school.id,data.academic_period_id,diary.academic_year_id)
+    if data.academic_period_id: _period(db,school.id,data.academic_period_id,diary.academic_year_id, diary.class_group_id)
     stmt=select(m.DescriptiveOpinion).where(m.DescriptiveOpinion.diary_id==diary.id,m.DescriptiveOpinion.enrollment_id==enrollment.id)
     stmt=stmt.where(m.DescriptiveOpinion.academic_period_id==data.academic_period_id if data.academic_period_id else m.DescriptiveOpinion.academic_period_id.is_(None))
     obj=db.scalar(stmt)
@@ -790,7 +840,7 @@ def close_diary(diary_id: str, data: s.CloseDiaryInput, db: DB, user: Actor, sch
     diary=_locked_diary(db, school.id, diary_id); _require_diary(db,user,diary,"diary.close")
     check_version(diary, data.version)
     if diary.status != "reviewed": fail(409,"Somente um diário revisado pode ser fechado.")
-    if data.academic_period_id: _period(db,school.id,data.academic_period_id,diary.academic_year_id)
+    if data.academic_period_id: _period(db,school.id,data.academic_period_id,diary.academic_year_id, diary.class_group_id)
     _require_unclosed_period(db, diary, data.academic_period_id)
     snapshot=_snapshot(db,diary,data.academic_period_id)
     if not snapshot["lessons"]: fail(409,"Não é possível fechar um diário sem aulas registradas.")
@@ -893,7 +943,12 @@ def diary_report(diary_id: str, db: DB, user: Actor, school: DiaryScope):
         ("Registros pedagógicos",str(len(data.get("pedagogical_records",[])))),
     ]
     note=("Relatório emitido a partir do snapshot do fechamento. Hash de integridade: "+closure.snapshot_hash) if closure else "Relatório gerado a partir dos registros atuais do Diário Escolar Digital. Fechamentos possuem snapshot e hash de integridade próprios."
-    content=render_pdf(school,"Diário Escolar Digital",rows,note,user.name,db=db,module="Diário escolar")
+    sections = [{'title': 'Identificação da turma', 'fields': rows[:5]},
+                {'title': 'Escrituração do diário', 'fields': rows[5:]}]
+    sections.extend(paper.lessons(data))
+    sections.append(_attendance_register(db, data))
+    content = render_table(school, "Diário Escolar Digital", [], [], sections=sections, notes=[note],
+                           issuer=user.name, db=db, module="Diário escolar")
     return Response(content,media_type="application/pdf",headers={"Content-Disposition":f'attachment; filename="diario-{diary.id}.pdf"',"Cache-Control":"no-store"})
 
 
@@ -996,7 +1051,7 @@ def save_assessment_rule(diary_id: str, period_id: str, data: s.PeriodAssessment
     diary = _locked_diary(db, school.id, diary_id)
     _require_diary(db, user, diary, "diary.configure")
     _require_open_diary(diary)
-    period = _period(db, school.id, period_id, diary.academic_year_id)
+    period = _period(db, school.id, period_id, diary.academic_year_id, diary.class_group_id)
     _require_unclosed_period(db, diary, period.id)
     obj = _assessment_rule_data(db, diary, period)
     values = data.model_dump(exclude={"version"})
@@ -1052,7 +1107,7 @@ def consolidate_period(diary_id: str, period_id: str, data: s.DiaryTransitionInp
     _require_diary(db, user, diary, "diary.review")
     check_version(diary, data.version)
     if diary.status not in {"open", "reviewed"}: fail(409, "A consolidação exige diário aberto ou revisado.")
-    period = _period(db, school.id, period_id, diary.academic_year_id)
+    period = _period(db, school.id, period_id, diary.academic_year_id, diary.class_group_id)
     _require_unclosed_period(db, diary, period.id)
     rule = _assessment_rule_data(db, diary, period)
     if not rule: fail(409, "Configure a regra de avaliação antes de consolidar.")
@@ -1162,7 +1217,7 @@ def consolidate_period(diary_id: str, period_id: str, data: s.DiaryTransitionInp
 @router.get("/diaries/{diary_id}/periods/{period_id}/results")
 def period_results(diary_id: str, period_id: str, db: DB, user: Actor, school: DiaryScope):
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id);_require_diary(db,user,diary,"diary.read")
-    period=_period(db,school.id,period_id,diary.academic_year_id)
+    period=_period(db,school.id,period_id,diary.academic_year_id, diary.class_group_id)
     rows=list(db.scalars(select(m.PeriodResult).where(m.PeriodResult.diary_id==diary.id,m.PeriodResult.academic_period_id==period.id)))
     items=[]
     for row in rows:
@@ -1177,7 +1232,7 @@ def _student_label(db, enrollment_id):
     return (person.name if person else "Aluno")+(" · "+student.number if student else "")
 
 
-def _report_attendance(db, snapshot):
+def _attendance_register(db, snapshot):
     students={item["enrollment_id"]:item for item in snapshot.get("roster",[])}
     lessons={item["id"]:item for item in snapshot.get("lessons",[])}
     rules={item["academic_period_id"]:item for item in snapshot.get("assessment_rules",[])}
@@ -1198,18 +1253,21 @@ def _report_attendance(db, snapshot):
     for student in students.values():
         v=counts.get(student["enrollment_id"],{});total=sum(v.get(key,0) for key in ("present","absent","justified_absence"));credited=v.get("credited",0)
         rate=f"{credited*100/total:.1f}%".replace(".",",") if total else "—"
-        rows.append((student["name"]+" · "+student["number"],f"Presenças: {v.get('present',0)} aula(s); faltas: {v.get('absent',0)}; justificadas: {v.get('justified_absence',0)}; frequência nas aulas com chamada: {rate}. Justificadas só geram crédito quando a regra do período autoriza."))
-    return rows
+        rows.append((student["name"]+" · "+student["number"], total, v.get('present',0),
+                     v.get('absent',0), v.get('justified_absence',0), rate))
+    return paper.register("Frequência por aluno",
+        [("Aluno e registro escolar", 2.6), ("Aulas com chamada", 1), ("Presenças", 1),
+         ("Faltas", .8), ("Justificadas", 1), ("Frequência", 1)], rows)
 
 
-REPORT_TITLES={"class_diary":"Diário da turma / componente","lessons":"Registro de aulas","attendance":"Mapa de frequência","assessments":"Mapa de avaliações/notas/conceitos","opinions":"Pareceres descritivos","occurrences":"Ocorrências pedagógicas","communications":"Comunicações à família","student_record":"Ficha individual do estudante","period_consolidation":"Consolidação por período","closure":"Relatório de fechamento","pending":"Relatório de pendências","revision_history":"Histórico de retificações","audit_validation":"Auditoria e validação"}
+REPORT_TITLES={"pedagogical_register":"Registro pedagógico","class_diary":"Diário da turma / componente","lessons":"Registro de aulas","attendance":"Mapa de frequência","assessments":"Mapa de avaliações/notas/conceitos","opinions":"Pareceres descritivos","occurrences":"Ocorrências pedagógicas","communications":"Comunicações à família","student_record":"Ficha individual do estudante","period_consolidation":"Consolidação por período","closure":"Relatório de fechamento","pending":"Relatório de pendências","revision_history":"Histórico de retificações","audit_validation":"Auditoria e validação"}
 
 
 @router.get("/diaries/{diary_id}/reports/{report_type}.pdf")
-def diary_report_family(diary_id: str, report_type: str, db: DB, user: Actor, school: DiaryScope, academic_period_id: str = "", enrollment_id: str = ""):
+def diary_report_family(diary_id: str, report_type: str, db: DB, user: Actor, school: DiaryScope, academic_period_id: str = "", enrollment_id: str = "", date_from: date | None = None, date_to: date | None = None):
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id);_require_diary(db,user,diary,"diary.reports")
     if report_type not in REPORT_TITLES:fail(404,"Tipo de relatório não encontrado.")
-    period=_period(db,school.id,academic_period_id,diary.academic_year_id) if academic_period_id else None
+    period=_period(db,school.id,academic_period_id,diary.academic_year_id, diary.class_group_id) if academic_period_id else None
     closure=None
     if period:
         closure=db.scalar(select(m.DiaryClosure).where(m.DiaryClosure.diary_id==diary.id,m.DiaryClosure.academic_period_id==period.id,m.DiaryClosure.active.is_(True)).order_by(m.DiaryClosure.closed_at.desc()))
@@ -1217,105 +1275,176 @@ def diary_report_family(diary_id: str, report_type: str, db: DB, user: Actor, sc
         closure=db.scalar(select(m.DiaryClosure).where(m.DiaryClosure.diary_id==diary.id,m.DiaryClosure.academic_period_id.is_(None),m.DiaryClosure.active.is_(True)).order_by(m.DiaryClosure.closed_at.desc()))
     data=closure.snapshot if closure else _snapshot(db,diary,period.id if period else None)
     rows=[("Ano letivo",data["diary"]["year_name"]),("Turma",data["diary"]["class_name"]),("Componente",data["diary"]["component_name"]),("Professor",data["diary"]["teacher_name"] or "Não vinculado"),("Situação",data["diary"]["status"])]
+    if date_from and date_to and date_from > date_to:
+        fail(422, 'A data inicial deve anteceder o término.')
+    if date_from or date_to:
+        if report_type not in {'attendance', 'pedagogical_register'}:
+            fail(422, 'O relatório escolhido usa o período letivo completo.')
+        lessons = [r for r in data['lessons'] if (not date_from or str(r['lesson_date']) >= date_from.isoformat())
+                   and (not date_to or str(r['lesson_date']) <= date_to.isoformat())]
+        included = {r['id'] for r in lessons}
+        data = {**data, 'lessons': lessons, 'attendance': [r for r in data['attendance'] if r['lesson_id'] in included]}
+        rows.append(('Intervalo de aulas', f"{date_from or 'Início do diário'} a {date_to or 'Fim do diário'}"))
+    rows[4] = ('Situação', 'Fechamento vigente' if closure else paper.STATES.get(diary.status, diary.status))
     if period:rows.append(("Período",period.name))
-    context = [{'label': key, 'value': value} for key, value in rows]
-    rows = []
-    if report_type in {"class_diary","lessons"}:
-        plan=data.get("plan") or {}
-        if plan:rows.extend([("Objetivos",plan.get("objectives","")),("Unidade/objetos",plan.get("thematic_units","")+" / "+plan.get("knowledge_objects","")),("Habilidades BNCC",", ".join(plan.get("bncc_references",[]))),("Metodologia",plan.get("methodology","")),("Recursos",plan.get("resources","")),("Estratégia de avaliação",plan.get("assessment_strategy",""))])
-        for i,x in enumerate(data["lessons"],1):rows.append((f"Aula {i} · {x['lesson_date']}",f"{x['lesson_count']} aula(s) — {x['content']} | Habilidades: {x.get('skills','')} | Metodologia: {x.get('methodology','')} | Atividades: {x.get('activities','')} | Tarefa: {x.get('homework','')}"))
-        if report_type=="class_diary":rows.extend(_report_attendance(db,data))
-    elif report_type=="attendance":
-        rows.extend(_report_attendance(db,data));rows.append(("Total de aulas",str(sum(int(x["lesson_count"]) for x in data["lessons"]))))
-    elif report_type=="assessments":
-        names={x["enrollment_id"]:x["name"]+" · "+x["number"] for x in data.get("roster",[])}
-        for result in data.get("assessment_results",[]):names.setdefault(result["enrollment_id"],_student_label(db,result["enrollment_id"]))
-        for inst in data.get("assessments",[]):
-            rows.append(("Avaliação · "+inst["title"],inst["assessment_date"]+" · "+inst["value_type"]+" · "+inst["status"]))
-            values={x["enrollment_id"]:x for x in data.get("assessment_results",[]) if x["instrument_id"]==inst["id"]}
-            for enrollment_id,name in sorted(names.items(),key=lambda x:x[1]):
-                result=values.get(enrollment_id);value=(str(result["numeric_score"]) if result and result.get("numeric_score") is not None else result.get("concept","") if result else "Pendente")
-                rows.append((name,value))
-        for result in data.get("period_results",[]):rows.append(("Consolidação · "+_student_label(db,result["enrollment_id"]),str(result.get("numeric_value") if result.get("numeric_value") is not None else result.get("concept_value") or "Pendente")+" · "+result["status"]))
-    elif report_type in {"opinions","occurrences"}:
-        collection=data.get("opinions" if report_type=="opinions" else "occurrences",[])
-        for x in collection:
-            if report_type=="opinions":rows.append((_student_label(db,x["enrollment_id"])+" · "+x["status"],x["text"]))
-            else:rows.append((_student_label(db,x["enrollment_id"])+" · "+x["occurrence_date"]+" · "+x["kind"]+" · "+x["status"],x["title"]+" — "+x["description"]))
-    elif report_type=="communications":
-        if closure:
-            records=data.get("communications",[])
-        else:
-            stmt=select(m.DiaryFamilyCommunication).where(m.DiaryFamilyCommunication.diary_id==diary.id)
+    sections = [{'title': 'Identificação do diário', 'fields': rows}]
+    roster = {r['enrollment_id']: r['name'] + ' · ' + r['number'] for r in data.get('roster', [])}
+    def student_name(eid):
+        if eid not in roster:
+            roster[eid] = _student_label(db, eid)
+        return roster[eid]
+
+    if report_type == 'pedagogical_register':
+        labels = {'intervention':'Intervenção', 'referral':'Encaminhamento', 'follow_up':'Acompanhamento',
+                  'recovery':'Recuperação', 'adaptation':'Adaptação', 'observation':'Observação'}
+        records = [r for r in data.get('pedagogical_records', []) if (not date_from or r['record_date'] >= date_from.isoformat())
+                   and (not date_to or r['record_date'] <= date_to.isoformat())]
+        if records:
+            sections.append(paper.register('Acompanhamentos registrados', [('Data', 1), ('Tipo de acompanhamento', 3)],
+                [(format_value(r['record_date'],'date'), labels.get(r['kind'],'Acompanhamento')) for r in sorted(records,key=lambda r:r['record_date'])]))
+    if report_type in {'class_diary', 'lessons', 'pedagogical_register'}:
+        sections.extend(paper.lessons(data))
+    if report_type == 'attendance':
+        lessons = sorted(data['lessons'], key=lambda r: (r['lesson_date'], r['id']))
+        marks = {(r['lesson_id'], r['enrollment_id']): r['status'] for r in data['attendance']}
+        eligible = {}
+        for lesson in lessons:
+            ids = lesson.get('expected_enrollment_ids')
+            if ids is None:
+                ids = [r['enrollment_id'] for r in _attendance_roster(db, diary, date.fromisoformat(lesson['lesson_date']))]
+            eligible[lesson['id']] = set(ids)
+        pupils = set(roster).union(*(eligible.values()), (eid for _, eid in marks))
+        symbols = {'present': 'P', 'absent': 'F', 'justified_absence': 'J'}
+        def cell(lesson, eid):
+            if lesson.get('status') in {'cancelled', 'canceled'}:
+                return 'C'
+            status = marks.get((lesson['id'], eid))
+            if status:
+                return symbols.get(status, 'NL')
+            return 'NL' if eid in eligible[lesson['id']] else 'FV'
+        for start in range(0, len(lessons), 8):
+            batch = lessons[start:start+8]
+            sections.append(paper.register('Chamada · P presença / F falta / J justificada / NL não lançada / FV fora da vigência / C cancelada',
+                [('Aluno e registro', 2.5)] + [(format_value(r['lesson_date'], 'date') + ' · ' + str(r['lesson_count']) + ' aula(s)', 1) for r in batch],
+                [(student_name(eid), *(cell(r, eid) for r in batch)) for eid in sorted(pupils, key=student_name)]))
+        totals = []
+        rule_by_period = {r['academic_period_id']: r for r in data.get('assessment_rules', [])}
+        for eid in sorted(pupils, key=student_name):
+            counts = {k: 0 for k in ('P','F','J','NL')}
+            credit = 0
+            known = True
+            for lesson in lessons:
+                status = cell(lesson, eid)
+                if status not in counts:
+                    continue
+                units = int(lesson['lesson_count'])
+                counts[status] += units
+                rule = rule_by_period.get(lesson.get('academic_period_id'), {})
+                policy = rule.get('justified_absence_counts_as_present')
+                if status == 'J' and policy is None:
+                    known = False
+                if status == 'P' or (status == 'J' and policy is True):
+                    credit += units
+            total = sum(counts.values())
+            rate = f'{100*credit/total:.1f}%'.replace('.', ',') if total and known and not counts['NL'] else 'Não apurada'
+            totals.append((student_name(eid), total, counts['P'], counts['F'], counts['J'], counts['NL'], rate))
+        sections.append(paper.register('Frequência por aluno', [('Aluno e registro', 2.6), ('Aulas no recorte', 1), ('Presenças', 1),
+            ('Faltas', 1), ('Justificadas', 1), ('Sem chamada', 1), ('Frequência', 1)], totals))
+    if report_type == 'class_diary':
+        sections.append({'title': 'Carga registrada', 'fields': [('Total de aulas', sum(int(r['lesson_count']) for r in data['lessons']))]})
+        sections.append(_attendance_register(db, data))
+    if report_type == 'assessments':
+        for r in data.get('assessment_results', []):
+            student_name(r['enrollment_id'])
+        sections.extend(paper.assessments(data, roster))
+    if report_type in {'assessments', 'period_consolidation'}:
+        if report_type == 'period_consolidation':
+            if not period:
+                fail(422, 'Selecione o período para emitir a consolidação.')
+            rule = next((r for r in data.get('assessment_rules', []) if r.get('academic_period_id') == period.id), None)
+            if rule:
+                sections.append({'title': 'Regra do período', 'fields': [
+                    ('Método de cálculo', rule.get('method')), ('Escala final', rule.get('scale_max')),
+                    ('Casas decimais', rule.get('decimal_places')), ('Recuperação', rule.get('recovery_mode')),
+                    ('Versão da regra', rule.get('version'))]})
+        results = [(student_name(r['enrollment_id']), paper.mark(r, 'numeric_value', 'concept_value'),
+                    paper.STATES.get(r['status'], r['status']), ', '.join(r.get('flags') or []))
+                   for r in data.get('period_results', [])]
+        sections.append(paper.register('Consolidação', [('Aluno', 2), ('Nota ou conceito', 1),
+            ('Resultado do período', 1.5), ('Observações de cálculo', 1.5)], results))
+    elif report_type == 'student_record':
+        if not enrollment_id:
+            fail(422, 'Selecione a matrícula para emitir a ficha individual.')
+        enrollment = _enrollment_for_diary(db, diary, enrollment_id)
+        sections[0]['fields'].append(('Aluno', student_name(enrollment.id)))
+        sections.extend(paper.individual(data, enrollment.id))
+    elif report_type == 'communications':
+        sections.append(paper.register('Comunicações à família', [('Aluno e responsável', 1.5), ('Envio', 1), ('Mensagem', 2.6), ('Leitura', 1)],
+            [(r['student_name'] + '\n' + r['guardian_name'], r['sent_at'], r['title'] + '\n' + r['message'],
+              r.get('read_at') or 'Disponível no portal') for r in data.get('communications', [])]))
+    elif report_type == 'opinions':
+        sections.append(paper.register('Pareceres por aluno', [('Aluno', 1.6), ('Situação', 1), ('Parecer descritivo', 3)],
+            [(student_name(r['enrollment_id']), paper.STATES.get(r['status'], r['status']), r['text']) for r in data.get('opinions', [])]))
+    elif report_type == 'occurrences':
+        sections.append(paper.register('Ocorrências por aluno', [('Data', 1), ('Aluno', 1.5), ('Tipo e situação', 1.3), ('Ocorrência', 2.5)],
+            [(format_value(r['occurrence_date'], 'date'), student_name(r['enrollment_id']), r['kind'] + '\n' + paper.STATES.get(r['status'], r['status']),
+              r['title'] + '\n' + r['description']) for r in data.get('occurrences', [])]))
+    elif report_type in {'closure', 'revision_history'}:
+        query = select(m.DiaryClosure).where(m.DiaryClosure.diary_id == diary.id)
+        if period:
+            query = query.where(m.DiaryClosure.academic_period_id == period.id)
+        closures = {c.id: c for c in db.scalars(query)}
+        entries = []
+        def add_event(stamp, action, author_id, reason, c):
+            person = db.get(m.User, author_id)
+            term = db.get(m.AcademicPeriod, c.academic_period_id) if c and c.academic_period_id else None
+            entries.append((stamp, action, person.name if person else 'Não informado',
+                            term.name if term else 'Diário completo', reason, c.snapshot_hash if c else ''))
+        for c in closures.values():
+            add_event(c.closed_at, 'Fechamento vigente' if c.active else 'Fechamento anterior', c.closed_by, c.reason, c)
+        if report_type == 'revision_history':
+            query = select(m.DiaryRevision).where(m.DiaryRevision.diary_id == diary.id)
             if period:
-                stmt=stmt.where(m.DiaryFamilyCommunication.academic_period_id==period.id)
-            records=[_communication_output(db,item) for item in db.scalars(stmt.order_by(m.DiaryFamilyCommunication.sent_at,m.DiaryFamilyCommunication.id))]
-        for record in records:
-            status='Lido em '+record['read_at'] if record['read_at'] else 'Disponível no portal'
-            rows.append((record['student_name']+' · '+record['guardian_name']+' · '+record['sent_at'],record['title']+' — '+record['message']+' · '+status))
-    elif report_type=="student_record":
-        if not enrollment_id:fail(422,"Selecione a matrícula para emitir a ficha individual.")
-        enrollment=_enrollment_for_diary(db,diary,enrollment_id);context.append({'label':'Aluno','value':_student_label(db,enrollment.id)})
-        for lesson in data["lessons"]:
-            mark=next((x for x in data["attendance"] if x["lesson_id"]==lesson["id"] and x["enrollment_id"]==enrollment.id),None)
-            if mark:rows.append(("Frequência · "+lesson["lesson_date"],mark["status"]))
-        for instrument in data.get("assessments",[]):
-            result=next((x for x in data.get("assessment_results",[]) if x["instrument_id"]==instrument["id"] and x["enrollment_id"]==enrollment.id),None)
-            if result:rows.append(("Avaliação · "+instrument["title"],str(result.get("numeric_score") if result.get("numeric_score") is not None else result.get("concept",""))))
-        for x in data.get("opinions",[]):
-            if x["enrollment_id"]==enrollment.id:rows.append(("Parecer · "+x["status"],x["text"]))
-        for x in data.get("pedagogical_records",[]):
-            if x["enrollment_id"]==enrollment.id:rows.append(("Registro pedagógico · "+x["record_date"]+" · "+x["kind"],x["text"]))
-        for x in data.get("occurrences",[]):
-            if x["enrollment_id"]==enrollment.id:rows.append(("Ocorrência · "+x["occurrence_date"],x["title"]+" — "+x["description"]))
-    elif report_type=="period_consolidation":
-        if not period:fail(422,"Selecione o período para emitir a consolidação.")
-        rule=_assessment_rule_data(db,diary,period)
-        if rule:rows.extend([("Regra",rule.method),("Escala final",str(rule.scale_max)),("Casas decimais",str(rule.decimal_places)),("Recuperação",rule.recovery_mode),("Versão da regra",str(rule.version))])
-        for x in data.get("period_results",[]):
-            value=x.get("numeric_value") if x.get("numeric_value") is not None else x.get("concept_value") or "Pendente"
-            rows.append((_student_label(db,x["enrollment_id"]),str(value)+" · "+x["status"]+" · "+", ".join(x.get("flags") or [])))
-    elif report_type=="closure":
-        for x in db.scalars(select(m.DiaryClosure).where(m.DiaryClosure.diary_id==diary.id).order_by(m.DiaryClosure.closed_at.desc())):
-            period_row=db.get(m.AcademicPeriod,x.academic_period_id) if x.academic_period_id else None
-            rows.append(((period_row.name if period_row else "Diário completo")+" · "+x.closed_at.isoformat(),"SHA-256: "+x.snapshot_hash+"; ativo: "+str(x.active)+"; motivo: "+x.reason))
-    elif report_type=="pending":
-        rows.extend((key,str(value)) for key,value in _diary_pending_counts(db,diary).items())
-        for lesson in data["lessons"]:
-            saved=sum(1 for x in data["attendance"] if x["lesson_id"]==lesson["id"]);expected=len(_attendance_roster(db,diary,date.fromisoformat(lesson["lesson_date"])))
-            if saved<expected:rows.append(("Chamada · "+lesson["lesson_date"],f"{expected-saved} aluno(s) sem situação"))
-        for x in data.get("occurrences",[]):
-            if x["status"]=="draft":rows.append(("Ocorrência aguardando revisão · "+x["occurrence_date"],x["title"]))
-    elif report_type=="revision_history":
-        for x in db.scalars(select(m.DiaryClosure).where(m.DiaryClosure.diary_id==diary.id).order_by(m.DiaryClosure.closed_at.desc())):rows.append(("Fechamento · "+x.closed_at.isoformat(),x.snapshot_hash+" · "+x.reason))
-        for x in db.scalars(select(m.DiaryRevision).where(m.DiaryRevision.diary_id==diary.id).order_by(m.DiaryRevision.reopened_at.desc())):rows.append(("Reabertura · "+x.reopened_at.isoformat(),x.reason))
-    elif report_type=="audit_validation":
-        issues=[]
-        for lesson in data["lessons"]:
-            expected=len(_attendance_roster(db,diary,date.fromisoformat(lesson["lesson_date"])));saved=sum(1 for x in data["attendance"] if x["lesson_id"]==lesson["id"])
-            if saved<expected:issues.append(f"Chamada incompleta em {lesson['lesson_date']}: {saved}/{expected}")
-        for result in data.get("period_results",[]):
-            result_period=db.get(m.AcademicPeriod,result["academic_period_id"]);rule=_assessment_rule_data(db,diary,result_period) if result_period else None
-            if rule and result["rule_version"]!=rule.version:issues.append("Consolidação desatualizada: "+_student_label(db,result["enrollment_id"]))
-        rows.append(("Validação","Sem divergências verificadas." if not issues else f"{len(issues)} divergência(s)"))
-        rows.extend((f"Item {i}",issue) for i,issue in enumerate(issues,1))
-    note=("Snapshot de fechamento · SHA-256 "+closure.snapshot_hash) if closure else "Emitido dos registros atuais. A frequência exibida resume os registros de chamada e não presume regra normativa ou assinatura digital."
-    if report_type=="period_consolidation" and period and not data.get("period_results"):note+=" Nenhuma consolidação foi processada."
-    from .school_reports import render_table
-    headings = {
-        'lessons': ('Aula ou planejamento', 'Registro de ensino'),
-        'attendance': ('Aluno ou turma', 'Apuração da frequência'),
-        'assessments': ('Avaliação ou aluno', 'Resultado registrado'),
-        'opinions': ('Aluno e situação', 'Parecer descritivo'),
-        'occurrences': ('Aluno e ocorrência', 'Descrição'),
-        'communications': ('Destinatários e envio', 'Mensagem e leitura'),
-        'revision_history': ('Movimentação', 'Justificativa e integridade'),
-    }
-    first, second = headings.get(report_type, ('Identificação', 'Informação registrada'))
-    columns = [{'key': 'field', 'label': first}, {'key': 'value', 'label': second, 'width': 2}]
-    content = render_table(school, REPORT_TITLES[report_type], columns,
-                           [{'field': key, 'value': value} for key, value in rows],
-                           filters=context, notes=[note], issuer=user.name, db=db, module='Diário escolar')
+                query = query.where(m.DiaryRevision.closure_id.in_(closures))
+            for rev in db.scalars(query):
+                add_event(rev.reopened_at, 'Reabertura', rev.reopened_by, rev.reason, closures.get(rev.closure_id))
+        sections.append(paper.register('Rastreabilidade dos fechamentos',
+            [('Data e hora (UTC)', 1), ('Ato e período', 1.4), ('Autor', 1.3), ('Justificativa e SHA-256', 2.6)],
+            [(stamp.strftime('%d/%m/%Y %H:%M'), action + '\n' + term, author, reason + '\n' + digest)
+             for stamp, action, author, term, reason, digest in sorted(entries, reverse=True)]))
+    elif report_type in {'pending', 'audit_validation'}:
+        issues = []
+        for lesson in data['lessons']:
+            expected = lesson.get('expected_enrollment_ids')
+            if expected is None:
+                expected = [r['enrollment_id'] for r in _attendance_roster(db, diary, date.fromisoformat(lesson['lesson_date']))]
+            recorded = {r['enrollment_id'] for r in data['attendance'] if r['lesson_id'] == lesson['id']}
+            missing = len(set(expected) - recorded)
+            if missing:
+                issues.append(('Chamada', format_value(lesson['lesson_date'], 'date'), f'{missing} aluno(s) sem situação'))
+        if report_type == 'pending':
+            totals = _diary_pending_counts(db, diary)
+            labels = {'lessons_without_complete_attendance': 'Chamadas pendentes', 'assessment_results_pending': 'Resultados de avaliação',
+                      'consolidation_results_pending': 'Consolidações', 'occurrences_pending_review': 'Ocorrências em revisão'}
+            sections.append({'title': 'Pendências atuais do diário completo', 'fields': [(labels[k], v) for k, v in totals.items()]})
+            issues.extend(('Ocorrência em revisão', format_value(r['occurrence_date'], 'date'), r['title'])
+                          for r in data.get('occurrences', []) if r['status'] == 'draft')
+        else:
+            rules = {r['academic_period_id']: r for r in data.get('assessment_rules', [])}
+            for r in data.get('period_results', []):
+                rule = rules.get(r['academic_period_id'])
+                if rule and r.get('rule_version') != rule.get('version'):
+                    issues.append(('Consolidação desatualizada', student_name(r['enrollment_id']), 'Conferir a versão da regra do período.'))
+        sections.append(paper.register('Conferência dos registros', [('Item', 1.5), ('Referência', 1.3), ('Apontamento', 2.3)], issues)
+                        if issues else {'title': 'Conferência dos registros', 'text': 'Sem divergências verificadas.'})
+    note = ('Snapshot de fechamento · SHA-256 ' + closure.snapshot_hash) if closure else 'Emitido a partir dos registros atuais do diário.'
+    notes = [note]
+    if report_type in {'attendance', 'class_diary'}:
+        notes.append('A frequência considera as aulas com chamada. Faltas justificadas geram crédito somente quando a regra do período autoriza.')
+    content = render_table(school, REPORT_TITLES[report_type], [], [], sections=sections,
+                           notes=notes, issuer=user.name, db=db, module='Diário escolar',
+                           kit=report_type in {'attendance', 'pedagogical_register'},
+                           orientation='landscape' if report_type in {'attendance', 'pedagogical_register'} else 'portrait')
     suffix="-"+period.id if period else ""
     return Response(content,media_type="application/pdf",headers={"Content-Disposition":f'attachment; filename="diario-{report_type}-{diary.id}{suffix}.pdf"',"Cache-Control":"no-store"})
 
@@ -1325,7 +1454,7 @@ def diary_occurrences(diary_id: str, db: DB, user: Actor, school: DiaryScope, ac
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id);_require_diary(db,user,diary,"diary.read")
     stmt=select(m.DiaryOccurrence).where(m.DiaryOccurrence.diary_id==diary.id)
     if academic_period_id:
-        _period(db,school.id,academic_period_id,diary.academic_year_id)
+        _period(db,school.id,academic_period_id,diary.academic_year_id, diary.class_group_id)
         stmt=stmt.where(m.DiaryOccurrence.academic_period_id==academic_period_id)
     return [output(x) for x in db.scalars(stmt.order_by(m.DiaryOccurrence.occurrence_date.desc()))]
 
@@ -1357,7 +1486,7 @@ def create_diary_communications(diary_id: str,data: s.DiaryCommunicationInput,db
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id);_require_diary(db,user,diary,"diary.read");require(user,"communications.send")
     lock_school(db,school.id)
     enrollment=_enrollment_for_diary(db,diary,data.enrollment_id)
-    period=_period(db,school.id,data.academic_period_id,diary.academic_year_id) if data.academic_period_id else None
+    period=_period(db,school.id,data.academic_period_id,diary.academic_year_id, diary.class_group_id) if data.academic_period_id else None
     occurrence=None
     if data.occurrence_id:
         occurrence=_scoped(db,m.DiaryOccurrence,data.occurrence_id,school.id)
@@ -1411,10 +1540,12 @@ def _occurrence_period(db, school_id, diary, supplied_period, occurrence_date):
     year=db.get(m.AcademicYear,diary.academic_year_id)
     if occurrence_date<year.starts_on or occurrence_date>year.ends_on:fail(422,"Data da ocorrência fora do ano letivo.")
     if supplied_period:
-        period=_period(db,school_id,supplied_period,diary.academic_year_id)
+        period=_period(db,school_id,supplied_period,diary.academic_year_id, diary.class_group_id)
         if occurrence_date<period.starts_on or occurrence_date>period.ends_on:fail(422,"Data da ocorrência fora do período informado.")
         return period
     periods=list(db.scalars(select(m.AcademicPeriod).where(m.AcademicPeriod.school_id==school_id,m.AcademicPeriod.academic_year_id==diary.academic_year_id,m.AcademicPeriod.starts_on<=occurrence_date,m.AcademicPeriod.ends_on>=occurrence_date)))
+    group = _scoped(db, m.ClassGroup, diary.class_group_id, school_id)
+    periods = [p for p in periods if period_applies(group, p)]
     if len(periods)!=1:fail(422,"Selecione o período letivo da ocorrência.")
     return periods[0]
 

@@ -411,7 +411,7 @@ var PigeDiary;
             const state = Vue.reactive({
                 busy: false, error: '', notice: '', tab: 'diaries', page: 'diaries', diaryFilter: '', lessonPeriod: '', dirty: false,
                 diaries: [], selected: null, academicYears: [], periods: [], components: [], groups: [], assignments: [], plans: [],
-                periodForm: { academic_year_id: '', name: '', starts_on: '', ends_on: '', order_index: 1, active: true },
+                calendarIds: [], periodForm: { academic_year_id: '', class_group_id: '', name: '', starts_on: '', ends_on: '', order_index: 1, active: true },
                 componentForm: { name: '', code: '', workload_hours: 0, active: true },
                 diaryForm: { class_group_id: '', component_id: '', teacher_assignment_id: '', notes: '' },
                 planForm: { class_group_id: '', component_id: '', academic_period_id: '', teacher_assignment_id: '', objectives: '', thematic_units: '', knowledge_objects: '', bncc_references: '', methodology: '', resources: '', assessment_strategy: '', notes: '', status: 'draft' },
@@ -433,7 +433,7 @@ var PigeDiary;
                 communicationRecipients: [], communications: [],
                 communicationForm: { enrollment_id: '', academic_period_id: '', occurrence_id: '', recipient_guardian_link_ids: [], title: '', message: '', client_key: PigeOnline.newId() },
                 occurrenceForm: { academic_period_id: '', enrollment_id: '', occurrence_date: today(), kind: 'pedagogical', title: '', description: '', status: 'draft' },
-                reportType: 'class_diary', reportPeriod: '', reportEnrollment: ''
+                reportFrom: '', reportTo: '', reportType: 'class_diary', reportPeriod: '', reportEnrollment: ''
             });
             const base = () => (props.teacherPortal ? '/teacher' : '') + '/schools/' + props.schoolId;
             const can = (p) => props.permissions.includes(p);
@@ -644,7 +644,7 @@ var PigeDiary;
                     state.closePeriod = '';
                 }
                 state.occurrenceForm = { academic_period_id: '', enrollment_id: '', occurrence_date: today(), kind: 'pedagogical', title: '', description: '', status: 'draft' };
-                const firstPeriod = state.periods.find(p => p.academic_year_id === d.academic_year_id);
+                const firstPeriod = periodsFor(d)[0];
                 selectRulePeriod(firstPeriod ? str(firstPeriod.id) : '');
                 state.communicationRecipients = [];
                 state.communicationForm = { enrollment_id: '', academic_period_id: '', occurrence_id: '', recipient_guardian_link_ids: [], title: '', message: '', client_key: PigeOnline.newId() };
@@ -678,7 +678,28 @@ var PigeDiary;
                 state.communicationForm.academic_period_id = str(occurrence.academic_period_id); }
             async function sendCommunication() { if (!state.selected)
                 return; await run(async () => { const f = state.communicationForm; const result = await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/communications', { ...f, academic_period_id: f.academic_period_id || null, occurrence_id: f.occurrence_id || null }); state.communications = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/communications'); state.communicationForm = { ...f, occurrence_id: '', recipient_guardian_link_ids: [], title: '', message: '', client_key: PigeOnline.newId() }; state.communicationRecipients = []; state.notice = result.created ? 'Comunicado disponibilizado no portal para ' + result.created + ' conta(s).' : 'Esta operação já havia sido processada; nenhum comunicado duplicado foi criado.'; }); }
-            async function createPeriod() { await run(async () => { await PigeAPI.post(base() + '/academic-periods', state.periodForm); state.periodForm = { academic_year_id: state.periodForm.academic_year_id, name: '', starts_on: '', ends_on: '', order_index: state.periodForm.order_index + 1, active: true }; await loadBase(); state.notice = 'Período letivo criado.'; }); }
+            function periodsFor(d) {
+                const group = state.groups.find(g => g.id === d.class_group_id);
+                const ids = group?.academic_period_ids || d.academic_period_ids;
+                return state.periods.filter(p => p.academic_year_id === d.academic_year_id && (Array.isArray(ids) && ids.length ? ids.includes(p.id) : !p.class_calendar_only));
+            }
+            function loadCalendar() {
+                const group = state.groups.find(g => g.id === state.periodForm.class_group_id);
+                state.calendarIds = Array.isArray(group?.academic_period_ids) && group.academic_period_ids.length ? [...group.academic_period_ids] :
+                    state.periods.filter(p => p.academic_year_id === state.periodForm.academic_year_id && !p.class_calendar_only).map(p => p.id);
+            }
+            async function saveCalendar() {
+                await run(async () => {
+                    const group = state.groups.find(g => g.id === state.periodForm.class_group_id);
+                    if (!group)
+                        return;
+                    await PigeAPI.request(base() + '/class-groups/' + group.id + '/calendar', { method: 'PUT', body: JSON.stringify({ period_ids: state.calendarIds, version: group.version }) });
+                    await loadBase();
+                    loadCalendar();
+                    state.notice = 'Calendário da turma atualizado.';
+                });
+            }
+            async function createPeriod() { await run(async () => { await PigeAPI.post(base() + '/academic-periods', state.periodForm); state.periodForm = { class_group_id: state.periodForm.class_group_id, academic_year_id: state.periodForm.academic_year_id, name: '', starts_on: '', ends_on: '', order_index: state.periodForm.order_index + 1, active: true }; await loadBase(); loadCalendar(); state.notice = 'Período letivo criado.'; }); }
             async function createComponent() { await run(async () => { await PigeAPI.post(base() + '/curriculum-components', state.componentForm); state.componentForm = { name: '', code: '', workload_hours: 0, active: true }; await loadBase(); state.notice = 'Componente curricular criado.'; }); }
             async function createDiary() { await run(async () => { const body = { ...state.diaryForm, teacher_assignment_id: state.diaryForm.teacher_assignment_id || null }; const d = await PigeAPI.post(base() + '/diaries', body); state.diaryForm = { class_group_id: '', component_id: '', teacher_assignment_id: '', notes: '' }; await loadBase(); await loadDiary(d); if (pilot) {
                 navigatePage('diaries', false);
@@ -765,7 +786,12 @@ var PigeDiary;
             async function printMaterial(id) { if (state.selected)
                 await run(() => PigeAPI.download(base() + '/diaries/' + state.selected.id + '/materials/' + id + '/print.pdf', 'material-escolar.pdf')); }
             async function report() { if (state.selected)
-                await run(() => { const q = new URLSearchParams(); if (state.reportPeriod)
+                await run(() => { const q = new URLSearchParams(); if (['attendance', 'pedagogical_register'].includes(state.reportType)) {
+                    if (state.reportFrom)
+                        q.set('date_from', state.reportFrom);
+                    if (state.reportTo)
+                        q.set('date_to', state.reportTo);
+                } if (state.reportPeriod)
                     q.set('academic_period_id', state.reportPeriod); if (state.reportType === 'student_record' && state.reportEnrollment)
                     q.set('enrollment_id', state.reportEnrollment); const query = q.toString(); return PigeAPI.download(base() + '/diaries/' + state.selected.id + '/reports/' + state.reportType + '.pdf' + (query ? '?' + query : ''), 'diario-' + state.reportType + '.pdf'); }); }
             let handled;
@@ -814,9 +840,193 @@ var PigeDiary;
             });
             Vue.onUnmounted(() => { if (pilot)
                 window.removeEventListener('beforeunload', beforeUnload); });
-            return { props, state, pilot, catalog, catalogImpact, suggest, decide, lessons, filterPeriod, save, navigation, activeGroup, filteredDiaries, pageLink, go, show, chooseAnother, markDraft, publishMaterial, printMaterial, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, editAssessment, cancelAssessmentEdit, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
+            return { props, state, periodsFor, loadCalendar, saveCalendar, pilot, catalog, catalogImpact, suggest, decide, lessons, filterPeriod, save, navigation, activeGroup, filteredDiaries, pageLink, go, show, chooseAnother, markDraft, publishMaterial, printMaterial, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, editAssessment, cancelAssessmentEdit, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
         } };
 })(PigeDiary || (PigeDiary = {}));
+var PigeSupport;
+(function (PigeSupport) {
+    PigeSupport.status = Vue.reactive({ error: '' });
+    let loadedSource = '', activeScope = '';
+    let pending = null;
+    let retryAt = 0;
+    const busyMessage = 'O atendimento recebeu muitas solicitações. Aguarde antes de tentar novamente.';
+    let frame = null;
+    let observer = null;
+    let viewportTimer;
+    let generation = 0;
+    function release() {
+        observer?.disconnect();
+        observer = null;
+        if (viewportTimer !== undefined)
+            window.clearInterval(viewportTimer);
+        viewportTimer = undefined;
+        const previous = frame;
+        frame = null;
+        loadedSource = '';
+        // O SDK executa em outro documento. Remover esse contexto encerra seus
+        // timers, listeners, iframes e DOM mesmo quando ele não oferece destroy.
+        try {
+            previous?.contentWindow?.hubSDK?.destroy?.();
+        }
+        catch { /* Atendimento não bloqueia a aplicação. */ }
+        previous?.remove();
+    }
+    function dispose() { ++generation; activeScope = ''; pending = null; retryAt = 0; release(); PigeSupport.status.error = ''; }
+    PigeSupport.dispose = dispose;
+    function clipWidget(element) {
+        if (frame !== element)
+            return;
+        const doc = element.contentDocument, win = element.contentWindow;
+        if (!doc || !win)
+            return;
+        let left = win.innerWidth, top = win.innerHeight, right = 0, bottom = 0;
+        // Recorta o documento do SDK à bolha/painel visível. A área transparente
+        // não intercepta cliques, scroll ou campos da página da escola.
+        for (const node of Array.from(doc.querySelectorAll('iframe,button,[role="button"],[class*="bubble-holder"],[class*="launcher"]'))) {
+            let visible = true;
+            for (let ancestor = node; ancestor && ancestor !== doc.documentElement; ancestor = ancestor.parentElement) {
+                const css = win.getComputedStyle(ancestor);
+                if (css.display === 'none' || css.visibility === 'hidden' || Number(css.opacity) === 0) {
+                    visible = false;
+                    break;
+                }
+            }
+            if (!visible)
+                continue;
+            const rect = node.getBoundingClientRect();
+            if (rect.width < 2 || rect.height < 2 || rect.right <= 0 || rect.bottom <= 0 || rect.left >= win.innerWidth || rect.top >= win.innerHeight)
+                continue;
+            left = Math.min(left, Math.max(0, rect.left - 4));
+            top = Math.min(top, Math.max(0, rect.top - 4));
+            right = Math.max(right, Math.min(win.innerWidth, rect.right + 4));
+            bottom = Math.max(bottom, Math.min(win.innerHeight, rect.bottom + 4));
+        }
+        element.style.clipPath = right > left && bottom > top ? `inset(${top}px ${Math.max(0, win.innerWidth - right)}px ${Math.max(0, win.innerHeight - bottom)}px ${left}px)` : 'inset(100%)';
+        element.style.visibility = right > left && bottom > top ? 'visible' : 'hidden';
+    }
+    async function load(schoolId = '', area = 'login', sessionKey = 'public') {
+        const scope = JSON.stringify([schoolId, sessionKey]);
+        const context = JSON.stringify([scope, area]);
+        if (scope !== activeScope) {
+            dispose();
+            activeScope = scope;
+        }
+        if (pending?.context === context)
+            return pending.promise;
+        pending = null;
+        const request = ++generation;
+        if (frame)
+            frame.style.display = 'none';
+        if (!schoolId && area !== 'login') {
+            release();
+            return;
+        }
+        if (Date.now() < retryAt) {
+            release();
+            PigeSupport.status.error = busyMessage;
+            return;
+        }
+        PigeSupport.status.error = '';
+        const promise = loadArea(schoolId, area, scope, request);
+        pending = { context, promise };
+        try {
+            await promise;
+        }
+        finally {
+            if (pending?.promise === promise)
+                pending = null;
+        }
+    }
+    PigeSupport.load = load;
+    async function loadArea(schoolId, area, scope, request) {
+        let config = null;
+        try {
+            const path = schoolId ? '/api/v1/schools/' + encodeURIComponent(schoolId) + '/support-widget?area=' + encodeURIComponent(area) : '/api/v1/support-widget';
+            const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store' });
+            if (request !== generation)
+                return;
+            if (response.status === 429) {
+                const header = response.headers.get('Retry-After')?.trim() || '';
+                const delay = /^\d+$/.test(header) ? Number(header) * 1000 : Date.parse(header) - Date.now();
+                retryAt = Date.now() + (Number.isFinite(delay) && delay >= 0 ? delay : 60000);
+                release();
+                PigeSupport.status.error = busyMessage;
+                return;
+            }
+            if (response.ok)
+                config = await response.json();
+        }
+        catch { /* Indisponibilidade do atendimento não bloqueia o formulário. */ }
+        if (request !== generation)
+            return;
+        if (!config?.enabled || !config.base_url || !config.website_token) {
+            release();
+            return;
+        }
+        let baseUrl;
+        try {
+            const url = new URL(config.base_url);
+            if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.search || url.hash)
+                throw new Error('URL inválida');
+            baseUrl = url.href.replace(/\/+$/, '');
+        }
+        catch {
+            release();
+            PigeSupport.status.error = 'Revise o endereço configurado para o atendimento.';
+            return;
+        }
+        const sourceKey = JSON.stringify([scope, baseUrl, config.website_token, config.position, config.type, config.launcherTitle]);
+        if (sourceKey === loadedSource && frame) {
+            frame.style.display = '';
+            return;
+        }
+        release();
+        const element = document.createElement('iframe');
+        element.dataset.pigeSupportFrame = 'true';
+        element.title = 'Atendimento da instituição';
+        element.tabIndex = -1;
+        element.src = 'about:blank';
+        element.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;background:transparent;z-index:2147483000;clip-path:inset(100%);visibility:hidden;color-scheme:light;';
+        frame = element;
+        loadedSource = sourceKey;
+        document.body.appendChild(element);
+        const doc = element.contentDocument, runtime = element.contentWindow;
+        if (!doc || !runtime) {
+            release();
+            PigeSupport.status.error = 'Não foi possível abrir o atendimento.';
+            return;
+        }
+        doc.documentElement.lang = 'pt-BR';
+        doc.documentElement.style.background = 'transparent';
+        doc.body.style.cssText = 'margin:0;background:transparent;';
+        runtime.hubSettings = { position: config.position || 'left', type: config.type || 'expanded_bubble', launcherTitle: config.launcherTitle || 'Suporte' };
+        const sdk = doc.createElement('script');
+        sdk.src = baseUrl + '/packs/js/sdk.js';
+        sdk.defer = true;
+        sdk.async = true;
+        sdk.onload = () => {
+            if (frame !== element)
+                return;
+            try {
+                if (!runtime.hubSDK?.run)
+                    throw new Error('SDK indisponível');
+                runtime.hubSDK.run({ websiteToken: config.website_token, baseUrl });
+                observer = new MutationObserver(() => clipWidget(element));
+                observer.observe(doc.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
+                viewportTimer = window.setInterval(() => clipWidget(element), 250);
+                clipWidget(element);
+            }
+            catch {
+                PigeSupport.status.error = 'O atendimento não iniciou. Confira a configuração com o administrador.';
+                release();
+            }
+        };
+        sdk.onerror = () => { if (frame !== element)
+            return; PigeSupport.status.error = 'O atendimento está indisponível. Tente novamente mais tarde.'; release(); };
+        doc.head.appendChild(sdk);
+    }
+    window.addEventListener('pagehide', dispose);
+})(PigeSupport || (PigeSupport = {}));
 var PigeTeacher;
 (function (PigeTeacher) {
     const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bahia' }).format(new Date());
@@ -970,6 +1180,15 @@ var PigeTeacher;
         return [assignment?.class_name, diary?.component].filter(Boolean).join(' · ');
     }
     Vue.createApp({ render: PigeRenders.teacherPortal, components: { 'school-diary': PigeDiary.component }, setup() {
+            Vue.watch(() => [s.ready, s.user?.id, s.user?.role, s.schoolId].join('|'), () => {
+                if (s.user && s.schoolId)
+                    void PigeSupport.load(s.schoolId, 'teacher_portal', s.user.id);
+                else if (s.ready && !s.user)
+                    void PigeSupport.load(undefined, 'login');
+                else
+                    PigeSupport.dispose();
+            });
+            Vue.onUnmounted(PigeSupport.dispose);
             Vue.onMounted(() => {
                 PigeMFA.init(PigeAPI.request, data => enter(data), logout);
                 window.addEventListener('pige-session-expired', () => { clear(); s.error = 'Sessão encerrada. Entre novamente.'; });

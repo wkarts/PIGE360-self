@@ -10,7 +10,7 @@ from pathlib import Path
 import re
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 ORIGIN=os.environ.get('PIGE_INTERNAL_URL','http://app:8000')
 PUBLIC=os.environ.get('PORTAL_PUBLIC_URL','').rstrip('/')
@@ -59,6 +59,7 @@ def client_headers(method,path,peer,forwarded=''):
 
 
 def allowed(path,method):
+    if path=='/api/v1/support-widget' or re.fullmatch(r'/api/v1/schools/[0-9a-f-]{36}/support-widget',path):return method=='GET'
     if TEACHER_ONLY and not (path.startswith(('/api/v1/teacher/', '/api/v1/auth/', '/api/v1/institution/'))
             or re.fullmatch(r'/api/v1/schools/[0-9a-f-]{36}/community-feed', path)):
         return False
@@ -107,12 +108,28 @@ def branded_html(content,name,identity):
     return content.replace('</head>','<script type="application/json" id="institution-bootstrap">'+raw+'</script></head>')
 
 
+def portal_csp(upstream=''):
+    # O backend já limita script-src aos Hubs habilitados. Conserve as
+    # restrições próprias do portal, inclusive o bloqueio de incorporação.
+    directive=next((part.split()[1:] for part in upstream.split(';')
+                    if part.strip().split()[:1]==['script-src']), [])
+    origins=[value for value in directive if re.fullmatch(
+        r'https?://(?:[a-zA-Z0-9.-]+|\[[0-9a-fA-F:]+\])(?::[0-9]+)?',value)]
+    scripts=' '.join(["'self'",*origins])
+    connections=' '.join([scripts,*(value.replace('http','ws',1) for value in origins)])
+    styles="'self' 'unsafe-inline'" + (' https://fonts.googleapis.com' if origins else '')
+    fonts="'self'" + (' https://fonts.gstatic.com' if origins else '')
+    return (f"default-src 'self'; script-src {scripts}; style-src {styles}; img-src 'self' data: blob:; "
+            f"font-src {fonts}; connect-src {connections}; frame-src {scripts}; "
+            "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,*args):pass
-    def respond(self,status,body,mime='text/plain; charset=utf-8',headers=()):
+    def respond(self,status,body,mime='text/plain; charset=utf-8',headers=(),widget_policy=''):
         self.send_response(status);self.send_header('Content-Type',mime);self.send_header('Content-Length',str(len(body)))
         self.send_header('Cache-Control','no-store');self.send_header('Referrer-Policy','no-referrer');self.send_header('X-Content-Type-Options','nosniff')
-        self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
+        self.send_header('Content-Security-Policy',portal_csp(widget_policy))
         for key,value in headers:self.send_header(key,value)
         self.end_headers();self.wfile.write(body)
 
@@ -128,6 +145,10 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/health/ready':return self.proxy('/health/ready')
         if path.startswith('/api/'):
             if not allowed(path,self.command):return self.respond(404,b'Route unavailable')
+            if path.startswith('/api/v1/schools/') and path.endswith('/support-widget'):
+                areas=parse_qs(parsed.query,keep_blank_values=True).get('area',['online_enrollment'])
+                supported={'teacher_portal'} if TEACHER_ONLY else {'guardian_portal','student_portal','online_enrollment'}
+                if len(areas)!=1 or areas[0] not in supported:return self.respond(404,b'Route unavailable')
             if self.command not in {'GET','HEAD'}:
                 if self.headers.get('Origin','').rstrip('/')!=PUBLIC or self.headers.get('X-CSRF-Protection')!='1':return self.respond(403,b'Origin or CSRF invalid')
             return self.proxy(self.path)
@@ -152,17 +173,20 @@ class Handler(BaseHTTPRequestHandler):
         if not file.is_file():return self.respond(404,b'Not found')
         import mimetypes
         content=file.read_bytes()
+        widget_policy=''
         if name.endswith('.html'):
             conn=None
             try:
                 conn=connection(timeout=5)
                 conn.request('GET','/api/v1/institution/identity',headers={'Host':'localhost'})
                 response=conn.getresponse();identity=response.read(65537)
-                if response.status==200 and len(identity)<=65536:content=branded_html(content.decode(),name,json.loads(identity)).encode()
+                if response.status==200 and len(identity)<=65536:
+                    content=branded_html(content.decode(),name,json.loads(identity)).encode()
+                    if name!='first-access.html':widget_policy=response.getheader('Content-Security-Policy') or ''
             except (OSError,ValueError,TypeError,http.client.HTTPException):pass # A UI conserva o estado de indisponibilidade, sem marca inventada.
             finally:
                 if conn:conn.close()
-        return self.respond(200,content,mimetypes.guess_type(name)[0] or 'application/octet-stream')
+        return self.respond(200,content,mimetypes.guess_type(name)[0] or 'application/octet-stream',widget_policy=widget_policy)
 
     def proxy(self,path):
         conn=None

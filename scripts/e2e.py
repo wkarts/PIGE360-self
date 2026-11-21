@@ -204,7 +204,9 @@ try:
             downloaded.value.save_as(str(OUT/'comprovante-exemplo.pdf'))
         expect(dialog()).to_have_count(0);checks.append('PDF emitido pela UI e bytes conferidos no harness' if BRIDGE else 'PDF emitido e baixado pelo navegador')
         nav('Relatórios');page.get_by_label('Relatório',exact=True).select_option('students');page.get_by_label('Período',exact=True).select_option('month')
-        page.get_by_text('Mais filtros',exact=True).click();page.get_by_label('Turma',exact=False).select_option(index=1)
+        filters = page.locator('details').filter(has=page.get_by_text('Mais filtros', exact=True))
+        filters.get_by_text('Mais filtros', exact=True).click()
+        filters.get_by_role('combobox', name=re.compile('^Turma')).select_option(index=1)
         page.get_by_role('button',name='Gerar relatório',exact=True).click()
         expect(page.get_by_text('Lucas Almeida — Teste',exact=True)).to_be_visible()
         if BRIDGE:

@@ -142,6 +142,8 @@ def admission_output(db,obj,public=True):
         from .contract_history import access_state
         data['issued_documents']=[]
         for item in issued:
+            if item.kind == 'official_bulletin':
+                continue  # Boletins exigem vínculo pedagógico, consentimento e publicação vigente.
             if item.history_removed_at is not None:
                 continue
             access = access_state(db, item)
@@ -403,10 +405,10 @@ def learning(db:DB,account:Parent):
 
 
 @router.get('/learning/{student_id}/report.pdf')
-def learning_report(student_id:str,request:Request,db:DB,account:Parent,enrollment_id:str=Query(default='',max_length=36)):
+def learning_report(student_id:str,request:Request,db:DB,account:Parent,enrollment_id:str=Query(default='',max_length=36),document_id:str=Query(default='',max_length=36)):
     from .learning_portal import own_portal_students, report_response
     students=own_portal_students(db,account)
-    response=report_response(db,students,student_id,enrollment_id,account.name)
+    response=report_response(db,students,student_id,enrollment_id,account.name,document_id)
     parent_audit(db,request,account,'learning.report.downloaded',next(item for item in students if item.id==student_id))
     return response
 
@@ -685,7 +687,7 @@ def issued(id:str,issued_id:str,request:Request,db:DB,account:Parent):
     record=db.get(m.IssuedDocument,issued_id)
     if not obj.enrollment_id or not record or record.school_id!=obj.school_id or record.enrollment_id!=obj.enrollment_id:fail(404,'Documento não encontrado.')
     from .contract_history import access_state
-    if record.history_removed_at is not None:
+    if record.kind == 'official_bulletin' or record.history_removed_at is not None:
         fail(404, 'Documento não encontrado.')
     access = access_state(db, record)
     if not access['downloadable']:

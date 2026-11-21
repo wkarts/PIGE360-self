@@ -17,14 +17,30 @@ function fixture(path='/family',search=''){
  sandbox.Vue.onMounted=fn=>events.mounted=fn;sandbox.Vue.onUnmounted=()=>{};
  sandbox.Vue.createApp=options=>({mount(){apps.push(options);}});
  vm.runInContext(fs.readFileSync(root+'dist/family.js','utf8'),sandbox);
+ // O transporte privado e o SDK público têm ciclos independentes.
+ const supportCalls=[];
+ sandbox.PigeSupport.load=async(...args)=>{supportCalls.push(args);};
+ sandbox.PigeSupport.dispose=()=>{supportCalls.push(['dispose']);};
  const app=apps[0],ctx=app.setup();sandbox.PigeMFA.accept=async()=>false;
  const render=()=>app.render.call(ctx,ctx,[]);
- return {sandbox,ctx,render,events,calls,history,downloads};
+ return {sandbox,ctx,render,events,calls,history,downloads,supportCalls};
 }
 function nodes(v){return !v||typeof v!=='object'?[]:[v,...(Array.isArray(v.children)?v.children.flatMap(nodes):[])];}
 function text(v){return nodes(v).map(n=>typeof n.children==='string'?n.children:'').join(' ');}
 const student=(id,financial=true)=>({id,name:'Aluno '+id,number:'001',financial_authorized:financial,enrollments:[{id:'enr-'+id,number:'M1',class_name:'Turma A',year_name:'2027',status:'active'}],documents:[{id:'doc-'+id,type_name:'Autorização',status:'pending',file_id:null}]});
 const account={id:'guardian',name:'Responsável Teste',role:'guardian',school_ids:['school-a','school-b']};
+{
+ const {ctx,sandbox,supportCalls}=fixture();
+ ctx.s.ready=true;
+ await sandbox.Vue.nextTick();
+ assert.deepEqual(supportCalls.at(-1),[undefined,'login']);
+ ctx.s.account=account;ctx.s.schoolId='school-a';
+ await sandbox.Vue.nextTick();
+ assert.deepEqual(supportCalls.at(-1),['school-a','guardian_portal','guardian']);
+ ctx.s.account={...account,id:'student',role:'student'};
+ await sandbox.Vue.nextTick();
+ assert.deepEqual(supportCalls.at(-1),['school-a','student_portal','student']);
+}
 {
  const {ctx,render}=fixture();render();ctx.s.ready=true;let tree=render();
  assert.equal(nodes(tree).filter(n=>n.type==='form').length,1);assert.match(text(tree),/Acesse seu portal/);assert.match(text(tree),/secretaria da escola/);

@@ -160,7 +160,7 @@ def test_complete_student_documents(api):
         assert 'Não contém assinatura digital' in text and 'Página 1 de' in text
     with SessionLocal() as db:
         emitted = db.get(m.IssuedDocument, issued['id'])
-        assert emitted.snapshot['layout_version'] == '6' and emitted.snapshot['guardians'][0]['person']['name'] == guardian['name']
+        assert emitted.snapshot['layout_version'] == '8' and emitted.snapshot['guardians'][0]['person']['name'] == guardian['name']
 
 
 def test_academic_results_use_consolidated_value_and_flag_rule_change(api):

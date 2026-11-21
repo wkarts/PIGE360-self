@@ -85,6 +85,13 @@ namespace PigeTeacher {
     return [assignment?.class_name,diary?.component].filter(Boolean).join(' · ');
   }
   Vue.createApp({render:PigeRenders.teacherPortal,components:{'school-diary':PigeDiary.component},setup(){
+    Vue.watch(()=>[s.ready,s.user?.id,s.user?.role,s.schoolId].join('|'),()=>{
+      if(s.user&&s.schoolId)void PigeSupport.load(s.schoolId,'teacher_portal',s.user.id);
+      else if(s.ready&&!s.user)void PigeSupport.load(undefined,'login');
+      else PigeSupport.dispose();
+    });
+    Vue.onUnmounted(PigeSupport.dispose);
+
     Vue.onMounted(()=>{
       PigeMFA.init(PigeAPI.request,data=>enter(data as unknown as PigeAPI.SessionResponse),logout);
       window.addEventListener('pige-session-expired',()=>{clear();s.error='Sessão encerrada. Entre novamente.';});

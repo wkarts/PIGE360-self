@@ -241,7 +241,7 @@ try:
                 with page.expect_download() as download:
                     page.get_by_role('button', name='Gerar e baixar PDF', exact=True).click()
                 pdf = Path(download.value.path()).read_bytes()
-                text = '\n'.join(item.extract_text() for item in PdfReader(io.BytesIO(pdf)).pages)
+                text = ' '.join(word for item in PdfReader(io.BytesIO(pdf)).pages for word in item.extract_text().split())
                 assert 'Ficha de matrícula' in text and student['person']['name'] in text, text
                 assert guardian['name'] in text and group['name'] in text, text
                 (OUT/'ficha-matricula-sintetica.pdf').write_bytes(pdf)
@@ -309,7 +309,7 @@ try:
                     with counter.expect_download() as download:
                         form.get_by_role('button', name='Gerar e baixar PDF').click()
                     document = PdfReader(download.value.path())
-                    content = ' '.join(page.extract_text() for page in document.pages)
+                    content = ' '.join(word for page in document.pages for word in page.extract_text().split())
                     assert number in content and counter_student['person']['name'] in content
                     expect(form).to_have_count(0)
                 docs = client.get(base+'/students/'+counter_student['id']+'/documents', headers=headers).json()['issued']
