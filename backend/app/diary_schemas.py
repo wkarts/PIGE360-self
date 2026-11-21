@@ -83,6 +83,7 @@ class CloseDiaryInput(DiaryTransitionInput):
 
 
 class ReopenDiaryInput(DiaryTransitionInput):
+    academic_period_id: str | None = None
     reason: str = Field(min_length=10,max_length=1000)
 
 

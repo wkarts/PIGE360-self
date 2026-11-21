@@ -421,7 +421,7 @@ var PigeDiary;
                 assessmentForm: { academic_period_id: '', title: '', kind: 'activity', assessment_date: today(), value_type: 'numeric', max_score: '10', weight: '1', description: '', skills: '', status: 'published' },
                 opinions: [], opinionForm: { academic_period_id: '', enrollment_id: '', text: '', status: 'draft' },
                 pedagogicalRecords: [], pedagogicalForm: { enrollment_id: '', record_date: today(), kind: 'observation', text: '' },
-                closePeriod: '', closeReason: 'Fechamento pedagógico conferido.', reopenReason: '',
+                closePeriod: '', closeReason: 'Fechamento pedagógico conferido.', reopenReason: '', reopenPeriod: '',
                 summary: null,
                 history: { closures: [], revisions: [] },
                 dashboard: { items: [], totals: {} },
@@ -481,7 +481,7 @@ var PigeDiary;
                 });
             }
             const initial = new URLSearchParams(location.search);
-            const pilot = pilotForSchool(props.schoolId);
+            const pilot = props.catalogEnabled === true || pilotForSchool(props.schoolId);
             const navigation = Vue.computed(() => groups.map(group => ({ ...group, pages: group.pages.filter(page => (!page.permission || can(page.permission)) && (page.id !== 'catalog' || props.catalogEnabled === true)) })).filter(group => group.pages.length));
             const activeGroup = Vue.computed(() => navigation.value.find(group => group.pages.some(page => page.id === state.page)));
             const filteredDiaries = Vue.computed(() => {
@@ -501,6 +501,7 @@ var PigeDiary;
             }
             function pageLink(page) {
                 const url = new URL(location.href);
+                url.searchParams.set('diarioPiloto', props.schoolId);
                 url.searchParams.set('guia', page);
                 if (state.lessonPeriod)
                     url.searchParams.set('periodo', state.lessonPeriod);
@@ -613,6 +614,7 @@ var PigeDiary;
                     PigeAPI.request(endpoint + '/pedagogical-records'), PigeAPI.request(endpoint + '/communications'), PigeAPI.request(endpoint + '/materials')
                 ]);
                 const changed = state.selected?.id !== d.id;
+                state.reopenPeriod = '';
                 state.selected = selected;
                 state.summary = summary;
                 state.history = history;
@@ -748,7 +750,7 @@ var PigeDiary;
             async function closeDiary() { if (!state.selected)
                 return; await run(async () => { const period = Boolean(state.closePeriod); await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/close', { academic_period_id: state.closePeriod || null, reason: state.closeReason, version: state.selected.version }); await loadDiary(state.selected); state.notice = period ? 'Período fechado.' : 'Diário fechado.'; }); }
             async function reopenDiary() { if (!state.selected)
-                return; await run(async () => { await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/reopen', { reason: state.reopenReason, version: state.selected.version }); state.reopenReason = ''; await loadDiary(state.selected); state.notice = 'Diário reaberto com registro de retificação.'; }); }
+                return; await run(async () => { await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/reopen', { academic_period_id: state.reopenPeriod || null, reason: state.reopenReason, version: state.selected.version }); state.reopenReason = ''; await loadDiary(state.selected); state.notice = 'Diário reaberto com registro de retificação.'; }); }
             async function publishMaterial() {
                 if (!state.selected)
                     return;

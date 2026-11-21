@@ -152,7 +152,7 @@ def test_diary_lesson_attendance_close_and_reopen(api):
     assert len(history["revisions"]) == 1
     with SessionLocal() as db:
         closures = db.query(m.DiaryClosure).filter_by(diary_id=diary["id"]).all()
-        assert all(not closure.active for closure in closures)
+        assert all(closure.active == (closure.academic_period_id is not None) for closure in closures)
 
 
 def test_period_must_be_inside_academic_year(api):

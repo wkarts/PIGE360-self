@@ -41,8 +41,18 @@ namespace PigeUI {
     if(node.isConnected && typeof target.moveBefore==='function')target.moveBefore(node,null);
     else target.appendChild(node);
   }
+  let menuScroll=0;
+  function rememberMenu(desk:Desk):void {
+    const menu=desk.node.querySelector<HTMLElement>('.sidebar-scroll[role="region"]');
+    if(menu)menuScroll=menu.scrollTop;
+  }
+  function restoreMenu(desk:Desk):void {
+    const menu=desk.node.querySelector<HTMLElement>('.sidebar-scroll[role="region"]');
+    if(menu)menu.scrollTop=menuScroll;
+  }
   function activateDesk(desk:Desk):void {
     if(!shell||desk===currentDesk)return;
+    rememberMenu(currentDesk);
     currentDesk.scroll=currentDesk.node.querySelector('main')?.scrollTop||0;
     currentDesk.context.state.menuOpen=false;
     moveDesk(parking,currentDesk.node);
@@ -57,6 +67,7 @@ namespace PigeUI {
       const tab=desk.node.querySelector<HTMLButtonElement>('[data-work-tab][aria-selected="true"]');
       tab?.focus({preventScroll:true});
       tab?.scrollIntoView({block:'nearest',inline:'nearest'});
+      restoreMenu(desk);
       const main=desk.node.querySelector('main');if(main)main.scrollTop=desk.scroll;
     });
   }
@@ -197,7 +208,7 @@ namespace PigeUI {
     if(page==='protocols')return can('protocols.read');
     if(registryPages.includes(page))return can('people.read');
     if(page==='connect')return can('connect.manage');
-    if(page==='educacenso')return can('educacenso.manage') && school()?.educacenso_training===true;
+    if(page==='educacenso')return can('educacenso.manage');
     if(page==='integrations')return can('integrations.manage');
     return true;
   }
@@ -412,6 +423,7 @@ namespace PigeUI {
       select.value=state.schoolId;return;
     }
     PigeDiary.clearPilotContext(state.schoolId);
+    rememberMenu(currentDesk);
     const page=state.page;
     const home=primaryDesk.context;
     resetDesks();
@@ -433,7 +445,7 @@ namespace PigeUI {
       await refreshAccess();if(epoch!==schoolSequence)return;
       if(!isProfileRole()&&state.page!=='academic')await Promise.all([loadCatalogs(),loadPage()]);else await loadPage();
     }catch(error){if(epoch===schoolSequence)notify(error);}
-    finally{if(epoch===schoolSequence){state.schoolLoading=false;refreshSupport();void loadPersonalTools();}}
+    finally{if(epoch===schoolSequence){state.schoolLoading=false;if(shell)await Vue.nextTick(()=>restoreMenu(primaryDesk));refreshSupport();void loadPersonalTools();}}
   }
   async function loadCatalogs():Promise<void>{
     const sid=state.schoolId;
@@ -461,7 +473,7 @@ namespace PigeUI {
     if(shell){await openDesk(page);return;}
     if(page!=='webmail'&&PigeEmail.hasUnsavedWork()&&!window.confirm('Descartar a mensagem não salva antes de sair do e-mail?'))return;
     if(page!=='contracts'&&contractDirty()&&!window.confirm('Descartar as alterações não salvas no modelo?'))return;
-    resetFilters();state.archiveFilter='active';state.lifecycleTarget=null;state.registryFilter={type_code:'',entity_kind:'',active:''};state.registryFiltersOpen=false;if(registryPages.includes(page))state.cadastresOpen=true;state.page=page;state.pageNumber=1;state.q='';state.selectedStudent=null;state.error='';state.menuOpen=false;if(page!=='contracts'){state.contractEnrollmentId='';state.contractReviewIssuedId='';}
+    resetFilters();state.archiveFilter='active';state.lifecycleTarget=null;state.registryFilter={type_code:'',entity_kind:'',active:''};state.registryFiltersOpen=false;state.page=page;state.pageNumber=1;state.q='';state.selectedStudent=null;state.error='';state.menuOpen=false;if(page!=='contracts'){state.contractEnrollmentId='';state.contractReviewIssuedId='';}
     history.replaceState({},'',`#/${page}`);await safe(loadPage);
   }
   async function loadPage():Promise<void>{
@@ -991,7 +1003,6 @@ namespace PigeUI {
   function newSchool(row:Row|null=null):void{
     const fields=[field('company_id','Empresa / mantenedora','select',true,state.companies.map(c=>({value:c.id,label:text(c.name)}))),field('name','Nome da escola','text',true),field('address','Endereço','text',false,undefined,true),field('phone','Telefone'),field('email','E-mail','email'),field('document_policy','Pendências na ativação da matrícula','select',true,[{value:'warn',label:'Avisar sem bloquear'},{value:'block',label:'Exigir validação dos documentos obrigatórios'}]),field('active','Escola ativa','checkbox')];
     if(typeof row?.diary_catalog==='boolean')fields.push(field('diary_catalog','Habilitar catálogo curricular do Diário','checkbox'));
-    if(typeof row?.educacenso_training==='boolean')fields.push(field('educacenso_training','Habilitar treinamento do Educacenso','checkbox'));
     openModal('school',row?'Editar escola':'Cadastrar escola',fields,row?valuesFrom(row,fields):{document_policy:'warn',active:true},row);
   }
   function editSupportHub():void{
@@ -1234,7 +1245,7 @@ namespace PigeUI {
     const layer=shell?document.createElement('div'):null;
     const context=createDesk(layer);
     if(shared){
-      for(const key of ['user','schoolId','schools','catalogs','configured','online','userPhotoUrl','canInstall','updateAvailable','emailAvailable','certificateAlerts','webmailDefault','webmailOverride'] as const){
+      for(const key of ['user','schoolId','schools','catalogs','configured','online','userPhotoUrl','canInstall','updateAvailable','emailAvailable','certificateAlerts','webmailDefault','webmailOverride','cadastresOpen','documentsOpen','configurationOpen','financeOpen','publicityOpen','adminMenuOpen','integrationsOpen'] as const){
         Object.defineProperty(context.state,key,{configurable:true,get:()=>shared.state[key],set:value=>Reflect.set(shared.state,key,value)});
       }
       context.state.ready=true;context.state.page=page;
