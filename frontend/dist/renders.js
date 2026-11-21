@@ -14568,7 +14568,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                   "aria-labelledby": "site-models-title"
                 }, [
                   _createElementVNode("h3", { id: "site-models-title" }, "Modelos de site"),
-                  _createElementVNode("p", null, "Conheça os modelos com textos e fotografias de exemplo. A prévia não altera seu conteúdo. Cada modelo tem uma página inicial curta e seis páginas reais para o menu. Aplicar substitui a página inicial e o menu, acrescenta as novas páginas e preserva todas as páginas atuais — somente no rascunho, após confirmação."),
+                  _createElementVNode("p", null, "Escolha uma composição para conferir a página inicial e navegar pelas páginas de exemplo."),
                   (!s.models.length&&!s.busy)
                     ? (_openBlock(), _createElementBlock("button", {
                         key: 0,
@@ -14581,65 +14581,64 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                     ? (_openBlock(), _createElementBlock("div", {
                         key: 1,
                         class: "x-form"
-                      }, [
-                        _createElementVNode("div", {
-                          class: "site-model-cards",
-                          "aria-label": "Catálogo de modelos"
-                        }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.models, (model) => {
-                          return (_openBlock(), _createElementBlock("button", {
-                            key: model.id,
+                      }, [_createElementVNode("div", {
+                        class: "site-model-cards",
+                        "aria-label": "Catálogo de modelos"
+                      }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.models, (model) => {
+                        return (_openBlock(), _createElementBlock("button", {
+                          key: model.id,
+                          type: "button",
+                          "aria-label": model.name,
+                          "aria-pressed": s.modelChoice===model.id,
+                          onClick: $event => {s.modelChoice=model.id;previewModel()}
+                        }, [_createElementVNode("img", {
+                          src: '/site-model-previews/'+model.id+'.webp',
+                          alt: "",
+                          width: "512",
+                          height: "320",
+                          loading: "lazy"
+                        }, null, 8, ["src"]), _createElementVNode("span", null, [_createElementVNode("strong", null, _toDisplayString(model.name), 1), _createElementVNode("small", null, _toDisplayString(model.description), 1)])], 8, ["aria-label", "aria-pressed", "onClick"]))
+                      }), 128))]), (selectedModel())
+                        ? (_openBlock(), _createElementBlock("div", {
+                            key: 0,
+                            class: "site-model-selection"
+                          }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(selectedModel()?.name), 1), _createElementVNode("small", null, "Aplicar altera a capa e o menu do rascunho e preserva as páginas existentes.")]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
                             type: "button",
-                            "aria-label": model.name,
-                            "aria-pressed": s.modelChoice===model.id,
-                            onClick: $event => {s.modelChoice=model.id;previewModel()}
-                          }, [(modelCover(model))
-                            ? (_openBlock(), _createElementBlock("img", {
-                                key: 0,
-                                src: modelCover(model),
-                                alt: "",
-                                loading: "lazy"
-                              }, null, 8, ["src"]))
-                            : _createCommentVNode("", true), _createElementVNode("span", null, [_createElementVNode("strong", null, _toDisplayString(model.name), 1), _createElementVNode("small", null, _toDisplayString(model.description), 1)])], 8, ["aria-label", "aria-pressed", "onClick"]))
-                        }), 128))]),
-                        _createElementVNode("p", null, "Selecione um modelo para abrir a prévia. Use Aplicar para levar a composição ao rascunho."),
-                        (modelReady())
-                          ? (_openBlock(), _createElementBlock("section", {
-                              key: 0,
-                              class: "panel x-card",
-                              "aria-labelledby": "model-map-title"
-                            }, [
-                              _createElementVNode("h4", { id: "model-map-title" }, "Mapa antes de aplicar"),
-                              _createElementVNode("p", null, "Início curto (" + _toDisplayString(s.resolvedModel?.design?.sections.length||0) + " blocos), " + _toDisplayString(modelNewPages().length) + " novas páginas completas e " + _toDisplayString(s.website.design?.pages.length||0) + " páginas atuais preservadas.", 1),
-                              _createElementVNode("h5", null, "Novo menu principal"),
-                              _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.resolvedModel?.design?.menu, (link) => {
-                                return (_openBlock(), _createElementBlock("li", { key: link.url }, _toDisplayString(link.label) + " → " + _toDisplayString(link.url), 1))
-                              }), 128))]),
-                              _createElementVNode("h5", null, "Páginas acrescentadas"),
-                              _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(modelNewPages(), (page) => {
-                                return (_openBlock(), _createElementBlock("li", { key: page.slug }, _toDisplayString(page.title) + " · /" + _toDisplayString(page.slug), 1))
-                              }), 128))]),
-                              (modelRenames().length)
-                                ? (_openBlock(), _createElementBlock("div", {
-                                    key: 0,
-                                    class: "alert warning"
-                                  }, [_createElementVNode("strong", null, "Endereços já existentes foram preservados."), _createElementVNode("p", null, "As novas páginas receberão outros endereços e seus links serão ajustados:"), _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(modelRenames(), (rename) => {
-                                    return (_openBlock(), _createElementBlock("li", { key: rename }, _toDisplayString(rename), 1))
-                                  }), 128))])]))
-                                : _createCommentVNode("", true),
-                              _createElementVNode("p", null, "O menu atual será substituído pelo menu do modelo. As páginas existentes continuam no rascunho; você pode incluí-las novamente no menu. A marcação de inclusão das novas páginas NÃO publica automaticamente: é preciso confirmar a ação Publicar site.")
-                            ]))
-                          : _createCommentVNode("", true),
-                        _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
-                          type: "button",
-                          class: "btn btn-secondary",
-                          onClick: previewModel
-                        }, "Ver modelo completo sem alterar", 8, ["onClick"]), _createElementVNode("button", {
-                          type: "button",
-                          class: "btn btn-primary",
-                          onClick: applyModel,
-                          disabled: !modelReady()
-                        }, "Aplicar páginas e menu ao rascunho", 8, ["onClick", "disabled"])])
-                      ]))
+                            class: "btn btn-secondary",
+                            onClick: openModelPreview
+                          }, "Ver modelo completo sem alterar", 8, ["onClick"]), _createElementVNode("button", {
+                            type: "button",
+                            class: "btn btn-primary",
+                            onClick: applyModel,
+                            disabled: !modelReady()
+                          }, "Aplicar páginas e menu ao rascunho", 8, ["onClick", "disabled"])])]))
+                        : _createCommentVNode("", true), (modelReady())
+                        ? (_openBlock(), _createElementBlock("section", {
+                            key: 1,
+                            class: "panel x-card",
+                            "aria-labelledby": "model-map-title"
+                          }, [_createElementVNode("details", { class: "site-model-map" }, [
+                            _createElementVNode("summary", { id: "model-map-title" }, "Conferir páginas e menu antes de aplicar"),
+                            _createElementVNode("p", null, "Início curto (" + _toDisplayString(s.resolvedModel?.design?.sections.length||0) + " blocos), " + _toDisplayString(modelNewPages().length) + " novas páginas completas e " + _toDisplayString(s.website.design?.pages.length||0) + " páginas atuais preservadas.", 1),
+                            _createElementVNode("h5", null, "Novo menu principal"),
+                            _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.resolvedModel?.design?.menu, (link) => {
+                              return (_openBlock(), _createElementBlock("li", { key: link.url }, _toDisplayString(link.label) + " → " + _toDisplayString(link.url), 1))
+                            }), 128))]),
+                            _createElementVNode("h5", null, "Páginas acrescentadas"),
+                            _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(modelNewPages(), (page) => {
+                              return (_openBlock(), _createElementBlock("li", { key: page.slug }, _toDisplayString(page.title) + " · /" + _toDisplayString(page.slug), 1))
+                            }), 128))]),
+                            (modelRenames().length)
+                              ? (_openBlock(), _createElementBlock("div", {
+                                  key: 0,
+                                  class: "alert warning"
+                                }, [_createElementVNode("strong", null, "Endereços já existentes foram preservados."), _createElementVNode("p", null, "As novas páginas receberão outros endereços e seus links serão ajustados:"), _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(modelRenames(), (rename) => {
+                                  return (_openBlock(), _createElementBlock("li", { key: rename }, _toDisplayString(rename), 1))
+                                }), 128))])]))
+                              : _createCommentVNode("", true),
+                            _createElementVNode("p", null, "O menu atual será substituído pelo menu do modelo. As páginas existentes continuam no rascunho; você pode incluí-las novamente no menu. A marcação de inclusão das novas páginas NÃO publica automaticamente: é preciso confirmar a ação Publicar site.")
+                          ])]))
+                        : _createCommentVNode("", true)]))
                     : _createCommentVNode("", true),
                   (s.hasModelCheckpoint)
                     ? (_openBlock(), _createElementBlock("div", {
@@ -15518,7 +15517,9 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
             : _createCommentVNode("", true), (s.previewHtml)
             ? (_openBlock(), _createElementBlock("div", {
                 key: 1,
-                class: "website-preview"
+                class: "website-preview",
+                tabindex: "-1",
+                "aria-label": "Visualização do site"
               }, [_createElementVNode("div", { class: "actions" }, [
                 _createElementVNode("strong", null, _toDisplayString(s.modelPreviewActive?'Prévia do modelo · '+selectedModel()?.name:'Prévia do rascunho'), 1),
                 (!s.modelPreviewActive)

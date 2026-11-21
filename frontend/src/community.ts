@@ -40,7 +40,7 @@ namespace PigeCommunity {
       {id:'media',number:'2',label:'Imagem',description:'Adicione uma fotografia acessível ou reutilize uma imagem da biblioteca.'},
       {id:'publish',number:'3',label:'Publicação',description:'Escolha o período, destaque e situação da publicação antes de salvar.'},
     ];
-    const s=Vue.reactive({siteGuide:'models',models:[] as SiteModel[],modelChoice:'horizon',resolvedModel:null as Website|null,modelPreviewInput:'',modelPreviewPage:'',modelPreviewActive:false,hasModelCheckpoint:false,demoConfirmed:false,sitePageIndex:-1,assets:[] as {id:string;url:string;sha256:string;created_at:string;thumbnail?:string}[],admissionReadiness:null as AdmissionReadiness|null,websiteInitial:'',sectionKind:'cards',previewHtml:'',previewWidth:'100%',publishedVersion:0,publishedUrl:'',published:false,hasDraft:false,website:{design:newDesign(),enabled:false,theme:'horizon',headline:'',introduction:'',about:'',public_url:'',portal_url:'',notice:'',admission_url:'',brand:{display_name:'',primary_color:'',secondary_color:'',font_family:''}} as Website,websiteOpen:false,busy:false,error:'',notice:'',items:[] as Post[],page:1,total:0,q:'',kind:'',status:'',upcoming:false,selected:null as Post|null,editing:false,savedPostStatus:'',editorStep:'content' as EditorStep,discard:false,deleteConfirm:false,initial:'',form:empty()});
+    const s=Vue.reactive({siteGuide:'models',models:[] as SiteModel[],modelChoice:'',resolvedModel:null as Website|null,modelPreviewInput:'',modelPreviewPage:'',modelPreviewActive:false,hasModelCheckpoint:false,demoConfirmed:false,sitePageIndex:-1,assets:[] as {id:string;url:string;sha256:string;created_at:string;thumbnail?:string}[],admissionReadiness:null as AdmissionReadiness|null,websiteInitial:'',sectionKind:'cards',previewHtml:'',previewWidth:'100%',publishedVersion:0,publishedUrl:'',published:false,hasDraft:false,website:{design:newDesign(),enabled:false,theme:'horizon',headline:'',introduction:'',about:'',public_url:'',portal_url:'',notice:'',admission_url:'',brand:{display_name:'',primary_color:'',secondary_color:'',font_family:''}} as Website,websiteOpen:false,busy:false,error:'',notice:'',items:[] as Post[],page:1,total:0,q:'',kind:'',status:'',upcoming:false,selected:null as Post|null,editing:false,savedPostStatus:'',editorStep:'content' as EditorStep,discard:false,deleteConfirm:false,initial:'',form:empty()});
     const manage=()=>!props.publicMode&&!props.portalMode&&Boolean(props.permissions?.includes('schools.manage'));
     const endpoint=()=>props.portalMode?'/portal/community-feed':props.publicMode?'/public/schools/'+props.schoolId+'/community-feed':'/schools/'+props.schoolId+(manage()?'/community-posts':'/community-feed');
     const transport=(path:string,options?:RequestInit)=>(props.request||request)(path,options);
@@ -72,16 +72,12 @@ namespace PigeCommunity {
     async function removeSiteAsset(asset:{id:string}):Promise<void>{if(!window.confirm('Excluir esta fotografia da biblioteca? Somente fotos sem uso em rascunhos, sites ou publicações podem ser excluídas.'))return;await run(async()=>{await transport('/schools/'+props.schoolId+'/website/assets/'+asset.id,{method:'DELETE'});s.assets=s.assets.filter(x=>x.id!==asset.id);s.notice='Fotografia sem uso excluída.';});}
     async function uploadSiteImage(event:Event,target:SiteImage):Promise<void>{const input=event.target as HTMLInputElement;const file=input.files?.[0];if(!file)return;await run(async()=>{if(file.size>3*1024*1024)throw new Error('Escolha uma imagem de até 3 MB.');if(!['image/jpeg','image/png','image/webp'].includes(file.type))throw new Error('Use uma fotografia JPEG, PNG ou WebP.');const body=new FormData();body.append('image',file);const asset=await transport('/schools/'+props.schoolId+'/website/assets',{method:'POST',body}) as SiteImage;target.url=asset.url;s.previewHtml='';s.notice='Fotografia enviada. Ela só ficará pública quando estiver em um site ou uma publicação pública.';});input.value='';}
     const siteGuides=[{id:'models',label:'Modelos'},{id:'identity',label:'Identidade e textos'},{id:'navigation',label:'Menu e capa'},{id:'pages',label:'Páginas e seções'},{id:'photos',label:'Fotografias'}];
-    function modelCover(model:SiteModel):string{
-      const design=model.website.design;
-      if(!design)return '';
-      const cover=design.hero_image?.url||design.hero_gallery?.[0]?.url;
-      if(cover)return cover;
-      for(const section of design.sections){
-        const photo=section.image?.url||section.items.find(item=>item.image?.url)?.image?.url;
-        if(photo)return photo;
-      }
-      return '';
+    async function openModelPreview(event:Event):Promise<void>{
+      const editor=(event.currentTarget as HTMLElement).closest('.community-page');
+      await previewModel();
+      if(!s.previewHtml||!s.modelPreviewActive)return;
+      await Vue.nextTick();
+      editor?.querySelector<HTMLElement>('.website-preview')?.focus();
     }
     function revealInvalidSiteField(event:Event):void{
       const field=event.target as HTMLElement;
@@ -93,7 +89,7 @@ namespace PigeCommunity {
     async function toggleWebsite():Promise<void>{if(s.busy)return;if(s.websiteOpen&&s.websiteInitial&&JSON.stringify(websitePayload())!==s.websiteInitial&&!window.confirm('Fechar a configuração com alterações ainda não salvas? Os campos permanecem nesta tela, mas serão perdidos ao sair.'))return;s.websiteOpen=!s.websiteOpen;if(s.websiteOpen&&!s.models.length)await loadSiteModels();if(s.websiteOpen&&!s.websiteInitial)s.websiteInitial=JSON.stringify(websitePayload());}
     function move<T>(items:T[],index:number,delta:number):void{const target=index+delta;if(target<0||target>=items.length)return;[items[index],items[target]]=[items[target],items[index]];s.previewHtml='';}
     function removeSiteItem<T>(items:T[],index:number):void{if(!window.confirm('Remover este item do rascunho? A publicação atual não será alterada até você publicar.'))return;items.splice(index,1);s.previewHtml='';}
-    async function loadSiteModels():Promise<void>{await run(async()=>{const result=await transport('/schools/'+props.schoolId+'/website/models') as {items:SiteModel[]};s.models=result.items;s.modelChoice=s.website.theme;});}
+    async function loadSiteModels():Promise<void>{await run(async()=>{const result=await transport('/schools/'+props.schoolId+'/website/models') as {items:SiteModel[]};s.models=result.items;if(!selectedModel())s.modelChoice='';});}
     function selectedModel():SiteModel|undefined{return s.models.find(model=>model.id===s.modelChoice);}
     function modelInput():string{return JSON.stringify({model_id:s.modelChoice,website:websitePayload()});}
     function modelReady():boolean{return Boolean(s.resolvedModel&&s.modelPreviewInput===modelInput());}
@@ -217,6 +213,6 @@ namespace PigeCommunity {
     Vue.watch(()=>props.websiteRequest,openRequestedSite);
     Vue.watch(()=>s.busy,openRequestedSite);
     Vue.onMounted(()=>{void run(async()=>{await load();await loadWebsite();}).then(openRequestedSite);});
-    return {dialogTarget:Vue.inject<HTMLElement|string>('school-dialog-host','body')||'body',siteGuides,editorSteps,modelCover,revealInvalidSiteField,s,props,manage,run,load,toggleWebsite,loadSiteAssets,loadAdmissionReadiness,removeSiteAsset,uploadSiteImage,move,removeSiteItem,addSection,loadSiteModels,selectedModel,modelReady,clearModelPreview,modelNewPages,modelRenames,previewModel,previewDraftPage,previewModelPage,bindPreviewLinks,closePreview,applyModel,restoreModelCheckpoint,markDemoReplaced,editingPage,contentSections,selectSitePage,addSitePage,moveSitePage,removeSitePage,addPageToMenu,inheritBrand,newImage,newLink,newItem,sectionLabels,saveWebsite,publishWebsite,previewWebsite,unpublishWebsite,search,page,open,edit,closeEditor,save,remove,date,audienceLabels,statusLabels,scheduled,expired,paragraphs,prepareUnpublish,canDeleteDraft,postSaveLabel,revealInvalidPostField,admissionReasonLabel,editorStepSummary,setEditorStep,nextEditorStep,previousEditorStep};
+    return {dialogTarget:Vue.inject<HTMLElement|string>('school-dialog-host','body')||'body',siteGuides,editorSteps,openModelPreview,revealInvalidSiteField,s,props,manage,run,load,toggleWebsite,loadSiteAssets,loadAdmissionReadiness,removeSiteAsset,uploadSiteImage,move,removeSiteItem,addSection,loadSiteModels,selectedModel,modelReady,clearModelPreview,modelNewPages,modelRenames,previewModel,previewDraftPage,previewModelPage,bindPreviewLinks,closePreview,applyModel,restoreModelCheckpoint,markDemoReplaced,editingPage,contentSections,selectSitePage,addSitePage,moveSitePage,removeSitePage,addPageToMenu,inheritBrand,newImage,newLink,newItem,sectionLabels,saveWebsite,publishWebsite,previewWebsite,unpublishWebsite,search,page,open,edit,closeEditor,save,remove,date,audienceLabels,statusLabels,scheduled,expired,paragraphs,prepareUnpublish,canDeleteDraft,postSaveLabel,revealInvalidPostField,admissionReasonLabel,editorStepSummary,setEditorStep,nextEditorStep,previousEditorStep};
   }};
 }
