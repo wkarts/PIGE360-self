@@ -129,7 +129,7 @@ try:
         subprocess.run([sys.executable,'-m','app.integration_worker','--once','--limit','10'],cwd=ROOT/'backend',env=env,check=True,stdout=log,stderr=log,timeout=40)
         message=BytesParser(policy=policy.default).parsebytes(messages.get(timeout=10));assert message['To']=='family-access@example.com'
         assert str(message['Subject'])==brand+' · Primeiro acesso'
-        text=message.get_body(preferencelist=('plain',)).get_content();link=re.search(r'http://[^\s]+/first-access.html#[A-Za-z0-9_-]+',text).group(0);assert link.startswith(PORTAL+'/')
+        text=message.get_body(preferencelist=('plain',)).get_content();link=re.search(r'http://[^\s]+/first-access#[A-Za-z0-9_-]+',text).group(0);assert link.startswith(PORTAL+'/')
         assert 'Senha temporária' not in text and PASSWORD not in text
         record('SMTP TLS capturador aceita convite em User.email e preserva o domínio público configurado')
         family=browser.new_page(viewport={'width':1365,'height':1000});family.on('pageerror',lambda e:errors.append(str(e)))
@@ -145,7 +145,7 @@ try:
         pending_inspections.pop().continue_()
         family.unroute('**/api/v1/invitations/inspect')
         expect(family.locator('#invite-form')).to_be_visible()
-        expect(family).to_have_url(re.compile(r'/first-access\.html\?invitation=[^#]+$'))
+        expect(family).to_have_url(re.compile(r'/first-access\?invitation=[^#]+$'))
         expect(family.locator('#institution-name')).to_have_text(brand)
         expect(family).to_have_title(brand+' · Primeiro acesso')
         family.wait_for_function('document.querySelector("#institution-logo").naturalWidth>0')
@@ -153,7 +153,7 @@ try:
         assert len(cookies)==1 and cookies[0]['httpOnly'] and cookies[0]['sameSite']=='Strict' and cookies[0]['path']=='/api/v1/invitations'
         assert family.evaluate('localStorage.length===0&&sessionStorage.length===0')
         family.reload();expect(family.locator('#invite-form')).to_be_visible()
-        expect(family).to_have_url(re.compile(r'/first-access\.html\?invitation=[^#]+$'))
+        expect(family).to_have_url(re.compile(r'/first-access\?invitation=[^#]+$'))
         expect(family.locator('#institution-name')).to_have_text(brand)
         record('Primeiro acesso mantém identidade e convite após refresh sem token em URL ou armazenamento JavaScript')
         family.get_by_label('Nova senha',exact=True).fill(PASSWORD);family.get_by_label('Confirme a senha',exact=True).fill(PASSWORD);family.get_by_role('button',name='Definir senha',exact=True).click();expect(family.get_by_text('Senha definida.',exact=False)).to_be_visible()

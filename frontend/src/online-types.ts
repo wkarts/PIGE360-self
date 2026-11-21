@@ -29,6 +29,6 @@ namespace PigeOnline {
     return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
   }
   export function person():Person{return {name:'',social_name:'',cpf:null,birth_date:null,email:'',phone:'',address:'',notes:'',is_guardian:false};}
-  export function publicURL(slug:string):string{return location.origin+'/online.html?campaign='+encodeURIComponent(slug);}
+  export function publicURL(slug:string):string{return location.origin+'/online?campaign='+encodeURIComponent(slug);}
   export function safeLink(value:string):string{try{const u=new URL(value);return u.protocol==='https:'&&!u.username?u.href:'';}catch{return '';}}
 }

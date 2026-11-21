@@ -31,7 +31,7 @@
         <button class="btn btn-primary full" :disabled="state.loginBusy || !state.online">{{ state.loginBusy ? 'Autenticando…' : 'Entrar na aplicação' }} <span>→</span></button>
         <p v-if="state.embedded" class="small muted">Se não conseguir entrar nesta janela, <a href="/" target="_blank" rel="noopener">abra a escola no navegador</a>.</p><p class="auth-help muted">Precisa recuperar seu acesso? Fale com a secretaria da escola.</p>
       </form>
-      <div v-if="state.configured && !mfa.state.challenge && identity.show_preenrollment_button" class="auth-enrollment"><p>Ainda não faz parte da escola?</p><a class="btn btn-secondary full" href="/online.html">Sou responsável · Pré-matrícula online →</a></div>
+      <div v-if="state.configured && !mfa.state.challenge && identity.show_preenrollment_button" class="auth-enrollment"><p>Ainda não faz parte da escola?</p><a class="btn btn-secondary full" href="/online">Sou responsável · Pré-matrícula online →</a></div>
       <p v-if="!state.online" class="alert warning">Sem conexão com o servidor. O acesso aos dados exige conexão.</p>
     </section>
   </div>
@@ -377,7 +377,7 @@
           </div>
           <article v-if="state.institutionTab==='support'" class="panel institution-card"><div class="institution-card-title"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#connect"></use></svg><h3>Atendimento pelo site</h3><span class="badge" :class="state.supportHub.enabled?'active':'archived'">{{ state.supportHub.enabled?'Ativo':'Desativado' }}</span></div><p v-if="supportStatus.error" class="alert warning" role="status">{{ supportStatus.error }}</p><p>{{ state.supportHub.enabled?'O atendimento aparece nas áreas selecionadas desta escola.':'Ative o atendimento para disponibilizar um canal de ajuda aos usuários.' }}</p><dl v-if="state.supportHub.enabled" class="institution-data"><div><dt>Áreas habilitadas</dt><dd>{{ supportAreaLabels() }}</dd></div><div><dt>Nome do botão</dt><dd>{{ state.supportHub.launcher_title }}</dd></div><div><dt>Posição</dt><dd>{{ state.supportHub.position==='right'?'À direita':'À esquerda' }}</dd></div></dl><div class="institution-card-actions"><button class="btn btn-secondary" @click="editSupportHub">Configurar atendimento</button></div></article>
         </section>
-        <lifecycle-panel v-if="state.lifecycleTarget" :key="state.schoolId+state.lifecycleTarget.resource+state.lifecycleTarget.id" :school-id="state.schoolId" :target="state.lifecycleTarget" @close="state.lifecycleTarget=null" @completed="lifecycleCompleted"></lifecycle-panel><footer v-if="state.page!=='webmail'" class="content-footer"><span>{{ identity.display_name }}</span><a :href="'/news.html?school='+state.schoolId" target="_blank" rel="noopener">Portal da escola</a><span>Acesso controlado · Histórico preservado</span></footer>
+        <lifecycle-panel v-if="state.lifecycleTarget" :key="state.schoolId+state.lifecycleTarget.resource+state.lifecycleTarget.id" :school-id="state.schoolId" :target="state.lifecycleTarget" @close="state.lifecycleTarget=null" @completed="lifecycleCompleted"></lifecycle-panel><footer v-if="state.page!=='webmail'" class="content-footer"><span>{{ identity.display_name }}</span><a :href="'/news?school='+state.schoolId" target="_blank" rel="noopener">Portal da escola</a><span>Acesso controlado · Histórico preservado</span></footer>
         </template>
       </main>
     </div>

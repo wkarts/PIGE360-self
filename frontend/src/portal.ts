@@ -70,7 +70,7 @@ namespace PigePortal {
   const authContext=()=>({school_id:state.schoolId,campaign_slug:''});
   async function loadCampaign():Promise<void>{
     state.campaign=null;
-    if(state.slug){state.campaign=await request<Campaign>('/campaigns/'+encodeURIComponent(state.slug));state.schoolId=state.campaign.school_id;history.replaceState({},'','/online.html?campaign='+encodeURIComponent(state.slug));}
+    if(state.slug){state.campaign=await request<Campaign>('/campaigns/'+encodeURIComponent(state.slug));state.schoolId=state.campaign.school_id;history.replaceState({},'','/online?campaign='+encodeURIComponent(state.slug));}
   }
   async function start():Promise<void>{
     await run(async()=>{
@@ -87,7 +87,7 @@ namespace PigePortal {
       if(!state.campaign&&!state.catalogFailed){const rows=visibleCampaigns();if(rows.length===1){state.slug=rows[0].slug;await loadCampaign();}}
     });state.ready=true;syncSupport();
   }
-  async function selectSchool():Promise<void>{PigeSupport.dispose();supportContext='';await run(async()=>{state.slug='';state.campaign=null;state.register.accept_privacy=false;const rows=visibleCampaigns();if(rows.length===1){state.slug=rows[0].slug;await loadCampaign();}else history.replaceState({},'','/online.html?school='+encodeURIComponent(state.schoolId));await loadRegistrationTerms();});}
+  async function selectSchool():Promise<void>{PigeSupport.dispose();supportContext='';await run(async()=>{state.slug='';state.campaign=null;state.register.accept_privacy=false;const rows=visibleCampaigns();if(rows.length===1){state.slug=rows[0].slug;await loadCampaign();}else history.replaceState({},'','/online?school='+encodeURIComponent(state.schoolId));await loadRegistrationTerms();});}
   async function selectCampaign():Promise<void>{PigeSupport.dispose();supportContext='';await run(async()=>{state.selected=null;state.editing=false;state.register.accept_privacy=false;await loadCampaign();});}
   async function afterMFA(result:Record<string,unknown>):Promise<void>{state.account=result as unknown as Account;state.schoolId=state.account.school_id;state.page=1;state.section='admissions';if(state.campaign?.school_id!==state.schoolId){state.campaign=null;state.slug='';const rows=visibleCampaigns();if(rows.length===1){state.slug=rows[0].slug;await loadCampaign();}}await loadList();await loadDiaryPortal();await loadVerification();}
   async function mfaRequest<T>(path:string,options:RequestInit={}):Promise<T>{const headers=new Headers(options.headers);headers.set('X-CSRF-Protection','1');if(options.body)headers.set('Content-Type','application/json');const r=await fetch('/api/v1'+path,{...options,headers,credentials:'same-origin',cache:'no-store'});const data=await r.json();if(!r.ok)throw new Error(data.detail||'Não foi possível confirmar a autenticação.');return data as T;}

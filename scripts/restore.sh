@@ -64,7 +64,21 @@ DO $$ BEGIN
   IF to_regclass('public.integration_jobs') IS NOT NULL THEN
     UPDATE integration_jobs SET status='uncertain',error_code='RESTORE_REQUIRES_RECONCILIATION',lease_until=NULL
       WHERE status IN ('pending','retry','processing');
+  END IF;
+  IF to_regclass('public.bank_charges') IS NOT NULL THEN
     UPDATE bank_charges SET status='uncertain' WHERE status='queued';
+  END IF;
+  IF to_regclass('public.crm_bridge_requests') IS NOT NULL THEN
+    UPDATE crm_bridge_requests SET status='failed',error_code='RESTORE_REQUIRES_RECONCILIATION'
+      WHERE status IN ('queued','retry');
+  END IF;
+  IF to_regclass('public.crm_bridge_external_requests') IS NOT NULL THEN
+    UPDATE crm_bridge_external_requests SET status='uncertain',error_code='RESTORE_REQUIRES_RECONCILIATION'
+      WHERE status IN ('queued','sending');
+  END IF;
+  IF to_regclass('public.connect_message_jobs') IS NOT NULL THEN
+    UPDATE connect_message_jobs SET status='uncertain',error_code='RESTORE_REQUIRES_RECONCILIATION',lease_until=NULL
+      WHERE status IN ('pending','retry','processing');
   END IF;
 END $$;
 SQL

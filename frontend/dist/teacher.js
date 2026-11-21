@@ -219,7 +219,7 @@ var PigeOnline;
     PigeOnline.newId = newId;
     function person() { return { name: '', social_name: '', cpf: null, birth_date: null, email: '', phone: '', address: '', notes: '', is_guardian: false }; }
     PigeOnline.person = person;
-    function publicURL(slug) { return location.origin + '/online.html?campaign=' + encodeURIComponent(slug); }
+    function publicURL(slug) { return location.origin + '/online?campaign=' + encodeURIComponent(slug); }
     PigeOnline.publicURL = publicURL;
     function safeLink(value) { try {
         const u = new URL(value);
@@ -246,7 +246,7 @@ var PigeInstitution;
     function apply(value) {
         Object.assign(PigeInstitution.state, value);
         const surface = document.documentElement?.dataset?.institutionSurface;
-        document.title = value.display_name + ' · ' + (location.pathname === '/online.html' ? 'Portal dos responsáveis' : surface === 'teacher' ? 'Portal do Professor' : surface === 'portal' ? 'Portal do aluno e responsável' : 'Gestão escolar');
+        document.title = value.display_name + ' · ' + (location.pathname === '/online' ? 'Portal dos responsáveis' : surface === 'teacher' ? 'Portal do Professor' : surface === 'portal' ? 'Portal do aluno e responsável' : 'Gestão escolar');
         document.querySelector('meta[name="theme-color"]')?.setAttribute('content', value.primary_color);
         const theme = document.querySelector('link[data-institution-theme]');
         if (theme && !theme.href.endsWith('/api/v1/institution/theme.css?v=' + value.version))

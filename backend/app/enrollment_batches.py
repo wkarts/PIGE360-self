@@ -129,9 +129,15 @@ def process(id:str,db:DB,user:Actor,school:Scope,request:Request):
     if row.status=='cancelled':fail(409,'Lote cancelado. Matrículas já concluídas permanecem preservadas.')
     if row.status=='completed':return output(row)
     data=PlanInput(**row.payload);results=list(row.results)
-    done={r['index'] for r in results if r['status']=='completed'}
-    for index,item in [(i,item) for i,item in enumerate(data.items) if i not in done][:20]:
-        result={'index':index,'student_id':item.student_id,'status':'failed','reason':''}
+    # Em lotes antigos, um resultado salvo corresponde a pelo menos uma tentativa.
+    attempts = {r['index']: r.get('attempts', 1) for r in results}
+    done = {r['index'] for r in results if r['status'] == 'completed'}
+    pending = sorted((i for i in range(len(data.items)) if i not in done),
+                     key=lambda i: (attempts.get(i, 0), i))
+    for index in pending[:20]:
+        item = data.items[index]
+        result = {'index':index, 'student_id':item.student_id, 'status':'failed',
+                  'reason':'', 'attempts': attempts.get(index, 0) + 1}
         try:
             with db.begin_nested():
                 checked=plan(db,school,PlanInput(academic_year_id=data.academic_year_id,enrolled_on=data.enrolled_on,items=[item],activate=data.activate))

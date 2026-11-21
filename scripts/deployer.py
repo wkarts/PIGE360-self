@@ -67,7 +67,7 @@ def stacks(root=ROOT):
             for line in env.read_text().splitlines():
                 if '=' in line and not line.startswith('#'):
                     key, value = line.split('=', 1)
-                    if key in {'APP_URL', 'APP_PORT', 'APP_ENV', 'APP_IMAGE', 'COMPOSE_PROJECT_NAME', 'STORAGE_BACKEND','WEBSITE_PUBLIC_URL','WEBSITE_PORT','PORTAL_PUBLIC_URL','PORTAL_PORT','COMPOSE_PROFILES'}:
+                    if key in {'APP_URL', 'APP_PORT', 'APP_ENV', 'APP_IMAGE', 'COMPOSE_PROJECT_NAME', 'STORAGE_BACKEND','WEBSITE_PUBLIC_URL','WEBSITE_PORT','PORTAL_PUBLIC_URL','PORTAL_PORT','TEACHER_PORTAL_PUBLIC_URL','TEACHER_PORTAL_PORT','COMPOSE_PROFILES'}:
                         values[key] = value
             result[relative] = values
     return result
@@ -180,16 +180,16 @@ def compose_project(root,env_path):
     return project
 
 
-def configure_surfaces(root,env_path,website_url,website_port,portal_url,portal_port,website_enabled,portal_enabled):
+def configure_surfaces(root,env_path,website_url,website_port,portal_url,portal_port,website_enabled,portal_enabled,teacher=None):
     project=compose_project(root,env_path)
     directory,lock=acquire_stack_lock(root,env_path,project)
     try:
         require_recovered_stack(directory)
-        return configure_surfaces_locked(root,env_path,website_url,website_port,portal_url,portal_port,website_enabled,portal_enabled,project)
+        return configure_surfaces_locked(root,env_path,website_url,website_port,portal_url,portal_port,website_enabled,portal_enabled,project,teacher)
     finally:lock.close()
 
 
-def configure_surfaces_locked(root,env_path,website_url,website_port,portal_url,portal_port,website_enabled,portal_enabled,project):
+def configure_surfaces_locked(root,env_path,website_url,website_port,portal_url,portal_port,website_enabled,portal_enabled,project,teacher=None):
     available=stacks(root)
     if env_path not in available:raise ValueError('Stack não encontrada.')
     values=available[env_path]
@@ -201,12 +201,17 @@ def configure_surfaces_locked(root,env_path,website_url,website_port,portal_url,
         if parsed.scheme!='https' and parsed.hostname not in {'localhost','127.0.0.1'}:raise ValueError('Domínios públicos de site e portal exigem HTTPS.')
         return value.rstrip('/')
     desired={}
-    for key,url,port,enabled in [('WEBSITE',website_url,website_port,website_enabled),('PORTAL',portal_url,portal_port,portal_enabled)]:
+    if teacher is None:
+        teacher = (values.get('TEACHER_PORTAL_PUBLIC_URL',''), values.get('TEACHER_PORTAL_PORT','58084'),
+                   'teacher' in values.get('COMPOSE_PROFILES','').split(','))
+    teacher_url, teacher_port, teacher_enabled = teacher
+    for key,url,port,enabled in [('WEBSITE',website_url,website_port,website_enabled),('PORTAL',portal_url,portal_port,portal_enabled),
+                                 ('TEACHER_PORTAL',teacher_url,teacher_port,teacher_enabled)]:
         if enabled or url:
             desired[key+'_PUBLIC_URL']=origin(url)
         if not port.isdecimal() or not 1024<=int(port)<=65535:raise ValueError('Portas devem estar entre 1024 e 65535.')
         desired[key+'_PORT']=port
-    used=[values.get('APP_PORT'),website_port if website_enabled else None,portal_port if portal_enabled else None]
+    used=[values.get('APP_PORT'),website_port if website_enabled else None,portal_port if portal_enabled else None,teacher_port if teacher_enabled else None]
     used=[p for p in used if p]
     if len(set(used))!=len(used):raise ValueError('Gestor, site e portal precisam de portas distintas.')
     for path,other in available.items():
@@ -214,12 +219,14 @@ def configure_surfaces_locked(root,env_path,website_url,website_port,portal_url,
     destination=root/env_path;original=destination.read_text();lines=original.splitlines()
     old=dict(line.split('=',1) for line in lines if '=' in line and not line.lstrip().startswith('#'))
     profiles={x for x in old.get('COMPOSE_PROFILES','').split(',') if x}
-    for profile,enabled in [('website',website_enabled),('portal',portal_enabled)]:
+    for profile,enabled in [('website',website_enabled),('portal',portal_enabled),('teacher',teacher_enabled)]:
         if enabled:profiles.add(profile)
         else:profiles.discard(profile)
     desired['COMPOSE_PROFILES']=','.join(sorted(profiles))
     if portal_enabled and values.get('APP_URL','').rstrip('/')==desired.get('PORTAL_PUBLIC_URL'):raise ValueError('O domínio do portal deve ser distinto do gestor.')
     if website_enabled and website_url.rstrip('/') in {values.get('APP_URL','').rstrip('/'),portal_url.rstrip('/') if portal_enabled else ''}:raise ValueError('O site deve usar domínio próprio.')
+    if teacher_enabled and teacher_url.rstrip('/') in {values.get('APP_URL','').rstrip('/'), portal_url.rstrip('/'), website_url.rstrip('/')}:
+        raise ValueError('O Portal do Professor precisa de um domínio próprio.')
     stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     backup=destination.with_name('.env.backup-'+stamp);shutil.copyfile(destination,backup);backup.chmod(0o600)
     updated=[]
@@ -408,9 +415,10 @@ def serve(port):
                 '<form method="post" action="/inspect">'+field+'<input type="hidden" name="path" value="'+escape(path,quote=True)+'"><button>Saúde e logs</button></form>'+
                 '<form method="post" action="/restore-plans">'+field+'<input type="hidden" name="path" value="'+escape(path,quote=True)+'"><button>Consultar planos de restauração</button></form>'+
                 '<form method="post" action="/restore-history">'+field+'<input type="hidden" name="path" value="'+escape(path,quote=True)+'"><button>Acompanhar restauração</button></form>'+
-                '<details><summary>Configurar site e portal independentes</summary><form method="post" action="/surfaces">'+field+'<input type="hidden" name="path" value="'+escape(path,quote=True)+'">'+
+                '<details><summary>Configurar site e portais independentes</summary><form method="post" action="/surfaces">'+field+'<input type="hidden" name="path" value="'+escape(path,quote=True)+'">'+
                 '<label><input type="checkbox" name="website_enabled" value="yes" '+('checked' if 'website' in v.get('COMPOSE_PROFILES','').split(',') else '')+'> Habilitar site</label><label>URL pública do site<input name="website_url" value="'+escape(v.get('WEBSITE_PUBLIC_URL',''),quote=True)+'"></label><label>Porta do site<input name="website_port" value="'+escape(v.get('WEBSITE_PORT','58082'),quote=True)+'"></label>'+
-                '<label><input type="checkbox" name="portal_enabled" value="yes" '+('checked' if 'portal' in v.get('COMPOSE_PROFILES','').split(',') else '')+'> Habilitar portal</label><label>URL pública do portal<input name="portal_url" value="'+escape(v.get('PORTAL_PUBLIC_URL',''),quote=True)+'"></label><label>Porta do portal<input name="portal_port" value="'+escape(v.get('PORTAL_PORT','58083'),quote=True)+'"></label><p>O conteúdo e a marca do site continuam administrados pelo PIGE. Configure o proxy reverso de cada domínio antes de liberar o acesso externo.</p><button>Validar e salvar configuração</button></form></details>'+
+                '<label><input type="checkbox" name="portal_enabled" value="yes" '+('checked' if 'portal' in v.get('COMPOSE_PROFILES','').split(',') else '')+'> Habilitar Portal do Aluno</label><label>URL pública do portal<input name="portal_url" value="'+escape(v.get('PORTAL_PUBLIC_URL',''),quote=True)+'"></label><label>Porta do portal<input name="portal_port" value="'+escape(v.get('PORTAL_PORT','58083'),quote=True)+'"></label>'+
+                '<label><input type="checkbox" name="teacher_enabled" value="yes" '+('checked' if 'teacher' in v.get('COMPOSE_PROFILES','').split(',') else '')+'> Habilitar Portal do Professor</label><label>URL pública do professor<input name="teacher_url" value="'+escape(v.get('TEACHER_PORTAL_PUBLIC_URL',''),quote=True)+'"></label><label>Porta do professor<input name="teacher_port" value="'+escape(v.get('TEACHER_PORTAL_PORT','58084'),quote=True)+'"></label><p>O conteúdo e a marca do site continuam administrados pelo PIGE. Configure o proxy reverso de cada domínio antes de liberar o acesso externo.</p><button>Validar e salvar configuração</button></form></details>'+
                 '<form method="post" action="/restore">'+field+'<input type="hidden" name="path" value="'+escape(path,quote=True)+'"><label>ID do plano preparado no gestor<input name="id" required></label><p>Substitui o banco e repõe arquivos de toda a instalação. Para os serviços, preserva o estado anterior e revoga sessões. Falhas exigem recuperação antes de liberar a escola.</p><label>Confirmação exibida no plano<input name="confirmation" required autocomplete="off"></label><button>Confirmar restauração destrutiva</button></form></li>'
                 for path, v in stacks(ROOT).items())
             return (head + notice + '<section><h2>Stacks deste checkout</h2><ul>' + (items or '<li>Nenhuma stack criada.</li>') +
@@ -451,7 +459,7 @@ def serve(port):
                     return self.send_html(self.page('Stack criada: ' + path + '. Revise o .env antes de implantar.'))
                 if self.path=='/preview':return self.send_html(self.page(preview_upgrade(ROOT,form.get('path',''))))
                 if self.path=='/inspect':return self.send_html(self.page(inspect_stack(ROOT,form.get('path',''))))
-                if self.path=='/surfaces':return self.send_html(self.page(configure_surfaces(ROOT,form.get('path',''),form.get('website_url',''),form.get('website_port',''),form.get('portal_url',''),form.get('portal_port',''),form.get('website_enabled')=='yes',form.get('portal_enabled')=='yes')))
+                if self.path=='/surfaces':return self.send_html(self.page(configure_surfaces(ROOT,form.get('path',''),form.get('website_url',''),form.get('website_port',''),form.get('portal_url',''),form.get('portal_port',''),form.get('website_enabled')=='yes',form.get('portal_enabled')=='yes',(form.get('teacher_url',''),form.get('teacher_port','58084'),form.get('teacher_enabled')=='yes') if 'teacher_port' in form else None)))
                 if self.path=='/restore-plans':return self.send_html(self.page(json.dumps(restore_plans(ROOT,form.get('path','')),ensure_ascii=False,indent=2)))
                 if self.path=='/restore-history':return self.send_html(self.page(json.dumps(restore_history(ROOT,form.get('path','')),ensure_ascii=False,indent=2)))
                 if self.path=='/restore':
