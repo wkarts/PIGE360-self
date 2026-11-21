@@ -2,7 +2,7 @@
 
 Backend FastAPI/Python 3.13, cliente Vue 3 Web/PWA. Preserve arquitetura, cadastros, permissões, migrations e branding existentes. Não criar aplicativos nativos nem introduzir nova plataforma de hospedagem.
 
-Adicionar uma nova variável de ambiente à aplicação ou passar a usá-la para habilitar um recurso exige concordância explícita de Wallace. Configure recursos por escola na aplicação e persista a escolha no banco.
+Novas variáveis de ambiente na aplicação exigem concordância explícita de Wallace. O catálogo do Diário é configurado no cadastro da escola. O Educacenso segue as permissões do operador em cada escola.
 
 ## Git e CI/CD
 

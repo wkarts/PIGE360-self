@@ -1,6 +1,7 @@
 namespace PigeEducacenso {
   type Row=PigeAPI.Row;
   interface Snapshot {
+    collection_year?:number; replacement_rule?:string; return_statuses?:string[];
     rows:{enrollment_id:string;class_group_id:string;local_status:string}[];
     blocks:string[]; official_source:string;
   }
@@ -16,8 +17,8 @@ namespace PigeEducacenso {
     const root='/schools/'+props.schoolId;
     const base=root+'/educacenso';
     const state=Vue.reactive({busy:false,error:'',years:[] as Row[],groups:[] as Row[],year:'',stage:'matricula_inicial',
-      day:'',group:'',preview:null as Snapshot|null,draft:null as Draft|null,history:[] as Draft[],offset:0,
-      file:null as File|null,tab:'prepare',visibleRows:25});
+      environment:'treinamento',day:'',group:'',preview:null as Snapshot|null,draft:null as Draft|null,history:[] as Draft[],offset:0,
+      file:null as File|null,reportedStatus:'',tab:'prepare',visibleRows:25});
     const stageLabel=(s:string)=>s==='matricula_inicial'?'Matrícula Inicial':'Situação do Aluno';
     async function run(work:()=>Promise<void>){
       if(state.busy)return;
@@ -26,8 +27,8 @@ namespace PigeEducacenso {
     }
     function reset(){state.preview=null;state.draft=null;state.file=null;state.visibleRows=25;}
     function payload(){return {year_id:state.year,stage:state.stage,reference_date:state.day,
-      environment:'treinamento',class_group_ids:state.group?[state.group]:null};}
-    async function refreshHistory(){state.history=await PigeAPI.request<Draft[]>(base+'/drafts?offset='+state.offset);}
+      environment:state.environment,class_group_ids:state.group?[state.group]:null};}
+    async function refreshHistory(){state.history=await PigeAPI.request<Draft[]>(base+'/drafts?environment='+state.environment+'&offset='+state.offset);}
     async function load(){await run(async()=>{
       const [years,groups]=await Promise.all([PigeAPI.request<Row[]>(root+'/academic-years'),PigeAPI.request<Row[]>(root+'/class-groups')]);
       state.years=years;state.groups=groups;
@@ -43,21 +44,24 @@ namespace PigeEducacenso {
       await select(draft.id);state.offset=0;await refreshHistory();
     });}
     async function select(id:string){
-      const draft=await PigeAPI.request<Draft>(base+'/drafts/'+id);
-      state.draft=draft;state.preview=null;state.file=null;state.visibleRows=25;state.tab='detail';
+      const draft=await PigeAPI.request<Draft>(base+'/drafts/'+id+'?environment='+state.environment);
+      state.draft=draft;state.reportedStatus='';state.preview=null;state.file=null;state.visibleRows=25;state.tab='detail';
     }
     function open(id:string){return run(()=>select(id));}
     function attach(){return run(async()=>{
       if(!state.draft || !state.file)return;
       const id=state.draft.id;
       const form=new FormData();form.set('file',state.file);
-      await PigeAPI.request(base+'/drafts/'+id+'/evidence',{method:'POST',body:form});
+      if(state.reportedStatus)form.set('reported_status',state.reportedStatus);
+      await PigeAPI.request(base+'/drafts/'+id+'/evidence?environment='+state.environment,{method:'POST',body:form});
       await select(id);
     });}
+    function diagnostic(){if(state.draft)return run(()=>PigeAPI.download(base+'/drafts/'+state.draft!.id+'/diagnostico.json?environment='+state.environment,'diagnostico-local.json'));}
     function fileChanged(event:Event){state.file=(event.target as HTMLInputElement).files?.[0]||null;}
     function download(item:Evidence){return run(()=>PigeAPI.download(root+'/files/'+item.file_id+'/download','evidencia.bin'));}
     function page(delta:number){return run(async()=>{state.offset=Math.max(0,state.offset+delta);await refreshHistory();});}
+    function changeEnvironment(){reset();state.offset=0;state.history=[];state.tab='prepare';return run(refreshHistory);}
     Vue.onMounted(load);
-    return {props,state,reasons,stageLabel,reset,preview,save,open,attach,fileChanged,download,page};
+    return {props,state,reasons,stageLabel,changeEnvironment,reset,preview,save,open,attach,diagnostic,fileChanged,download,page};
   }};
 }

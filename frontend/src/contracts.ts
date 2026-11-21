@@ -21,7 +21,7 @@ namespace PigeContracts {
       selected:null as Template|null,editing:false,draft:emptyDraft(),savedDraft:'',activeSection:'body',
       docxPrepared:false,docxPreviewed:false,importWarnings:[] as string[],importFileName:'',letterheadName:'',letterheadUrl:'',
       enrollmentSearch:'',enrollmentChoices:[] as Enrollment[],enrollment:null as Enrollment|null,
-      templateId:'',values:{} as Record<string,string>,preview:null as Preview|null,previewStale:false,
+      templateId:'',values:{} as Record<string,string>,preview:null as Preview|null,identificationFooter:false,previewStale:false,
       draftVersion:0,draftDirty:false,previewVisible:false,issued:null as (Row&{file_id:string;template_name?:string})|null
     });
     const identity=PigeInstitution.state;
@@ -174,11 +174,11 @@ namespace PigeContracts {
       if(state.previewStale||state.preview?.missing_fields?.length){throw new Error('Preencha os campos pendentes e gere uma nova prévia antes de emitir.');}
       const template=state.applicable.find(item=>item.id===state.templateId);
       if(!template||!template.active)throw new Error('Selecione um modelo ativo para esta matrícula.');
-      const result=await PigeAPI.post<Row&{file_id:string;template_name?:string;signature_status?:string}>(base()+'/document-templates/'+state.templateId+'/issue',{enrollment_id:state.enrollment!.id,values:state.values});
+      const result=await PigeAPI.post<Row&{file_id:string;template_name?:string;signature_status?:string}>(base()+'/document-templates/'+state.templateId+'/issue',{enrollment_id:state.enrollment!.id,values:state.values,identification_footer:state.identificationFooter});
       state.issued=result;state.notice='PDF emitido e preservado na ficha do aluno. Repetir a mesma emissão reutiliza o documento idêntico.';
       await downloadIssuedFile(result,(result.template_name||template.name).replace(/[^a-z0-9_-]+/gi,'-')+'.pdf');
     });}
-    async function downloadPdfPreview():Promise<void>{if(!state.templateId||!state.enrollment)return;await run(()=>PigeAPI.downloadPost(base()+'/document-templates/'+state.templateId+'/preview.pdf',{enrollment_id:state.enrollment!.id,values:state.values},'previa-documento.pdf'));}
+    async function downloadPdfPreview():Promise<void>{if(!state.templateId||!state.enrollment)return;await run(()=>PigeAPI.downloadPost(base()+'/document-templates/'+state.templateId+'/preview.pdf',{enrollment_id:state.enrollment!.id,values:state.values,identification_footer:state.identificationFooter},'previa-documento.pdf'));}
     async function downloadIssuedFile(issued:Row&{file_id:string;signature_status?:string},name:string):Promise<void>{
       let fileId=issued.file_id;
       if(issued.signature_status&&issued.signature_status!=='unsigned'){

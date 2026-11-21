@@ -160,6 +160,7 @@ class RenderInput(BaseModel):
     model_config = ConfigDict(extra='forbid')
     enrollment_id: str | None = None
     template_version: int | None = Field(default=None, ge=1)
+    identification_footer: bool = False
     values: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode='after')
@@ -681,7 +682,11 @@ def preview_pdf(template_id: str, data: RenderInput, db: DB, user: Actor, school
         fail(422, 'Preencha os campos obrigatórios antes de gerar o PDF: ' + ', '.join(preview['field_meta'][key]['label'] for key in preview['missing_fields']))
     if obj.letterhead_file_id:
         preview['letterhead_file'] = scoped(db, m.FileRecord, obj.letterhead_file_id, school.id)
-    return Response(template_pdf(db, school, obj, preview), media_type='application/pdf',
+    pdf = template_pdf(db, school, obj, preview)
+    if _is_contract_kind(obj.kind):
+        from .contract_presentation import prepare_contract
+        pdf = prepare_contract(pdf, 'PRÉVIA', obj.version, data.identification_footer)
+    return Response(pdf, media_type='application/pdf',
                     headers={'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})
 
 
@@ -693,7 +698,8 @@ def issue_template(template_id: str, data: IssueInput, db: DB, user: Actor, scho
     enrollment = scoped(db, m.Enrollment, data.enrollment_id, school.id)
     input_hash = hashlib.sha256(json.dumps({'template': obj.id, 'version': obj.version,
          'revision_sha256': obj.revision_sha256,
-         'enrollment': enrollment.id, 'values': data.values}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+         'enrollment': enrollment.id, 'values': data.values,
+         **({'identification_footer': True} if data.identification_footer else {})}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     admission = db.scalar(select(m.Admission).where(m.Admission.enrollment_id==enrollment.id))
     ensure_bound_contract(db, school, obj, enrollment)
     applicant_first = bool(admission and admission.contract_signing_order=='applicant_first'
@@ -738,12 +744,20 @@ def issue_template(template_id: str, data: IssueInput, db: DB, user: Actor, scho
          'revision_sha256': obj.revision_sha256, 'enrollment': enrollment.id,
          'variables': preview['variables']}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     pdf = template_pdf(db, school, obj, preview)
+    presentation = {}
+    if _is_contract_kind(obj.kind):
+        from .common import number
+        from .contract_presentation import prepare_contract, SCHOOL_FIELD
+        contract_number = number(db, school.id, 'contract', 'CTR')
+        pdf = prepare_contract(pdf, contract_number, obj.version, data.identification_footer)
+        presentation = {'contract_number': contract_number, 'institutional_signature_field': SCHOOL_FIELD,
+                        'identification_footer': data.identification_footer}
     stored = write_file(db, school.id, user.id, f'modelo-{obj.id}-matricula-{enrollment.number}.pdf', 'application/pdf', pdf)
     issued = m.IssuedDocument(school_id=school.id, student_id=enrollment.student_id,
                               enrollment_id=enrollment.id, kind='template', file_id=stored.id,
                               template_id=obj.id, template_version=str(obj.version), idempotency_key=key,
                               signature_status='unsigned',
-                              snapshot={'template_name': obj.name, 'template_kind': obj.kind,
+                              snapshot={**presentation, 'template_name': obj.name, 'template_kind': obj.kind,
                                         'template_revision_sha256': obj.revision_sha256,
                                         'template_version': obj.version, 'header': obj.header,
                                         'body': obj.body, 'footer': obj.footer,
