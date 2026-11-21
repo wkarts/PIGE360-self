@@ -41,6 +41,18 @@ def verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,pos
     admin.goto(URL+'/#/community')
     expect(admin.get_by_role('heading',name='Site institucional',exact=True)).to_be_visible()
     admin.locator('aside').get_by_role('link',name='Site da escola',exact=True).click()
+    catalog_cards = admin.locator('.site-model-cards button')
+    expect(catalog_cards).to_have_count(10)
+    thumbnails = catalog_cards.locator('img').evaluate_all("""async images => {
+        await Promise.all(images.map(image => { image.loading='eager'; return image.decode(); }));
+        return images.map(image => [image.currentSrc, image.naturalWidth, image.naturalHeight]);
+    }""")
+    assert len({url for url, _, _ in thumbnails}) == catalog_cards.count()
+    assert all((width, height) == (512, 320) for _, width, height in thumbnails)
+    praca = admin.get_by_role('button',name='Praça da escola',exact=True)
+    praca.click()
+    expect(praca).to_have_attribute('aria-pressed','true')
+    expect(admin.locator('.website-preview iframe')).to_be_visible()
     original_viewport=admin.viewport_size
     admin.set_viewport_size({'width':390,'height':844})
     expect(admin.get_by_role('button',name='Central das famílias',exact=True)).to_be_visible()
@@ -68,6 +80,7 @@ def verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,pos
     expect(preview.locator('h1')).to_have_text(resolved_model['headline'])
     model_map=admin.locator('section[aria-labelledby="model-map-title"]')
     expect(model_map).to_be_visible()
+    model_map.locator('summary').click()
     assert len(resolved_model['design']['menu'])==6
     for link in resolved_model['design']['menu']:
         expect(model_map.get_by_text(link['label']+' → '+link['url'],exact=True)).to_be_visible()
