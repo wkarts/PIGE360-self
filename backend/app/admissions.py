@@ -432,7 +432,8 @@ class ContractHistoryRemovalInput(BaseModel):
 def contract_history_policy(db: DB, user: Actor, school: Scope):
     require(user, 'admissions.read')
     from .contract_history import is_installation_owner
-    return {'allow_removal': school.allow_contract_history_removal,
+    company = db.get(m.Company, school.company_id)
+    return {'allow_removal': company.allow_contract_history_removal,
             'can_manage': is_installation_owner(db, user)}
 
 
@@ -443,13 +444,14 @@ def set_contract_history_policy(data: ContractHistoryPolicyInput, db: DB, user: 
     if not is_installation_owner(db, user):
         fail(403, 'Somente o administrador original comprovado da instalação pode alterar esta política.')
     lock_school(db, school.id)
-    db.refresh(school)
-    if school.allow_contract_history_removal != data.allow_removal:
-        before = school.allow_contract_history_removal
-        school.allow_contract_history_removal = data.allow_removal
-        audit(db, request, user, 'contract_history.policy_changed', school, school.id,
+    company = db.scalar(select(m.Company).where(m.Company.id == school.company_id)
+                        .with_for_update().execution_options(populate_existing=True))
+    if company.allow_contract_history_removal != data.allow_removal:
+        before = company.allow_contract_history_removal
+        company.allow_contract_history_removal = data.allow_removal
+        audit(db, request, user, 'contract_history.policy_changed', company, school.id,
               {'before': before, 'after': data.allow_removal})
-    return {'allow_removal': school.allow_contract_history_removal, 'can_manage': True}
+    return {'allow_removal': company.allow_contract_history_removal, 'can_manage': True}
 
 
 @router.post('/admissions/{id}/issued/{document_id}/remove-history')
@@ -460,9 +462,10 @@ def remove_contract_history(id: str, document_id: str, data: ContractHistoryRemo
     if not is_installation_owner(db, user):
         fail(403, 'Somente o administrador original comprovado da instalação pode remover esta via.')
     lock_school(db, school.id)
-    db.refresh(school)
-    if not school.allow_contract_history_removal:
-        fail(409, 'A política da escola preserva todas as vias substituídas.')
+    company = db.scalar(select(m.Company).where(m.Company.id == school.company_id)
+                        .with_for_update().execution_options(populate_existing=True))
+    if not company.allow_contract_history_removal:
+        fail(409, 'A política da empresa preserva todas as vias substituídas.')
     admission = scoped(db, m.Admission, id, school.id)
     document = scoped(db, m.IssuedDocument, document_id, school.id)
     if not admission.enrollment_id or document.enrollment_id != admission.enrollment_id:

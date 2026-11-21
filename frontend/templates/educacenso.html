@@ -1,7 +1,9 @@
-<section class="panel x-card" aria-label="Educacenso em treinamento">
-  <h2>Educacenso · Treinamento</h2><p>{{props.schoolName}}</p>
+<section class="panel x-card" aria-label="Educacenso">
+  <h2>Educacenso</h2><p>{{props.schoolName}}</p>
   <div v-if="state.error" role="alert" class="alert error">{{state.error}}</div>
   <fieldset class="portal-fieldset" :disabled="state.busy">
+    <label>Ambiente do lote<select v-model="state.environment" @change="changeEnvironment"><option value="treinamento">Treinamento</option><option value="producao">Preparação da declaração oficial</option></select></label>
+    <p>Confira a declaração existente antes da migração. Um envio pode substituir dados já declarados. A exportação exige leiaute e domínios validados para o ano e a etapa.</p>
     <div class="tabs"><button @click="state.tab='prepare'">Dados a declarar</button><button @click="state.tab='history'">Histórico</button></div>
     <template v-if="state.tab==='prepare'">
       <form @submit.prevent="preview" class="x-form" @change="reset">
@@ -20,7 +22,9 @@
     </template>
     <template v-if="(state.tab==='prepare' && state.preview) || (state.tab==='detail' && state.draft)">
       <section v-for="snap in [state.tab==='detail'?state.draft.snapshot:state.preview]" :key="state.tab">
-        <h3>{{state.tab==='detail'?'Rascunho de treinamento':'Prévia da seleção'}}</h3>
+        <h3>{{state.tab==='detail'?'Rascunho do lote':'Prévia da seleção'}}</h3>
+        <p v-if="snap.replacement_rule==='substitui_declaracao_da_escola'">Nesta coleta, a importação substitui a declaração da escola. Confira a cobertura de todos os alunos antes de enviar pelo Educacenso.</p>
+        <p v-else>Regra de substituição pendente de confirmação para este ano e etapa.</p>
         <p>{{snap.rows.length}} matrícula(s) na data de referência.</p>
         <ul><li v-for="block in snap.blocks" :key="block">{{reasons[block]||block}}</li></ul>
         <a :href="snap.official_source" target="_blank" rel="noopener noreferrer">Consultar orientações oficiais do Inep</a>
@@ -30,9 +34,10 @@
       </section>
       <button class="btn btn-primary" v-if="state.tab==='prepare'" @click="save">Guardar rascunho</button>
       <section v-else><p>{{stageLabel(state.draft.stage)}} · {{state.draft.reference_date}}</p><p>SHA-256 <code>{{state.draft.digest}}</code></p>
-        <h3>Retornos e comprovantes anexados</h3><p>Os anexos ficam disponíveis para conferência manual. O rascunho permanece em treinamento.</p>
-        <form @submit.prevent="attach" class="x-form"><label>Arquivo de evidência (até 4 MiB)<input type="file" :key="state.draft.id+':'+(state.draft.evidence||[]).length" @change="fileChanged" required></label><button class="btn btn-secondary" :disabled="!state.file">Anexar evidência</button></form>
-        <div class="x-list"><button v-for="item in state.draft.evidence" :key="item.id" @click="download(item)">Baixar evidência · {{item.digest.slice(0,12)}}</button></div>
+        <button @click="diagnostic">Baixar diagnóstico local (JSON)</button>
+        <h3>Retornos e comprovantes anexados</h3><p>Os anexos ficam disponíveis para conferência manual. Anexar um retorno não confirma a aceitação pelo Inep.</p>
+        <form @submit.prevent="attach" class="x-form"><label v-if="state.draft.snapshot.return_statuses?.length">Situação informada pelo operador conforme o retorno<select v-model="state.reportedStatus"><option value="">Somente anexar</option><option v-for="status in state.draft.snapshot.return_statuses" :key="status">{{status}}</option></select></label><label>Arquivo de evidência (até 4 MiB)<input type="file" :key="state.draft.id+':'+(state.draft.evidence||[]).length" @change="fileChanged" required></label><button class="btn btn-secondary" :disabled="!state.file">Anexar evidência</button></form>
+        <div class="x-list"><button v-for="item in state.draft.evidence" :key="item.id" @click="download(item)">Baixar evidência {{item.reported_status||''}} · {{item.digest.slice(0,12)}}</button></div>
       </section>
     </template>
   </fieldset>

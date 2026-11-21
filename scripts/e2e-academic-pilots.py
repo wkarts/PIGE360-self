@@ -60,8 +60,11 @@ def main():
             http.post('/api/v1/setup', headers={'X-Setup-Token':env['SETUP_TOKEN']}, json=setup).raise_for_status()
             token = http.post('/api/v1/auth/login', json={'email':setup['admin_email'], 'password':password}).json()['access_token']
             school = http.get('/api/v1/schools', headers={'Authorization':'Bearer '+token}).json()[0]
-            assert not school['educacenso_training'] and not school['diary_catalog']
+            assert not school['diary_catalog']
             sid = school['id']
+            other = http.post('/api/v1/schools', headers={'Authorization':'Bearer '+token},
+                              json={'company_id':school['company_id'],'name':'Z Escola fictícia'}).json()
+
             with sync_playwright() as pw:
                 executable = os.getenv('CHROMIUM_PATH') or shutil.which('chromium') or pw.chromium.executable_path
                 browser = pw.chromium.launch(executable_path=executable, args=['--no-sandbox'])
@@ -73,17 +76,58 @@ def main():
                 page.get_by_label('E-mail', exact=True).fill(setup['admin_email'])
                 page.get_by_label('Senha', exact=True).fill(password)
                 page.get_by_role('button', name='Entrar na aplicação').click()
+                for width, height in [(1360, 620), (390, 660)]:
+                    page.set_viewport_size({'width':width, 'height':height})
+                    def drawer():
+                        button = page.get_by_role('button', name='Abrir menu')
+                        if button.is_visible() and button.get_attribute('aria-expanded') == 'false':
+                            button.click()
+                    drawer()
+                    cadastros = page.get_by_role('button', name='Cadastros', exact=True)
+                    if cadastros.get_attribute('aria-expanded') == 'true':
+                        cadastros.click()
+                    menu = page.locator('#app .sidebar-scroll[role="region"]')
+                    link = page.get_by_role('link', name='Inscrições online', exact=True)
+                    link.scroll_into_view_if_needed()
+                    y = menu.evaluate('(el)=>{el.scrollTop=45;return el.scrollTop}')
+                    assert y > 0
+                    link.evaluate('el=>el.click()')
+                    expect(page.get_by_role('heading', name='Inscrições online', exact=True)).to_be_visible()
+                    drawer()
+                    expect(cadastros).to_have_attribute('aria-expanded','false')
+                    expect(link).to_have_attribute('aria-current','page')
+                    assert menu.evaluate('el=>el.scrollTop') == y
+                    for school_id in (other['id'], sid):
+                        if width < 600:
+                            page.get_by_role('button', name='Fechar menu').click()
+                        page.get_by_label('Selecionar escola').select_option(school_id)
+                        expect(page.get_by_role('heading', name='Inscrições online', exact=True)).to_be_visible()
+                        drawer()
+                        expect(cadastros).to_have_attribute('aria-expanded','false')
+                        expect(link).to_have_attribute('aria-current','page')
+                        assert menu.evaluate('el=>el.scrollTop') == y
+                    if width < 600:
+                        page.get_by_role('button', name='Fechar menu').click()
+                    page.get_by_role('tab', name='Visão geral', exact=True).click()
+                    drawer()
+                    expect(cadastros).to_have_attribute('aria-expanded','false')
+                    assert menu.evaluate('el=>el.scrollTop') == y
+                    if width < 600:
+                        page.get_by_role('button', name='Fechar menu').click()
+                page.set_viewport_size({'width':1280,'height':900})
                 page.get_by_role('link', name='Instituição', exact=True).click()
                 page.get_by_role('button', name='Editar dados').click()
                 diary_option = page.get_by_label('Habilitar catálogo curricular do Diário')
                 census_option = page.get_by_label('Habilitar treinamento do Educacenso')
                 expect(diary_option).not_to_be_checked()
-                expect(census_option).not_to_be_checked()
+                expect(census_option).to_have_count(0)
                 diary_option.check()
-                census_option.check()
                 page.get_by_role('button', name='Salvar', exact=True).click()
                 expect(diary_option).to_have_count(0)
-                page.goto(f'{url}/?diarioPiloto={sid}&guia=catalog#/diary')
+                expect(page.get_by_label('Selecionar escola')).to_be_enabled()
+                page.get_by_role('link', name='Diário Escolar', exact=True).click()
+                page.get_by_role('link', name='Configuração', exact=True).click()
+                page.get_by_role('link', name='Catálogo e vigência', exact=True).click()
                 catalog = page.locator('.diary-workspace')
                 catalog.get_by_label('Nome sugerido').fill('Oficina sintética')
                 catalog.get_by_role('button', name='Guardar sugestão').click()
@@ -96,7 +140,7 @@ def main():
                 catalog.get_by_role('button', name='Desativar componente').click()
                 expect(catalog.get_by_label('Componente para conferência')).to_have_value('')
                 page.get_by_role('link', name='Educacenso', exact=True).click()
-                census = page.get_by_role('region', name='Educacenso em treinamento')
+                census = page.get_by_role('region', name='Educacenso', exact=True)
                 census.get_by_label('Data de referência').fill('2026-06-01')
                 census.get_by_role('button', name='Validar prévia').click()
                 expect(census.get_by_text('Nenhuma matrícula na seleção.')).to_be_visible()
@@ -109,17 +153,16 @@ def main():
                 assert Path(download.value.path()).read_bytes() == b'retorno sintetico sem parser'
                 census.get_by_role('button', name='Histórico').click()
                 census.get_by_role('button', name='Matrícula Inicial', exact=False).click()
-                expect(census.get_by_role('heading', name='Rascunho de treinamento')).to_be_visible()
+                expect(census.get_by_role('heading', name='Rascunho do lote')).to_be_visible()
                 page.get_by_role('link', name='Instituição', exact=True).click()
                 page.get_by_role('button', name='Editar dados').click()
                 expect(diary_option).to_be_checked()
-                expect(census_option).to_be_checked()
-                census_option.uncheck()
+                diary_option.uncheck()
                 page.get_by_role('button', name='Salvar', exact=True).click()
                 expect(census_option).to_have_count(0)
-                expect(page.get_by_role('link', name='Educacenso', exact=True)).to_have_count(0)
+                expect(page.get_by_role('link', name='Educacenso', exact=True)).to_be_visible()
                 schools = http.get('/api/v1/schools', headers={'Authorization':'Bearer '+token}).json()
-                assert schools[0]['diary_catalog'] and not schools[0]['educacenso_training']
+                assert not next(s for s in schools if s['id']==sid)['diary_catalog']
                 assert not errors, errors
                 browser.close()
         print('PASS: catálogo, prévia por arquivo, rascunho persistido, histórico e download íntegro em Chromium.')

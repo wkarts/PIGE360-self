@@ -42,8 +42,11 @@ def test_campaign_contract_revision_and_activation_gate(online, tmp_path, monkey
     assert old['sha256']==a['contract_template_revision_sha256']
     # A família recebe o contrato antes de existir A1 institucional configurado.
     issued=api.post('/document-templates/'+template['id']+'/issue',{
-        'enrollment_id':a['enrollment_id'],'template_version':a['contract_template_version']})
+        'enrollment_id':a['enrollment_id'],'template_version':a['contract_template_version'],
+        'identification_footer':guardian_trusted})
     assert issued['signature_status']=='unsigned'
+    queued=api.get('/issued-documents/signatures/unsigned')['items']
+    assert next(item for item in queued if item['document_id']==issued['id'])['applicant_first']
     unsigned=pc(o,'GET',f"/admissions/{a['id']}/issued/{issued['id']}").content
     assert unsigned.startswith(b'%PDF-')
     assert api.post('/admissions/'+a['id']+'/finalize',{'version':a['version'],'reason':'Verificação final.'},409)
@@ -87,6 +90,16 @@ def test_campaign_contract_revision_and_activation_gate(online, tmp_path, monkey
     completed=api.post('/admissions/'+a['id']+'/finalize',{'version':a['version'],'reason':'Assinaturas conferidas.'},200)
     assert completed['status']=='enrolled' and completed['enrollment']['status']=='active'
     final=pc(o,'GET',f"/admissions/{a['id']}/issued/{issued['id']}").content
+    from io import BytesIO
+    from pypdf import PdfReader
+    from app.contract_presentation import SCHOOL_FIELD
+    pdf = PdfReader(BytesIO(final))
+    widget = next(item.get_object() for item in pdf.pages[-1]['/Annots']
+                  if item.get_object().get('/T') == SCHOOL_FIELD)
+    assert widget['/V'] and widget['/Rect'][2] > widget['/Rect'][0] and '/AP' in widget
+    for index, page in enumerate(pdf.pages, 1):
+        assert (f'Página {index} de {len(pdf.pages)}' in page.extract_text()) == guardian_trusted
+    assert completed['enrollment']['class_group_id'] == o['cat']['group']['id']
     assert final.startswith(signed_by_guardian) and len(final)>len(signed_by_guardian)
     verification=api.get(f"/issued-documents/{issued['id']}/signatures")
     assert verification['cryptographic_valid'] and len(verification['signatures'])==2
@@ -186,6 +199,7 @@ def test_unsigned_history_direct_routes_policy_owner_and_removal(online):
     from sqlalchemy import select
     from conftest import PASSWORD
     o=online; api=o['api']
+    api.call('PUT','/contract-history/policy',{'allow_removal':False})
     a, old, template, payload=unsigned_supersession(o)
     aid=f"/admissions/{a['id']}"
     doc=f"/issued-documents/{old['id']}"
@@ -224,7 +238,12 @@ def test_unsigned_history_direct_routes_policy_owner_and_removal(online):
     other_school=api.client.post('/api/v1/schools',headers=api.headers,json={
         'company_id':api.school['company_id'],'name':'Escola segregada '+uuid.uuid4().hex[:8]}).json()
     other_base=f"/api/v1/schools/{other_school['id']}"
-    assert api.client.get(other_base+'/contract-history/policy',headers=api.headers).json()['allow_removal'] is False
+    assert api.client.get(other_base+'/contract-history/policy',headers=api.headers).json()['allow_removal'] is True
+    company = api.client.post('/api/v1/companies', headers=api.headers, json={'name':'Mantenedora independente'}).json()
+    independent = api.client.post('/api/v1/schools', headers=api.headers, json={
+        'company_id':company['id'], 'name':'Escola de outra empresa'}).json()
+    assert not api.client.get('/api/v1/schools/'+independent['id']+'/contract-history/policy',
+                              headers=api.headers).json()['allow_removal']
     assert api.client.put(other_base+'/contract-history/policy',headers=api.headers,json=policy).status_code==200
     assert api.client.post(other_base+remove,headers=api.headers,json=reason).status_code==404
     with SessionLocal() as db:

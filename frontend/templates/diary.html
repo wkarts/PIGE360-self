@@ -207,7 +207,8 @@
             </div>
           </template>
           <p v-else-if="state.selected.status==='closed'" class="alert info">Diário fechado. Alterações exigem reabertura formal e ficam registradas no histórico.</p>
-          <div v-if="state.selected.status!=='open' && can('diary.reopen')" class="x-form">
+          <div v-if="(state.selected.status!=='open' || state.history.closures.some(c=>c.active)) && can('diary.reopen')" class="x-form">
+            <label v-if="state.history.closures.some(c=>c.active)">Fechamento a reabrir<select v-model="state.reopenPeriod"><option value="">{{state.history.closures.some(c=>c.active&&!c.academic_period_id)?'Diário completo':'Selecione o período'}}</option><option v-for="c in state.history.closures.filter(c=>c.active&&c.academic_period_id)" :key="c.id" :value="c.academic_period_id">{{state.periods.find(p=>p.id===c.academic_period_id)?.name}}</option></select></label>
             <label>Motivo da reabertura<textarea v-model="state.reopenReason" minlength="10" maxlength="1000" rows="2"></textarea></label>
             <button class="btn btn-secondary" :disabled="state.reopenReason.length<10" @click="save(reopenDiary)">Reabrir com justificativa</button>
           </div>
