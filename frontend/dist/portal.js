@@ -15,7 +15,7 @@ var PigeInstitution;
     function apply(value) {
         Object.assign(PigeInstitution.state, value);
         const surface = document.documentElement?.dataset?.institutionSurface;
-        document.title = value.display_name + ' · ' + (location.pathname === '/online.html' ? 'Portal dos responsáveis' : surface === 'teacher' ? 'Portal do Professor' : surface === 'portal' ? 'Portal do aluno e responsável' : 'Gestão escolar');
+        document.title = value.display_name + ' · ' + (location.pathname === '/online' ? 'Portal dos responsáveis' : surface === 'teacher' ? 'Portal do Professor' : surface === 'portal' ? 'Portal do aluno e responsável' : 'Gestão escolar');
         document.querySelector('meta[name="theme-color"]')?.setAttribute('content', value.primary_color);
         const theme = document.querySelector('link[data-institution-theme]');
         if (theme && !theme.href.endsWith('/api/v1/institution/theme.css?v=' + value.version))
@@ -218,7 +218,7 @@ var PigeOnline;
     PigeOnline.newId = newId;
     function person() { return { name: '', social_name: '', cpf: null, birth_date: null, email: '', phone: '', address: '', notes: '', is_guardian: false }; }
     PigeOnline.person = person;
-    function publicURL(slug) { return location.origin + '/online.html?campaign=' + encodeURIComponent(slug); }
+    function publicURL(slug) { return location.origin + '/online?campaign=' + encodeURIComponent(slug); }
     PigeOnline.publicURL = publicURL;
     function safeLink(value) { try {
         const u = new URL(value);
@@ -1402,7 +1402,7 @@ var PigePortal;
         if (state.slug) {
             state.campaign = await request('/campaigns/' + encodeURIComponent(state.slug));
             state.schoolId = state.campaign.school_id;
-            history.replaceState({}, '', '/online.html?campaign=' + encodeURIComponent(state.slug));
+            history.replaceState({}, '', '/online?campaign=' + encodeURIComponent(state.slug));
         }
     }
     async function start() {
@@ -1465,7 +1465,7 @@ var PigePortal;
         await loadCampaign();
     }
     else
-        history.replaceState({}, '', '/online.html?school=' + encodeURIComponent(state.schoolId)); await loadRegistrationTerms(); }); }
+        history.replaceState({}, '', '/online?school=' + encodeURIComponent(state.schoolId)); await loadRegistrationTerms(); }); }
     async function selectCampaign() { PigeSupport.dispose(); supportContext = ''; await run(async () => { state.selected = null; state.editing = false; state.register.accept_privacy = false; await loadCampaign(); }); }
     async function afterMFA(result) { state.account = result; state.schoolId = state.account.school_id; state.page = 1; state.section = 'admissions'; if (state.campaign?.school_id !== state.schoolId) {
         state.campaign = null;

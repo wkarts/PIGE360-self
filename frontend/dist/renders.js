@@ -991,7 +991,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                 class: "auth-enrollment"
               }, [_createElementVNode("p", null, "Ainda não faz parte da escola?"), _createElementVNode("a", {
                 class: "btn btn-secondary full",
-                href: "/online.html"
+                href: "/online"
               }, "Sou responsável · Pré-matrícula online →")]))
             : _createCommentVNode("", true), (!state.online)
             ? (_openBlock(), _createElementBlock("p", {
@@ -4029,7 +4029,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                           key: 26,
                           class: "content-footer"
                         }, [_createElementVNode("span", null, _toDisplayString(identity.display_name), 1), _createElementVNode("a", {
-                          href: '/news.html?school='+state.schoolId,
+                          href: '/news?school='+state.schoolId,
                           target: "_blank",
                           rel: "noopener"
                         }, "Portal da escola", 8, ["href"]), _createElementVNode("span", null, "Acesso controlado · Histórico preservado")]))
@@ -5319,7 +5319,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
     const _component_assist_panel = _resolveComponent("assist-panel")
 
     return (_openBlock(), _createElementBlock("div", { class: "portal-shell" }, [_createElementVNode("header", { class: "portal-header" }, [_createElementVNode("a", {
-      href: "/online.html",
+      href: "/online",
       "aria-label": "Página inicial do portal"
     }, [(identity.logo_url)
       ? (_openBlock(), _createElementBlock("img", {
@@ -6835,7 +6835,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                   disabled: s.busy
                 }, [_createTextVNode(_toDisplayString(s.busy?'Autenticando…':'Entrar no portal') + " ", 1), _createElementVNode("span", { "aria-hidden": "true" }, "→")], 8, ["disabled"]),
                 _createElementVNode("p", { class: "auth-help muted" }, "Precisa recuperar seu acesso? Fale com a secretaria da escola."),
-                _createElementVNode("details", { class: "family-first-access" }, [_createElementVNode("summary", null, "Primeiro acesso?"), _createElementVNode("p", null, "Utilize o convite enviado ao e-mail do seu cadastro. A conta da inscrição é independente do acesso escolar."), _createElementVNode("a", { href: "/online.html" }, "Inscrição e matrícula online →")])
+                _createElementVNode("details", { class: "family-first-access" }, [_createElementVNode("summary", null, "Primeiro acesso?"), _createElementVNode("p", null, "Utilize o convite enviado ao e-mail do seu cadastro. A conta da inscrição é independente do acesso escolar."), _createElementVNode("a", { href: "/online" }, "Inscrição e matrícula online →")])
               ], 40, ["onSubmit"]))])]))
         : (_openBlock(), _createElementBlock("div", {
             key: 2,
@@ -6861,7 +6861,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
             class: "ui-icon",
             "aria-hidden": "true"
           }, [_createElementVNode("use", { href: "/ui-icons.svg#close" })]))], 8, ["onClick"]), _createElementVNode("a", {
-            href: "/family.html",
+            href: "/family",
             onClick: _withModifiers($event => (section('overview')), ["prevent"])
           }, [(identity.logo_url)
             ? (_openBlock(), _createElementBlock("img", {
@@ -6905,7 +6905,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                 class: "ui-icon",
                 "aria-hidden": "true"
               }, [_createElementVNode("use", { href: '/ui-icons.svg#'+item.icon }, null, 8, ["href"])])), _createElementVNode("span", null, _toDisplayString(item.label), 1)], 8, ["aria-current", "onClick"]))
-            }), 128)), _createElementVNode("a", { href: "/online.html" }, [(_openBlock(), _createElementBlock("svg", {
+            }), 128)), _createElementVNode("a", { href: "/online" }, [(_openBlock(), _createElementBlock("svg", {
               class: "ui-icon",
               "aria-hidden": "true"
             }, [_createElementVNode("use", { href: "/ui-icons.svg#online" })])), _createElementVNode("span", null, "Inscrição e contratos ↗")])])
@@ -7396,7 +7396,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                         _createElementVNode("p", null, "Procure os canais de atendimento informados pela sua escola para dúvidas sobre acesso, vínculos, documentos ou cobranças."),
                         _createElementVNode("div", { class: "family-grid" }, [_createElementVNode("div", null, [_createElementVNode("h3", null, "Acesso escolar"), _createElementVNode("p", null, "Para recuperar sua senha ou revisar quem pode acompanhar o aluno, fale com a secretaria. Não compartilhe sua senha.")]), _createElementVNode("div", null, [_createElementVNode("h3", null, "Inscrição e matrícula"), _createElementVNode("p", null, "Use a conta de inscrição para acompanhar propostas e contratos. Ela é independente deste acesso escolar."), _createElementVNode("a", {
                           class: "link-button",
-                          href: "/online.html"
+                          href: "/online"
                         }, "Ir para inscrição e contratos →")])])
                       ]))
                     : _createCommentVNode("", true),
@@ -7790,7 +7790,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                   }, [
                     _createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Matrícula online · " + _toDisplayString(s.readiness.ready?'Disponível':'Configuração pendente'), 1), _createElementVNode("p", null, _toDisplayString(s.readiness.ready?'O portal está pronto para receber inscrições.':'Conclua os itens abaixo para abrir as inscrições.'), 1)]), _createElementVNode("a", {
                       class: "btn btn-secondary",
-                      href: '/online.html?school='+props.schoolId,
+                      href: '/online?school='+props.schoolId,
                       target: "_blank",
                       rel: "noopener"
                     }, "Ver portal", 8, ["href"])]),
@@ -7848,7 +7848,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                   onClick: $event => (s.tab='campaigns')
                 }, "Processos e link público", 10, ["onClick"]),
                 _createElementVNode("a", {
-                  href: '/online.html?school='+props.schoolId,
+                  href: '/online?school='+props.schoolId,
                   target: "_blank",
                   rel: "noopener",
                   class: "btn btn-secondary"
@@ -14183,7 +14183,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                     _createElementVNode("label", null, [_createTextVNode("Endereço da inscrição e matrícula"), _withDirectives(_createElementVNode("input", {
                       "onUpdate:modelValue": $event => ((s.website.admission_url) = $event),
                       type: "url",
-                      placeholder: "https://portal.exemplo.com/online.html?campaign=processo"
+                      placeholder: "https://portal.exemplo.com/online?campaign=processo"
                     }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.website.admission_url]])])
                   ]),
                   _createElementVNode("label", null, [_createTextVNode("Chamada principal"), _withDirectives(_createElementVNode("input", {
@@ -15570,7 +15570,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
 
     return (_openBlock(), _createElementBlock("div", { class: "school-news-shell" }, [_createElementVNode("header", { class: "school-news-header" }, [_createElementVNode("a", {
       class: "school-news-brand",
-      href: "/news.html"
+      href: "/news"
     }, [(identity.logo_url)
       ? (_openBlock(), _createElementBlock("img", {
           key: 0,
@@ -15579,7 +15579,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
         }, null, 8, ["src", "alt"]))
       : _createCommentVNode("", true), _createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(identity.display_name), 1), _createElementVNode("small", null, "Notícias e agenda da escola")])]), _createElementVNode("div", { class: "actions" }, [_createElementVNode("a", {
       class: "btn btn-secondary",
-      href: '/online.html'+(state.schoolId?'?school='+encodeURIComponent(state.schoolId):'')
+      href: '/online'+(state.schoolId?'?school='+encodeURIComponent(state.schoolId):'')
     }, "Portal dos responsáveis", 8, ["href"]), _createElementVNode("a", {
       class: "btn btn-primary",
       href: "/"

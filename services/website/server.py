@@ -116,6 +116,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             parsed=urlsplit(self.path);path=parsed.path
             if '%' in path or '..' in path or '\\' in path or self.path.startswith('//'):self.send_error(400);return
+            if path == '/index.html':
+                return self.respond(302, b'', 'text/plain', request_id, [('Location','/' + ('?' + parsed.query if parsed.query else ''))])
             if path=='/health/live':body=b'{"status":"live"}';mime='application/json; charset=utf-8'
             elif path=='/health/ready':
                 payload,_=fetch('/health/ready')

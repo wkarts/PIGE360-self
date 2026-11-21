@@ -132,9 +132,16 @@ class Handler(BaseHTTPRequestHandler):
                 if self.headers.get('Origin','').rstrip('/')!=PUBLIC or self.headers.get('X-CSRF-Protection')!='1':return self.respond(403,b'Origin or CSRF invalid')
             return self.proxy(self.path)
         if self.command!='GET':return self.respond(405,b'Method unavailable')
-        name='professor.html' if path.rstrip('/')=='/professor' else 'family.html' if path=='/' or re.fullmatch(r'/(?:academic|documents|finance)/?',path) else 'online.html' if path=='/online.html' else path.lstrip('/')
-        if TEACHER_ONLY and path == '/':
-            name = 'professor.html'
+        routes = {'/': 'professor.html', '/professor': 'professor.html'} if TEACHER_ONLY else {
+            '/': 'family.html', '/family': 'family.html', '/online': 'online.html', '/first-access': 'first-access.html',
+            '/academic': 'family.html', '/finance': 'family.html', '/documents': 'family.html'}
+        if path.endswith('.html'):
+            legacy = path.removesuffix('.html')
+            if legacy not in routes:
+                return self.respond(404, b'Not found')
+            target = '/' if legacy == '/professor' else legacy
+            return self.respond(302, b'', headers=[('Location', target + ('?' + parsed.query if parsed.query else ''))])
+        name = routes.get(path.rstrip('/') or '/', path.lstrip('/'))
         teacher_files = {'professor.html', 'teacher.js', 'teacher.css'}
         shared_files = {'auth.css', 'app.css', 'family.css', 'portal.css', 'institution-layout.css', 'mfa.css',
                         'ui-icons.svg', 'renders.js', 'vendor/vue-3.5.13.global.prod.js', 'favicon.svg'}

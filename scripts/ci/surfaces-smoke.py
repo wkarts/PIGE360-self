@@ -42,7 +42,7 @@ assert unknown.status_code==404 and 'Site em manutenção' in unknown.text and '
 assert httpx.get(portal_url+'/',headers=portal_headers,trust_env=False).status_code==200
 assert httpx.get(portal_url+'/api/v1/backups',headers=portal_headers,trust_env=False).status_code==404
 teacher_url=surface_url('teacher-portal')
-for base_url, host, allowed_page, denied_page in [(teacher_url,'localhost:58084','/professor.html','/family.html'),(portal_url,'localhost','/family.html','/professor.html')]:
+for base_url, host, allowed_page, denied_page in [(teacher_url,'localhost:58084','/professor','/family.html'),(portal_url,'localhost','/family','/professor.html')]:
     assert httpx.get(base_url+allowed_page,headers={'Host':host},trust_env=False).status_code==200
     assert httpx.get(base_url+denied_page,headers={'Host':host},trust_env=False).status_code==404
 print('PASS: site e portal em imagens próprias, conteúdo interno autenticado e bloqueio administrativo',flush=True)

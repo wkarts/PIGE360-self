@@ -10,6 +10,7 @@ from pydantic import Field, ValidationError, field_validator
 from sqlalchemy import Boolean, ForeignKey, String, Text, JSON, Integer, LargeBinary, UniqueConstraint, func, select
 from sqlalchemy.orm import Mapped, mapped_column
 from . import models as m
+from .config import settings
 from .common import audit, output
 from .db import Base, Record
 from .institution import public_identity
@@ -330,6 +331,28 @@ def configure(data:WebsiteInput,db:DB,user:Actor,school:Scope,request:Request):
     return website_output(row)
 
 
+def canonical_site_routes(value, origins):
+    """Present existing PIGE links with clean paths without rewriting stored content or third-party sites."""
+    if isinstance(value, list):
+        return [canonical_site_routes(item, origins) for item in value]
+    if not isinstance(value, dict):
+        return value
+    result = {}
+    for key, item in value.items():
+        if key in {'portal_url', 'admission_url', 'url'} and isinstance(item, str):
+            try:
+                parts = urlsplit(item)
+                if (parts.scheme + '://' + parts.netloc).lower() in origins and parts.path in {
+                    '/online.html', '/family.html', '/professor.html', '/first-access.html', '/news.html', '/index.html'
+                }:
+                    path = '/' if parts.path == '/index.html' else parts.path.removesuffix('.html')
+                    item = parts._replace(path=path).geturl()
+            except ValueError:
+                pass  # Legacy invalid URLs remain subject to the renderer's existing validation.
+        result[key] = canonical_site_routes(item, origins)
+    return result
+
+
 def site_data(db,row,preview=False,page=''):
     school=db.get(m.School,row.school_id)
     if (not preview and not row.enabled) or not school or not school.active:fail(404,'Site não publicado.')
@@ -339,6 +362,9 @@ def site_data(db,row,preview=False,page=''):
     payload={'school':{'id':school.id,'name':school.name,'address':school.address,'phone':school.phone,'email':school.email},
         'identity':identity,'website':{key:getattr(row,key) for key in ('theme','headline','introduction','about','public_url','portal_url','notice','admission_url','design')},
         'posts':[post_output(post) for post in sorted(posts,key=lambda p:(p.pinned,p.publish_at),reverse=True)]}
+    config = settings()
+    origins = {url.rstrip('/').lower() for url in (config.app_url, config.portal_public_url, config.teacher_portal_public_url) if url}
+    payload['website'] = canonical_site_routes(payload['website'], origins)
     payload['website']['font_override'] = (row.brand or {}).get('font_family', '')
     if not preview:payload['website']['design']=public_design(payload['website']['design'])
     payload['page']=None

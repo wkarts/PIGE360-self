@@ -77,7 +77,7 @@ def setup(data: Setup, db: DB, request: Request, x_setup_token: str = Header(def
 @router.post('/auth/login')
 def login(data: Login, request: Request, response: Response, db: DB):
     from .embedding import effective_origins
-    if effective_origins(db):
+    if request.headers.get('X-Pige-Portal-Signature') or effective_origins(db):
         request_csrf(request)
     email = str(data.email).lower()
     peer = request.client.host if request.client else 'unknown'

@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const tick=()=>new Promise(r=>setImmediate(r));
-function fixture(path='/family.html',search=''){
+function fixture(path='/family',search=''){
  const apps=[],events={},calls=[],history=[],downloads=[];
  const sandbox={console,URLSearchParams,URL,Headers,Response,Blob,AbortController,setTimeout,clearTimeout,Intl,
   location:{pathname:path,search},history:{pushState(_a,_b,url){history.push(url);},replaceState(_a,_b,url){history.push(url);}},
@@ -47,7 +47,7 @@ const account={id:'guardian',name:'Responsável Teste',role:'guardian',school_id
  const {ctx,sandbox,history}=fixture('/documents','?student=a');assert.equal(ctx.s.section,'documents');
  ctx.s.account=account;ctx.s.students=[student('a'),student('b')];ctx.s.studentId='a';ctx.s.schoolId='school-a';
  const requests=[];sandbox.fetch=async(url,opts)=>{requests.push({url,opts});return new Response(JSON.stringify({items:[],note:'Real'}));};
- ctx.section('finance');ctx.section('finance');assert.equal(history.length,1,'Clique repetido não duplica histórico');assert.match(history[0],/^\/family.html\?view=finance&student=a$/);
+ ctx.section('finance');ctx.section('finance');assert.equal(history.length,1,'Clique repetido não duplica histórico');assert.match(history[0],/^\/family\?view=finance&student=a$/);
  await ctx.changeStudent();assert.equal(requests[0].opts.headers.get('X-School-Id'),'school-a');assert.equal(requests[0].opts.headers.get('X-CSRF-Protection'),'1');
  ctx.s.students=[student('a',false)];requests.length=0;await ctx.changeStudent();assert.equal(requests.length,0,'Consulta financeira não é emitida sem autorização');
 }

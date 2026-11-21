@@ -245,7 +245,7 @@ def icon(db: DB, size: int = Query(192)):
 def manifest(db: DB, surface: Literal['manager','portal','website']='manager'):
     data = identity_data(db)
     shortcuts={'manager':[{'name':'Alunos','url':'/#/students'},{'name':'Matrículas','url':'/#/enrollments'},{'name':'Protocolos','url':'/#/protocols'}],
-        'portal':[{'name':'Boletim','url':'/academic'},{'name':'Documentos','url':'/documents'},{'name':'Inscrição','url':'/online.html'}],
+        'portal':[{'name':'Boletim','url':'/academic'},{'name':'Documentos','url':'/documents'},{'name':'Inscrição','url':'/online'}],
         'website':[{'name':'A escola','url':'/#escola'},{'name':'Novidades','url':'/#novidades'},{'name':'Contato','url':'/#contato'}]}
     descriptions={'manager':'Gestão escolar e atendimento da instituição.','portal':'Portal do aluno e responsável.','website':'Site institucional da escola.'}
     return JSONResponse({

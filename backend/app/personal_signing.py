@@ -273,7 +273,7 @@ def result_page(request: Request, db: DB, session: str = Query('', max_length=36
 
 @router.get('/signing/result.js')
 def result_script():
-    return Response("const done=()=>{if(window.opener){window.opener.postMessage({type:'pige-signature-return'},location.origin);window.close();}else{location.replace('/online.html');}};document.getElementById('return-to-school')?.addEventListener('click',done);if(window.opener)window.opener.postMessage({type:'pige-signature-return'},location.origin);",
+    return Response("const done=()=>{if(window.opener){window.opener.postMessage({type:'pige-signature-return'},location.origin);window.close();}else{location.replace('/online');}};document.getElementById('return-to-school')?.addEventListener('click',done);if(window.opener)window.opener.postMessage({type:'pige-signature-return'},location.origin);",
                     media_type='application/javascript')
 
 
@@ -284,4 +284,4 @@ def logout():
     except GovBRSigningError:
         fail(503, 'Integração GOV.BR indisponível.')
     return RedirectResponse(login.base_url.rstrip('/') + '/logout?' + urlencode({
-        'post_logout_redirect_uri': settings().app_url.rstrip('/') + '/online.html'}), status_code=303)
+        'post_logout_redirect_uri': settings().app_url.rstrip('/') + '/online'}), status_code=303)

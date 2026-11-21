@@ -68,6 +68,10 @@ try:
     assert httpx.get(TEACHER_URL+'/api/v1/family/context').status_code==404
     assert httpx.get(TEACHER_URL+'/family.html').status_code==404
     assert httpx.get(PORTAL_URL+'/professor').status_code==404
+    for origin, old, clean in [(PORTAL_URL, '/online.html', '/online'),(PORTAL_URL, '/family.html', '/family'),
+                               (PORTAL_URL, '/first-access.html', '/first-access'),(TEACHER_URL, '/professor.html', '/')]:
+        redirect = httpx.get(origin + old + '?x=1')
+        assert redirect.status_code == 302 and redirect.headers['location'] == clean + '?x=1'
     record('Website e portal separados prontos contra a API interna de teste')
     r=client.post('/api/v1/setup',headers={'X-Setup-Token':env['SETUP_TOKEN']},json={'admin_name':'Secretaria — Teste','admin_email':'secretaria@example.com','admin_password':password,'company_name':'Mantenedora Exemplo — Teste','school_name':'Escola Exemplo — Dados de Teste','academic_year':2027});assert r.status_code==201,r.text
     r=client.post('/api/v1/auth/login',json={'email':'secretaria@example.com','password':password});headers={'Authorization':'Bearer '+r.json()['access_token']}
