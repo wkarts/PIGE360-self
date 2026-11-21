@@ -3191,11 +3191,20 @@ var PigeReports;
             const kit = Vue.reactive({ prefs: null, year: '', grade: '', group: '', offset: 0, more: false,
                 operation: '', recipients: [], notice: '' });
             const settingsPath = () => '/schools/' + props.schoolId + '/report-preferences';
+            let loadingPreferences = false;
             async function openKit(event) {
-                if (!event.currentTarget.open)
+                if (!event.currentTarget.open || !props.canConfigure || kit.prefs || loadingPreferences)
                     return;
-                if (props.canConfigure && !kit.prefs)
-                    await run(async () => { kit.prefs = await PigeAPI.request(settingsPath()); });
+                loadingPreferences = true;
+                try {
+                    kit.prefs = await PigeAPI.request(settingsPath());
+                }
+                catch (error) {
+                    kit.notice = error instanceof Error ? error.message : 'Não foi possível carregar os padrões da escola.';
+                }
+                finally {
+                    loadingPreferences = false;
+                }
             }
             async function saveLogo(event) {
                 const input = event.target;

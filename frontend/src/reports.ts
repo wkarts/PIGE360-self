@@ -9,8 +9,14 @@ namespace PigeReports {
     const kit=Vue.reactive({prefs:null as Preferences|null,year:'',grade:'',group:'',offset:0,more:false,
       operation:'',recipients:[] as Recipient[],notice:''});
     const settingsPath=()=>'/schools/'+props.schoolId+'/report-preferences';
-    async function openKit(event:Event){if(!(event.currentTarget as HTMLDetailsElement).open)return;
-      if(props.canConfigure&&!kit.prefs)await run(async()=>{kit.prefs=await PigeAPI.request<Preferences>(settingsPath());});}
+    let loadingPreferences=false;
+    async function openKit(event:Event){
+      if(!(event.currentTarget as HTMLDetailsElement).open || !props.canConfigure || kit.prefs || loadingPreferences)return;
+      loadingPreferences=true;
+      try{kit.prefs=await PigeAPI.request<Preferences>(settingsPath());}
+      catch(error){kit.notice=error instanceof Error?error.message:'Não foi possível carregar os padrões da escola.';}
+      finally{loadingPreferences=false;}
+    }
     async function saveLogo(event:Event){const input=event.target as HTMLInputElement;
       const file=input.files?.[0];if(!file||!kit.prefs)return;
       const body=new FormData();body.set('file',file);body.set('version',String(kit.prefs.version));
