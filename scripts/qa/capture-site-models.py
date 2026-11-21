@@ -3,7 +3,9 @@
 import argparse
 from functools import partial
 from http.server import SimpleHTTPRequestHandler,ThreadingHTTPServer
+from io import BytesIO
 import json
+from PIL import Image
 from pathlib import Path
 import subprocess
 import sys
@@ -56,9 +58,23 @@ def inspect_page(page,theme,width,slug,output):
     return {'theme':theme,'route':'/'+slug,'width':width,'images':page.locator('img').count(),
             'height':page.evaluate('document.documentElement.scrollHeight'),'footer_height':footer['height'],'geometry':geometry,'secondary_text':secondary_text}
 
+def capture_thumbnail(browser, base, target):
+    page = browser.new_page(viewport={'width': 1280, 'height': 800}, device_scale_factor=1)
+    try:
+        response = page.goto(base, wait_until='load')
+        assert response.ok
+        page.evaluate('document.fonts.ready')
+        page.locator('img').evaluate_all("images => Promise.all(images.map(img => {img.loading='eager'; return img.decode()}))")
+        with Image.open(BytesIO(page.screenshot())) as screenshot:
+            screenshot.resize((512, 320), Image.Resampling.LANCZOS).save(target, 'WEBP', quality=84)
+    finally:
+        page.close()
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',type=Path,default=ROOT/'ci-evidence/site-models')
+    parser.add_argument('--thumbnails-only', action='store_true', help='Write a small WebP of each model home for the editor catalog.')
     args=parser.parse_args();args.output.mkdir(parents=True,exist_ok=True)
     results=[]
     with tempfile.TemporaryDirectory(prefix='pige-model-fixtures-') as temporary:
@@ -73,6 +89,9 @@ def main():
                     thread=Thread(target=server.serve_forever,daemon=True);thread.start()
                     base=f'http://127.0.0.1:{server.server_port}'
                     try:
+                        if args.thumbnails_only:
+                            capture_thumbnail(browser, base, args.output / (theme + '.webp'))
+                            continue
                         for width in [320,390,768,1440]:
                             page=browser.new_page(viewport={'width':width,'height':1000},device_scale_factor=1)
                             errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
@@ -104,7 +123,10 @@ def main():
                             page.close()
                     finally:server.shutdown();server.server_close();thread.join()
             finally:browser.close()
+    if args.thumbnails_only:
+        print(f'{len(manifest)} catalog thumbnails captured.')
+        return
     (args.output/'measurements.json').write_text(json.dumps(results,indent=2))
-    print('All five models and their 30 internal pages navigated, reloaded and captured in real Chromium. Human pixel review is still required.')
+    print(f'{len(manifest)} models and their internal pages checked in Chromium.')
 
 if __name__=='__main__':main()

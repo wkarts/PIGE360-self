@@ -9,7 +9,7 @@ Abra Matrículas e inicie um lançamento. Para consultar outro cadastro, use **M
 ## Equipe que administra o site
 
 1. Selecione a instituição correta e abra **Publicidade → Site da escola** com um perfil autorizado a gerenciar a escola.
-2. Em **Modelos**, selecione **Central das famílias** e use **Ver modelo completo sem alterar**. Percorra o menu e a página Matrículas na prévia. Confira as páginas existentes no mapa antes de aplicar o modelo ao rascunho.
+2. Em **Modelos**, compare as miniaturas das páginas iniciais. Selecione um cartão e use **Ver modelo completo sem alterar** para navegar pela prévia privada. Por exemplo, em **Central das famílias**, abra Matrículas. Expanda **Conferir páginas e menu antes de aplicar** para ver como o modelo se encaixa no rascunho atual.
 3. Em **Identidade e textos**, revise o nome, a apresentação e os endereços de acesso. Em **Menu e capa**, organize o menu e a apresentação. Em **Páginas e seções**, edite os textos e os blocos de cada página. A página Matrículas pode mostrar os endereços configurados de inscrição e do portal. Contato usa os dados da instituição.
 4. Em **Fotografias**, use imagens autorizadas para a escola. Troque os conteúdos demonstrativos, salve o rascunho e confira a prévia em tela larga e estreita. Agenda e Notícias exibem as publicações liberadas para o público.
 5. Depois da revisão, use **Publicar site** e confira no domínio público da escola. Até publicar, as alterações ficam no rascunho. A ação **Restaurar cópia original** recupera no rascunho o conteúdo anterior à primeira aplicação de um modelo.
