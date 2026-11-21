@@ -207,13 +207,13 @@ def download(file_id: str, db: DB, user: Actor, school: Scope, request: Request)
 
 PDF_TITLES = {'student_record':'Ficha cadastral do aluno', 'enrollment_receipt':'Comprovante de matrícula', 'enrollment_declaration':'Declaração de matrícula', 'enrollment_form':'Ficha de matrícula'}
 
-def render_pdf(school_name, title, rows, note='', issuer='', db=None):
+def render_pdf(school_name, title, rows, note='', issuer='', db=None, *, module='Secretaria'):
     """Somente identidade da escola em texto, logotipo, cores e tipografia.
 
     A renderização não regrava PDFs históricos emitidos, seus hashes ou snapshots.
     """
     from .school_reports import render
-    return render(school_name, title, rows, note, issuer, db)
+    return render(school_name, title, rows, note, issuer, db, module=module)
 
 @router.post('/students/{student_id}/issued-documents', status_code=201)
 def issue(student_id: str, data: s.IssueInput, db: DB, user: Actor, school: Scope, request: Request):

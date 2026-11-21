@@ -4,6 +4,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import select
 from . import models as m
+from .school_reports import format_value, render_table
 from .common import audit
 from .security import Actor, DB, fail, require
 
@@ -102,11 +103,49 @@ def _period_data(snapshot, enrollment, period, closure):
                   and rule.get('justified_absence_counts_as_present') is not None else None)
     return {
         'period_id': period.id, 'period_name': period.name,
+        'order_index': period.order_index, 'starts_on': period.starts_on.isoformat(),
         'grade_display': _grade(result), 'result_status': result.get('status', 'pending') if result else 'pending',
         'result_label': RESULT_LABELS.get(result.get('status'), 'Consolidado') if result else 'Consolidação pendente',
         'attendance': {**counts, 'percentage': percentage}, 'published': True,
         'published_at': closure.closed_at.isoformat(),
     }
+
+
+def grade_tables(subjects, current_class, *, attendance=False):
+    """Quadros por turma de origem. Cada coluna representa um fechamento publicado."""
+    classes = {}
+    for subject in subjects:
+        for period in subject['periods']:
+            group = period['class_name'] or current_class
+            heading = period['component_name'] or subject['component_name']
+            periods, components = classes.setdefault(group, ({}, {}))
+            periods.setdefault(period['period_id'], period)
+            # Diários diferentes com nomes iguais continuam sendo linhas independentes.
+            cells = components.setdefault((heading, subject['diary_id']), {})
+            if attendance:
+                counts = period['attendance']
+                rate = format_value(counts['percentage'], 'percent') if counts['percentage'] is not None else 'Não apurada'
+                detail = f"{counts['total']} A · {counts['absent']} F · {counts['justified_absence']} J"
+                if counts['unrecorded']:
+                    detail += f" · {counts['unrecorded']} S"
+                cells[period['period_id']] = rate + '\n' + detail
+            else:
+                cells[period['period_id']] = period['grade_display']
+
+    tables = []
+    for group, (periods, components) in sorted(classes.items()):
+        ordered = sorted(periods.values(), key=lambda p: (p['order_index'], p['starts_on'], p['period_id']))
+        # Quatro colunas de notas deixam espaço para conceitos escritos em A4 retrato.
+        for start in range(0, len(ordered), 4):
+            window = ordered[start:start + 4]
+            columns = [{'key': 'subject', 'label': 'Componente curricular', 'width': 2}]
+            columns.extend({'key': p['period_id'], 'label': p['period_name']} for p in window)
+            rows = [{'subject': label, **{p['period_id']: cells.get(p['period_id'], '—') for p in window}}
+                    for (label, _), cells in sorted(components.items())
+                    if any(p['period_id'] in cells for p in window)]
+            label = 'Frequência por período' if attendance else 'Notas e conceitos'
+            tables.append({'title': label + ' · ' + group, 'columns': columns, 'rows': rows})
+    return tables
 
 
 def learning_data(db, students):
@@ -170,7 +209,8 @@ def learning_data(db, students):
                     subjects.append({'diary_id': diary.id, 'component_name': published[-1]['component_name'] or (component.name if component else ''), 'periods': published})
             items.append({'enrollment_id': enrollment.id, 'number': enrollment.number,
                           'class_name': group.name if group else '', 'year_name': year.name if year else '',
-                          'status': enrollment.status, 'subjects': sorted(subjects, key=lambda item: item['component_name'])})
+                          'status': enrollment.status, 'grade_tables': grade_tables(subjects, group.name if group else ''),
+                          'subjects': sorted(subjects, key=lambda item: item['component_name'])})
         output.append({'student_id': student.id, 'student_name': (person.social_name or person.name) if person else '',
                        'student_number': student.number, 'school_id': student.school_id,
                        'school_name': school.name if school else '', 'enrollments': items})
@@ -185,28 +225,34 @@ def report_response(db, students, student_id, enrollment_id, issuer):
     enrollments = [row for row in info['enrollments'] if not enrollment_id or row['enrollment_id'] == enrollment_id]
     if enrollment_id and not enrollments:
         fail(404, 'Matrícula não encontrada para este acesso.')
-    rows = []
+    sections = []
     for enrollment in enrollments:
+        if not enrollment['subjects']:
+            continue
+        sections.append({'title': 'Matrícula ' + enrollment['number'], 'fields': [
+            ('Ano letivo', enrollment['year_name']), ('Turma atual', enrollment['class_name'])]})
+        sections.extend(enrollment['grade_tables'])
+        sections.extend(grade_tables(enrollment['subjects'], enrollment['class_name'], attendance=True))
+        statuses = []
         for subject in enrollment['subjects']:
             for period in subject['periods']:
-                a = period['attendance']
-                rows.append({'year': enrollment['year_name'], 'class': period['class_name'] or enrollment['class_name'],
-                             'subject': period['component_name'] or subject['component_name'], 'period': period['period_name'],
-                             'grade': period['grade_display'], 'present': a['present'], 'absent': a['absent'],
-                             'justified': a['justified_absence'], 'attendance': f"{a['percentage']:.2f}%".replace('.', ',') if a['percentage'] is not None else 'Não consolidada',
-                             'result': period['result_label']})
-    if not rows:
+                statuses.append({'subject': period['component_name'] or subject['component_name'],
+                                 'class': period['class_name'] or enrollment['class_name'],
+                                 'period': period['period_name'], 'result': period['result_label']})
+        labels = {r['result'] for r in statuses}
+        if len(labels) == 1:
+            sections.append({'title': 'Situação dos resultados publicados', 'text': statuses[0]['result'] + ' em todos os registros acima.'})
+        else:
+            sections.append({'title': 'Situação dos resultados publicados', 'columns': [
+                {'key': 'subject', 'label': 'Componente curricular', 'width': 1.5},
+                {'key': 'class', 'label': 'Turma'}, {'key': 'period', 'label': 'Período'},
+                {'key': 'result', 'label': 'Situação', 'width': 1.6}], 'rows': statuses})
+    if not sections:
         fail(409, 'O boletim ficará disponível após a escola publicar o fechamento do período.')
-    from .school_reports import render_table
-    columns = [{'key': key, 'label': label, 'type': 'text', 'width': width} for key, label, width in [
-        ('year', 'Ano', .6), ('class', 'Turma', .9), ('subject', 'Componente', 1.35), ('period', 'Período', 1),
-        ('grade', 'Nota / conceito', .9), ('present', 'Presenças', .7), ('absent', 'Faltas', .55),
-        ('justified', 'Justif.', .55), ('attendance', 'Frequência', .9), ('result', 'Resultado do período', 1.3),
-    ]]
-    content = render_table(info['school_name'], 'Boletim escolar', columns, rows,
-                           profile={'name': info['student_name'], 'detail': 'Registro escolar ' + info['student_number']},
-                           notes=[NOTE, 'Presenças e ausências são contadas pela quantidade de aulas registrada em cada dia.'],
-                           issuer=issuer, db=db)
+    content = render_table(db.get(m.School, student.school_id), 'Boletim escolar', [], [], sections=sections,
+                           module='Escrituração escolar', profile={'name': info['student_name'], 'detail': 'Registro escolar ' + info['student_number']},
+                           notes=['A = aulas · F = faltas sem justificativa · J = faltas justificadas · S = aulas sem chamada. O traço indica ausência de publicação para o componente naquele período.', NOTE],
+                           circulation='Uso restrito ao aluno e aos responsáveis autorizados', issuer=issuer, db=db)
     return Response(content, media_type='application/pdf', headers={
         'Content-Disposition': 'attachment; filename="boletim-escolar.pdf"', 'Cache-Control': 'no-store',
     })

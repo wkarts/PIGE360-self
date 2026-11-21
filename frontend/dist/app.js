@@ -3160,9 +3160,11 @@ var PigeSigning;
 })(PigeSigning || (PigeSigning = {}));
 var PigeReports;
 (function (PigeReports) {
-    PigeReports.component = { props: ['schoolId', 'catalogs'], render: PigeRenders.reports, setup(props) {
+    PigeReports.component = { props: ['schoolId', 'catalogs', 'identity'], render: PigeRenders.reports, setup(props) {
             const state = Vue.reactive({ busy: false, error: '', catalog: [], kind: 'enrollments', dateFrom: '', dateTo: '', preset: 'last-three', academicYear: '', classGroup: '', unit: '', status: '', q: '', page: 1, result: null, appliedQuery: '' });
             const base = () => '/schools/' + props.schoolId + '/reports';
+            const modules = () => Array.from(new Set(state.catalog.map(item => item.module)));
+            const issuedAt = (stamp) => new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Bahia' }).format(new Date(stamp));
             const selected = () => state.catalog.find(c => c.id === state.kind);
             const iso = (d) => [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
             function period() {
@@ -3230,7 +3232,7 @@ var PigeReports;
             const filterAllowed = (name) => selected()?.filters?.includes(name) || false;
             Vue.onMounted(() => { period(); void run(async () => { const c = await PigeAPI.request(base() + '/catalog'); state.catalog = c.items; if (!c.items.some(i => i.id === state.kind))
                 state.kind = c.items[0]?.id || ''; }); });
-            return { state, selected, period, changeKind, generate, download, value, classes, changed, filterAllowed, get catalogs() { return props.catalogs; } };
+            return { state, selected, modules, issuedAt, period, changeKind, generate, download, value, classes, changed, filterAllowed, get catalogs() { return props.catalogs; } };
         } };
 })(PigeReports || (PigeReports = {}));
 var PigeLegacyImport;
@@ -3341,7 +3343,7 @@ var PigeLegacyImport;
 })(PigeLegacyImport || (PigeLegacyImport = {}));
 var PigeLearning;
 (function (PigeLearning) {
-    PigeLearning.component = { props: ['request', 'download', 'rootPath', 'schoolId', 'studentId'], render: PigeRenders.learning, setup(props) {
+    PigeLearning.component = { props: ['request', 'download', 'rootPath', 'schoolId', 'studentId', 'identity'], render: PigeRenders.learning, setup(props) {
             const state = Vue.reactive({ busy: false, error: '', students: [], studentId: '', enrollmentId: '', note: '' });
             const base = () => (props.rootPath || '/profile') + '/learning';
             const student = () => state.students.find(s => s.student_id === state.studentId);
@@ -3359,12 +3361,26 @@ var PigeLearning;
             } }
             async function load() { await run(async () => { const data = await props.request(base() + (props.schoolId ? '?school_id=' + encodeURIComponent(props.schoolId) : '')); state.students = props.studentId ? data.students.filter(item => item.student_id === props.studentId) : data.students; state.note = data.note; if (!student())
                 state.studentId = state.students[0]?.student_id || ''; selectStudent(); }); }
-            const rows = () => (enrollment()?.subjects || []).flatMap(subject => subject.periods.map(period => ({ ...period, component_name: subject.component_name, diary_id: subject.diary_id })));
+            const rows = () => (enrollment()?.subjects || []).flatMap(subject => subject.periods.map(period => ({ ...period, component_name: period.component_name || subject.component_name, diary_id: subject.diary_id })));
+            const periodGroups = Vue.computed(() => {
+                const groups = new Map();
+                for (const row of rows()) {
+                    const className = row.class_name || enrollment()?.class_name || '';
+                    const id = JSON.stringify([row.period_id, className]);
+                    const group = groups.get(id) || { id, label: row.period_name, className, items: [] };
+                    group.items.push(row);
+                    groups.set(id, group);
+                }
+                return Array.from(groups.values()).sort((left, right) => {
+                    const a = left.items[0], b = right.items[0];
+                    return (a.order_index ?? 0) - (b.order_index ?? 0) || (a.starts_on || '').localeCompare(b.starts_on || '') || left.className.localeCompare(right.className, 'pt-BR');
+                });
+            });
             const percent = (value) => value === null || value === undefined ? 'Não apurada' : Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%';
             async function download() { await run(async () => { if (!student() || !enrollment())
                 return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId), 'boletim-' + student().student_number + '.pdf'); }); }
             Vue.onMounted(() => { void load(); });
-            return { props, state, student, enrollment, selectStudent, rows, percent, load, download };
+            return { props, state, student, enrollment, selectStudent, rows, periodGroups, percent, load, download };
         } };
 })(PigeLearning || (PigeLearning = {}));
 /** Notícias e agenda com transporte compartilhável entre gestão, portal e página pública. */
@@ -3842,7 +3858,7 @@ var PigeAudit;
             else {
                 state.reference = item.request_id;
             } await search(); }
-            async function download() { await run(async () => { await PigeAPI.download(base() + '/export?' + query(), 'auditoria-' + new Date().toISOString().replace(/[:.]/g, '-') + '.csv'); state.notice = 'Arquivo de auditoria gerado com os filtros selecionados.'; }); }
+            async function download(format) { await run(async () => { await PigeAPI.download(base() + '/export?format=' + format + '&' + query(), 'auditoria-' + new Date().toISOString().replace(/[:.]/g, '-') + '.' + format); state.notice = 'Arquivo de auditoria gerado com os filtros selecionados.'; }); }
             function investigate(item) { if (/^[a-f0-9]{24}$/.test(item.request_id)) {
                 sessionStorage.setItem('pige-diagnostic-reference', item.request_id);
                 location.hash = '#/diagnostics';

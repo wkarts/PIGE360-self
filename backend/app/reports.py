@@ -216,7 +216,7 @@ def protocol_pdf(protocol_id: str, db: DB, user: Actor, school: Scope, request: 
     require(user, 'reports.read')
     obj = scoped(db, m.Protocol, protocol_id, school.id)
     data = protocol_output(db, obj)
-    content = render_pdf(school.name, 'Comprovante de protocolo', [
+    content = render_pdf(school, 'Comprovante de protocolo', [
         ('Protocolo', obj.number), ('Solicitação', obj.kind), ('Aluno', data['student_name'] or 'Não vinculado'),
         ('Situação', STATE_LABELS[obj.status]), ('Prazo', obj.due_on.strftime('%d/%m/%Y') if obj.due_on else 'Não definido'),
         ('Descrição', obj.description)], note='Comprovante de registro de solicitação. Não comprova conclusão ou deferimento.', issuer=user.name, db=db)
@@ -255,7 +255,7 @@ def class_pdf(class_id: str, db: DB, user: Actor, school: Scope, request: Reques
     group = data['class_group']
     year = scoped(db, m.AcademicYear, group['academic_year_id'], school.id)
     rows = [{**row, 'status':label(row['status'])} for row in data['items']]
-    payload = render_table(school.name, 'Relação de alunos por turma',
+    payload = render_table(school, 'Relação de alunos por turma',
         [col('student_number','Código'), col('name','Aluno',width=2.5), col('birth_date','Nascimento','date'), col('number','Matrícula'), col('status','Situação')],
         rows, summary=[metric('total','Alunos na turma',len(rows))],
         filters=[{'label':'Turma','value':group['name']},{'label':'Ano letivo','value':year.name}],
@@ -300,7 +300,7 @@ def pending_pdf(db: DB, user: Actor, school: Scope, request: Request, filters: P
         if filters.get(key): selected_filters.append({'label':caption, 'value':scoped(db, model, filters[key], school.id).name})
     if filters.get('q'): selected_filters.append({'label':'Busca', 'value':filters['q']})
     if filters.get('document_status'): selected_filters.append({'label':'Situação', 'value':STATE_LABELS[filters['document_status']]})
-    content = render_table(school.name, 'Pendências documentais',
+    content = render_table(school, 'Pendências documentais',
         [col('number','Código'), col('name','Aluno',width=2), col('class_name','Turma',width=1.2), col('year','Ano letivo'), col('document','Documento',width=1.5), col('status','Situação',width=1.3)],
         rows, summary=[metric('students','Alunos com pendências',data['total']), metric('documents','Documentos pendentes',data['total_documents']), metric('scanned','Alunos verificados',data['scanned_students'])],
         filters=selected_filters, notes=['Conferência dos documentos obrigatórios na data de emissão. Documentos recebidos ainda aguardam análise da Secretaria.'], issuer=user.name, db=db)

@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from app import models as m
 from app.db import SessionLocal
-from app.diary import _report_attendance, _snapshot
+from app.diary import _attendance_register, _snapshot
 
 
 def diary_fixture(api):
@@ -50,8 +50,8 @@ def test_frequency_uses_class_units_and_explicit_justification_policy(api):
     assert result["calculation"]["attendance_basis"] == "lesson_count"
     with SessionLocal() as db:
         snapshot = _snapshot(db, db.get(m.SchoolDiary, diary["id"]), period["id"])
-        assert "60,0%" in _report_attendance(db, snapshot)[0][1]
-        assert "Presenças: 3 aula(s)" in _report_attendance(db, snapshot)[0][1]
+        assert _attendance_register(db, snapshot)["rows"][0]["5"] == "60,0%"
+        assert _attendance_register(db, snapshot)["rows"][0]["2"] == 3
     api.call("PUT", path + f"/assessment-rules/{period['id']}", {
         "method": "arithmetic", "scale_max": "10", "decimal_places": 2,
         "minimum_attendance_percent": "70", "justified_absence_counts_as_present": True,
@@ -73,7 +73,7 @@ def test_frequency_uses_class_units_and_explicit_justification_policy(api):
     assert api.post(path + f"/periods/{period['id']}/consolidate", {"version":reopened["diary"]["version"]}, 200)["count"] == 1
     # A atualização da regra atual não altera o snapshot já produzido.
     with SessionLocal() as db:
-        assert "60,0%" in _report_attendance(db, snapshot)[0][1]
+        assert _attendance_register(db, snapshot)["rows"][0]["5"] == "60,0%"
 
 
 def test_assessment_can_be_published_and_grades_validate_versions(api):

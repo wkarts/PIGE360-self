@@ -13,7 +13,7 @@ namespace PigeAudit {
     function reset():void{Object.assign(state,{action:'',entity:'',entityId:'',actor:'',reference:'',since:'',until:''});}
     async function clear():Promise<void>{reset();await search();}
     async function related(item:Event,kind:string):Promise<void>{reset();if(kind==='record'){state.entity=item.entity_type;state.entityId=item.entity_id;}else{state.reference=item.request_id;}await search();}
-    async function download():Promise<void>{await run(async()=>{await PigeAPI.download(base()+'/export?'+query(),'auditoria-'+new Date().toISOString().replace(/[:.]/g,'-')+'.csv');state.notice='Arquivo de auditoria gerado com os filtros selecionados.';});}
+    async function download(format:'csv'|'pdf'):Promise<void>{await run(async()=>{await PigeAPI.download(base()+'/export?format='+format+'&'+query(),'auditoria-'+new Date().toISOString().replace(/[:.]/g,'-')+'.'+format);state.notice='Arquivo de auditoria gerado com os filtros selecionados.';});}
     function investigate(item:Event):void{if(/^[a-f0-9]{24}$/.test(item.request_id)){sessionStorage.setItem('pige-diagnostic-reference',item.request_id);location.hash='#/diagnostics';}}
     const date=(v:string)=>v?new Date(v).toLocaleString('pt-BR'):'—';
     const pretty=(v:unknown)=>JSON.stringify(v,null,2);
