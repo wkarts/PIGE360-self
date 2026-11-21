@@ -55,6 +55,8 @@ A agenda consulta as datas do Diário e das avaliações. Os horários fixos de 
 
 A família acessa o serviço `portal`. O professor acessa a raiz de `teacher-portal`, com imagem dedicada `ghcr.io/wkarts/pige360-self-teacher-portal`. Cada domínio serve seu próprio login e rejeita as páginas e APIs exclusivas do outro. A matrícula mantém o acesso ao Portal do Aluno.
 
+No deployer, abra **Configurar site e portais independentes**, marque **Habilitar Portal do Professor**, informe a URL e a porta e salve.
+
 Nos quatro adaptadores Compose, acrescente `teacher` aos perfis já ativos, configure a origem HTTPS em `TEACHER_PORTAL_PUBLIC_URL` e use a mesma versão de imagem do gestor. Por exemplo, aponte o DNS e o proxy TLS de `portalprofessor.sua-escola.example` para a porta local 58084. A porta do portal familiar continua 58083. Antes de divulgar o endereço docente, confira a raiz, o login e `/health/ready` nos dois domínios. Em instalações que usam o complemento histórico `deploy/compose.teacher.yaml`, consolide a configuração no Compose principal ao atualizar.
 
 ### Rotina da equipe
