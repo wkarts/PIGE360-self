@@ -872,7 +872,7 @@ def diary_report(diary_id: str, db: DB, user: Actor, school: DiaryScope):
         ("Registros pedagógicos",str(len(data.get("pedagogical_records",[])))),
     ]
     note=("Relatório emitido a partir do snapshot do fechamento. Hash de integridade: "+closure.snapshot_hash) if closure else "Relatório gerado a partir dos registros atuais do Diário Escolar Digital. Fechamentos possuem snapshot e hash de integridade próprios."
-    content=render_pdf(school.name,"Diário Escolar Digital",rows,note,user.name,db=db,module="Diário escolar")
+    content=render_pdf(school,"Diário Escolar Digital",rows,note,user.name,db=db,module="Diário escolar")
     return Response(content,media_type="application/pdf",headers={"Content-Disposition":f'attachment; filename="diario-{diary.id}.pdf"',"Cache-Control":"no-store"})
 
 
@@ -1292,7 +1292,7 @@ def diary_report_family(diary_id: str, report_type: str, db: DB, user: Actor, sc
     }
     first, second = headings.get(report_type, ('Identificação', 'Informação registrada'))
     columns = [{'key': 'field', 'label': first}, {'key': 'value', 'label': second, 'width': 2}]
-    content = render_table(school.name, REPORT_TITLES[report_type], columns,
+    content = render_table(school, REPORT_TITLES[report_type], columns,
                            [{'field': key, 'value': value} for key, value in rows],
                            filters=context, notes=[note], issuer=user.name, db=db, module='Diário escolar')
     suffix="-"+period.id if period else ""

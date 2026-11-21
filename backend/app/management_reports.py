@@ -465,7 +465,7 @@ def management_pdf(kind: str, db: DB, user: Actor, school: Scope, request: Reque
     report = collect_report(kind, db, user, school, filters)
     if report['total'] > MAX_PDF_ROWS:
         fail(422, 'O relatório excede 2.000 registros para PDF. Refine os filtros ou exporte o relatório completo em CSV.')
-    payload = render_table(school.name, report['title'], report['columns'], report['items'],
+    payload = render_table(school, report['title'], report['columns'], report['items'],
                            summary=report['summary'], period=report['period']['label'], filters=report['filters'],
                            module=report['module'], status_summary=report['status_summary'], notes=[report['description'], report['date_basis'], *report['notes']], monthly=report['monthly'], issuer=user.name, db=db)
     audit(db, request, user, 'report.management_exported', school, school.id, {'kind': kind, 'format': 'pdf', 'count': report['total'], 'period': report['period']})

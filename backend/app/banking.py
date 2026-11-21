@@ -298,6 +298,6 @@ def manual_receipt_pdf(id:str,db:DB,user:Actor,school:Scope):
         person=scoped(db,m.Person,student.person_id,school.id)
         rows.extend([('Aluno',person.name),('Matrícula',enrollment.number)])
     issuer=db.get(m.User,obj.manual_received_by)
-    content=render_pdf(school.name,'Comprovante de recebimento',rows,
+    content=render_pdf(school,'Comprovante de recebimento',rows,
         note='Recebimento integral registrado pela instituição. Este comprovante não representa conciliação bancária nem substitui documento fiscal.',issuer=issuer.name if issuer else '',db=db,module='Financeiro')
     return Response(content,media_type='application/pdf',headers={'Content-Disposition':f'attachment; filename="recebimento-{obj.id}.pdf"','Cache-Control':'no-store'})

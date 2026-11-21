@@ -504,6 +504,20 @@ var PigeExpansion;
                 settings.open = false; s.reason = ''; s.notice = 'Nova revisão vinculada. Prepare e emita a via corrigida; a família deverá assinar novamente. O histórico anterior foi preservado.'; }
             async function applyContractChoice() { await run(async () => { const target = admissionContractTemplates().find(t => t.id === s.contractTargetId); if (!target)
                 throw new Error('Selecione um modelo de contrato ativo e compatível com esta matrícula.'); await changeContract(target.id, target.version, s.contractChangeReason); }); }
+            const contractHistoryPolicy = Vue.reactive({ value: null });
+            async function loadContractHistoryPolicy() { await run(async () => { contractHistoryPolicy.value = await PigeAPI.request(base() + '/contract-history/policy'); }); }
+            async function setContractHistoryPolicy(allow) { if (!contractHistoryPolicy.value?.can_manage)
+                return; await run(async () => { contractHistoryPolicy.value = await PigeAPI.request(base() + '/contract-history/policy', { method: 'PUT', body: JSON.stringify({ allow_removal: allow }) }); }); }
+            async function removeContractHistory(id) {
+                const a = s.selected;
+                if (!a || !contractHistoryPolicy.value?.can_manage || !contractHistoryPolicy.value.allow_removal)
+                    return;
+                const reason = window.prompt('Justifique a retirada da via sem assinatura do histórico (pelo menos 10 caracteres). Os registros de auditoria serão preservados.');
+                if (reason === null)
+                    return;
+                await run(async () => { if (reason.trim().length < 10)
+                    throw new Error('Informe ao menos 10 caracteres para justificar a remoção.'); await PigeAPI.post(base() + '/admissions/' + a.id + '/issued/' + id + '/remove-history', { reason }); await openAdmission(a.id); s.notice = 'Via retirada do histórico operacional. A auditoria foi preservada.'; });
+            }
             async function downloadContractHistory(id) { await run(async () => { const details = await PigeAPI.request(base() + '/issued-documents/' + id + '/signatures'); await PigeAPI.download(base() + '/files/' + details.file_id + '/download', 'contrato-historico.pdf'); }); }
             function contractStatus(status) { return { awaiting_school: 'Aguardando emissão pela escola', company_signed: 'Assinado pela escola · aguardando responsável', pending_validation: 'Assinatura do responsável em revisão', verified: 'Assinatura conferida', rejected: 'Devolvido para correção', unsigned: 'Sem assinatura' }[str(status)] || str(status) || '—'; }
             function contractPreviewKeys() { const preview = s.contractPreview; return preview ? Array.from(new Set([...Object.keys(preview.variables || {}), ...(preview.missing_fields || [])])) : []; }
@@ -884,7 +898,7 @@ var PigeExpansion;
             Vue.onMounted(() => { window.addEventListener('beforeunload', warnUnsaved); void run(load); });
             Vue.onUnmounted(() => { window.removeEventListener('beforeunload', warnUnsaved); if (PigeExpansion.hasUnsavedChanges === draftDirty)
                 PigeExpansion.hasUnsavedChanges = () => false; });
-            return { dialogTarget: Vue.inject('school-dialog-host', 'body') || 'body', s, props, closeAdmission, reloadContractRegistry, openStudentRegistry, contractFieldGroups: PigeContractFields.groups, contractFieldMeta, contractGroupKeys, setContractFieldValue, saveContractDraft, showReadinessStage, refreshAdmissionStatus, reviewPresets, useReviewPreset, saveBridge, testBridge, queueBridge, retryBridge, statusBridge, loadBridge, issueExternal, externalCommand, campaignSlug, campaignGroupLabel, campaignGroups, admissionActions, bankCards, bankPeriod, reconcileBank, bankError, bankOperation, activateBankWebhook, identity: PigeInstitution.state, changeCollectionMode, chargeMethod, chargeStatus, receiptMethods, receiptDate, receiveManualCharge, receiptPdf, closeCharge, chargeTotal, can, str, run, load, search, paginate, paginateJobs, newCampaign, editCampaign, saveCampaign, campaignYearId, changeCampaignYear, eligibleContractTemplates, templateName, selectedContractVersion, canChangeContract, admissionContractTemplates, contractChoiceChanged, reloadContractTemplates, applyContractChoice, downloadContractHistory, contractStatus, contractPreviewKeys, contractFieldLabel, contractValue, contractAutomatic, setContractValue, previewFrozenContract, previewFrozenPdf, issueFrozenContract, downloadSignedContract, view, action, match, approve, finalize, reviseContract, renewReservation, reviewDoc, message, whatsapp, download, newCharge, findEnrollments, createCharge, inspectCharge, chargeAction, configure, saveConnection, testConnection, retry, copy, connectionFor, jobs, connectLoad, connectJobs, connectInventory, connectAdopt, connectAdoptNamed, connectReleaseLegacy, connectPrefer, connectPreferUnit, connectRestart, connectCreate, connectSync, connectQr, connectPairingCode, connectSavePhone, connectLogout, connectDelete, connectTest, connectRetry, clearConnectQr, label: PigeOnline.label, date: PigeOnline.date, dateTime: PigeOnline.dateTime, money: PigeOnline.money, publicURL: PigeOnline.publicURL, safeLink: PigeOnline.safeLink, origin: location.origin, statuses: PigeOnline.statuses };
+            return { dialogTarget: Vue.inject('school-dialog-host', 'body') || 'body', s, props, closeAdmission, reloadContractRegistry, openStudentRegistry, contractFieldGroups: PigeContractFields.groups, contractFieldMeta, contractGroupKeys, setContractFieldValue, saveContractDraft, showReadinessStage, refreshAdmissionStatus, reviewPresets, useReviewPreset, saveBridge, testBridge, queueBridge, retryBridge, statusBridge, loadBridge, issueExternal, externalCommand, campaignSlug, campaignGroupLabel, campaignGroups, admissionActions, bankCards, bankPeriod, reconcileBank, bankError, bankOperation, activateBankWebhook, identity: PigeInstitution.state, changeCollectionMode, chargeMethod, chargeStatus, receiptMethods, receiptDate, receiveManualCharge, receiptPdf, closeCharge, chargeTotal, can, str, run, load, search, paginate, paginateJobs, newCampaign, editCampaign, saveCampaign, campaignYearId, changeCampaignYear, eligibleContractTemplates, templateName, selectedContractVersion, canChangeContract, admissionContractTemplates, contractChoiceChanged, reloadContractTemplates, applyContractChoice, downloadContractHistory, contractHistoryPolicy, loadContractHistoryPolicy, setContractHistoryPolicy, removeContractHistory, contractStatus, contractPreviewKeys, contractFieldLabel, contractValue, contractAutomatic, setContractValue, previewFrozenContract, previewFrozenPdf, issueFrozenContract, downloadSignedContract, view, action, match, approve, finalize, reviseContract, renewReservation, reviewDoc, message, whatsapp, download, newCharge, findEnrollments, createCharge, inspectCharge, chargeAction, configure, saveConnection, testConnection, retry, copy, connectionFor, jobs, connectLoad, connectJobs, connectInventory, connectAdopt, connectAdoptNamed, connectReleaseLegacy, connectPrefer, connectPreferUnit, connectRestart, connectCreate, connectSync, connectQr, connectPairingCode, connectSavePhone, connectLogout, connectDelete, connectTest, connectRetry, clearConnectQr, label: PigeOnline.label, date: PigeOnline.date, dateTime: PigeOnline.dateTime, money: PigeOnline.money, publicURL: PigeOnline.publicURL, safeLink: PigeOnline.safeLink, origin: location.origin, statuses: PigeOnline.statuses };
         } };
 })(PigeExpansion || (PigeExpansion = {}));
 var PigeDialogs;
@@ -3302,12 +3316,26 @@ var PigeLearning;
             } }
             async function load() { await run(async () => { const data = await props.request(base() + (props.schoolId ? '?school_id=' + encodeURIComponent(props.schoolId) : '')); state.students = props.studentId ? data.students.filter(item => item.student_id === props.studentId) : data.students; state.note = data.note; if (!student())
                 state.studentId = state.students[0]?.student_id || ''; selectStudent(); }); }
-            const rows = () => (enrollment()?.subjects || []).flatMap(subject => subject.periods.map(period => ({ ...period, component_name: subject.component_name, diary_id: subject.diary_id })));
+            const rows = () => (enrollment()?.subjects || []).flatMap(subject => subject.periods.map(period => ({ ...period, component_name: period.component_name || subject.component_name, diary_id: subject.diary_id })));
+            const periodGroups = Vue.computed(() => {
+                const groups = new Map();
+                for (const row of rows()) {
+                    const className = row.class_name || enrollment()?.class_name || '';
+                    const id = JSON.stringify([row.period_id, className]);
+                    const group = groups.get(id) || { id, label: row.period_name, className, items: [] };
+                    group.items.push(row);
+                    groups.set(id, group);
+                }
+                return Array.from(groups.values()).sort((left, right) => {
+                    const a = left.items[0], b = right.items[0];
+                    return (a.order_index ?? 0) - (b.order_index ?? 0) || (a.starts_on || '').localeCompare(b.starts_on || '') || left.className.localeCompare(right.className, 'pt-BR');
+                });
+            });
             const percent = (value) => value === null || value === undefined ? 'Não apurada' : Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%';
             async function download() { await run(async () => { if (!student() || !enrollment())
                 return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId), 'boletim-' + student().student_number + '.pdf'); }); }
             Vue.onMounted(() => { void load(); });
-            return { props, state, student, enrollment, selectStudent, rows, percent, load, download };
+            return { props, state, student, enrollment, selectStudent, rows, periodGroups, percent, load, download };
         } };
 })(PigeLearning || (PigeLearning = {}));
 /** Notícias e agenda com transporte compartilhável entre gestão, portal e página pública. */

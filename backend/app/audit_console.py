@@ -102,7 +102,7 @@ def export(db: DB, user: Actor, school: Scope, request: Request, options: dict =
         captions = {'action': 'Operação', 'entity_type': 'Tipo de registro', 'entity_id': 'Identificador',
                     'actor_id': 'Autor (ID)', 'request_id': 'Referência', 'since': 'Desde (UTC)', 'until': 'Até (UTC)'}
         applied = [{'label': caption, 'value': options[key]} for key, caption in captions.items() if options[key]]
-        pdf = render_table(school.name, 'Histórico de operações', columns, entries, module='Auditoria',
+        pdf = render_table(school, 'Histórico de operações', columns, entries, module='Auditoria',
                            filters=applied, issuer=user.name, db=db, circulation='Uso administrativo restrito',
                            notes=['Operações da instituição em ordem cronológica decrescente. O detalhamento de cada alteração está disponível na consulta administrativa.'])
         audit(db, request, user, 'audit.exported', school, school.id, details={'records': len(rows), 'format': 'pdf'})

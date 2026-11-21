@@ -48,10 +48,8 @@ def _font(data, db):
 
 
 def render(school_name, title, rows, note='', issuer='', db=None, *, module='Secretaria'):
-    columns = [{'key': 'field', 'label': 'Identificação', 'width': 1},
-               {'key': 'value', 'label': 'Informação registrada', 'width': 2.5}]
-    return render_table(school_name, title, columns,
-                        [{'field': field, 'value': value} for field, value in rows],
+    return render_table(school_name, title, [], [],
+                        sections=[{'title': 'Dados do documento', 'fields': rows}],
                         module=module, notes=[note] if note else [], issuer=issuer, db=db,
                         signatures=['Secretaria / representante da instituição'],
                         electronic_notice=True)
@@ -85,10 +83,14 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
     Não utiliza o formulário de declarações, evitando blocos de assinatura e
     pares chave/valor impróprios para tabelas com centenas de registros.
     """
-    from reportlab.lib.pagesizes import landscape
+    from .models import Company, School
     from reportlab.pdfgen.canvas import Canvas
     from reportlab.platypus import CondPageBreak, LongTable, Image as ReportImage
     with _LOCK:
+        school = school_name if isinstance(school_name, School) else None
+        company = db.get(Company, school.company_id) if school is not None and db is not None else None
+        if school is not None:
+            school_name = school.name
         identity = identity_data(db) if db is not None else {
             'display_name': school_name, 'short_name': school_name[:30], 'primary_color': '#205D79',
             'secondary_color': '#172b3a', 'font_family': 'system', 'logo_asset_id': ''}
@@ -98,23 +100,22 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
         primary = colors.HexColor(identity['primary_color'])
         ink = colors.HexColor('#172b3a')
         accent = primary if foreground(identity['primary_color']) == '#FFFFFF' else ink
-        on_primary = colors.HexColor(foreground(identity['primary_color']))
         muted, border, pale = colors.HexColor('#475569'), colors.HexColor('#cbd5df'), colors.HexColor('#f4f7fa')
-        column_sets = [columns, *(section.get('columns', []) for section in sections or [])]
-        pagesize = landscape(A4) if any(len(items) >= 7 for items in column_sets) else A4
+        pagesize = A4
         page_width, page_height = pagesize
-        margin = 16 * mm
+        margin = 13 * mm
         # Platypus mantém seis pontos de respiro em cada lado do frame.
         width = page_width - 2 * margin - 12
         styles = {
-            'body': ParagraphStyle('ReportBody', fontName=regular, fontSize=8, leading=10.5, textColor=ink, splitLongWords=True),
-            'small': ParagraphStyle('ReportSmall', fontName=regular, fontSize=8, leading=10.8, textColor=muted, splitLongWords=True),
-            'heading': ParagraphStyle('ReportHeading', fontName=bold, fontSize=17, leading=21, textColor=ink, spaceAfter=4 * mm),
-            'section': ParagraphStyle('ReportSection', fontName=bold, fontSize=10.5, leading=14, textColor=ink, spaceAfter=3 * mm),
-            'thead': ParagraphStyle('ReportTableHeading', fontName=bold, fontSize=8, leading=10.5, textColor=on_primary, splitLongWords=True),
-            'value': ParagraphStyle('ReportMetricValue', fontName=bold, fontSize=14, leading=18, textColor=accent),
-            'school': ParagraphStyle('ReportSchool', fontName=brand_bold, fontSize=10, leading=12.5, textColor=accent),
+            'body': ParagraphStyle('ReportBody', fontName=regular, fontSize=8.5, leading=11, textColor=ink, splitLongWords=True),
+            'small': ParagraphStyle('ReportSmall', fontName=regular, fontSize=7.8, leading=10, textColor=muted, splitLongWords=True),
+            'heading': ParagraphStyle('ReportHeading', fontName=bold, fontSize=20, leading=23, textColor=ink, spaceAfter=4 * mm),
+            'section': ParagraphStyle('ReportSection', fontName=bold, fontSize=11, leading=14, textColor=ink, spaceAfter=3 * mm),
+            'thead': ParagraphStyle('ReportTableHeading', fontName=bold, fontSize=8.5, leading=11, textColor=ink, splitLongWords=True),
+            'value': ParagraphStyle('ReportMetricValue', fontName=bold, fontSize=11, leading=13, textColor=accent),
+            'school': ParagraphStyle('ReportSchool', fontName=brand_bold, fontSize=13, leading=16, textColor=accent),
         }
+        styles['field'] = ParagraphStyle('ReportField', fontName=bold, fontSize=7.4, leading=9.6, textColor=muted)
         styles['numeric'] = ParagraphStyle('ReportNumeric', parent=styles['body'], alignment=TA_RIGHT)
         def p(value, style='body'):
             return Paragraph(escape(str(value if value is not None and value != '' else '-')).replace('\n', '<br/>'), styles[style])
@@ -143,13 +144,39 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                         ('RIGHTPADDING', (0, 0), (-1, -1), 7), ('TOPPADDING', (0, 0), (-1, -1), 4),
                         ('BOTTOMPADDING', (0, 0), (-1, -1), 4), ('LINEBELOW', (0, 0), (-1, -1), .35, border)]
             if header:
-                commands += [('BACKGROUND', (0, 0), (-1, 0), primary), ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, pale])]
+                commands += [('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e6ebef')), ('LINEBELOW',(0,0),(-1,0),.8,accent), ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, pale])]
             item.setStyle(TableStyle(commands))
             return item
+        def section_heading(label):
+            band = Table([[p(label, 'section')]], colWidths=[width], hAlign='LEFT')
+            band.setStyle(TableStyle([('LINEBEFORE',(0,0),(0,0),2,accent),
+                                      ('BACKGROUND',(0,0),(0,0),pale), ('LEFTPADDING',(0,0),(0,0),7),
+                                      ('TOPPADDING',(0,0),(0,0),3), ('BOTTOMPADDING',(0,0),(0,0),3)]))
+            band.keepWithNext = True
+            return band
+
+        def record_table(cols, records):
+            # Tabelas extensas mantêm os campos de identificação em colunas. Os
+            # demais atributos ficam identificados na mesma linha do registro.
+            main = cols[:3] if len(cols) > 7 else cols
+            detail = cols[len(main):]
+            headings = list(main)
+            if detail:
+                headings.append({'key': '', 'label': 'Dados complementares', 'width': 3.2})
+            values = [[p(col['label'], 'thead') for col in headings]]
+            for record in records:
+                line = [p(format_value(record.get(col['key']), col.get('type','text')),
+                          'numeric' if col.get('type') in {'currency','number','integer','percent'} else 'body')
+                        for col in main]
+                if detail:
+                    line.append([p(col['label'] + ': ' + format_value(record.get(col['key']), col.get('type','text'))) for col in detail])
+                values.append(line)
+            return table(values, column_widths(headings))
+
         stream = io.BytesIO()
         doc = SimpleDocTemplate(stream, pagesize=pagesize, leftMargin=margin, rightMargin=margin,
-                                topMargin=35 * mm, bottomMargin=23 * mm, title=title, author=name)
-        parts = [p(module, 'school'), p(title, 'heading')]
+                                topMargin=43 * mm, bottomMargin=23 * mm, title=title, author=name)
+        parts = []
         if period:
             parts.append(p('Período: ' + period, 'small'))
         if filters:
@@ -157,7 +184,8 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
         elif not sections:
             scope = 'Abrangência: registros da escola no período selecionado.' if period else 'Abrangência: registros da escola na data da emissão.'
             parts.append(p(scope, 'small'))
-        parts.append(Spacer(1, 5 * mm))
+        if parts:
+            parts.append(Spacer(1, 3 * mm))
         if profile:
             content = [p(profile.get('name', ''), 'section'), p(profile.get('detail', ''), 'small')]
             banner_cells = [content]
@@ -170,11 +198,11 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
             banner = Table([banner_cells], colWidths=banner_widths)
             banner.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, -1), pale), ('BOX', (0, 0), (-1, -1), .5, border),
                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('LEFTPADDING', (0, 0), (-1, -1), 12),
-                ('TOPPADDING', (0, 0), (-1, -1), 10), ('BOTTOMPADDING', (0, 0), (-1, -1), 10)]))
-            parts.extend([banner, Spacer(1, 5 * mm)])
+                ('TOPPADDING', (0, 0), (-1, -1), 5), ('BOTTOMPADDING', (0, 0), (-1, -1), 5)]))
+            parts.extend([banner, Spacer(1, 3 * mm)])
         if summary:
             metric_rows = []
-            cards_per_row = 4 if page_width > A4[0] else 3
+            cards_per_row = min(3, len(summary))
             for index in range(0, len(summary), cards_per_row):
                 current = summary[index:index + cards_per_row]
                 cells = [[p(item['label'], 'small'), Spacer(1, 1.5 * mm), p(format_value(item['value'], item.get('type', 'number')), 'value')] for item in current]
@@ -185,7 +213,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                 ('BOX', (0, 0), (-1, -1), .5, border), ('INNERGRID', (0, 0), (-1, -1), .5, border),
                 ('LEFTPADDING', (0, 0), (-1, -1), 10), ('RIGHTPADDING', (0, 0), (-1, -1), 10),
                 ('TOPPADDING', (0, 0), (-1, -1), 9), ('BOTTOMPADDING', (0, 0), (-1, -1), 9)]))
-            parts.extend([cards, Spacer(1, 6 * mm)])
+            parts.extend([section_heading('Síntese dos registros'), cards, Spacer(1, 4 * mm)])
         if status_summary:
             parts.extend([CondPageBreak(25 * mm), p('Distribuição por situação', 'section')])
             values = [[p('Situação', 'thead'), p('Registros', 'thead')]]
@@ -201,30 +229,25 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
         if columns:
             parts.extend([CondPageBreak(30 * mm), p('Detalhamento - ' + str(len(rows)) + ' registro(s)', 'section')])
             if rows:
-                values = [[p(column['label'], 'thead') for column in columns]]
-                values += [[p(format_value(row.get(column['key']), column.get('type', 'text')),
-                             'numeric' if column.get('type') in {'currency', 'number', 'integer', 'percent'} else 'body') for column in columns] for row in rows]
-                parts.append(table(values, column_widths(columns)))
+                parts.append(record_table(columns, rows))
             else:
                 parts.append(p('Nenhum registro encontrado para os filtros selecionados.', 'small'))
         for section in sections or []:
-            parts.extend([CondPageBreak(30 * mm), p(section['title'], 'section')])
+            parts.extend([CondPageBreak(18 * mm), section_heading(section['title'])])
             if section.get('text'):
                 parts.append(p(section['text']))
             fields = section.get('fields', [])
             if fields:
                 cells = []
                 for index in range(0, len(fields), 2):
-                    row = [[p(key, 'small'), p(value or 'Não informado')] for key, value in fields[index:index + 2]]
+                    row = [[p(key, 'field'), p(value if value not in (None, '') else 'Não informado')] for key, value in fields[index:index + 2]]
                     row += [''] * (2 - len(row))
                     cells.append(row)
                 parts.append(table(cells, [width / 2, width / 2], False))
             if section.get('columns'):
                 cols = section['columns']
-                values = [[p(column['label'], 'thead') for column in cols]]
-                values += [[p(format_value(row.get(column['key']), column.get('type', 'text'))) for column in cols] for row in section['rows']]
-                parts.append(table(values, column_widths(cols)))
-            parts.append(Spacer(1, 5 * mm))
+                parts.append(record_table(cols, section['rows']))
+            parts.append(Spacer(1, 3 * mm))
         if signatures:
             blocks = []
             for caption in signatures:
@@ -235,7 +258,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
         if electronic_notice:
             parts.append(p('Documento gerado eletronicamente. Não contém assinatura digital.', 'small'))
         if notes:
-            parts.append(Spacer(1, 5 * mm))
+            parts.append(Spacer(1, 3 * mm))
             if notes_title: parts.append(p(notes_title, 'section'))
             for note in notes:
                 parts.extend([p(note, 'small'), Spacer(1, 1.5 * mm)])
@@ -252,22 +275,41 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
             canvas.saveState()
             canvas.setCreator(name)
             canvas._doc.info.producer = name
-            x = margin
+            top = page_height - 8 * mm
+            emblem = 22 * mm
             if logo_image:
-                canvas.drawImage(logo_image, x, page_height - 29 * mm, width=22 * mm, height=19 * mm,
+                canvas.drawImage(logo_image, margin, top-emblem, width=emblem, height=emblem,
                                  preserveAspectRatio=True, anchor='c', mask='auto')
-                x += 27 * mm
-            labels = [p(name, 'school')]
-            if name != school_name:
-                labels.append(p(school_name, 'small'))
-            if document.page > 1:
-                labels.append(p(module + ' · ' + title, 'small'))
-            heading = KeepInFrame(page_width - margin - x, 22 * mm, labels, mode='shrink')
-            _, height = heading.wrapOn(canvas, page_width - margin - x, 22 * mm)
-            heading.drawOn(canvas, x, page_height - 17 * mm - height / 2)
-            canvas.setStrokeColor(primary)
-            canvas.setLineWidth(1.5)
-            canvas.line(margin, page_height - 31 * mm, page_width - margin, page_height - 31 * mm)
+            else:
+                initials = ''.join(word[0] for word in school_name.split()[:2]).upper()
+                canvas.setFillColor(pale)
+                canvas.roundRect(margin, top-emblem, emblem, emblem, 3*mm, fill=1, stroke=0)
+                canvas.setFillColor(accent)
+                canvas.setFont(bold, 18)
+                canvas.drawCentredString(margin+emblem/2, top-emblem/2-6, initials)
+            labels = [p(school_name, 'school')]
+            if name != school_name and identity.get('logo_asset_id'):
+                labels.append(p(name, 'small'))
+            if company:
+                legal = ' · '.join(filter(None, [company.name, 'CNPJ '+company.document if company.document else '']))
+                labels.append(p(legal, 'small'))
+            if school:
+                contact = ' · '.join(filter(None, [school.address, school.phone, school.email]))
+                if contact:
+                    labels.append(p(contact, 'small'))
+            x = margin + emblem + 5*mm
+            available = page_width-margin-x
+            heading = KeepInFrame(available, emblem, labels, mode='shrink')
+            _, height = heading.wrapOn(canvas, available, emblem)
+            heading.drawOn(canvas, x, top-emblem/2-height/2)
+            line_y=top-emblem-2*mm
+            canvas.setStrokeColor(accent)
+            canvas.setLineWidth(1)
+            canvas.line(margin, line_y, page_width-margin, line_y)
+            # O título é repetido na capa e nas continuações; cabe em títulos longos.
+            title_block=KeepInFrame(page_width-2*margin,9*mm,[p(title,'heading')],mode='shrink')
+            title_block.wrapOn(canvas,page_width-2*margin,9*mm)
+            title_block.drawOn(canvas,margin,page_height-42*mm)
             canvas.restoreState()
         class NumberedCanvas(Canvas):
             def __init__(self, *args, **kwargs):
@@ -288,7 +330,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                     self.drawString(margin, 14 * mm, 'Emitido em ' + stamp)
                     self.drawRightString(page_width - margin, 14 * mm, f'Página {self._pageNumber} de {total}')
                     self.setFont(regular, 7)
-                    self.drawString(margin, 10 * mm, edition)
+                    self.drawString(margin, 10 * mm, edition + ' · ' + module)
                     self.drawRightString(page_width - margin, 10 * mm, circulation)
                     self.restoreState()
                     super().showPage()

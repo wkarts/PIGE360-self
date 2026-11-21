@@ -575,3 +575,12 @@ td .link-button { text-align: left; }
   .report-records td::before { content: attr(data-label); color: var(--muted); font-weight: 600; }
   .report-imprint { flex-direction: column; }
 }
+
+.report-result,.bulletin-sheet{background:var(--surface,#fff);padding:clamp(12px,2.6vw,32px);border:1px solid var(--border,#d7dce0)}
+.report-result .report-masthead,.bulletin-sheet .report-masthead{border-bottom:2px solid var(--primary,#205d79);margin-bottom:1rem;padding:0 0 1rem}
+.report-result .report-masthead img,.bulletin-sheet .report-masthead img{width:clamp(48px,8vw,78px);height:68px;object-fit:contain}
+.report-result h2,.bulletin-sheet h2{font-size:clamp(1.35rem,2.3vw,1.9rem);line-height:1.2}
+.bulletin-period h3{margin:1rem 0 .35rem;padding:.4rem .65rem;border-inline-start:3px solid var(--primary,#205d79);background:var(--bg,#f2f5f6);font-size:1rem}
+.report-records td,.bulletin-period td{font-size:.84rem;line-height:1.45;font-variant-numeric:tabular-nums}
+@page school-report{size:A4 portrait;margin:13mm}
+@media print{.report-result,.bulletin-sheet{page:school-report;border:0;padding:0}.report-records thead{display:table-header-group}.report-records tr{break-inside:avoid}.bulletin-period h3{break-after:avoid}}

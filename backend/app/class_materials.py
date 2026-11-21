@@ -45,7 +45,7 @@ def printable(db, school, user, request: Request, material):
     diary = db.get(m.SchoolDiary, material.diary_id)
     group = db.get(m.ClassGroup, diary.class_group_id)
     component = db.get(m.CurriculumComponent, diary.component_id)
-    pdf = render_table(school.name, material.title, [], [], db=db, module='Materiais da turma',
+    pdf = render_table(school, material.title, [], [], db=db, module='Materiais da turma',
                        filters=[{'label':'Turma', 'value':group.name}, {'label':'Componente', 'value':component.name}],
                        sections=[{'title':material.kind, 'text':material.body}],
                        issuer=db.get(m.User, material.author_id).name)

@@ -133,14 +133,28 @@ def admission_output(db,obj,public=True):
     data['document_types']=[{'id':x.id,'name':x.name,'required':x.required} for x in document_types(db,obj) if x.name != COMPLEMENTARY_DOCUMENT or x.required]
     account=db.get(m.PortalAccount,obj.account_id)
     if not public:data['account']=account_output(account)
+    if public:
+        data['preserved_contracts'] = []
     if obj.enrollment_id:
         enrollment=db.get(m.Enrollment,obj.enrollment_id)
         data['enrollment']={'id':enrollment.id,'number':enrollment.number,'status':enrollment.status,'class_group_id':enrollment.class_group_id}
         issued=list(db.scalars(select(m.IssuedDocument).where(m.IssuedDocument.enrollment_id==enrollment.id,m.IssuedDocument.school_id==obj.school_id).order_by(m.IssuedDocument.created_at.desc(),m.IssuedDocument.id.desc())))
-        data['issued_documents']=[output(x,('snapshot',)) for x in issued]
+        from .contract_history import access_state
+        data['issued_documents']=[]
+        for item in issued:
+            if item.history_removed_at is not None:
+                continue
+            access = access_state(db, item)
+            if public and access['superseded']:
+                if access['downloadable']:
+                    data['preserved_contracts'].append(output(item, ('snapshot', 'file_id')))
+                continue
+            data['issued_documents'].append({
+                **output(item, ('snapshot',) if access['downloadable'] else ('snapshot', 'file_id')), **access})
+
     else:data['issued_documents']=[]
     selected_template=obj.contract_template_id if obj.status in ('approved','enrolled') else campaign.contract_template_id
-    contract=next((item for item in issued if obj.contract_template_id and item.template_id==obj.contract_template_id
+    contract=next((item for item in issued if item.superseded_at is None and item.history_removed_at is None and obj.contract_template_id and item.template_id==obj.contract_template_id
                    and item.template_version==str(obj.contract_template_version)
                    and (item.snapshot or {}).get('template_revision_sha256')==obj.contract_template_revision_sha256),None) if obj.enrollment_id else None
     from .admission_reservations import state as reservation_state
@@ -657,7 +671,7 @@ def receipt(id:str,request:Request,db:DB,account:Parent):
     obj=own_admission(db,account,id)
     if obj.status=='draft':fail(409,'Envie a inscrição antes de obter o protocolo.')
     school=db.get(m.School,obj.school_id)
-    data=render_pdf(school.name,'Protocolo de inscrição online',[
+    data=render_pdf(school,'Protocolo de inscrição online',[
         ('Protocolo',obj.number),('Aluno',obj.student_data['name']),('Responsável',obj.guardian_snapshot.get('name',account.name)),
         ('Processo',db.get(m.AdmissionCampaign,obj.campaign_id).title),('Turma pretendida',db.get(m.ClassGroup,obj.class_group_id).name),
         ('Situação',STATUS_LABELS[obj.status]),('Enviada em',str(obj.submitted_at)),
@@ -670,11 +684,18 @@ def issued(id:str,issued_id:str,request:Request,db:DB,account:Parent):
     obj=own_admission(db,account,id)
     record=db.get(m.IssuedDocument,issued_id)
     if not obj.enrollment_id or not record or record.school_id!=obj.school_id or record.enrollment_id!=obj.enrollment_id:fail(404,'Documento não encontrado.')
+    from .contract_history import access_state
+    if record.history_removed_at is not None:
+        fail(404, 'Documento não encontrado.')
+    access = access_state(db, record)
+    if not access['downloadable']:
+        fail(409, 'Esta via substituída não está disponível para download.')
     if obj.contract_signing_order!='applicant_first' and record.template_id and record.template_id==obj.contract_template_id and record.signature_status not in ('company_signed','pending_validation','verified','rejected'):
         fail(409,'A escola ainda está preparando a assinatura do contrato.')
     if record.template_id:
-        from .contract_signatures import latest_signed_file
-        stored=latest_signed_file(db,record)
+        from .contract_signatures import _latest, latest_signed_file
+        historical = _latest(db, record) if access['superseded'] else None
+        stored = db.get(m.FileRecord, historical.file_id) if historical else latest_signed_file(db, record)
         if not stored:fail(409,'A versão assinada pela escola está indisponível.')
     else:
         stored=db.get(m.FileRecord,record.file_id)
