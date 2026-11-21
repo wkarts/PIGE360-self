@@ -22,6 +22,8 @@ on:
         value: ${{ jobs.publish.outputs.website_digest }}
       portal_digest:
         value: ${{ jobs.publish.outputs.portal_digest }}
+      teacher_digest:
+        value: ${{ jobs.publish.outputs.teacher_digest }}
 permissions:
   contents: read
   packages: write
@@ -39,6 +41,7 @@ jobs:
       sogo_digest: ${{ steps.build-sogo.outputs.digest }}
       website_digest: ${{ steps.build-website.outputs.digest }}
       portal_digest: ${{ steps.build-portal.outputs.digest }}
+      teacher_digest: ${{ steps.build-teacher.outputs.digest }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -70,6 +73,7 @@ jobs:
           echo "sogo=ghcr.io/${GITHUB_REPOSITORY,,}-sogo" >> "$GITHUB_OUTPUT"
           echo "website=ghcr.io/${GITHUB_REPOSITORY,,}-website" >> "$GITHUB_OUTPUT"
           echo "portal=ghcr.io/${GITHUB_REPOSITORY,,}-portal" >> "$GITHUB_OUTPUT"
+          echo "teacher=ghcr.io/${GITHUB_REPOSITORY,,}-teacher-portal" >> "$GITHUB_OUTPUT"
       - name: Build do candidato (sem atualizar aliases)
         id: build
         uses: docker/build-push-action@v6
@@ -145,6 +149,23 @@ jobs:
             PYTHON_BASE_IMAGE=${{ inputs.python_ref }}
           provenance: false
           sbom: false
+      - name: Build e publicação do Portal do Professor
+        id: build-teacher
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/portal/Dockerfile
+          target: teacher
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.names.outputs.teacher }}:${{ inputs.candidate }}
+          build-args: |
+            APP_VERSION=${{ inputs.version }}
+            SOURCE_REVISION=${{ inputs.ref }}
+            NODE_BASE_IMAGE=${{ inputs.node_ref }}
+            PYTHON_BASE_IMAGE=${{ inputs.python_ref }}
+          provenance: false
+          sbom: false
       - name: Smoke do serviço público separado
         env:
           WEBSITE_IMAGE: ${{ steps.names.outputs.website }}@${{ steps.build-website.outputs.digest }}
@@ -158,6 +179,7 @@ jobs:
           SOGO_IMAGE: ${{ steps.names.outputs.sogo }}@${{ steps.build-sogo.outputs.digest }}
           WEBSITE_IMAGE: ${{ steps.names.outputs.website }}@${{ steps.build-website.outputs.digest }}
           PORTAL_IMAGE: ${{ steps.names.outputs.portal }}@${{ steps.build-portal.outputs.digest }}
+          TEACHER_PORTAL_IMAGE: ${{ steps.names.outputs.teacher }}@${{ steps.build-teacher.outputs.digest }}
           POSTGRES_IMAGE: ${{ inputs.postgres_ref }}
         run: bash scripts/ci/smoke.sh "$IMAGE@$DIGEST" remote
       - name: Promover somente aliases develop após smoke
@@ -172,7 +194,9 @@ jobs:
           WEBSITE_IMAGE: ${{ steps.names.outputs.website }}
           WEBSITE_DIGEST: ${{ steps.build-website.outputs.digest }}
           PORTAL_IMAGE: ${{ steps.names.outputs.portal }}
+          TEACHER_PORTAL_IMAGE: ${{ steps.names.outputs.teacher }}
           PORTAL_DIGEST: ${{ steps.build-portal.outputs.digest }}
+          TEACHER_PORTAL_DIGEST: ${{ steps.build-teacher.outputs.digest }}
           VERSION: ${{ inputs.version }}
         run: |
           python scripts/ci/promote.py develop
@@ -180,6 +204,7 @@ jobs:
           IMAGE="$SOGO_IMAGE" DIGEST="$SOGO_DIGEST" python scripts/ci/promote.py develop
           IMAGE="$WEBSITE_IMAGE" DIGEST="$WEBSITE_DIGEST" python scripts/ci/promote.py develop
           IMAGE="$PORTAL_IMAGE" DIGEST="$PORTAL_DIGEST" python scripts/ci/promote.py develop
+          IMAGE="$TEACHER_PORTAL_IMAGE" DIGEST="$TEACHER_PORTAL_DIGEST" python scripts/ci/promote.py develop
       - name: Verificar possibilidade de pull anônimo
         env:
           IMAGE: ${{ steps.names.outputs.image }}

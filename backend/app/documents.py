@@ -178,6 +178,9 @@ def download(file_id: str, db: DB, user: Actor, school: Scope, request: Request)
             fail(404, 'Arquivo não encontrado.')
         if not access_state(db, document)['downloadable']:
             fail(409, 'Esta via substituída não está disponível para download.')
+    if obj.file_kind == 'educacenso_evidence':
+        from .educacenso import authorize
+        authorize(user, school)
     if obj.file_kind == 'absence_evidence':
         require(user, 'protocols.read')
     if obj.file_kind == 'fiscal_xml':

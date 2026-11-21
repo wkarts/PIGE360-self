@@ -137,8 +137,17 @@ def verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,pos
     expect(admin.get_by_text('Rascunho salvo.',exact=False)).to_be_visible()
     assert client.get('/api/v1/public/schools/'+base.split('/')[-1]+'/website').json()['website']['headline']!= 'Rascunho privado em revisão'
     assert client.get('/api/v1/public/schools/'+base.split('/')[-1]+'/website?page=sobre').status_code==404
-    admin.get_by_role('button',name='Visualizar prévia',exact=True).click()
+    admin.get_by_role('button',name='Ver prévia do rascunho',exact=True).click()
     expect(admin.locator('iframe[title="Prévia privada do site"]')).to_be_visible()
+    draft_frame=admin.frame_locator('iframe[title="Prévia privada do site"]')
+    draft_pages=admin.get_by_label('Página da prévia do rascunho',exact=True)
+    internal_page_title=draft_pages.locator('option[value="sobre"]').inner_text()
+    internal_page_title=internal_page_title.split(' · /',1)[0]
+    draft_pages.select_option('sobre')
+    expect(draft_frame.locator('h1')).to_have_text(internal_page_title)
+    draft_frame.locator('a[href="/"]:visible').first.click()
+    expect(draft_frame.locator('h1')).to_have_text('Rascunho privado em revisão')
+
     admin.once('dialog',lambda dialog:dialog.accept())
     admin.get_by_role('button',name='Publicar site',exact=True).click()
     expect(admin.get_by_text('Site publicado com sucesso.',exact=True)).to_be_visible()

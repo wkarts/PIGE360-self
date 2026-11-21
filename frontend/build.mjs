@@ -23,7 +23,7 @@ execFileSync(compiler,['-p',path.join(root,'tsconfig.news.json')],{stdio:'inheri
 execFileSync(compiler,['-p',path.join(root,'tsconfig.family.json')],{stdio:'inherit'});
 execFileSync(compiler,['-p',path.join(root,'tsconfig.teacher.json')],{stdio:'inherit'});
 const renders={};
-for(const name of ['contractValue','enrollmentWorkflow','academicPreparation','notificationEmail','app','portal','familyPortal','teacherPortal','expansion','camera','users','assist','diagnostics','diary','contracts','signing','reports','legacyImport','learning','community','news','mailcow','audit','email','lifecycle']){
+for(const name of ['contractValue','enrollmentWorkflow','academicPreparation','notificationEmail','app','portal','familyPortal','teacherPortal','expansion','camera','users','assist','diagnostics','diary','educacenso','contracts','signing','reports','legacyImport','learning','community','news','mailcow','audit','email','lifecycle']){
  const fragment=key=>fs.readFileSync(path.join(root,'templates',key+'.html'),'utf8');
  const template=fs.readFileSync(path.join(root,'templates',name+'.html'),'utf8').replaceAll('<!-- MFA-MANAGE -->',fragment('mfa-manage')).replaceAll('<!-- MFA-CHALLENGE -->',fragment('mfa-challenge')).replaceAll('<!-- FAMILY -->',fragment('family')).replaceAll('<!-- FORM-FIELDS -->',fragment('form-fields'));
  const errors=[];
@@ -50,7 +50,10 @@ for(const name of ['index.html','online.html','news.html','family.html','profess
  const file=path.join(dist,name);
  fs.writeFileSync(file,fs.readFileSync(file,'utf8').replace(/(src|href)="(\/(?!api\/)[^"?]+\.(?:js|css))"/g,(_,attr,url)=>`${attr}="${url}?v=${hash}"`));
 }
-const sw=`const CACHE='pige360-shell-${hash}'; const ASSETS=${JSON.stringify(staticFiles)};
+// Cache route URLs for the local shell only. Dedicated portal origins own their own login.
+const shellRoutes={'/index.html':'/','/online.html':'/online','/news.html':'/news','/first-access.html':'/first-access'};
+const offlineAssets=[...new Set(staticFiles.filter(f=>!['/family.html','/professor.html'].includes(f)).map(f=>shellRoutes[f]||f))];
+const sw=`const CACHE='pige360-shell-${hash}'; const ASSETS=${JSON.stringify(offlineAssets)};
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS))));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('pige360-shell-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
 self.addEventListener('message',event=>{if(event.data?.type==='SKIP_WAITING')self.skipWaiting();});
@@ -60,7 +63,7 @@ self.addEventListener('fetch',event=>{
  const publicIdentity=url.pathname==='/manifest.webmanifest'||url.pathname==='/api/v1/institution/identity'||url.pathname==='/api/v1/institution/theme.css'||url.pathname==='/api/v1/institution/icon.png'||url.pathname.startsWith('/api/v1/institution/assets/');
  if(publicIdentity){event.respondWith(caches.open('pige360-public-identity').then(async cache=>{try{const response=await fetch(event.request);if(response.ok){await cache.put(event.request,response.clone());const keys=await cache.keys();await Promise.all(keys.slice(0,Math.max(0,keys.length-24)).map(key=>cache.delete(key)));}return response;}catch(error){const cached=await cache.match(event.request);if(cached)return cached;throw error;}}));return;}
  if(url.pathname.startsWith('/api/')||url.pathname.startsWith('/health/'))return;
- if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).catch(()=>caches.match(url.pathname==='/online.html'?'/online.html':url.pathname==='/news.html'?'/news.html':'/index.html')));return;}
+ if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).catch(()=>caches.match(['/online','/news','/first-access'].includes(url.pathname)?url.pathname:'/')));return;}
  // Nunca atender uma URL de outro build com bytes deste cache.
  if(ASSETS.includes(url.pathname))event.respondWith((url.searchParams.has('v')&&url.searchParams.get('v')!=='${hash}')?fetch(event.request):caches.open(CACHE).then(cache=>cache.match(event.request,{ignoreSearch:true})).then(cached=>cached||fetch(event.request)));
 });\n`;

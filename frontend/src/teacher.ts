@@ -21,6 +21,7 @@ namespace PigeTeacher {
     s.agenda=data;
   }
   async function school(id:string){
+    if(s.schoolId && s.schoolId!==id)PigeDiary.clearPilotContext(s.schoolId);
     s.agenda=null;s.news=[];s.newsPage=1;s.section='overview';s.requestedDiary=undefined;s.schoolId=id;PigeAPI.setActiveSchool(id);
     if(!id)return;
     s.user=await PigeAPI.request<PigeAPI.User>('/auth/me');
@@ -28,7 +29,10 @@ namespace PigeTeacher {
   }
   async function workspace(){
     s.schools=await PigeAPI.request<typeof s.schools>('/teacher/schools');
-    await school(s.schools.find(item=>item.id===s.schoolId)?.id||s.schools[0]?.id||'');
+    const link=new URLSearchParams(location.search);
+    const linked=location.hash==='#diario' && s.schools.find(item=>item.id===link.get('diarioPiloto'));
+    await school((linked && linked.id)||s.schools.find(item=>item.id===s.schoolId)?.id||s.schools[0]?.id||'');
+    if(linked)s.section='diary';
   }
   async function enter(session:PigeAPI.SessionResponse){
     if(session.user.role!=='teacher'){
@@ -55,6 +59,7 @@ namespace PigeTeacher {
     if(id===s.schoolId){s.news=feed.items;s.newsTotal=feed.total;s.newsPage=page;}
   }
   function navigate(section:string){
+    if(section!=='diary' && location.hash==='#diario')history.replaceState(history.state,'',location.pathname+location.search);
     s.menuOpen=false;s.section=section;
     if(section==='news')void run(()=>publications());
     if(section==='agenda')void run(agenda);
@@ -86,6 +91,6 @@ namespace PigeTeacher {
       window.addEventListener('resize',()=>{if(innerWidth>800)s.menuOpen=false;});
       void start();
     });
-    return {s,navigate,toggleMenu,menuKey,publications,identity:PigeInstitution.state,mfa:PigeMFA,login,logout,run,agenda,workspace,date,group,selectSchool};
+    return {s,pilotForSchool:PigeDiary.pilotForSchool,navigate,toggleMenu,menuKey,publications,identity:PigeInstitution.state,mfa:PigeMFA,login,logout,run,agenda,workspace,date,group,selectSchool};
   }}).mount('#teacher');
 }

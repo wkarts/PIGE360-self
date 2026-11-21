@@ -130,7 +130,7 @@ try:
         guest=browser.new_context(ignore_https_errors=True,viewport={'width':1440,'height':980},locale='pt-BR')
         public=guest.new_page();public.on('pageerror',lambda e:errors.append(str(e)))
         public.goto(URL);expect(public.get_by_role('heading',name='Acesse sua instituição')).to_be_visible()
-        expect(public.locator('a[href="/online.html"]')).to_have_count(0)
+        expect(public.locator('a[href="/online"]')).to_have_count(0)
         assert public.locator('#institution-bootstrap').text_content().find('"show_preenrollment_button": false')>=0
         expect(public.locator('.auth-intro h1')).to_contain_text('A gestão educacional.')
         expect(public.locator('.auth-intro h1')).to_contain_text('Organizada, de verdade.')

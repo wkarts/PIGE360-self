@@ -66,8 +66,12 @@ try:
         time.sleep(.1)
     else:raise AssertionError('Serviços separados de website/portal não ficaram prontos')
     assert httpx.get(TEACHER_URL+'/api/v1/family/context').status_code==404
-    assert httpx.get(TEACHER_URL+'/family.html').headers['location']==PORTAL_URL+'/family.html'
-    assert httpx.get(PORTAL_URL+'/professor').headers['location']==TEACHER_URL+'/'
+    assert httpx.get(TEACHER_URL+'/family.html').status_code==404
+    assert httpx.get(PORTAL_URL+'/professor').status_code==404
+    for origin, old, clean in [(PORTAL_URL, '/online.html', '/online'),(PORTAL_URL, '/family.html', '/family'),
+                               (PORTAL_URL, '/first-access.html', '/first-access'),(TEACHER_URL, '/professor.html', '/')]:
+        redirect = httpx.get(origin + old + '?x=1')
+        assert redirect.status_code == 302 and redirect.headers['location'] == clean + '?x=1'
     record('Website e portal separados prontos contra a API interna de teste')
     r=client.post('/api/v1/setup',headers={'X-Setup-Token':env['SETUP_TOKEN']},json={'admin_name':'Secretaria — Teste','admin_email':'secretaria@example.com','admin_password':password,'company_name':'Mantenedora Exemplo — Teste','school_name':'Escola Exemplo — Dados de Teste','academic_year':2027});assert r.status_code==201,r.text
     r=client.post('/api/v1/auth/login',json={'email':'secretaria@example.com','password':password});headers={'Authorization':'Bearer '+r.json()['access_token']}
@@ -106,6 +110,15 @@ try:
     operator('finance')
     operator('direction')
     teacher = operator('teacher', post('/persons', {'name':'Docente de Matemática'})['id'])
+    for origin, email in [(PORTAL_URL, teacher['email']), (PORTAL_URL, 'secretaria@example.com'), (TEACHER_URL, 'secretaria@example.com')]:
+        denied = httpx.post(origin+'/api/v1/auth/login', json={'email':email,'password':password},
+                            headers={'Origin':origin,'X-CSRF-Protection':'1'})
+        assert denied.status_code == 403 and 'access_token' not in denied.json() and not denied.cookies
+    for origin, paths in [(PORTAL_URL, ['/professor.html','/teacher.js','/api/v1/teacher/schools','/index.html']),
+                          (TEACHER_URL, ['/family.html','/online.html','/family.js','/api/v1/family/context','/index.html'])]:
+        for path in paths:
+            assert httpx.get(origin+path).status_code == 404, path
+    record('Perfis e superfícies isolados: páginas, APIs e emissão de sessão conferidas em origens distintas.')
     assignment = post('/teacher-assignments', {'teacher_user_id': teacher['id'],
                       'class_group_id': group['id'], 'subject_name':'Matemática'})
     with sync_playwright() as pw, capture_browser_failure():
@@ -213,10 +226,11 @@ try:
         teacher_page.on('pageerror',lambda e:errors.append('professor: '+str(e)))
         page = teacher_page
         teacher_page.goto(PORTAL_URL)
-        teacher_page.get_by_role('link',name='Portal do Professor').click()
+        expect(teacher_page.get_by_role('link',name='Portal do Professor')).to_have_count(0)
+        teacher_page.goto(TEACHER_URL)
         expect(teacher_page.get_by_role('heading',name='Acesso do professor')).to_be_visible()
         teacher_page.wait_for_url(TEACHER_URL+'/')
-        teacher_page.goto(PORTAL_URL+'/professor')
+        expect(teacher_page.get_by_role('link',name='Portal do aluno e responsável')).to_have_count(0)
         teacher_page.get_by_label('E-mail',exact=True).fill(teacher['email'])
         teacher_page.get_by_label('Senha',exact=True).fill(password)
         teacher_page.get_by_role('button',name='Entrar como professor').click()
@@ -240,6 +254,32 @@ try:
         workspace.get_by_label('Presença de Lucas',exact=False).select_option('present')
         workspace.get_by_role('button',name='Salvar chamada').click()
         expect(workspace.get_by_role('status')).to_have_text('Chamada salva.')
+        # Piloto no mesmo serviço do professor, com os cookies e a matrícula sintética já criados.
+        legacy_url=teacher_page.url
+        pilot_url=f"{TEACHER_URL}/?diarioPiloto={school['id']}&guia=attendance&diario={diary['id']}#diario"
+        expect(teacher_page.get_by_role('button',name='Fazer chamada · Matemática')).to_have_count(0)
+        teacher_page.goto(f"{TEACHER_URL}/?diarioPiloto={school['id']}")
+        teacher_page.get_by_role('button',name='Fazer chamada · Matemática').click()
+        expect(workspace.get_by_role('link',name='Frequência')).to_have_attribute('aria-current','page')
+        expect(workspace.get_by_role('button',name='Abrir chamada')).to_be_visible()
+        record('Minhas turmas abre a frequência do diário atribuído pelo atalho do piloto')
+        teacher_page.goto(pilot_url)
+        for width in (1440,390):
+            teacher_page.set_viewport_size({'width':width,'height':900})
+            expect(workspace.get_by_role('link',name='Frequência')).to_have_attribute('aria-current','page')
+            expect(workspace.get_by_role('link',name='Configuração')).to_have_count(0)
+            workspace.get_by_role('button',name='Abrir chamada').click()
+            workspace.get_by_label('Presença de Lucas',exact=False).select_option('present')
+            workspace.get_by_role('button',name='Salvar chamada').click()
+            expect(workspace.get_by_role('status')).to_have_text('Chamada salva.')
+            teacher_page.reload()
+        workspace.get_by_role('link',name='Fechamento').click()
+        expect(workspace.get_by_role('button',name='Enviar para revisão')).to_be_visible()
+        expect(workspace.get_by_role('button',name='Registrar aula')).to_have_count(0)
+        teacher_page.goto(legacy_url)
+        teacher_page.set_viewport_size({'width':1440,'height':1000})
+        teacher_page.get_by_role('button',name='Abrir diário · Matemática').click()
+        record('Subguias com chamada salva em desktop e celular, recarga e permissões do professor')
         workspace.get_by_role('button',name='Avaliações',exact=True).click()
         form=workspace.locator('form').filter(has=teacher_page.get_by_label('Título',exact=True))
         form.get_by_label('Título').fill('Avaliação de Matemática')
@@ -520,6 +560,27 @@ try:
         with clerk.expect_download() as desk_pdf:
             desk_diary.get_by_role('button',name='Baixar para imprimir').first.click()
         assert Path(desk_pdf.value.path()).read_bytes().startswith(b'%PDF')
+        clerk.goto(f"{URL}/?diarioPiloto={school['id']}&guia=components#/diary")
+        expect(desk_diary.get_by_role('heading',name='Pendências do Diário')).to_be_visible()
+        expect(desk_diary.get_by_role('link',name='Configuração')).to_have_count(0)
+        manager=browser.new_page()
+        manager.goto(f"{URL}/?diarioPiloto={school['id']}&guia=components#/diary")
+        manager.get_by_label('E-mail',exact=True).fill('direction@example.com')
+        manager.get_by_label('Senha',exact=True).fill(password)
+        manager.get_by_role('button',name='Entrar na aplicação').click()
+        expect(manager.get_by_role('heading',name='Componentes curriculares')).to_be_visible()
+        manager.close()
+        expect(desk_diary.get_by_role('heading',name='Períodos letivos')).to_have_count(0)
+        desk_diary.get_by_role('link',name='Aulas e chamada').click()
+        desk_diary.get_by_role('searchbox').fill('inexistente')
+        expect(desk_diary.get_by_text('Nenhum diário corresponde ao filtro.')).to_be_visible()
+        desk_diary.get_by_role('searchbox').fill('Matemática')
+        desk_diary.locator('.x-record').filter(has_text='Matemática').first.click()
+        desk_diary.get_by_role('link',name='Frequência').click()
+        desk_diary.get_by_label('Filtrar aulas por período').select_option(period['id'])
+        clerk.reload()
+        expect(desk_diary.get_by_label('Filtrar aulas por período')).to_have_value(period['id'])
+        record('Gestor abre subguia por link, filtra turma/componente e restaura o período após recarga')
         clerk.locator('aside a[href="#/protocols"]').click()
         clerk.get_by_role('row').filter(has_text=number).get_by_role('button',name='Ver atendimento').click()
         with clerk.expect_download() as proof:

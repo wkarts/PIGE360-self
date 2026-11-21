@@ -173,7 +173,7 @@ class SurfaceTests(unittest.TestCase):
                 with self.assertRaises(HTTPError) as failed:urlopen(Request(base+'/',headers={'Host':'missing.example.test'}),timeout=3)
         body=failed.exception.read().decode()
         self.assertEqual(failed.exception.code,404)
-        self.assertIn('não está associado',body)
+        self.assertIn('Estamos preparando o site da escola',body)
         self.assertNotIn('private internal detail',body)
         self.assertNotIn('high load',body.lower())
         self.assertIn('category=domain_not_published',captured.output[0])

@@ -20,7 +20,7 @@ ENVFILE="$STACK_DIR/.env.ci"
 PROJECT="pige360-ci-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-${RANDOM}"
 export APP_IMAGE="$IMAGE" APP_PULL_POLICY=never COMPOSE_PROJECT_NAME="$PROJECT"
 if [[ "$MODE" == local ]]; then
-  export MAIL_AGENT_IMAGE=pige360-mail-agent:ci SOGO_IMAGE=pige360-sogo:ci WEBSITE_IMAGE=pige360-website:ci PORTAL_IMAGE=pige360-portal:ci
+  export MAIL_AGENT_IMAGE=pige360-mail-agent:ci SOGO_IMAGE=pige360-sogo:ci WEBSITE_IMAGE=pige360-website:ci PORTAL_IMAGE=pige360-portal:ci TEACHER_PORTAL_IMAGE=pige360-teacher-portal:ci
 fi
 export POSTGRES_IMAGE="${POSTGRES_IMAGE:-ghcr.io/wkarts/pige360-self-postgres:17-bookworm}"
 python - "$ENVFILE" <<'PYCONF'
@@ -32,7 +32,7 @@ values={'APP_SECRET_KEY':secrets.token_urlsafe(48),'SETUP_TOKEN':secrets.token_u
         'STORAGE_ACCESS_KEY':'pige360minio','STORAGE_ENDPOINT_URL':'http://minio:9000', 'APP_ENV':'production',
         # Docker allocates the surface ports atomically; probes discover them.
         # The public Host stays explicit, as with a reverse proxy in production.
-        'PORTAL_PUBLIC_URL':'http://localhost','PORTAL_PORT':'0','WEBSITE_PORT':'0',
+        'TEACHER_PORTAL_PUBLIC_URL':'http://localhost:58084','TEACHER_PORTAL_PORT':'0','PORTAL_PUBLIC_URL':'http://localhost','PORTAL_PORT':'0','WEBSITE_PORT':'0',
         'PORTAL_BIND':'127.0.0.1','WEBSITE_BIND':'127.0.0.1',
         'WEBSITE_INTERNAL_TOKEN':secrets.token_urlsafe(36),'PORTAL_INTERNAL_TOKEN':secrets.token_urlsafe(48),'APP_URL':f'http://127.0.0.1:{app_port}','APP_PORT':str(app_port),'APP_BIND':'127.0.0.1',
         'COOKIE_SECURE':'false','ALLOWED_HOSTS':'localhost,127.0.0.1',
@@ -172,5 +172,5 @@ assert_healthy_services
 printf '{"postgresql_restore":true,"local_documents":true,"minio_documents":true,"isolated_stack":true}\n' > ci-evidence/backup-restore.json
 
 # Site e portal construídos/puxados separadamente, usando API interna real.
-compose --profile website --profile portal up -d --wait --wait-timeout 180 website portal
+compose --profile website --profile portal --profile teacher up -d --wait --wait-timeout 180 website portal teacher-portal
 python scripts/ci/surfaces-smoke.py "$ADDRESS" "$STACK_DIR" "$ENVFILE" "$PROJECT"

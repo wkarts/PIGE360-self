@@ -119,3 +119,33 @@ def test_financial_only_guardian_has_no_learning_access(api, client, admin):
     headers = login(client, email, 'Profile-Test-Password-2026!')
     response = client.get('/api/v1/profile/learning', headers=headers)
     assert response.status_code == 200 and response.json()['students'] == []
+
+
+def test_family_keeps_closed_report_after_change_of_class(api, client):
+    student, _, enrollment, other, closure_id = published_learning(api)
+    with SessionLocal() as db:
+        old = db.get(m.ClassGroup, enrollment['class_group_id'])
+        group_data = {k:getattr(old,k) for k in ('unit_id','grade_id','shift_id','academic_year_id')}
+        old_name = old.name
+    target = api.post('/class-groups', {**group_data, 'name':'Turma de destino', 'capacity':5})
+    current = api.get('/enrollments/'+enrollment['id'])
+    api.move(current, 'change_class', class_group_id=target['id'])
+    cookies, _ = portal_session(api)
+    activate(client, cookies, student)
+    result = portal_call(client, cookies, 'GET', '/learning')['students'][0]['enrollments'][0]
+    assert result['class_name'] == 'Turma de destino'
+    period = result['subjects'][0]['periods'][0]
+    assert period['class_name'] == old_name and period['grade_display'] == '8,5'
+    assert other['id'] not in str(result)
+    # Fechamentos novos distinguem aula sem chamada de aula de outra turma após a mudança.
+    with SessionLocal.begin() as db:
+        closure = db.get(m.DiaryClosure, closure_id)
+        snapshot = dict(closure.snapshot)
+        snapshot['lessons'] = [*snapshot['lessons'], {**snapshot['lessons'][0],
+            'id':'aula-posterior', 'expected_enrollment_ids':[], 'lesson_count':3}]
+        closure.snapshot = snapshot
+    refreshed = portal_call(client, cookies, 'GET', '/learning')['students'][0]['enrollments'][0]
+    assert refreshed['subjects'][0]['periods'][0]['attendance'] == period['attendance']
+    with SessionLocal.begin() as db:
+        db.get(m.DiaryClosure, closure_id).active = False
+    assert portal_call(client, cookies, 'GET', '/learning')['students'][0]['enrollments'][0]['subjects'] == []
