@@ -3,6 +3,7 @@ import copy
 import hashlib
 import json
 import time
+from types import SimpleNamespace
 import uuid
 from pathlib import Path
 
@@ -158,9 +159,13 @@ def test_callback_rejects_wrong_scope_or_mapping(api, monkeypatch, mutation, exp
 
 def test_authentication_replay_window_and_unmapped_event(api, monkeypatch):
     cfg = configured(api, monkeypatch); row = enqueue(api, charge(api)['id'])
-    for stamp in (int(time.time())-301, int(time.time())+301):
+    now = int(time.time())
+    monkeypatch.setattr(bridge, 'time', SimpleNamespace(time=lambda: now))
+    for stamp in (now - 301, now + 301):
         assert callback(api, cfg, row, timestamp=stamp)[0].status_code == 401
-    assert callback(api, cfg, row, secret='wrong')[0].status_code == 401
+    assert callback(api, cfg, row, timestamp=now, secret='wrong')[0].status_code == 401
+    for stamp in (now - 300, now + 300):
+        assert callback(api, cfg, row, timestamp=stamp)[0].status_code == 409
     # Authentic events before the durable request mapping are not applied or dropped.
     assert callback(api, cfg, row)[0].status_code == 409
 

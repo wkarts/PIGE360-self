@@ -7,7 +7,9 @@ from test_school_website_domains import website
 
 def test_catalog_complete_editable_safe_and_fresh():
     entries=catalog()['items']
-    assert {x['id'] for x in entries}=={'horizon','editorial','culture','campus','familias'}
+    assert {x['id'] for x in entries}=={'horizon','editorial','culture','campus','familias','atelier','rota','nucleo'}
+    assert {x['id'] for x in entries[:5]}=={'horizon','editorial','culture','campus','familias'}
+    assert {x['website']['design']['direction'] for x in entries[5:]}=={'atelier','rota','nucleo'}
     for entry in entries:
         value=WebsiteInput(**entry['website'])
         d=value.design
@@ -26,7 +28,7 @@ def test_catalog_complete_editable_safe_and_fresh():
 
 def test_catalog_read_does_not_write_and_needs_auth(api,client):
     before=api.get('/website')
-    assert len(api.get('/website/models')['items'])==5
+    assert len(api.get('/website/models')['items'])==8
     assert api.get('/website')==before
     response=client.get(api.base+'/website/models')
     assert response.status_code in (401,403)
@@ -246,6 +248,18 @@ def test_community_news_and_agenda_are_real_feed_sections():
     assert pages['contato']['show_contact_details'] is True
 
 
+def test_opt_in_directions_keep_distinct_home_compositions_and_existing_models():
+    models={item['id']:item['website'] for item in catalog()['items']}
+    assert {models[key]['design']['direction'] for key in ('horizon','editorial','culture','campus','familias')}=={'standard'}
+    assert models['atelier']['theme']=='horizon' and models['atelier']['design']['direction']=='atelier'
+    assert models['rota']['theme']=='editorial' and models['rota']['design']['direction']=='rota'
+    assert models['nucleo']['theme']=='campus' and models['nucleo']['design']['direction']=='nucleo'
+    assert models['atelier']['design']['sections'][0]['id']=='pilares'
+    assert models['rota']['design']['pages'][0]['sections'][0]['id']=='jornada'
+    assert models['nucleo']['design']['sections'][0]['id']=='historias'
+    assert all(page['published'] for key in ('atelier','rota','nucleo') for page in models[key]['design']['pages'])
+
+
 def test_home_summaries_are_compact_and_editorial_discoveries_are_age_appropriate():
     models={m['id']:m['website']['design'] for m in catalog()['items']}
     for theme in ('horizon','editorial','culture'):
@@ -313,3 +327,20 @@ def test_family_services_use_school_links_only_when_configured():
     assert 'href="https://ingresso.example.test/online">Acessar matrícula online<span' in page
     assert 'href="https://familia.example.test/">Portal da família<span' in page
     assert 'Acessar matrícula online<span' not in render({**data, 'page': pages['ensino']})
+
+
+def test_directions_keep_their_own_pages_when_applied_over_parent_theme():
+    from app.school_website import resolve_website_model
+    models = {model['id']: model['website'] for model in catalog()['items']}
+    for model_id, theme in [('atelier','horizon'), ('rota','editorial'), ('nucleo','campus')]:
+        original = website_values(WebsiteInput(**models[theme]), exclude_enabled=True)
+        result = resolve_website_model(model_id, original)
+        pages = result['design']['pages']
+        assert pages[:6] == original['design']['pages']
+        assert len(pages) == 12
+        own_pages = {p['slug'] for p in pages if p['model_origin'].startswith(model_id + ':')}
+        assert own_pages == {link['url'][1:] for link in result['design']['menu']}
+        assert resolve_website_model(model_id, result)['design']['pages'] == pages
+    assert [s['kind'] for s in models['atelier']['design']['sections']] == ['split', 'gallery']
+    assert [s['kind'] for s in models['rota']['design']['sections']] == ['steps', 'split']
+    assert [s['kind'] for s in models['nucleo']['design']['sections']] == ['news', 'agenda']

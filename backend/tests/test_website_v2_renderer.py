@@ -47,6 +47,23 @@ def test_four_distinct_compositions_use_configured_media():
         assert not any(tag=='script' for tag,_ in nodes)
 
 
+def test_opt_in_directions_are_structurally_distinct_and_enrollment_cta_is_not_duplicated():
+    expected={'atelier':'atelier-cover','rota':'route-cover','nucleo':'nucleus-cover'}
+    for direction,marker in expected.items():
+        data=fixture('horizon')
+        data['website']['design'].update(composition_version=2,direction=direction,primary_action={'label':'Conheça a proposta','url':'#etapas'})
+        document=render(data)
+        nodes=Nodes(document).nodes
+        assert f'direction-{direction}' in next(attrs for tag,attrs in nodes if tag=='body')['class']
+        assert any(marker in attrs.get('class','').split() for _,attrs in nodes)
+        assert document.count('class="button admission-button"')==2  # capa e cabeçalho
+    data=fixture('horizon')
+    data['website']['design'].update(composition_version=2,direction='atelier',primary_action={'label':'Matrículas','url':'https://example.test/online.html'})
+    document=render(data)
+    assert not any('admission-button' in attrs.get('class','') for _,attrs in Nodes(document).nodes)
+    assert document.count('href="https://example.test/online.html"')==2
+
+
 def test_order_visibility_and_empty_sections_are_intentional():
     data=fixture()
     data['website']['design']['sections']=[{'id':'second','kind':'text','title':'Second title','text':'Second body'}, {'id':'hidden','kind':'text','visible':False,'title':'Hidden title'}, {'id':'first','kind':'text','title':'First title'}]

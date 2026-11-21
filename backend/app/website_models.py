@@ -21,8 +21,8 @@ def section(id,kind,title,text='',*,layout='default',photo=None,items=None,eyebr
     return {'id':id,'kind':kind,'title':title,'text':text,'layout':layout,'image':image(photo) if photo else None,
             'items':items or [],'eyebrow':eyebrow,'action':action,'visible':True}
 
-def design(theme,sections,hero=None,gallery=None):
-    return {'composition_version':2,'demonstration':True,'configured':True,'heading_style':'editorial' if theme in {'horizon','editorial'} else 'inherit',
+def design(theme,sections,hero=None,gallery=None,direction='standard'):
+    return {'composition_version':2,'direction':direction,'demonstration':True,'configured':True,'heading_style':'editorial' if theme in {'horizon','editorial'} else 'inherit',
             'header_sticky':False,'mobile_actions':False,'topline':'Juntos, ampliamos possibilidades.' if theme in {'horizon','editorial'} else '', 'hero_caption':{'horizon':'Educar para a vida, em cada etapa.','editorial':'Pequenos gestos. Grandes descobertas.'}.get(theme,''),
             'eyebrow':{'horizon':'Institucional contemporâneo','editorial':'Infância e descobertas','culture':'Aprendizagem e projetos','campus':'Vida escolar'}[theme],
             'hero_image':image(hero) if hero else None,'hero_gallery':gallery or [],'primary_action':link('Agende uma visita'),
@@ -100,6 +100,38 @@ def catalog():
     for entry in result['items']:
         entry['website']=multipage_website(entry['website'])
     result['items'].append(family_services_model())
+
+    # New directions are deliberately opt-in.  They keep the five existing
+    # identifiers above untouched and are only applied after the editor shows
+    # a complete preview and the operator confirms the draft action.
+    direction_values=[
+        ('atelier','Ateliê','Editorial em camadas, com fotografia, matéria e chamadas curtas.','Uma escola que se faz em movimento.','Ideias, encontros e experiências que ganham forma no cotidiano.',
+         [section('pilares','split','Aprender é fazer, observar e compartilhar.','Uma composição mais tátil para mostrar processos, pessoas e os detalhes que dão identidade à escola.',layout='feature',photo='theatre',eyebrow='Ateliê aberto',action=link('Ver projetos','#educacao')),
+          section('educacao','cards','Projetos que ganham forma.',eyebrow='Mãos, ideias e descobertas',items=[item('Experimentar','Perguntas que viram protótipos, histórias e novas tentativas.','lab','Conhecer'),item('Criar em companhia','A escola como espaço para fazer junto e aprender com o processo.','community','Conhecer'),item('Cuidar do entorno','Pequenas ações para observar e transformar o lugar onde vivemos.','garden','Conhecer')]),
+          section('escola','split','Uma presença que se percebe nos detalhes.','Escuta, tempo e intenção para acompanhar cada etapa.',layout='quote',photo='library',eyebrow='O jeito de estar junto',items=[item('Observar. Perguntar. Fazer novamente.','Cada percurso merece espaço para acontecer.',label='')]),
+          section('espacos','gallery','Espaços para imaginar e construir.', 'Ambientes que convidam à leitura, à criação e à convivência.',eyebrow='A escola por dentro',items=[item('Laboratório de ideias',photo='lab',label=''),item('Biblioteca viva',photo='library',label=''),item('Pátio de encontros',photo='community',label='')]),
+          section('visita','cta','Venha conhecer nosso processo.','Uma conversa pode ser o começo de uma boa parceria.',action=link('Agendar conversa','#contato'))],
+         'theatre',[image('lab','Investigar'),image('community','Compartilhar')]),
+        ('rota','Rota','Uma jornada visual, com passos claros e leitura rápida em qualquer tela.','A escola acontece em muitos caminhos.','Acompanhe as etapas, as experiências e os próximos passos da comunidade.',
+         [section('jornada','steps','Uma jornada com começo, percurso e descoberta.','Uma leitura em sequência para apresentar o jeito de aprender da escola.',layout='dates',eyebrow='Por onde começamos?',items=[item('Chegar','Acolher perguntas, vínculos e diferentes histórias.',label=''),item('Explorar','Investigar o mundo com curiosidade e autonomia.',label=''),item('Compartilhar','Registrar, conversar e celebrar o que foi aprendido.',label='')]),
+          section('rotina','split','O cotidiano também ensina.','Ritmos, encontros e experiências que tornam cada dia significativo.',layout='spotlight',photo='garden',eyebrow='No dia a dia',items=[item('Tempo para descobrir','Brincadeiras, aulas e projetos em movimento.',label='')]),
+          section('familias','cards','Família e escola no mesmo caminho.','Informação clara e conversa próxima para acompanhar cada etapa.',eyebrow='Parceria',items=[item('Acompanhar','Receber orientações e participar das conversas.',label=''),item('Perguntar','Encontrar a equipe e combinar os próximos passos.',label='')]),
+          section('visita','cta','Qual é o próximo passo da sua família?','Conheça a escola e converse com a equipe.',action=link('Planejar uma visita','#contato'))],
+         'garden',[image('preschool','Tempo para descobrir'),image('community','Aprender junto')]),
+        ('nucleo','Núcleo','Uma vitrine compacta para notícias, agenda e o que está acontecendo agora.','A vida escolar em um só lugar.','Histórias, encontros e projetos que aproximam a comunidade.',
+         [section('historias','cards','O que está acontecendo na escola.',layout='magazine',eyebrow='Em destaque',items=[item('Uma comunidade em movimento','Histórias e experiências que merecem ser compartilhadas.','community','Ler história'),item('Projetos que aproximam','Ideias que saem da sala e encontram o mundo.','lab','Ler história'),item('Cultura para participar','Arte, esporte e convivência no cotidiano.','theatre','Ler história')]),
+          section('agenda','agenda','Próximos encontros.',layout='dates',eyebrow='Para anotar'),
+          section('noticias','news','Notícias da escola.',layout='magazine'),
+          section('vivencias','split','Uma escola feita de participação.','Descubra como estudantes, famílias e educadores constroem juntos a vida escolar.',layout='feature',photo='sport',eyebrow='Comunidade',action=link('Conhecer a escola','#contato')),
+          section('visita','cta','Quer fazer parte?','Fale com a escola e descubra os próximos passos.',action=link('Conversar com a equipe','#contato'))],
+         'community',[image('lab','Projetos em movimento'),image('sport','Vida escolar')]),
+    ]
+    for key,name,desc,headline,intro,sections,hero,gallery in direction_values:
+        theme={'atelier':'horizon','rota':'editorial','nucleo':'campus'}[key]
+        preset={'id':key,'name':name,'description':desc,'demonstration_notice':'Direção experimental: textos e fotografias ilustrativas. Revise e substitua antes de publicar.',
+                'website':{'theme':theme,'headline':headline,'introduction':intro,'about':'','notice':'','design':design(theme,sections,hero,gallery,direction=key)}}
+        preset['website']=multipage_website(preset['website'])
+        result['items'].append(preset)
     return result
 
 
@@ -148,7 +180,8 @@ def multipage_website(website):
         'visita':'Conheça os espaços, converse sobre a proposta e compartilhe as perguntas da sua família.',
         'contato':'Encontre os canais institucionais e comece uma conversa com a equipe da escola.',
     }
-    pages=[{'slug':slug,'model_origin':theme+':'+slug,'show_contact_details':slug=='contato','title':title,'introduction':introductions[slug],'published':True,'image':None,'sections':deepcopy(sections)} for slug,title,sections in groups]
+    origin=d['direction'] if d['direction']!='standard' else theme
+    pages=[{'slug':slug,'model_origin':origin+':'+slug,'show_contact_details':slug=='contato','title':title,'introduction':introductions[slug],'published':True,'image':None,'sections':deepcopy(sections)} for slug,title,sections in groups]
     # The cover carries the identity; the home contains summaries, not entire pages.
     summary_groups=groups[1:4] if theme=='culture' else groups[:3]
     summaries=[item(title,introductions[slug],label='Conheça mais',target='/'+slug) for slug,title,_ in summary_groups]
@@ -163,6 +196,13 @@ def multipage_website(website):
         for index,story in enumerate(lead['items']):story['action']=link('Leia a história','/'+('historias' if index==0 else 'vivencias'))
         home=[lead,section('convite','cta','Conheça as histórias e participe.','Explore a vida escolar, consulte a agenda e converse com a equipe.',action=link('Ver agenda','/agenda'))]
     else:home=[first]
+    if d['direction']=='atelier':
+        home=[source['pilares'],source['espacos']]
+    elif d['direction']=='rota':
+        home=[source['jornada'],source['rotina']]
+    elif d['direction']=='nucleo':
+        home=[section('historias','news','Notícias da escola',layout='magazine',action=link('Todas as notícias','/noticias')),
+              section('agenda','agenda','Na agenda',action=link('Consultar agenda','/agenda'))]
     d.update(sections=home,pages=pages,menu=[link(title,'/'+slug) for slug,title,_ in groups],primary_action=link('Agende uma visita','/visita'),secondary_action=None)
     result['design']=rewrite_links(d,mapping)
     for page in result['design']['pages']:

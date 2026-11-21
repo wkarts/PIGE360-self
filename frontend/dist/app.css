@@ -548,3 +548,9 @@ td .link-button { text-align: left; }
 .work-tabs .work-resume{color:var(--primary-dark);font-size:.8rem;font-weight:700}
 [data-task-paused]{display:none!important}
 .task-minimize{margin-inline-start:auto;font-size:.8rem}
+
+.diary-links { display:flex; flex-wrap:wrap; gap:.35rem .75rem; margin:.5rem 0; }
+.diary-links a { display:inline-flex; align-items:center; min-height:44px; padding:0 .45rem; }
+.diary-links a[aria-current] { font-weight:700; text-decoration:underline; text-underline-offset:.3em; }
+
+.diary-context { position:sticky; top:0; z-index:2; background:var(--surface,white); padding:.5rem; margin:0; }
