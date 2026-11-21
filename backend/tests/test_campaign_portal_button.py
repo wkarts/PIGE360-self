@@ -9,7 +9,7 @@ def test_visibility_roundtrip_and_old_clients_preserve_choice(api, monkeypatch):
     payload={**campaign(cat['group']), 'active':True}
     row=api.post('/admission-campaigns',payload)
     assert row['show_student_portal_button'] is True
-    assert row['student_portal_url']=='/family.html'
+    assert row['student_portal_url']=='/family'
     row=api.patch('/admission-campaigns/'+row['id'],{**payload,'version':row['version'],'show_student_portal_button':False})
     assert row['show_student_portal_button'] is False
     assert api.get('/admission-campaigns')[0]['show_student_portal_button'] is False
@@ -21,7 +21,7 @@ def test_visibility_roundtrip_and_old_clients_preserve_choice(api, monkeypatch):
     assert row['show_student_portal_button'] is False
     monkeypatch.setattr(settings(),'portal_public_url','https://portal.example.test/')
     public=api.client.get('/api/v1/portal/campaigns/'+row['slug']).json()
-    assert public['student_portal_url']=='https://portal.example.test/family.html'
+    assert public['student_portal_url']=='https://portal.example.test/family'
     row=api.patch('/admission-campaigns/'+row['id'],{**payload,'version':row['version'],'show_student_portal_button':True})
     assert row['show_student_portal_button'] is True
 
@@ -58,3 +58,28 @@ def test_migration_preserves_existing_publications():
             assert connection.execute(sa.text('SELECT show_student_portal_button FROM admission_campaigns')).scalar_one()==1
             migration.downgrade()
         assert connection.execute(sa.text('SELECT id FROM admission_campaigns')).scalar_one()=='existing'
+
+
+def test_manager_legacy_entries_use_the_correct_dedicated_origin(client, monkeypatch):
+    monkeypatch.setattr(settings(), 'portal_public_url', 'https://familia.example.test')
+    monkeypatch.setattr(settings(), 'teacher_portal_public_url', 'https://professor.example.test')
+    for path, destination in [('/family.html?view=academic', 'https://familia.example.test/family?view=academic'),
+                              ('/professor.html?diarioPiloto=abc', 'https://professor.example.test/?diarioPiloto=abc')]:
+        response = client.get(path, follow_redirects=False)
+        assert response.status_code == 302
+        assert response.headers['location'] == destination
+
+
+def test_clean_navigation_and_legacy_bookmarks(client):
+    for name in ('index', 'online', 'news', 'family', 'professor', 'first-access'):
+        clean = '/' if name == 'index' else '/' + name
+        old = client.get('/' + name + '.html?a=1&b=2', follow_redirects=False)
+        assert old.status_code == 302 and old.headers['location'] == clean + '?a=1&b=2'
+        assert client.get(clean, follow_redirects=False).status_code == 200
+    from app.school_website import canonical_site_routes
+    original = {'portal_url':'https://familia.test/family.html?view=academic#area',
+                'menu':[{'url':'https://externo.test/online.html'}]}
+    converted = canonical_site_routes(original, {'https://familia.test'})
+    assert converted['portal_url'] == 'https://familia.test/family?view=academic#area'
+    assert converted['menu'] == original['menu']
+    assert original['portal_url'].endswith('family.html?view=academic#area')

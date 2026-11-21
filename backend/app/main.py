@@ -8,7 +8,7 @@ import httpx
 from . import educacenso
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse, RedirectResponse
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from sqlalchemy import text
@@ -129,7 +129,7 @@ async def security_headers(request: Request, call_next):
         "object-src 'none'; base-uri 'self'; form-action 'self'; "
         + ("frame-ancestors 'self' " + ' '.join(parents) if parents else "frame-ancestors 'none'")
     ))
-    if request.url.path.startswith('/api') or request.url.path in ('/','/index.html','/online.html','/news.html','/sw.js','/manifest.webmanifest'):
+    if request.url.path.startswith('/api') or request.url.path in ('/','/online','/news','/family','/professor','/first-access','/index.html','/online.html','/news.html','/sw.js','/manifest.webmanifest'):
         response.headers['Cache-Control'] = 'no-store'
     # Cache público somente dos ativos de identidade; jamais sessão, perfil ou foto pessoal.
     public_asset = request.url.path.startswith('/api/v1/institution/assets/')
@@ -229,6 +229,18 @@ def ready():
 def frontend(path: str, request: Request, db: auth.DB):
     if path.startswith(('api/', 'health/')):
         raise HTTPException(404, 'Rota não encontrada.')
+    routes = {'index': '', 'online': 'online', 'news': 'news', 'family': 'family',
+              'professor': 'professor', 'first-access': 'first-access'}
+    name = path.removesuffix('.html').rstrip('/')
+    query = '?' + request.url.query if request.url.query else ''
+    if name == 'professor' and cfg.teacher_portal_public_url:
+        return RedirectResponse(cfg.teacher_portal_public_url.rstrip('/') + '/' + query, status_code=302)
+    if name == 'family' and cfg.portal_public_url:
+        return RedirectResponse(cfg.portal_public_url.rstrip('/') + '/family' + query, status_code=302)
+    if name in routes:
+        if path.endswith('.html') or name == 'index' or path.endswith('/'):
+            return RedirectResponse('/' + routes[name] + query, status_code=302)
+        path = name + '.html'
     root = cfg.frontend_path.resolve()
     requested = (root / path).resolve()
     if not requested.is_relative_to(root):

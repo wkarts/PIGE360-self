@@ -85,7 +85,7 @@ def main():
     tag='develop' if channel=='develop' else 'latest'
     official={'APP_IMAGE':'ghcr.io/wkarts/pige360-self',
               'MAIL_AGENT_IMAGE':'ghcr.io/wkarts/pige360-self-mail-agent',
-              'PORTAL_IMAGE':'ghcr.io/wkarts/pige360-self-portal','SOGO_IMAGE':'ghcr.io/wkarts/pige360-self-sogo','WEBSITE_IMAGE':'ghcr.io/wkarts/pige360-self-website'}
+              'TEACHER_PORTAL_IMAGE':'ghcr.io/wkarts/pige360-self-teacher-portal','PORTAL_IMAGE':'ghcr.io/wkarts/pige360-self-portal','SOGO_IMAGE':'ghcr.io/wkarts/pige360-self-sogo','WEBSITE_IMAGE':'ghcr.io/wkarts/pige360-self-website'}
     example=(root/'deploy'/('docker' if instance else env_path.parts[1])/f'.env.{channel}.example').read_text().splitlines()
     version=(root/'VERSION').read_text().strip()
     version_tuple=tuple(map(int,version.split('.')))

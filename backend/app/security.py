@@ -193,7 +193,17 @@ def allowed_request_origin(origin,path):
         return path.startswith(('/api/v1/teacher/', '/api/v1/auth/'))
     portal=settings().portal_public_url.rstrip('/')
     if not portal or origin.rstrip('/')!=portal:return False
-    return path.startswith(('/api/v1/teacher/','/api/v1/portal/','/api/v1/family/','/api/v1/profile/learning','/api/v1/invitations/','/api/v1/auth/'))
+    return path.startswith(('/api/v1/portal/','/api/v1/family/','/api/v1/profile/learning','/api/v1/invitations/','/api/v1/auth/'))
+
+def require_portal_role(request, user):
+    origin = request.headers.get('origin', '').rstrip('/')
+    if not origin:
+        return
+    config = settings()
+    if origin == config.teacher_portal_public_url.rstrip('/') and user.role != 'teacher':
+        fail(403, 'Esta área requer uma conta de Professor. Confira o perfil com a Secretaria.')
+    if origin == config.portal_public_url.rstrip('/') and user.role not in {'student', 'guardian'}:
+        fail(403, 'Esta área requer uma conta de aluno ou responsável.')
 
 def request_csrf(request: Request):
     if request.headers.get('X-CSRF-Protection') != '1':

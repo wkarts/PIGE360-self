@@ -15,7 +15,7 @@ var PigeInstitution;
     function apply(value) {
         Object.assign(PigeInstitution.state, value);
         const surface = document.documentElement?.dataset?.institutionSurface;
-        document.title = value.display_name + ' · ' + (location.pathname === '/online.html' ? 'Portal dos responsáveis' : surface === 'teacher' ? 'Portal do Professor' : surface === 'portal' ? 'Portal do aluno e responsável' : 'Gestão escolar');
+        document.title = value.display_name + ' · ' + (location.pathname === '/online' ? 'Portal dos responsáveis' : surface === 'teacher' ? 'Portal do Professor' : surface === 'portal' ? 'Portal do aluno e responsável' : 'Gestão escolar');
         document.querySelector('meta[name="theme-color"]')?.setAttribute('content', value.primary_color);
         const theme = document.querySelector('link[data-institution-theme]');
         if (theme && !theme.href.endsWith('/api/v1/institution/theme.css?v=' + value.version))
@@ -300,10 +300,7 @@ var PigeFamily;
             PigeMFA.clear();
         } });
     }
-    async function load() { if (s.account?.role === 'teacher') {
-        location.replace('/professor.html');
-        return;
-    } clearPrivate(); s.contextError = false; const current = generation; try {
+    async function load() { clearPrivate(); s.contextError = false; const current = generation; try {
         const data = await request('/family/context');
         if (current !== generation)
             return;
@@ -373,7 +370,7 @@ var PigeFamily;
             s.feedBusy = false;
     } }
     function updateLocation(push = false) { const params = new URLSearchParams({ view: s.section }); if (s.studentId)
-        params.set('student', s.studentId); history[push ? 'pushState' : 'replaceState']({}, '', '/family.html?' + params); }
+        params.set('student', s.studentId); history[push ? 'pushState' : 'replaceState']({}, '', '/family?' + params); }
     async function changeStudent() { if (s.busy)
         return; clearSchoolwork(); s.selectedPost = null; updateLocation(); await run(async () => { await Promise.all([finance(), loadSchoolwork()]); }); }
     async function chooseStudent(id) { if (s.busy)

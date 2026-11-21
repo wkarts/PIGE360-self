@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Reconcilia release publicada por SHA e verifica contrato imutável sem republicar."""
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
@@ -57,6 +58,11 @@ def verify_manifest(api, release, loader=load_manifest, aliases=False):
             'Manifesto difere da tag/SHA publicado')
     images = manifest.get('images', {})
     expected=IMAGES[:3] if parse(tag)<=(0,12,1) else IMAGES
+    if expected == IMAGES and set(images) == set(IMAGES[:-1]):
+        # Historical manifests are checked against the packaging at their immutable commit.
+        recipe = api.api('/contents/services/portal/Dockerfile?ref=' + target)
+        if b' AS teacher' not in base64.b64decode(recipe['content']):
+            expected = IMAGES[:-1]
     require(set(images) == set(expected), 'Manifesto não contém o conjunto de imagens PIGE da versão')
     for image, digest in images.items():
         import re

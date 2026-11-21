@@ -12,7 +12,6 @@
         <div class="field"><label for="teacher-password">Senha</label><div class="password-control"><input id="teacher-password" v-model="s.password" :type="s.passwordVisible?'text':'password'" required maxlength="128" autocomplete="current-password" enterkeyhint="go" placeholder="Sua senha de acesso" :disabled="s.busy"><button class="password-toggle" type="button" :aria-label="s.passwordVisible?'Ocultar senha':'Mostrar senha'" :aria-pressed="s.passwordVisible" aria-controls="teacher-password" @click="s.passwordVisible=!s.passwordVisible">{{s.passwordVisible?'Ocultar':'Mostrar'}}</button></div></div>
         <button class="btn btn-primary full" :disabled="s.busy">{{s.busy?'Autenticando…':'Entrar como professor'}} <span aria-hidden="true">→</span></button>
         <p class="auth-help muted">Precisa recuperar seu acesso? Fale com a secretaria da escola.</p>
-        <a href="/family.html">Portal do aluno e responsável</a>
       </form>
     </section>
   </main>

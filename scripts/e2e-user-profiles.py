@@ -147,7 +147,7 @@ try:
         user = next(item for item in client.get(base_a+'/users', headers=headers).json() if item['email']==USER_EMAIL)
         user_id = user['id']
         # Primeiro acesso usa o convite persistido, sem senha inicial do administrador.
-        token_script="from sqlalchemy import select;from app.db import SessionLocal;from app import models as m;from app.integration_core import unseal;import re;db=SessionLocal();j=db.scalar(select(m.IntegrationJob).where(m.IntegrationJob.dedupe_key=='user-invitation:'+__import__('sys').argv[1]));print(re.search(r'first-access.html#([A-Za-z0-9_-]+)',unseal(j.encrypted_payload)['text']).group(1))"
+        token_script="from sqlalchemy import select;from app.db import SessionLocal;from app import models as m;from app.integration_core import unseal;import re;db=SessionLocal();j=db.scalar(select(m.IntegrationJob).where(m.IntegrationJob.dedupe_key=='user-invitation:'+__import__('sys').argv[1]));print(re.search(r'first-access#([A-Za-z0-9_-]+)',unseal(j.encrypted_payload)['text']).group(1))"
         invitation_token=subprocess.check_output([sys.executable,'-c',token_script,user['invitation']['id']],cwd=ROOT/'backend',env=env,text=True).strip()
         client.post('/api/v1/invitations/accept',json={'token':invitation_token,'password':PASSWORD}).raise_for_status()
         assert user['access_profile_id'] == profile['id'] and user['school_ids'] == [school_a]

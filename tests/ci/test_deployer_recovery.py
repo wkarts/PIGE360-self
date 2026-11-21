@@ -34,6 +34,19 @@ class DeployerRecoveryTests(unittest.TestCase):
         self.assertIn('COMPOSE_PROFILES=infra,portal,s3,website',result)
         self.assertTrue(list(self.env.parent.glob('.env.backup-*')))
 
+    def test_teacher_surface_rejects_shared_origin_or_port_and_persists_profile(self):
+        args=(self.root,self.path,'https://school.example.test','48182','https://portal.example.test','48183',True,True)
+        for url,port in [('https://portal.example.test','48184'),('https://faculty.example.test','48183')]:
+            with self.assertRaises(ValueError):
+                deployer.configure_surfaces(*args,teacher=(url,port,True))
+        with patch.object(deployer.subprocess,'run'):
+            deployer.configure_surfaces(*args,teacher=('https://faculty.example.test','48184',True))
+            deployer.configure_surfaces(*args)
+        saved=self.env.read_text()
+        self.assertIn('COMPOSE_PROFILES=infra,portal,s3,teacher,website',saved)
+        self.assertIn('TEACHER_PORTAL_PUBLIC_URL=https://faculty.example.test',saved)
+        self.assertIn('TEACHER_PORTAL_PORT=48184',saved)
+
     def test_bad_ports_or_origins_leave_existing_configuration_unchanged(self):
         original=self.env.read_bytes()
         for url,port in [('http://public.example.test','48183'),('https://portal.example.test/path','48183'),('https://portal.example.test','58181')]:

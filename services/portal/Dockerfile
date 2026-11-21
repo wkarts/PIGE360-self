@@ -9,7 +9,7 @@ RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY VERSION /VERSION
 COPY frontend/ ./
 RUN npm run build
-FROM ${PYTHON_BASE_IMAGE}
+FROM ${PYTHON_BASE_IMAGE} AS portal-runtime
 ARG APP_VERSION=0.12.1
 ARG SOURCE_REVISION=local
 LABEL org.opencontainers.image.title="PIGE360 Self — portal privado" \
@@ -23,3 +23,15 @@ USER 10001:10001
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready',timeout=3)"
 CMD ["python","server.py"]
+
+FROM portal-runtime AS teacher
+ENV PORTAL_SURFACE=teacher
+LABEL org.opencontainers.image.title="PIGE360 Self — Portal do Professor"
+USER root
+RUN rm -f public/family.html public/family.js public/online.html public/portal.js public/index.html public/app.js
+USER 10001:10001
+
+FROM portal-runtime AS family
+USER root
+RUN rm -f public/professor.html public/teacher.js public/index.html public/app.js
+USER 10001:10001

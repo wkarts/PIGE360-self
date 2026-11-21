@@ -195,6 +195,9 @@ jobs:
           docker build --build-arg NODE_BASE_IMAGE="$NODE_BASE_IMAGE" --build-arg PYTHON_BASE_IMAGE="$PYTHON_BASE_IMAGE" \
             --build-arg APP_VERSION="$(cat VERSION)" --build-arg SOURCE_REVISION="$(git rev-parse HEAD)" \
             -f services/portal/Dockerfile -t pige360-portal:ci .
+          docker build --build-arg NODE_BASE_IMAGE="$NODE_BASE_IMAGE" --build-arg PYTHON_BASE_IMAGE="$PYTHON_BASE_IMAGE" \
+            --build-arg APP_VERSION="$(cat VERSION)" --build-arg SOURCE_REVISION="$(git rev-parse HEAD)" \
+            --target teacher -f services/portal/Dockerfile -t pige360-teacher-portal:ci .
           # O Dockerfile deve falhar se o Apache upstream voltar a remover os
           # cabeçalhos de login confiáveis ou reescrever a URL pública.
           docker build --build-arg SOURCE_REVISION="$(git rev-parse HEAD)" --build-arg APP_VERSION="$(cat VERSION)" \
