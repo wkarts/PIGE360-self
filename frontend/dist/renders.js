@@ -1714,12 +1714,17 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                       ? (_openBlock(), _createElementBlock("div", {
                           key: 0,
                           class: "page-header"
-                        }, [_createElementVNode("div", { class: "page-heading" }, [_createElementVNode("p", { class: "breadcrumb" }, _toDisplayString(registryPages.includes(state.page)?'Cadastros':integrationPages.includes(state.page)?'Integrações':administrationPages.includes(state.page)?'Administração do sistema':state.page==='settings'?'Instituição':configurationPages.includes(state.page)?'Configurações':documentPages.includes(state.page)?'Documentos':'Secretaria') + " / " + _toDisplayString(pageLabels[state.page]), 1), _createElementVNode("div", { class: "page-heading-title" }, [_createElementVNode("h1", null, _toDisplayString(state.selectedStudent ? state.selectedStudent.person.name : pageLabels[state.page]), 1)]), (state.selectedStudent)
+                        }, [_createElementVNode("div", { class: "page-heading" }, [_createElementVNode("p", { class: "breadcrumb" }, _toDisplayString(registryPages.includes(state.page)?'Cadastros':integrationPages.includes(state.page)?'Integrações':administrationPages.includes(state.page)?'Administração do sistema':state.page==='settings'?'Instituição':configurationPages.includes(state.page)?'Configurações':documentPages.includes(state.page)?'Documentos':'Secretaria') + " / " + _toDisplayString(pageLabels[state.page]), 1), _createElementVNode("div", { class: "page-heading-title" }, [_createElementVNode("h1", null, _toDisplayString(state.selectedStudent ? state.selectedStudent.person.name : (state.personRecord?.person.name || pageLabels[state.page])), 1)]), (state.selectedStudent)
                           ? (_openBlock(), _createElementBlock("p", {
                               key: 0,
                               class: "page-subtitle"
                             }, "Ficha do aluno · " + _toDisplayString(state.selectedStudent.number), 1))
-                          : _createCommentVNode("", true)]), _createElementVNode("div", { class: "actions" }, [
+                          : (state.personRecord)
+                            ? (_openBlock(), _createElementBlock("p", {
+                                key: 1,
+                                class: "page-subtitle"
+                              }, _toDisplayString(recordKind() ? 'Ficha de '+personTypeLabel(recordKind()).toLocaleLowerCase('pt-BR') : 'Ficha da pessoa'), 1))
+                            : _createCommentVNode("", true)]), _createElementVNode("div", { class: "actions" }, [
                           (state.page!=='help')
                             ? (_openBlock(), _createElementBlock("button", {
                                 key: 0,
@@ -1727,79 +1732,86 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                 onClick: $event => (navigate('help'))
                               }, "Guia de uso", 8, ["onClick"]))
                             : _createCommentVNode("", true),
-                          (registryPages.includes(state.page) && state.page!=='people' && !state.selectedStudent && can('people.write'))
+                          (registryPages.includes(state.page) && state.page!=='people' && !state.selectedStudent && !state.personRecord && can('people.write'))
                             ? (_openBlock(), _createElementBlock("button", {
                                 key: 1,
                                 class: "btn btn-secondary",
                                 onClick: reusePerson
                               }, "Vincular pessoa existente", 8, ["onClick"]))
                             : _createCommentVNode("", true),
-                          (isBusiness() && can('people.write'))
+                          (isBusiness() && !state.personRecord && can('people.write'))
                             ? (_openBlock(), _createElementBlock("button", {
                                 key: 2,
                                 class: "btn btn-primary",
                                 onClick: $event => (newBusiness())
                               }, "+ Cadastrar " + _toDisplayString(businessTypes[state.page].singular), 9, ["onClick"]))
                             : _createCommentVNode("", true),
-                          (state.selectedStudent)
+                          (state.personRecord)
                             ? (_openBlock(), _createElementBlock("button", {
                                 key: 3,
+                                class: "btn btn-secondary",
+                                onClick: closePersonRecord
+                              }, "← Voltar à lista", 8, ["onClick"]))
+                            : _createCommentVNode("", true),
+                          (state.selectedStudent)
+                            ? (_openBlock(), _createElementBlock("button", {
+                                key: 4,
                                 class: "btn btn-secondary",
                                 onClick: studentList
                               }, "← Todos os alunos", 8, ["onClick"]))
                             : _createCommentVNode("", true),
-                          (state.page==='people' && can('people.write'))
+                          (state.page==='people' && !state.personRecord && can('people.write'))
                             ? (_openBlock(), _createElementBlock("button", {
-                                key: 4,
+                                key: 5,
                                 class: "btn btn-primary",
                                 onClick: newPerson
                               }, "+ Nova pessoa", 8, ["onClick"]))
                             : _createCommentVNode("", true),
-                          (state.page==='students' && !state.selectedStudent && can('people.write'))
+                          (state.page==='students' && !state.selectedStudent && !state.personRecord && can('people.write'))
                             ? (_openBlock(), _createElementBlock("button", {
-                                key: 5,
+                                key: 6,
                                 class: "btn btn-primary",
                                 onClick: $event => (newStudent())
                               }, "+ Novo aluno", 8, ["onClick"]))
                             : _createCommentVNode("", true),
-                          (state.page==='teachers' && can('people.write'))
+                          (state.page==='teachers' && !state.personRecord && can('people.write'))
                             ? (_openBlock(), _createElementBlock("button", {
-                                key: 6,
+                                key: 7,
                                 class: "btn btn-primary",
                                 onClick: $event => (newTeacher())
                               }, "+ Novo professor", 8, ["onClick"]))
                             : _createCommentVNode("", true),
-                          (state.page==='employees' && can('people.write'))
+                          (state.page==='employees' && !state.personRecord && can('people.write'))
                             ? (_openBlock(), _createElementBlock("button", {
-                                key: 7,
+                                key: 8,
                                 class: "btn btn-primary",
                                 onClick: $event => (newEmployee())
                               }, "+ Novo funcionário", 8, ["onClick"]))
                             : _createCommentVNode("", true),
-                          (state.page==='guardians' && can('people.write'))
+                          (state.page==='guardians' && !state.personRecord && can('people.write'))
                             ? (_openBlock(), _createElementBlock("button", {
-                                key: 8,
+                                key: 9,
                                 class: "btn btn-primary",
                                 onClick: newGuardian
                               }, "+ Novo responsável", 8, ["onClick"]))
                             : _createCommentVNode("", true),
                           (state.page==='enrollments' && can('enrollments.write'))
                             ? (_openBlock(), _createElementBlock("button", {
-                                key: 9,
+                                key: 10,
                                 class: "btn btn-primary",
                                 onClick: newEnrollment
                               }, "+ Nova matrícula", 8, ["onClick"]))
                             : _createCommentVNode("", true),
                           (state.page==='academic' && can('academic.write'))
                             ? (_openBlock(), _createElementBlock("button", {
-                                key: 10,
+                                key: 11,
                                 class: "btn btn-primary",
                                 onClick: $event => (newCatalog())
                               }, "+ Cadastrar", 8, ["onClick"]))
                             : _createCommentVNode("", true),
                           (state.page==='protocols' && can('protocols.write'))
                             ? (_openBlock(), _createElementBlock("button", {
-                                key: 11,
+                                key: 12,
                                 class: "btn btn-primary",
                                 onClick: $event => (newProtocol())
                               }, "+ Abrir protocolo", 8, ["onClick"]))
@@ -2363,9 +2375,74 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                 ]))
                               }), 128))])]))]))
                       : _createCommentVNode("", true),
-                    (state.page==='students' && state.selectedStudent)
+                    (state.personRecord)
                       ? (_openBlock(), _createElementBlock("section", {
                           key: 18,
+                          class: "student-detail",
+                          "aria-label": "Ficha cadastral"
+                        }, [_createElementVNode("div", { class: "student-banner" }, [
+                          (photoSrc(state.personRecord.person))
+                            ? (_openBlock(), _createElementBlock("img", {
+                                key: 0,
+                                class: "avatar large",
+                                src: photoSrc(state.personRecord.person),
+                                alt: 'Foto de '+state.personRecord.person.name
+                              }, null, 8, ["src", "alt"]))
+                            : (_openBlock(), _createElementBlock("span", {
+                                key: 1,
+                                class: "avatar large"
+                              }, _toDisplayString(initials(state.personRecord.person.name)), 1)),
+                          _createElementVNode("div", { class: "grow" }, [_createElementVNode("h2", null, _toDisplayString(state.personRecord.person.social_name || state.personRecord.person.trade_name || state.personRecord.person.name), 1), _createElementVNode("p", null, _toDisplayString((state.personRecord.person.person_types || []).map(personTypeLabel).join(' · ')), 1)]),
+                          _createElementVNode("span", { class: "badge" }, _toDisplayString(state.personRecord.person.archived?'Arquivado':state.personRecord.person.active?'Ativo':'Inativo'), 1),
+                          (can('people.write') && !state.recordArchived && !state.personRecord.person.archived)
+                            ? (_openBlock(), _createElementBlock("button", {
+                                key: 2,
+                                class: "btn btn-secondary",
+                                onClick: editRecord
+                              }, "Editar cadastro", 8, ["onClick"]))
+                            : _createCommentVNode("", true)
+                        ]), _createElementVNode("div", {
+                          class: "tabs",
+                          "aria-label": "Seções da ficha"
+                        }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(recordTabs(), (tab) => {
+                          return (_openBlock(), _createElementBlock("button", {
+                            key: tab.value,
+                            class: _normalizeClass({active:state.recordTab===tab.value}),
+                            "aria-pressed": state.recordTab===tab.value,
+                            onClick: $event => (state.recordTab=tab.value)
+                          }, _toDisplayString(tab.label), 11, ["aria-pressed", "onClick"]))
+                        }), 128))]), (state.recordTab==='family')
+                          ? (_openBlock(), _createElementBlock("section", {
+                              key: 0,
+                              class: "panel"
+                            }, [_createElementVNode("div", { class: "panel-header" }, [_createElementVNode("h2", null, "Vínculos familiares")]), (!state.personRecord.family.total)
+                              ? (_openBlock(), _createElementBlock("p", {
+                                  key: 0,
+                                  class: "empty-state"
+                                }, "Nenhum vínculo familiar cadastrado."))
+                              : (_openBlock(), _createElementBlock("div", {
+                                  key: 1,
+                                  class: "data-grid"
+                                }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.personRecord.family.items, (link) => {
+                                  return (_openBlock(), _createElementBlock("article", { key: link.id }, [_createElementVNode("strong", null, _toDisplayString(link.peer.name), 1), _createElementVNode("p", null, _toDisplayString(link.direction==='student'?'Aluno':'Responsável') + " · " + _toDisplayString(link.relationship) + " · " + _toDisplayString(link.active?'Ativo':'Inativo'), 1), _createElementVNode("small", null, _toDisplayString([link.legal?'Responsável legal':'',link.financial?'Responsável financeiro':'',link.pickup?'Autorizado a buscar':'',link.primary_contact?'Contato principal':''].filter(Boolean).join(' · ')), 1)]))
+                                }), 128))])), (state.personRecord.family.items.length < state.personRecord.family.total)
+                              ? (_openBlock(), _createElementBlock("button", {
+                                  key: 2,
+                                  class: "btn btn-secondary",
+                                  disabled: state.familyBusy,
+                                  onClick: moreRecordFamily
+                                }, "Carregar mais vínculos", 8, ["disabled", "onClick"]))
+                              : _createCommentVNode("", true)]))
+                          : (_openBlock(), _createElementBlock("section", {
+                              key: 1,
+                              class: "panel"
+                            }, [_createElementVNode("div", { class: "panel-header" }, [_createElementVNode("h2", null, _toDisplayString(state.recordTab==='general'?'Identificação e contato':personTypeLabel(state.recordTab)), 1)]), _createElementVNode("dl", { class: "data-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(recordDetails(), (item) => {
+                              return (_openBlock(), _createElementBlock("div", { key: item.label }, [_createElementVNode("dt", null, _toDisplayString(item.label), 1), _createElementVNode("dd", null, _toDisplayString(item.value), 1)]))
+                            }), 128))])]))]))
+                      : _createCommentVNode("", true),
+                    (state.page==='students' && state.selectedStudent)
+                      ? (_openBlock(), _createElementBlock("section", {
+                          key: 19,
                           class: "student-detail"
                         }, [
                           _createElementVNode("div", { class: "student-banner" }, [
@@ -2408,7 +2485,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                 ? (_openBlock(), _createElementBlock("button", {
                                     key: 0,
                                     class: "btn btn-secondary",
-                                    onClick: editStudent
+                                    onClick: $event => (editStudent())
                                   }, "Editar cadastro", 8, ["onClick"]))
                                 : _createCommentVNode("", true)]), _createElementVNode("dl", { class: "data-grid" }, [
                                 _createElementVNode("div", null, [_createElementVNode("dt", null, "Nome completo"), _createElementVNode("dd", null, _toDisplayString(state.selectedStudent.person.name), 1)]),
@@ -2716,8 +2793,8 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                             : _createCommentVNode("", true)
                         ]))
                       : _createCommentVNode("", true),
-                    (['people','students','teachers','employees','guardians','suppliers','providers','customers','partners','academic','enrollments','documents','protocols'].includes(state.page) && !state.selectedStudent)
-                      ? (_openBlock(), _createElementBlock("section", { key: 19 }, [
+                    (['people','students','teachers','employees','guardians','suppliers','providers','customers','partners','academic','enrollments','documents','protocols'].includes(state.page) && !state.selectedStudent && !state.personRecord)
+                      ? (_openBlock(), _createElementBlock("section", { key: 20 }, [
                           (state.page==='academic' && can('academic.write'))
                             ? (_openBlock(), _createBlock(_component_academic_preparation, {
                                 key: state.schoolId+':year-preparation',
@@ -3066,7 +3143,10 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                     role: "cell",
                                     headers: "record-1-column-6",
                                     "data-label": "Ações"
-                                  }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("div", { class: "actions compact" }, [
+                                  }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("button", {
+                                    class: "link-button",
+                                    onClick: $event => (viewPersonRecord(r))
+                                  }, "Abrir ficha →", 8, ["onClick"]), _createTextVNode(), _createElementVNode("div", { class: "actions compact" }, [
                                     ((can('people.write')) && !r.archived)
                                       ? (_openBlock(), _createElementBlock("button", {
                                           key: 0,
@@ -3153,7 +3233,17 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                       role: "cell",
                                       headers: "record-2-column-1",
                                       "data-label": "Nome / razão social"
-                                    }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("div", { class: "person-cell" }, [_createElementVNode("span", { class: "avatar" }, _toDisplayString(initials(r.name)), 1), _createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(r.trade_name || r.name), 1), (r.trade_name)
+                                    }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("div", { class: "person-cell" }, [(photoSrc(r))
+                                      ? (_openBlock(), _createElementBlock("img", {
+                                          key: 0,
+                                          class: "avatar",
+                                          src: photoSrc(r),
+                                          alt: 'Foto de '+r.name
+                                        }, null, 8, ["src", "alt"]))
+                                      : (_openBlock(), _createElementBlock("span", {
+                                          key: 1,
+                                          class: "avatar"
+                                        }, _toDisplayString(initials(r.name)), 1)), _createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(r.trade_name || r.name), 1), (r.trade_name)
                                       ? (_openBlock(), _createElementBlock("small", { key: 0 }, _toDisplayString(r.name), 1))
                                       : _createCommentVNode("", true)])])])]),
                                     _createElementVNode("td", {
@@ -3185,7 +3275,10 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                       role: "cell",
                                       headers: "record-2-column-7",
                                       "data-label": "Ações"
-                                    }, [_createElementVNode("div", { class: "record-value" }, [((can('people.write')) && !r.archived)
+                                    }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("button", {
+                                      class: "link-button",
+                                      onClick: $event => (viewPersonRecord(r))
+                                    }, "Abrir ficha →", 8, ["onClick"]), _createTextVNode(), ((can('people.write')) && !r.archived)
                                       ? (_openBlock(), _createElementBlock("button", {
                                           key: 0,
                                           class: "link-button",
@@ -3282,7 +3375,13 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                       }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("button", {
                                         class: "link-button",
                                         onClick: $event => (viewStudent(r.id))
-                                      }, "Abrir ficha →", 8, ["onClick"])]), (can('people.write'))
+                                      }, "Abrir ficha →", 8, ["onClick"]), _createTextVNode(), (can('people.write') && !r.archived)
+                                        ? (_openBlock(), _createElementBlock("button", {
+                                            key: 0,
+                                            class: "link-button",
+                                            onClick: $event => (editStudent(r))
+                                          }, "Editar cadastro", 8, ["onClick"]))
+                                        : _createCommentVNode("", true)]), (can('people.write'))
                                         ? (_openBlock(), _createElementBlock("button", {
                                             key: 0,
                                             class: "link-button record-manage",
@@ -3360,7 +3459,10 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                           role: "cell",
                                           headers: "record-4-column-5",
                                           "data-label": "Ações"
-                                        }, [_createElementVNode("div", { class: "record-value" }, [((can('people.write')) && !r.archived)
+                                        }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("button", {
+                                          class: "link-button",
+                                          onClick: $event => (viewPersonRecord(r))
+                                        }, "Abrir ficha →", 8, ["onClick"]), _createTextVNode(), ((can('people.write')) && !r.archived)
                                           ? (_openBlock(), _createElementBlock("button", {
                                               key: 0,
                                               class: "link-button",
@@ -3444,7 +3546,10 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                             role: "cell",
                                             headers: "record-5-column-5",
                                             "data-label": "Ações"
-                                          }, [_createElementVNode("div", { class: "record-value" }, [((can('people.write')) && !r.archived)
+                                          }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("button", {
+                                            class: "link-button",
+                                            onClick: $event => (viewPersonRecord(r))
+                                          }, "Abrir ficha →", 8, ["onClick"]), _createTextVNode(), ((can('people.write')) && !r.archived)
                                             ? (_openBlock(), _createElementBlock("button", {
                                                 key: 0,
                                                 class: "link-button",
@@ -3530,7 +3635,10 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                               role: "cell",
                                               headers: "record-6-column-5",
                                               "data-label": "Ações"
-                                            }, [_createElementVNode("div", { class: "record-value" }, [((can('people.write')) && !r.archived)
+                                            }, [_createElementVNode("div", { class: "record-value" }, [_createElementVNode("button", {
+                                              class: "link-button",
+                                              onClick: $event => (viewPersonRecord(r))
+                                            }, "Abrir ficha →", 8, ["onClick"]), _createTextVNode(), ((can('people.write')) && !r.archived)
                                               ? (_openBlock(), _createElementBlock("button", {
                                                   key: 0,
                                                   class: "link-button",
@@ -3875,7 +3983,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                       : _createCommentVNode("", true),
                     (state.page==='settings')
                       ? (_openBlock(), _createElementBlock("section", {
-                          key: 25,
+                          key: 26,
                           class: "institution-workspace"
                         }, [
                           _createElementVNode("header", { class: "institution-summary" }, [_createElementVNode("div", { class: "institution-mark" }, [(identity.logo_url)
@@ -4050,7 +4158,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                       : _createCommentVNode("", true),
                     (state.page!=='webmail')
                       ? (_openBlock(), _createElementBlock("footer", {
-                          key: 27,
+                          key: 28,
                           class: "content-footer"
                         }, [_createElementVNode("span", null, _toDisplayString(identity.display_name), 1), _createElementVNode("a", {
                           href: '/news?school='+state.schoolId,
@@ -4388,7 +4496,17 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                       key: 0,
                       class: "form-section-nav",
                       "aria-label": "Seções do cadastro"
-                    }, [_createElementVNode("div", { class: "form-profile" }, [_createElementVNode("span", { class: "avatar" }, _toDisplayString(initials(state.modal.form.name || state.modal.target?.name || state.modal.title)), 1), _createElementVNode("strong", null, _toDisplayString(state.modal.form.name || state.modal.target?.name || 'Novo cadastro'), 1), _createElementVNode("small", null, _toDisplayString(state.modal.form.entity_kind==='organization'?'Pessoa jurídica':'Ficha cadastral'), 1)]), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(modalSections(), (section, i) => {
+                    }, [_createElementVNode("div", { class: "form-profile" }, [(editorPhoto())
+                      ? (_openBlock(), _createElementBlock("img", {
+                          key: 0,
+                          class: "avatar",
+                          src: editorPhoto(),
+                          alt: "Foto do cadastro"
+                        }, null, 8, ["src"]))
+                      : (_openBlock(), _createElementBlock("span", {
+                          key: 1,
+                          class: "avatar"
+                        }, _toDisplayString(initials(state.modal.form.name || state.modal.target?.name || state.modal.title)), 1)), _createElementVNode("strong", null, _toDisplayString(state.modal.form.name || state.modal.target?.name || 'Novo cadastro'), 1), _createElementVNode("small", null, _toDisplayString(state.modal.form.entity_kind==='organization'?'Pessoa jurídica':'Ficha cadastral'), 1)]), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(modalSections(), (section, i) => {
                       return (_openBlock(), _createElementBlock("button", {
                         key: section.id,
                         type: "button",
@@ -4992,7 +5110,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                                 type: "file",
                                                 accept: ".png,.jpg,.jpeg",
                                                 required: f.required || (f.key==='birth_date' && selectedPersonTypes().includes('student')),
-                                                onChange: fileChange
+                                                onChange: personPhotoChange
                                               }, null, 40, ["id", "required", "onChange"]),
                                               _createElementVNode("button", {
                                                 type: "button",
@@ -5005,11 +5123,11 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                                     class: "field-hint"
                                                   }, _toDisplayString(state.captureName), 1))
                                                 : _createCommentVNode("", true),
-                                              (state.profilePhotoPreview)
+                                              (editorPhoto())
                                                 ? (_openBlock(), _createElementBlock("img", {
                                                     key: 1,
-                                                    src: state.profilePhotoPreview,
-                                                    alt: "Prévia da foto",
+                                                    src: editorPhoto(),
+                                                    alt: "Foto da pessoa",
                                                     style: {"max-width":"160px","max-height":"180px","object-fit":"contain","border-radius":"12px"}
                                                   }, null, 8, ["src"]))
                                                 : _createCommentVNode("", true)
@@ -5212,7 +5330,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                                     type: "file",
                                                     accept: ".png,.jpg,.jpeg",
                                                     required: f.required || (f.key==='birth_date' && selectedPersonTypes().includes('student')),
-                                                    onChange: fileChange
+                                                    onChange: personPhotoChange
                                                   }, null, 40, ["id", "required", "onChange"]),
                                                   _createElementVNode("button", {
                                                     type: "button",
@@ -5225,11 +5343,11 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                                         class: "field-hint"
                                                       }, _toDisplayString(state.captureName), 1))
                                                     : _createCommentVNode("", true),
-                                                  (state.profilePhotoPreview)
+                                                  (editorPhoto())
                                                     ? (_openBlock(), _createElementBlock("img", {
                                                         key: 1,
-                                                        src: state.profilePhotoPreview,
-                                                        alt: "Prévia da foto",
+                                                        src: editorPhoto(),
+                                                        alt: "Foto da pessoa",
                                                         style: {"max-width":"160px","max-height":"180px","object-fit":"contain","border-radius":"12px"}
                                                       }, null, 8, ["src"]))
                                                     : _createCommentVNode("", true)
