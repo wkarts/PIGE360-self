@@ -119,6 +119,11 @@ def test_diary_lesson_attendance_close_and_reopen(api):
     assert full_close["scope"] == "diary"
     assert full_close["diary"]["status"] == "closed"
     assert len(full_close["closure"]["snapshot_hash"]) == 64
+    api.update_school(diary_catalog=True)
+    original_report = api.get('/diaries/'+diary['id']+'/history')
+    api.post('/diary-catalog/'+component['id']+'/decisions',
+             {'action':'retire', 'version':component['version'], 'reason':'Currículo encerrado'}, 200)
+    assert api.get('/diaries/'+diary['id']+'/history') == original_report
     with SessionLocal() as db:
         closure = db.get(m.DiaryClosure, full_close["closure"]["id"])
         assert len(closure.snapshot["assessments"]) == 1
