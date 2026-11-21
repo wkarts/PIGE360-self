@@ -57,7 +57,7 @@ def compose_student_document(db, school, student, person, enrollment_id, kind, i
             fail(409, 'Comprovantes e declarações exigem matrícula ativa.')
     identity = public_identity(db)
     snapshot = {'school': output(school), 'person': output(person), 'student': output(student), 'issuer': issuer,
-                'template_version': '3', 'layout_version': '4', 'institution_identity': identity, 'brand': identity['display_name']}
+                'template_version': '3', 'layout_version': '5', 'institution_identity': identity, 'brand': identity['display_name']}
     detailed = kind in {'student_record', 'enrollment_form'}
     sections = []
     basic = [('Nome completo', person.name), ('Data de nascimento', date_text(person.birth_date))]
@@ -135,7 +135,7 @@ def compose_student_document(db, school, student, person, enrollment_id, kind, i
     notes = ['Documento gerado eletronicamente a partir dos dados cadastrados. Não contém assinatura digital.']
     if kind == 'enrollment_form':
         notes.insert(0, 'Ficha administrativa. A situação acima deve ser observada; este documento não substitui a declaração de matrícula ativa.')
-    content = render_table(school.name, title, [], [], sections=sections,
+    content = render_table(school.name, title, [], [], sections=sections, module='Cadastro e matrícula',
         profile={'name': person.name, 'detail': f'Aluno {student.number} | Situação cadastral: ' + ('Ativo' if student.status == 'active' else 'Inativo')},
         photo=student_photo(db, school.id, person) if detailed else None,
         signatures=['Responsável / aluno maior de idade', 'Secretaria / instituição'] if detailed else ['Secretaria / representante da instituição'],

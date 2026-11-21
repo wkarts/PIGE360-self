@@ -1,10 +1,12 @@
 namespace PigeReports {
-  type Catalog = {id:string;title:string;description:string;date_basis:string;statuses:{value:string;label:string}[];filters:string[]};
+  type Catalog = {module:string;id:string;title:string;description:string;date_basis:string;statuses:{value:string;label:string}[];filters:string[]};
   type Metric = {key:string;label:string;value:unknown;type:string};
-  type Report = {title:string;description:string;date_basis:string;period:{date_from:string;date_to:string;label:string};filters:{label:string;value:string}[];columns:{key:string;label:string;type:string}[];items:Record<string,unknown>[];total:number;page:number;page_size:number;summary:Metric[];monthly:{month:string;label:string;count:number;amount?:string}[];notes:string[]};
-  export const component = {props:['schoolId','catalogs'],render:PigeRenders.reports,setup(props:{schoolId:string;catalogs:Record<string,PigeAPI.Row[]>}) {
+  type Report = {module:string;school_name:string;generated_at:string;status_summary:{label:string;count:number}[];title:string;description:string;date_basis:string;period:{date_from:string;date_to:string;label:string};filters:{label:string;value:string}[];columns:{key:string;label:string;type:string}[];items:Record<string,unknown>[];total:number;page:number;page_size:number;summary:Metric[];monthly:{month:string;label:string;count:number;amount?:string}[];notes:string[]};
+  export const component = {props:['schoolId','catalogs','identity'],render:PigeRenders.reports,setup(props:{schoolId:string;catalogs:Record<string,PigeAPI.Row[]>}) {
     const state=Vue.reactive({busy:false,error:'',catalog:[] as Catalog[],kind:'enrollments',dateFrom:'',dateTo:'',preset:'last-three',academicYear:'',classGroup:'',unit:'',status:'',q:'',page:1,result:null as Report|null,appliedQuery:''});
     const base=()=>'/schools/'+props.schoolId+'/reports';
+    const modules=()=>Array.from(new Set(state.catalog.map(item=>item.module)));
+    const issuedAt=(stamp:string)=>new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Bahia'}).format(new Date(stamp));
     const selected=()=>state.catalog.find(c=>c.id===state.kind);
     const iso=(d:Date)=>[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
     function period():void {const today=new Date(),y=today.getFullYear(),m=today.getMonth();let start:Date,end:Date;
@@ -27,6 +29,6 @@ namespace PigeReports {
     const classes=()=> (props.catalogs['class-groups']||[]).filter(c=>(!state.academicYear||c.academic_year_id===state.academicYear)&&(!state.unit||c.unit_id===state.unit));
     const filterAllowed=(name:string)=>selected()?.filters?.includes(name)||false;
     Vue.onMounted(()=>{period();void run(async()=>{const c=await PigeAPI.request<{items:Catalog[]}>(base()+'/catalog');state.catalog=c.items;if(!c.items.some(i=>i.id===state.kind))state.kind=c.items[0]?.id||'';});});
-    return{state,selected,period,changeKind,generate,download,value,classes,changed,filterAllowed,get catalogs(){return props.catalogs;}};
+    return{state,selected,modules,issuedAt,period,changeKind,generate,download,value,classes,changed,filterAllowed,get catalogs(){return props.catalogs;}};
   }};
 }

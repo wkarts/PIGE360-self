@@ -3101,9 +3101,11 @@ var PigeSigning;
 })(PigeSigning || (PigeSigning = {}));
 var PigeReports;
 (function (PigeReports) {
-    PigeReports.component = { props: ['schoolId', 'catalogs'], render: PigeRenders.reports, setup(props) {
+    PigeReports.component = { props: ['schoolId', 'catalogs', 'identity'], render: PigeRenders.reports, setup(props) {
             const state = Vue.reactive({ busy: false, error: '', catalog: [], kind: 'enrollments', dateFrom: '', dateTo: '', preset: 'last-three', academicYear: '', classGroup: '', unit: '', status: '', q: '', page: 1, result: null, appliedQuery: '' });
             const base = () => '/schools/' + props.schoolId + '/reports';
+            const modules = () => Array.from(new Set(state.catalog.map(item => item.module)));
+            const issuedAt = (stamp) => new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Bahia' }).format(new Date(stamp));
             const selected = () => state.catalog.find(c => c.id === state.kind);
             const iso = (d) => [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
             function period() {
@@ -3171,7 +3173,7 @@ var PigeReports;
             const filterAllowed = (name) => selected()?.filters?.includes(name) || false;
             Vue.onMounted(() => { period(); void run(async () => { const c = await PigeAPI.request(base() + '/catalog'); state.catalog = c.items; if (!c.items.some(i => i.id === state.kind))
                 state.kind = c.items[0]?.id || ''; }); });
-            return { state, selected, period, changeKind, generate, download, value, classes, changed, filterAllowed, get catalogs() { return props.catalogs; } };
+            return { state, selected, modules, issuedAt, period, changeKind, generate, download, value, classes, changed, filterAllowed, get catalogs() { return props.catalogs; } };
         } };
 })(PigeReports || (PigeReports = {}));
 var PigeLegacyImport;
@@ -3282,7 +3284,7 @@ var PigeLegacyImport;
 })(PigeLegacyImport || (PigeLegacyImport = {}));
 var PigeLearning;
 (function (PigeLearning) {
-    PigeLearning.component = { props: ['request', 'download', 'rootPath', 'schoolId', 'studentId'], render: PigeRenders.learning, setup(props) {
+    PigeLearning.component = { props: ['request', 'download', 'rootPath', 'schoolId', 'studentId', 'identity'], render: PigeRenders.learning, setup(props) {
             const state = Vue.reactive({ busy: false, error: '', students: [], studentId: '', enrollmentId: '', note: '' });
             const base = () => (props.rootPath || '/profile') + '/learning';
             const student = () => state.students.find(s => s.student_id === state.studentId);
@@ -3788,7 +3790,7 @@ var PigeAudit;
             else {
                 state.reference = item.request_id;
             } await search(); }
-            async function download() { await run(async () => { await PigeAPI.download(base() + '/export?' + query(), 'auditoria-' + new Date().toISOString().replace(/[:.]/g, '-') + '.csv'); state.notice = 'Arquivo de auditoria gerado com os filtros selecionados.'; }); }
+            async function download(format) { await run(async () => { await PigeAPI.download(base() + '/export?format=' + format + '&' + query(), 'auditoria-' + new Date().toISOString().replace(/[:.]/g, '-') + '.' + format); state.notice = 'Arquivo de auditoria gerado com os filtros selecionados.'; }); }
             function investigate(item) { if (/^[a-f0-9]{24}$/.test(item.request_id)) {
                 sessionStorage.setItem('pige-diagnostic-reference', item.request_id);
                 location.hash = '#/diagnostics';

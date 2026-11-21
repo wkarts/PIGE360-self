@@ -872,8 +872,8 @@ def diary_report(diary_id: str, db: DB, user: Actor, school: DiaryScope):
         ("Registros pedagógicos",str(len(data.get("pedagogical_records",[])))),
     ]
     note=("Relatório emitido a partir do snapshot do fechamento. Hash de integridade: "+closure.snapshot_hash) if closure else "Relatório gerado a partir dos registros atuais do Diário Escolar Digital. Fechamentos possuem snapshot e hash de integridade próprios."
-    content=render_pdf(school.name,"Diário Escolar Digital",rows,note,user.name,db=db)
-    return Response(content,media_type="application/pdf",headers={"Content-Disposition":f'attachment; filename="diario-{diary.id}.pdf"'})
+    content=render_pdf(school.name,"Diário Escolar Digital",rows,note,user.name,db=db,module="Diário escolar")
+    return Response(content,media_type="application/pdf",headers={"Content-Disposition":f'attachment; filename="diario-{diary.id}.pdf"',"Cache-Control":"no-store"})
 
 
 @router.get("/diaries/{diary_id}/summary")
@@ -1197,6 +1197,8 @@ def diary_report_family(diary_id: str, report_type: str, db: DB, user: Actor, sc
     data=closure.snapshot if closure else _snapshot(db,diary,period.id if period else None)
     rows=[("Ano letivo",data["diary"]["year_name"]),("Turma",data["diary"]["class_name"]),("Componente",data["diary"]["component_name"]),("Professor",data["diary"]["teacher_name"] or "Não vinculado"),("Situação",data["diary"]["status"])]
     if period:rows.append(("Período",period.name))
+    context = [{'label': key, 'value': value} for key, value in rows]
+    rows = []
     if report_type in {"class_diary","lessons"}:
         plan=data.get("plan") or {}
         if plan:rows.extend([("Objetivos",plan.get("objectives","")),("Unidade/objetos",plan.get("thematic_units","")+" / "+plan.get("knowledge_objects","")),("Habilidades BNCC",", ".join(plan.get("bncc_references",[]))),("Metodologia",plan.get("methodology","")),("Recursos",plan.get("resources","")),("Estratégia de avaliação",plan.get("assessment_strategy",""))])
@@ -1232,7 +1234,7 @@ def diary_report_family(diary_id: str, report_type: str, db: DB, user: Actor, sc
             rows.append((record['student_name']+' · '+record['guardian_name']+' · '+record['sent_at'],record['title']+' — '+record['message']+' · '+status))
     elif report_type=="student_record":
         if not enrollment_id:fail(422,"Selecione a matrícula para emitir a ficha individual.")
-        enrollment=_enrollment_for_diary(db,diary,enrollment_id);rows=[("Aluno",_student_label(db,enrollment.id)),*rows]
+        enrollment=_enrollment_for_diary(db,diary,enrollment_id);context.append({'label':'Aluno','value':_student_label(db,enrollment.id)})
         for lesson in data["lessons"]:
             mark=next((x for x in data["attendance"] if x["lesson_id"]==lesson["id"] and x["enrollment_id"]==enrollment.id),None)
             if mark:rows.append(("Frequência · "+lesson["lesson_date"],mark["status"]))
@@ -1278,7 +1280,21 @@ def diary_report_family(diary_id: str, report_type: str, db: DB, user: Actor, sc
         rows.extend((f"Item {i}",issue) for i,issue in enumerate(issues,1))
     note=("Snapshot de fechamento · SHA-256 "+closure.snapshot_hash) if closure else "Emitido dos registros atuais. A frequência exibida resume os registros de chamada e não presume regra normativa ou assinatura digital."
     if report_type=="period_consolidation" and period and not data.get("period_results"):note+=" Nenhuma consolidação foi processada."
-    content=render_pdf(school.name,REPORT_TITLES[report_type],rows,note,user.name,db=db)
+    from .school_reports import render_table
+    headings = {
+        'lessons': ('Aula ou planejamento', 'Registro de ensino'),
+        'attendance': ('Aluno ou turma', 'Apuração da frequência'),
+        'assessments': ('Avaliação ou aluno', 'Resultado registrado'),
+        'opinions': ('Aluno e situação', 'Parecer descritivo'),
+        'occurrences': ('Aluno e ocorrência', 'Descrição'),
+        'communications': ('Destinatários e envio', 'Mensagem e leitura'),
+        'revision_history': ('Movimentação', 'Justificativa e integridade'),
+    }
+    first, second = headings.get(report_type, ('Identificação', 'Informação registrada'))
+    columns = [{'key': 'field', 'label': first}, {'key': 'value', 'label': second, 'width': 2}]
+    content = render_table(school.name, REPORT_TITLES[report_type], columns,
+                           [{'field': key, 'value': value} for key, value in rows],
+                           filters=context, notes=[note], issuer=user.name, db=db, module='Diário escolar')
     suffix="-"+period.id if period else ""
     return Response(content,media_type="application/pdf",headers={"Content-Disposition":f'attachment; filename="diario-{report_type}-{diary.id}{suffix}.pdf"',"Cache-Control":"no-store"})
 

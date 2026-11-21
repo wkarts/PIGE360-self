@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import re
+from typing import Literal
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import func, select
@@ -77,14 +78,36 @@ def options(db:DB,user:Actor,school:Scope,include_global:bool=False):
 
 
 @router.get('/audit/export')
-def export(db:DB,user:Actor,school:Scope,request:Request,options:dict=Depends(audit_filters)):
+def export(db: DB, user: Actor, school: Scope, request: Request, options: dict = Depends(audit_filters),
+           format: Literal['csv', 'pdf'] = 'csv'):
     require_admin(user)
     from .diagnostics import download_filename
     from .portal import rate_limit
     rate_limit(db,request,'audit-export',user.id,6,600)
     stmt=statement(school.id,options)
-    rows=list(db.scalars(stmt.order_by(m.AuditEvent.created_at.desc(),m.AuditEvent.id.desc()).limit(10001)))
-    if len(rows)>10000:fail(422,'Há mais de 10.000 operações. Refine o período antes de exportar.')
+    limit = 1000 if format == 'pdf' else 10000
+    rows = list(db.scalars(stmt.order_by(m.AuditEvent.created_at.desc(), m.AuditEvent.id.desc()).limit(limit + 1)))
+    if len(rows) > limit:
+        fail(422, f'O limite da exportação em {format.upper()} é de {limit} operações. Refine o período.')
+    if format == 'pdf':
+        from .school_reports import render_table
+        columns = [{'key': key, 'label': label, 'width': width} for key, label, width in (
+            ('date', 'Data (UTC)', 1), ('action', 'Operação', 1.3), ('actor', 'Autor', 1),
+            ('entity', 'Tipo de registro', 1), ('record', 'Identificador', 1.3))]
+        names = dict(db.execute(select(m.User.id, m.User.name).where(
+            m.User.id.in_({row.actor_id for row in rows if row.actor_id}))).all())
+        entries = [{'date': utc(row.created_at).astimezone(UTC).strftime('%d/%m/%Y %H:%M'),
+                    'action': row.action, 'actor': names.get(row.actor_id, 'Sistema' if not row.actor_id else 'Usuário removido'),
+                    'entity': row.entity_type, 'record': row.entity_id} for row in rows]
+        captions = {'action': 'Operação', 'entity_type': 'Tipo de registro', 'entity_id': 'Identificador',
+                    'actor_id': 'Autor (ID)', 'request_id': 'Referência', 'since': 'Desde (UTC)', 'until': 'Até (UTC)'}
+        applied = [{'label': caption, 'value': options[key]} for key, caption in captions.items() if options[key]]
+        pdf = render_table(school.name, 'Histórico de operações', columns, entries, module='Auditoria',
+                           filters=applied, issuer=user.name, db=db, circulation='Uso administrativo restrito',
+                           notes=['Operações da instituição em ordem cronológica decrescente. O detalhamento de cada alteração está disponível na consulta administrativa.'])
+        audit(db, request, user, 'audit.exported', school, school.id, details={'records': len(rows), 'format': 'pdf'})
+        return Response(pdf, media_type='application/pdf', headers={'Cache-Control':'no-store',
+                        'Content-Disposition':'attachment; filename="auditoria.pdf"'})
     stream=io.StringIO(newline='');writer=csv.writer(stream,delimiter=';')
     writer.writerow(['Data UTC','Operação','Tipo de registro','Registro','Autor','Autor ID','Origem','Referência','IP','Detalhes'])
     def cell(v):

@@ -204,7 +204,7 @@ def report_response(db, students, student_id, enrollment_id, issuer):
         ('justified', 'Justif.', .55), ('attendance', 'Frequência', .9), ('result', 'Resultado do período', 1.3),
     ]]
     content = render_table(info['school_name'], 'Boletim escolar', columns, rows,
-                           profile={'name': info['student_name'], 'detail': 'Registro escolar ' + info['student_number']},
+                           module='Portal do aluno e responsável', profile={'name': info['student_name'], 'detail': 'Registro escolar ' + info['student_number']},
                            notes=[NOTE, 'Presenças e ausências são contadas pela quantidade de aulas registrada em cada dia.'],
                            issuer=issuer, db=db)
     return Response(content, media_type='application/pdf', headers={

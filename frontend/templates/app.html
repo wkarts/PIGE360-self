@@ -268,7 +268,7 @@
         </section>
         <section v-if="state.page==='dashboard' && isProfileRole()" class="dashboard">
           <school-community :key="state.schoolId+'-feed'" :school-id="state.schoolId" :permissions="[]" :request="request" :compact="true"></school-community>
-          <learning-panel v-if="['student','guardian'].includes(state.user.role)" :key="state.schoolId" :school-id="state.schoolId" :request="request" :download="download" root-path="/profile"></learning-panel>
+          <learning-panel :identity="identity" v-if="['student','guardian'].includes(state.user.role)" :key="state.schoolId" :school-id="state.schoolId" :request="request" :download="download" root-path="/profile"></learning-panel>
           <div v-if="state.user.role==='teacher'">
             <div class="welcome-card"><div><p class="eyebrow">ESPAÇO DO PROFESSOR</p><h2>Suas turmas e alunos.</h2><p>Consulte as turmas atribuídas a você e acompanhe a lista real de alunos de cada classe.</p><div class="actions"><button v-if="can('diary.read')" class="btn btn-primary" @click="navigate('diary')">Abrir Diário Escolar →</button></div></div><div class="welcome-art" aria-hidden="true"><span>PROFESSOR</span><strong>Turmas<br>Alunos<br>Vínculos</strong><i>✓</i></div></div>
             <div v-if="!state.profileContext.assignments?.length" class="alert info">Seu usuário ainda não possui turmas atribuídas. Solicite à Direção ou à Coordenação o vínculo com uma turma.</div>
@@ -356,7 +356,7 @@
             <div v-if="['people','students','teachers','employees','guardians','suppliers','providers','customers','partners','enrollments','documents','protocols'].includes(state.page)" class="pagination"><span>{{ state.total }} {{ state.total===1?'registro':'registros' }} · Página {{ state.pageNumber }}</span><div><button class="btn btn-secondary small-button" :disabled="state.pageNumber<=1 || state.loading" @click="page(-1)">Anterior</button><button class="btn btn-secondary small-button" :disabled="state.pageNumber*30>=state.total || state.loading" @click="page(1)">Próxima</button></div></div>
           </div>
         </section>
-        <reports-panel v-if="state.page==='reports'" :key="state.schoolId" :school-id="state.schoolId" :catalogs="state.catalogs"></reports-panel>
+        <reports-panel :identity="identity" v-if="state.page==='reports'" :key="state.schoolId" :school-id="state.schoolId" :catalogs="state.catalogs"></reports-panel>
         <enrollment-workflow @new-person="newPerson()" @new-student="newStudent()" v-if="state.page==='enrollments'&&can('enrollments.write')" :key="state.schoolId+'-enrollment-workflow'" :school-id="state.schoolId" :permissions="state.user.permissions" :role="state.user.role" />
         <school-community v-if="state.page==='community'" :key="state.schoolId" :website-request="state.websiteRequest" :school-id="state.schoolId" :permissions="state.user.permissions" :request="request"></school-community>
         <users-panel v-if="state.page==='users' &amp;&amp; can('users.manage')" :key="state.schoolId+':users'" :school-id="state.schoolId" :current-user-id="state.user.id" @changed="refreshAccess"></users-panel>

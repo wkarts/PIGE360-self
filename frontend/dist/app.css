@@ -554,3 +554,24 @@ td .link-button { text-align: left; }
 .diary-links a[aria-current] { font-weight:700; text-decoration:underline; text-underline-offset:.3em; }
 
 .diary-context { position:sticky; top:0; z-index:2; background:var(--surface,white); padding:.5rem; margin:0; }
+
+.report-result { min-width: 0; font-family: var(--institution-font, inherit); }
+.report-masthead { display: flex; gap: 1.25rem; align-items: center; padding: 1.25rem; margin-top: 1.25rem; background: var(--surface, white); border-block: 2px solid var(--primary); overflow-wrap: anywhere; }
+.report-masthead img { width: clamp(48px, 9vw, 76px); max-height: 80px; object-fit: contain; }
+.report-masthead p { margin: .25rem 0; font-size: .8125rem; }
+.report-masthead h2 { margin: .2rem 0; font-size: clamp(1.35rem, 3vw, 2rem); }
+.report-masthead strong, .report-module { font-size: .8125rem; font-weight: 650; }
+.report-records table { font-size: .8125rem; line-height: 1.45; }
+.report-records td { padding-block: .55rem; }
+.report-status-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: .5rem 1.5rem; }
+.report-status-list div { display: flex; justify-content: space-between; gap: .75rem; padding-block: .45rem; border-bottom: 1px solid var(--border); font-size: .8125rem; }
+.report-status-list dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.report-imprint { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .4rem 1.25rem; padding: .85rem 0; border-top: 1px solid var(--border); font-size: .75rem; overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .report-records table, .report-records tbody, .report-records tr { display: block; width: 100%; min-width: 0; }
+  .report-records thead { position: absolute; clip-path: inset(50%); width: 1px; height: 1px; overflow: hidden; }
+  .report-records tbody tr { padding: .6rem 0; border-bottom: 1px solid var(--border); }
+  .report-records td { display: grid; grid-template-columns: minmax(5rem, 38%) minmax(0, 1fr); gap: .75rem; text-align: left; border: 0; white-space: normal; overflow-wrap: anywhere; padding: .3rem .85rem; }
+  .report-records td::before { content: attr(data-label); color: var(--muted); font-weight: 600; }
+  .report-imprint { flex-direction: column; }
+}

@@ -4,8 +4,8 @@ namespace PigeLearning {
   type Subject={diary_id:string;component_name:string;periods:Period[]};
   type Enrollment={enrollment_id:string;number:string;class_name:string;year_name:string;status:string;subjects:Subject[]};
   type Student={student_id:string;student_name:string;student_number:string;school_id?:string;school_name?:string;enrollments:Enrollment[]};
-  type Props={request:<T>(path:string)=>Promise<T>;download:(path:string,filename:string)=>Promise<void>;rootPath?:string;schoolId?:string;studentId?:string};
-  export const component={props:['request','download','rootPath','schoolId','studentId'],render:PigeRenders.learning,setup(props:Props){
+  type Props={identity?:{logo_url?:string;display_name?:string;app_version?:string};request:<T>(path:string)=>Promise<T>;download:(path:string,filename:string)=>Promise<void>;rootPath?:string;schoolId?:string;studentId?:string};
+  export const component={props:['request','download','rootPath','schoolId','studentId','identity'],render:PigeRenders.learning,setup(props:Props){
     const state=Vue.reactive({busy:false,error:'',students:[] as Student[],studentId:'',enrollmentId:'',note:''});
     const base=()=> (props.rootPath||'/profile')+'/learning';
     const student=()=>state.students.find(s=>s.student_id===state.studentId);
