@@ -79,7 +79,7 @@ def issue(db,user,school):
     if not url.hostname or url.username or url.password or url.query or url.fragment or url.path not in ('','/') or url.scheme not in ({'https'} if settings().app_env=='production' else {'http','https'}):
         fail(409,'Configure a URL pública segura do gestor antes de enviar convites.')
     # Fragmento não participa do request HTTP nem do Referer. A página o remove.
-    link=origin+'/first-access.html#'+token
+    link=origin+'/first-access#'+token
     from .institution import public_identity
     institution_name=public_identity(db)['display_name']
     job=enqueue(db,school.id,'smtp_email',{'to':user.email,'subject':institution_name+' · Primeiro acesso',

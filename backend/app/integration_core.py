@@ -196,7 +196,7 @@ def admission_notification(db,admission,text,code):
     if account.active and available(db, admission.school_id):
         enqueue(db, admission.school_id, 'smtp_email', {
             'to': account.email, 'subject': 'Atualização da inscrição ' + admission.number,
-            'text': text + ' Acompanhe no portal: ' + settings().app_url + '/online.html'},
+            'text': text + ' Acompanhe no portal: ' + settings().app_url + '/online'},
             f'admission-email:{admission.id}:{code}:{admission.version}')
     if not account.whatsapp_opt_in or not account.phone_verified:
         return None
@@ -209,6 +209,6 @@ def admission_notification(db,admission,text,code):
         db,
         admission.school_id,
         instance.id,
-        {'number': account.phone, 'text': text + ' Acompanhe no portal: ' + settings().app_url + '/online.html'},
+        {'number': account.phone, 'text': text + ' Acompanhe no portal: ' + settings().app_url + '/online'},
         f'admission:{admission.id}:{code}:{admission.version}',
     )

@@ -22,6 +22,19 @@ class AssetProxyTests(unittest.TestCase):
         self.base=f'http://127.0.0.1:{server.server_port}'
         self.path='/api/v1/public/schools/11111111-2222-4333-8444-555555555555/website-assets/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
 
+    def test_maintenance_notice_and_missing_page_keep_status_and_identity(self):
+        with patch.object(website, 'SCHOOL', ''), patch.object(website, 'fetch', side_effect=HTTPError('/', 404, 'missing', {}, None)):
+            for path, title in [('/', 'Site em manutenção'), ('/pagina', 'Página indisponível')]:
+                with self.assertRaises(HTTPError) as caught:
+                    urlopen(self.base + path)
+                self.assertEqual(caught.exception.code, 404)
+                document = caught.exception.read().decode()
+                self.assertIn('<h1>' + title + '</h1>', document)
+                self.assertIn('/api/v1/institution/theme.css', document)
+                self.assertIn('/api/v1/institution/icon.png?size=192', document)
+                self.assertIn(caught.exception.headers['X-Request-ID'], document)
+                self.assertEqual('Voltar ao início' in document, path != '/')
+
     def test_demo_catalog_assets_have_narrow_jpeg_proxy(self):
         with patch.object(website,'fetch',return_value=(b'jpeg fixture','image/jpeg')) as fetch:
             for name in ['garden','community','library','theatre','lab','sport','preschool']:
