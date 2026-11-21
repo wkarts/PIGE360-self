@@ -161,7 +161,14 @@ process_one()
             page.set_viewport_size({'width':390,'height':844})
             page.screenshot(path=str(OUT/'03-relatorios-mobile.png'),full_page=True)
             assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+1')
-            checks.append('Central de relatórios utilizável em 390px, sem transbordamento horizontal da página.')
+            for width in (320, 390, 700):
+                page.set_viewport_size({'width':width,'height':844})
+                records = page.locator('.report-records')
+                assert records.evaluate('el=>el.scrollWidth <= el.clientWidth+1')
+                name = records.locator('td[data-label="Aluno"]').first
+                expect(name).to_have_text('Aluno Selecionado')
+                assert name.evaluate("el=>getComputedStyle(el, '::before').content") == '"Aluno"'
+            checks.append('Colunas com rótulos de leitura em 320, 390 e 700 px, sem rolagem lateral na listagem.')
             assert not errors,errors
             browser.close()
     (OUT/'result.json').write_text(json.dumps({'status':'passed','checks':checks,'page_errors':errors},ensure_ascii=False,indent=2))

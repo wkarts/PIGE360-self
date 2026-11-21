@@ -36,6 +36,9 @@ def test_enrollment_dates_months_and_full_summary(api):
     assert [month['count'] for month in report['monthly']] == [1, 0, 1]
     assert report['summary'][0]['value'] == 2 and report['items'][0]['enrolled_on'] == '2026-07-01'
     next_page = api.get('/reports/management/enrollments' + PERIOD + '&page_size=1&page=2')
+    assert report['module'] == 'Matrículas'
+    assert sum(item['count'] for item in report['status_summary']) == report['total']
+    assert next_page['status_summary'] == report['status_summary']
     assert next_page['items'][0]['enrolled_on'] == '2026-09-30' and next_page['summary'] == report['summary']
     assert 'Aluno período 3' not in api.get('/reports/management/enrollments.csv' + PERIOD).text
 
@@ -92,7 +95,7 @@ def test_financial_decimal_totals_and_no_secrets(api):
 def test_csv_formula_guard_and_pdf_headers(api):
     cat = api.catalogs(capacity=100)
     student = api.student('=FORMULA(1)', adult=True)
-    api.enroll(student, cat['group'])
+    enrollment = api.enroll(student, cat['group'])
     response = api.get('/reports/management/enrollments.csv' + PERIOD)
     assert response.content.startswith(b'\xef\xbb\xbf') and "'=FORMULA(1)" in response.text
     assert response.headers['cache-control'] == 'no-store'
@@ -101,6 +104,7 @@ def test_csv_formula_guard_and_pdf_headers(api):
     embedded = [font.get_object().get('/FontDescriptor') for font in fonts]
     assert sum(bool(descriptor and descriptor.get_object().get('/FontFile2')) for descriptor in embedded) >= 2
     text = text_pdf(pdf_response)
+    assert enrollment['number'] in text and date.fromisoformat(enrollment['enrolled_on']).strftime('%d/%m/%Y') in text
     assert 'Consolidação mensal' in text and '07/2026' in text and '09/2026' in text
     assert 'Página 1 de' in text and 'Secretaria / representante' not in text
     assert api.get('/reports/management/enrollments' + PERIOD + '&q=%25')['total'] == 0
@@ -156,7 +160,7 @@ def test_complete_student_documents(api):
         assert 'Não contém assinatura digital' in text and 'Página 1 de' in text
     with SessionLocal() as db:
         emitted = db.get(m.IssuedDocument, issued['id'])
-        assert emitted.snapshot['layout_version'] == '4' and emitted.snapshot['guardians'][0]['person']['name'] == guardian['name']
+        assert emitted.snapshot['layout_version'] == '6' and emitted.snapshot['guardians'][0]['person']['name'] == guardian['name']
 
 
 def test_academic_results_use_consolidated_value_and_flag_rule_change(api):
@@ -185,3 +189,17 @@ def test_academic_results_use_consolidated_value_and_flag_rule_change(api):
     assert report['monthly'][2]['count'] == 1
     assert api.get('/reports/management/academic-results?date_from=2026-07-01&date_to=2026-09-29')['total'] == 0
     assert 'Matemática' in text_pdf(api.get('/reports/management/academic-results.pdf' + PERIOD))
+
+def test_institutional_footer_and_continuation_on_every_page():
+    from app.school_reports import render_table
+    rows = [{'student': f'Aluno sintético {n:03}', 'note': 'Conferência de frequência'} for n in range(175)]
+    columns = [{'key': 'student', 'label': 'Aluno'}, {'key': 'note', 'label': 'Apuração'}]
+    content = render_table('Escola sintética', 'Mapa de frequência', columns, rows, module='Diário escolar')
+    pages = PdfReader(io.BytesIO(content)).pages
+    assert len(pages) > 1
+    for index, page in enumerate(pages, 1):
+        text = page.extract_text()
+        for label in ('Escola sintética', 'Mapa de frequência', 'Diário escolar', 'Apuração',
+                      'Uso restrito aos destinatários autorizados', f'Página {index} de {len(pages)}'):
+            assert label in text
+    assert 'Aluno sintético 174' in pages[-1].extract_text()

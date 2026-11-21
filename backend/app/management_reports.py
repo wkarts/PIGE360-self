@@ -43,28 +43,28 @@ LABELS = {
 }
 ACADEMIC_FILTERS = ['academic_year_id', 'class_group_id', 'unit_id']
 CATALOG = {
-    'enrollments': dict(title='Matrículas', description='Matrículas por turma, situação e mês.',
+    'enrollments': dict(module='Matrículas', title='Matrículas', description='Matrículas por turma, situação e mês.',
                         date_basis='Data de matrícula. A situação apresentada é a atual.', permission='enrollments.read',
                         filters=ACADEMIC_FILTERS, statuses=['draft', 'active', 'suspended', 'transferred', 'cancelled', 'completed']),
-    'students': dict(title='Alunos cadastrados', description='Cadastros de alunos criados no período.',
+    'students': dict(module='Cadastros', title='Alunos cadastrados', description='Cadastros de alunos criados no período.',
                      date_basis='Data de criação do cadastro. Turma e situação são as atuais.', permission='students.read',
                      filters=ACADEMIC_FILTERS, statuses=['active', 'archived']),
-    'financial': dict(title='Cobranças e recebimentos', description='Valores por vencimento, situação e competência mensal.',
+    'financial': dict(module='Financeiro', title='Cobranças e recebimentos', description='Valores por vencimento, situação e competência mensal.',
                       date_basis='Data de vencimento. Valores nominais e situações atuais das cobranças.', permission='banking.read',
                       filters=ACADEMIC_FILTERS, statuses=['queued', 'pending', 'overdue', 'confirmed', 'received', 'received_external', 'cancelled', 'refunded', 'refund_requested', 'partially_refunded', 'disputed', 'awaiting_review', 'uncertain', 'failed']),
-    'admissions': dict(title='Inscrições online', description='Inscrições recebidas, aprovadas e convertidas em matrícula.',
+    'admissions': dict(module='Inscrições online', title='Inscrições online', description='Inscrições recebidas, aprovadas e convertidas em matrícula.',
                        date_basis='Data de criação da inscrição. A situação apresentada é a atual.', permission='admissions.read',
                        filters=ACADEMIC_FILTERS, statuses=['draft', 'submitted', 'under_review', 'changes_requested', 'waitlisted', 'approved', 'enrolled', 'rejected', 'withdrawn']),
-    'document-pendencies': dict(title='Pendências documentais', description='Documentos obrigatórios pendentes dos alunos matriculados no período.',
+    'document-pendencies': dict(module='Secretaria', title='Pendências documentais', description='Documentos obrigatórios pendentes dos alunos matriculados no período.',
                                 date_basis='Data da matrícula; pendências verificadas na data da emissão, sem retrospectiva documental.', permission='documents.read',
                                 filters=ACADEMIC_FILTERS, statuses=['pending', 'received', 'rejected', 'expired']),
-    'attendance': dict(title='Frequência escolar', description='Presenças e faltas por aluno, turma e componente curricular.',
+    'attendance': dict(module='Diário escolar', title='Frequência escolar', description='Presenças e faltas por aluno, turma e componente curricular.',
                        date_basis='Data da aula. Apenas chamadas registradas entram no cálculo.', permission='diary.reports',
                        filters=ACADEMIC_FILTERS, statuses=[]),
-    'academic-results': dict(title='Notas e resultados por período', description='Resultados já consolidados, por aluno, turma, componente e período letivo.',
+    'academic-results': dict(module='Diário escolar', title='Notas e resultados por período', description='Resultados já consolidados, por aluno, turma, componente e período letivo.',
                              date_basis='Data final do período letivo. Exibe a última consolidação registrada; não calcula aprovação automaticamente.', permission='diary.reports',
                              filters=ACADEMIC_FILTERS, statuses=['pending', 'calculated', 'below_minimum', 'attendance_below_minimum', 'opinion_pending', 'concept']),
-    'protocols': dict(title='Atendimentos e protocolos', description='Solicitações, prazos e situação do atendimento.',
+    'protocols': dict(module='Secretaria', title='Atendimentos e protocolos', description='Solicitações, prazos e situação do atendimento.',
                       date_basis='Data de abertura. Situação e atraso verificados na data da emissão.', permission='protocols.read',
                       filters=[], statuses=['open', 'in_progress', 'waiting', 'completed', 'cancelled']),
 }
@@ -408,7 +408,9 @@ def collect_report(kind, db, user, school, f):
     rows, columns, summary, notes = collected[:4]
     monthly = [] if kind == 'document-pendencies' else monthly_rows(rows, f, kind == 'financial', collected[4] if len(collected) > 4 else None)
     period = {'date_from': str(f['date_from']), 'date_to': str(f['date_to']), 'label': f['date_from'].strftime('%d/%m/%Y') + ' a ' + f['date_to'].strftime('%d/%m/%Y')}
-    return {'kind': kind, 'title': catalog['title'], 'description': catalog['description'], 'date_basis': catalog['date_basis'],
+    counts = Counter(row['status'] for row in rows if row.get('status'))
+    status_summary = [{'label': state, 'count': count} for state, count in sorted(counts.items())]
+    return {'status_summary': status_summary, 'kind': kind, 'module': catalog['module'], 'title': catalog['title'], 'description': catalog['description'], 'date_basis': catalog['date_basis'],
             'school_name': school.name, 'generated_at': now().astimezone(TZ).isoformat(), 'period': period,
             'filters': filters, 'columns': columns, 'summary': summary, 'monthly': monthly, 'notes': notes,
             'items': [{k: v for k, v in row.items() if not k.startswith('_')} for row in rows], 'total': len(rows)}
@@ -449,6 +451,9 @@ def export_csv(report):
     write([]); write([column['label'] for column in report['columns']])
     for row in report['items']: write([format_value(row.get(column['key']), column['type']) for column in report['columns']])
     write([]); write(['Total de registros', report['total']])
+    if report['status_summary']:
+        write([]); write(['Situação', 'Quantidade de registros'])
+        for item in report['status_summary']: write([item['label'], item['count']])
     for note in report['notes']: write(['Observação', note])
     return '\ufeff' + stream.getvalue()
 
@@ -460,9 +465,9 @@ def management_pdf(kind: str, db: DB, user: Actor, school: Scope, request: Reque
     report = collect_report(kind, db, user, school, filters)
     if report['total'] > MAX_PDF_ROWS:
         fail(422, 'O relatório excede 2.000 registros para PDF. Refine os filtros ou exporte o relatório completo em CSV.')
-    payload = render_table(school.name, report['title'], report['columns'], report['items'],
+    payload = render_table(school, report['title'], report['columns'], report['items'],
                            summary=report['summary'], period=report['period']['label'], filters=report['filters'],
-                           notes=[report['date_basis'], *report['notes']], monthly=report['monthly'], issuer=user.name, db=db)
+                           module=report['module'], status_summary=report['status_summary'], notes=[report['description'], report['date_basis'], *report['notes']], monthly=report['monthly'], issuer=user.name, db=db)
     audit(db, request, user, 'report.management_exported', school, school.id, {'kind': kind, 'format': 'pdf', 'count': report['total'], 'period': report['period']})
     return Response(payload, media_type='application/pdf', headers={'Content-Disposition': f'attachment; filename="relatorio-{kind}-{filters["date_from"]}-{filters["date_to"]}.pdf"', 'Cache-Control': 'no-store'})
 

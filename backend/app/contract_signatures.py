@@ -221,13 +221,17 @@ def superseded_contract_filter(school_id):
         m.Admission.contract_template_id.is_not(None),
         or_(m.Admission.contract_template_id!=m.IssuedDocument.template_id,
             cast(m.Admission.contract_template_version,String)!=m.IssuedDocument.template_version)).exists()
-    return is_contract & replaced
+    return or_(m.IssuedDocument.superseded_at.is_not(None), is_contract & replaced)
 
 
-def ensure_current_contract(db,issued):
-    if db.scalar(select(m.IssuedDocument.id).where(m.IssuedDocument.id==issued.id,
-        superseded_contract_filter(issued.school_id))):
-        fail(409,'Esta via está no histórico. Utilize o contrato atualmente vinculado à matrícula.')
+def is_superseded(db, issued):
+    return issued.superseded_at is not None or bool(db.scalar(select(m.IssuedDocument.id).where(
+        m.IssuedDocument.id == issued.id, superseded_contract_filter(issued.school_id))))
+
+
+def ensure_current_contract(db, issued):
+    if issued.history_removed_at is not None or is_superseded(db, issued):
+        fail(409, 'Esta via está no histórico. Utilize o contrato atualmente vinculado à matrícula.')
 
 
 def auto_sign_issued_document(db, issued, actor_id, request):
@@ -253,7 +257,8 @@ def auto_sign_issued_document(db, issued, actor_id, request):
         fail(409, 'O certificado A1 da escola expirou. Atualize-o antes da emissão.')
     source = _read_verified(latest_signed_file(db,issued))
     try:
-        signed = sign_pdf_pfx(source, pfx, password, f'Escola_{issued.id.replace("-", "")[:16]}')
+        field = issued.snapshot.get('institutional_signature_field') or f'Escola_{issued.id.replace("-", "")[:16]}'
+        signed = sign_pdf_pfx(source, pfx, password, field)
     except InvalidPdfSignature as exc:
         fail(409, f'Não foi possível assinar com A1: {exc}')
     return _store_revision(db, issued, signed, actor_id, request, source='company_a1',
@@ -293,10 +298,14 @@ def submit_external_signature(db, issued, signed_pdf, actor_id, request,
     try:
         from pyhanko.pdf_utils.reader import PdfFileReader
         reader = PdfFileReader(io.BytesIO(signed_pdf))
-        cert = reader.embedded_regular_signatures[-1].signer_cert
+        external = reader.embedded_regular_signatures[-1]
+        cert = external.signer_cert
         cpf = _signer_cpf(cryptography_x509.load_der_x509_certificate(cert.dump()))
     except Exception:
         cpf = ''
+    else:
+        if external.field_name == document.snapshot.get('institutional_signature_field'):
+            fail(422, 'Use o campo do responsável. O campo da escola é reservado ao A1 institucional.')
     if expected_signer_cpf and cpf and _digits(expected_signer_cpf) != cpf:
         fail(422, 'CPF do certificado não corresponde ao responsável pela matrícula.')
     # Certificado sem CPF verificável exige comparação humana no VALIDAR/ITI.
@@ -479,6 +488,7 @@ def unsigned_documents(db: DB, user: Actor, school: Scope, limit: int = 30, offs
     return {'items': [{'document_id': doc.id, 'student_name': name, 'kind': doc.kind,
                       'enrollment_id': doc.enrollment_id, 'student_id': doc.student_id,
                       'file_id': doc.file_id, 'signature_status': doc.signature_status,
+                      'applicant_first': applicant_first(doc),
                       'created_at': doc.created_at.isoformat()} for doc, name in rows],
             'total': total, 'limit': limit, 'offset': offset}
 
@@ -490,8 +500,13 @@ def sign_school_document(document_id: str, db: DB, user: Actor, school: Scope, r
         fail(403, 'Somente direção ou administração pode assinar em nome da escola.')
     lock_school(db, school.id)
     issued = scoped(db, m.IssuedDocument, document_id, school.id)
+    ensure_current_contract(db, issued)
     if applicant_first(issued):
-        fail(409,'A assinatura institucional deste contrato ocorre ao efetivar a matrícula.')
+        if issued.signature_status in {'unsigned','rejected'}:
+            fail(409,'O responsável deve baixar a via vigente no portal, assinar e enviar o PDF.')
+        if issued.signature_status == 'pending_validation':
+            fail(409,'A Direção deve conferir a assinatura do responsável.')
+        fail(409,'A escola aplica o A1 ao efetivar a matrícula com a via conferida.')
     previous = _company_revision(db, issued)
     if previous:
         return {'document_id': issued.id, 'signature_status': issued.signature_status,
@@ -505,12 +520,16 @@ def sign_school_document(document_id: str, db: DB, user: Actor, school: Scope, r
 def signatures(document_id: str, db: DB, user: Actor, school: Scope):
     require(user, 'documents.read')
     issued = scoped(db, m.IssuedDocument, document_id, school.id)
-    current = verify_document_signatures(db, issued)
+    from .contract_history import access_state
+    state = access_state(db, issued)
+    if issued.history_removed_at is not None:
+        fail(404, 'Documento não encontrado.')
+    current = verify_document_signatures(db, issued) if state['downloadable'] else {'file_id': None, 'signatures': []}
     revisions = db.scalars(select(IssuedDocumentSignature).where(
         IssuedDocumentSignature.school_id == school.id,
         IssuedDocumentSignature.issued_document_id == issued.id,
     ).order_by(IssuedDocumentSignature.created_at, IssuedDocumentSignature.id)).all()
-    return {'document_id': issued.id, 'status': issued.signature_status, **current,
+    return {'document_id': issued.id, 'status': issued.signature_status, 'applicant_first': applicant_first(issued), **current, **state,
             'revisions': [output(row) for row in revisions]}
 
 

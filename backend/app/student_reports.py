@@ -57,7 +57,7 @@ def compose_student_document(db, school, student, person, enrollment_id, kind, i
             fail(409, 'Comprovantes e declarações exigem matrícula ativa.')
     identity = public_identity(db)
     snapshot = {'school': output(school), 'person': output(person), 'student': output(student), 'issuer': issuer,
-                'template_version': '3', 'layout_version': '4', 'institution_identity': identity, 'brand': identity['display_name']}
+                'template_version': '3', 'layout_version': '6', 'institution_identity': identity, 'brand': identity['display_name']}
     detailed = kind in {'student_record', 'enrollment_form'}
     sections = []
     basic = [('Nome completo', person.name), ('Data de nascimento', date_text(person.birth_date))]
@@ -115,6 +115,25 @@ def compose_student_document(db, school, student, person, enrollment_id, kind, i
         else:
             sections.append({'title': 'Vínculos acadêmicos', 'text': 'Não há matrícula registrada para este aluno.'})
             latest_group = None
+    if kind == 'student_record':
+        query = (select(m.EnrollmentEvent, m.Enrollment.number)
+                 .join(m.Enrollment, and_(m.Enrollment.id == m.EnrollmentEvent.enrollment_id,
+                                          m.Enrollment.school_id == school.id))
+                 .where(m.EnrollmentEvent.school_id == school.id, m.Enrollment.student_id == student.id)
+                 .order_by(m.EnrollmentEvent.created_at, m.EnrollmentEvent.id))
+        actions = {'create':'Cadastro', 'created':'Cadastro', 'activate':'Efetivação', 'reactivate':'Reativação',
+                   'change_class':'Mudança de turma', 'suspend':'Suspensão', 'cancel':'Cancelamento',
+                   'transfer':'Transferência', 'complete':'Conclusão', 'reenrolled':'Rematrícula',
+                   'draft_updated':'Atualização da pré-matrícula', 'legacy_import':'Importação do histórico'}
+        timeline = [{'date': date_text(event.created_at), 'number': number,
+                     'action': actions.get(event.action, event.action),
+                     'status': ENROLLMENT_LABELS.get((event.after or {}).get('status'), '—')}
+                    for event, number in db.execute(query)]
+        if timeline:
+            sections.append({'title':'Movimentação escolar', 'columns':[
+                {'key':'date','label':'Data'}, {'key':'number','label':'Matrícula'},
+                {'key':'action','label':'Movimento','width':1.5}, {'key':'status','label':'Situação após registro'}],
+                'rows':timeline})
     if detailed:
         from .documents import checklist
         grade_id = group.grade_id if enrollment else (latest_group.grade_id if latest_group else None)
@@ -135,7 +154,7 @@ def compose_student_document(db, school, student, person, enrollment_id, kind, i
     notes = ['Documento gerado eletronicamente a partir dos dados cadastrados. Não contém assinatura digital.']
     if kind == 'enrollment_form':
         notes.insert(0, 'Ficha administrativa. A situação acima deve ser observada; este documento não substitui a declaração de matrícula ativa.')
-    content = render_table(school.name, title, [], [], sections=sections,
+    content = render_table(school, title, [], [], sections=sections, module='Cadastro e matrícula',
         profile={'name': person.name, 'detail': f'Aluno {student.number} | Situação cadastral: ' + ('Ativo' if student.status == 'active' else 'Inativo')},
         photo=student_photo(db, school.id, person) if detailed else None,
         signatures=['Responsável / aluno maior de idade', 'Secretaria / instituição'] if detailed else ['Secretaria / representante da instituição'],
