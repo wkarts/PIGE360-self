@@ -50,7 +50,10 @@ var PigeInstitution;
 var PigeSupport;
 (function (PigeSupport) {
     PigeSupport.status = Vue.reactive({ error: '' });
-    let loadedSource = '', activeContext = '';
+    let loadedSource = '', activeScope = '';
+    let pending = null;
+    let retryAt = 0;
+    const busyMessage = 'O atendimento recebeu muitas solicitações. Aguarde antes de tentar novamente.';
     let frame = null;
     let observer = null;
     let viewportTimer;
@@ -72,7 +75,7 @@ var PigeSupport;
         catch { /* Atendimento não bloqueia a aplicação. */ }
         previous?.remove();
     }
-    function dispose() { ++generation; activeContext = ''; release(); PigeSupport.status.error = ''; }
+    function dispose() { ++generation; activeScope = ''; pending = null; retryAt = 0; release(); PigeSupport.status.error = ''; }
     PigeSupport.dispose = dispose;
     function clipWidget(element) {
         if (frame !== element)
@@ -106,21 +109,54 @@ var PigeSupport;
         element.style.visibility = right > left && bottom > top ? 'visible' : 'hidden';
     }
     async function load(schoolId = '', area = 'login', sessionKey = 'public') {
-        const context = [schoolId, area, sessionKey].join('|');
-        if (context !== activeContext) {
-            release();
-            activeContext = context;
+        const scope = JSON.stringify([schoolId, sessionKey]);
+        const context = JSON.stringify([scope, area]);
+        if (scope !== activeScope) {
+            dispose();
+            activeScope = scope;
         }
+        if (pending?.context === context)
+            return pending.promise;
+        pending = null;
         const request = ++generation;
-        PigeSupport.status.error = '';
+        if (frame)
+            frame.style.display = 'none';
         if (!schoolId && area !== 'login') {
             release();
             return;
         }
+        if (Date.now() < retryAt) {
+            release();
+            PigeSupport.status.error = busyMessage;
+            return;
+        }
+        PigeSupport.status.error = '';
+        const promise = loadArea(schoolId, area, scope, request);
+        pending = { context, promise };
+        try {
+            await promise;
+        }
+        finally {
+            if (pending?.promise === promise)
+                pending = null;
+        }
+    }
+    PigeSupport.load = load;
+    async function loadArea(schoolId, area, scope, request) {
         let config = null;
         try {
             const path = schoolId ? '/api/v1/schools/' + encodeURIComponent(schoolId) + '/support-widget?area=' + encodeURIComponent(area) : '/api/v1/support-widget';
             const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store' });
+            if (request !== generation)
+                return;
+            if (response.status === 429) {
+                const header = response.headers.get('Retry-After')?.trim() || '';
+                const delay = /^\d+$/.test(header) ? Number(header) * 1000 : Date.parse(header) - Date.now();
+                retryAt = Date.now() + (Number.isFinite(delay) && delay >= 0 ? delay : 60000);
+                release();
+                PigeSupport.status.error = busyMessage;
+                return;
+            }
             if (response.ok)
                 config = await response.json();
         }
@@ -143,9 +179,11 @@ var PigeSupport;
             PigeSupport.status.error = 'Revise o endereço configurado para o atendimento.';
             return;
         }
-        const sourceKey = [context, baseUrl, config.website_token, config.position, config.type, config.launcherTitle].join('|');
-        if (sourceKey === loadedSource && frame)
+        const sourceKey = JSON.stringify([scope, baseUrl, config.website_token, config.position, config.type, config.launcherTitle]);
+        if (sourceKey === loadedSource && frame) {
+            frame.style.display = '';
             return;
+        }
         release();
         const element = document.createElement('iframe');
         element.dataset.pigeSupportFrame = 'true';
@@ -191,7 +229,6 @@ var PigeSupport;
             return; PigeSupport.status.error = 'O atendimento está indisponível. Tente novamente mais tarde.'; release(); };
         doc.head.appendChild(sdk);
     }
-    PigeSupport.load = load;
     window.addEventListener('pagehide', dispose);
 })(PigeSupport || (PigeSupport = {}));
 var PigeOnline;
@@ -1461,7 +1498,7 @@ var PigePortal;
     }
     else
         history.replaceState({}, '', '/online?school=' + encodeURIComponent(state.schoolId)); await loadRegistrationTerms(); }); }
-    async function selectCampaign() { PigeSupport.dispose(); supportContext = ''; await run(async () => { state.selected = null; state.editing = false; state.register.accept_privacy = false; await loadCampaign(); }); }
+    async function selectCampaign() { await run(async () => { state.selected = null; state.editing = false; state.register.accept_privacy = false; await loadCampaign(); }); }
     async function afterMFA(result) { state.account = result; state.schoolId = state.account.school_id; state.page = 1; state.section = 'admissions'; if (state.campaign?.school_id !== state.schoolId) {
         state.campaign = null;
         state.slug = '';

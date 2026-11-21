@@ -35,6 +35,19 @@ class SurfaceTests(unittest.TestCase):
         self.addCleanup(lambda:(server.shutdown(),server.server_close(),thread.join(timeout=2)))
         return f'http://127.0.0.1:{server.server_port}'
 
+    def test_support_widget_portal_policy(self):
+        path='/api/v1/schools/12345678-1111-2222-3333-123456789012/support-widget'
+        for teacher in (True,False):
+            with patch.object(portal,'TEACHER_ONLY',teacher):
+                self.assertTrue(portal.allowed(path,'GET'))
+                self.assertFalse(portal.allowed(path,'PUT'))
+                self.assertFalse(portal.allowed(path.replace('support-widget','support-hub'),'GET'))
+        policy=portal.portal_csp("script-src 'self' https://support.example.test; frame-ancestors *")
+        self.assertIn("frame-src 'self' https://support.example.test;",policy)
+        self.assertIn("wss://support.example.test",policy)
+        self.assertIn("frame-ancestors 'none'",policy)
+        self.assertNotIn("example.test",portal.portal_csp())
+
     def test_invitation_form_layout_preserves_hidden_state(self):
         html=(ROOT/'frontend/public/first-access.html').read_text()
         self.assertIn('<form id="invite-form" hidden>',html)

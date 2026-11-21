@@ -18,7 +18,11 @@ subprocess.run(['node', str(ROOT/'frontend/node_modules/typescript/lib/tsc.js'),
                 '--skipLibCheck', '--outFile', str(TMP/'widget.js'),
                 str(ROOT/'frontend/src/vue-globals.d.ts'), str(ROOT/'frontend/src/support-widget.ts')], check=True)
 WIDGET = (TMP/'widget.js').read_bytes()
-SDK = b'''window.hubSDK={run({websiteToken}){
+SDK = b'''window.hubSDK={run({websiteToken,baseUrl}){
+  parent.hubStarts=(parent.hubStarts||0)+1;
+  parent.lastHubConfig={baseUrl,...window.hubSettings};
+  if(websiteToken==='limited'){const remote=document.createElement('iframe');
+    remote.src=baseUrl+'/widget?website_token=limited';document.body.append(remote);}
   parent.supportTicks??={};parent.supportTicks[websiteToken]??=0;
   setInterval(()=>parent.supportTicks[websiteToken]++,25);
   const bubble=document.createElement('button');bubble.textContent='Atendimento '+websiteToken;
@@ -43,7 +47,7 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path.endswith('/support-widget'):
             school = parsed.path.split('/')[4] if '/schools/' in parsed.path else ''
             area = parse_qs(parsed.query).get('area', [''])[0]
-            body = json.dumps({'enabled': bool(school) and area == 'online_enrollment', 'base_url': URL,
+            body = json.dumps({'enabled': bool(school) and area in ('online_enrollment','guardian_portal'), 'base_url': URL,
                                'website_token': school, 'position': 'left', 'type': 'standard',
                                'launcherTitle': 'Atendimento'}).encode()
             content_type = 'application/json'
@@ -86,6 +90,11 @@ try:
         expect(frame.frame_locator('iframe').get_by_role('textbox')).to_be_visible()
         frame.frame_locator('iframe').get_by_role('textbox').fill('Teste sintético')
         checks.append('Painel do atendimento abre e recebe digitação')
+        page.evaluate("Promise.all([PigeSupport.load('a','guardian_portal'),PigeSupport.load('a','guardian_portal')])")
+        assert page.evaluate("window.hubStarts") == 1
+        assert page.evaluate("window.lastHubConfig") == dict(baseUrl=URL,position='left',type='standard',launcherTitle='Atendimento')
+        assert frame.frame_locator('iframe').get_by_role('textbox').input_value()=='Teste sintético'
+        checks.append('Áreas habilitadas da mesma conta conservam a conversa e os parâmetros do botão')
         page.evaluate("PigeSupport.load('b', 'online_enrollment')")
         expect(frame.get_by_role('button', name='Atendimento b')).to_be_visible()
         previous_ticks = page.evaluate('window.supportTicks.a')
@@ -104,6 +113,32 @@ try:
         page.evaluate('PigeSupport.dispose()')
         expect(page.locator('iframe[data-pige-support-frame]')).to_have_count(0)
         checks.append('Troca de conta e saída descartam o contexto de atendimento')
+        limited_calls=[]
+        def provider_limited(route):
+            limited_calls.append(1)
+            route.fulfill(status=429,headers={'Retry-After':'30'},body='Busy')
+        page.route('**/widget?website_token=limited',provider_limited)
+        with page.expect_response(lambda response: '/widget?' in response.url and response.status==429):
+            page.evaluate("PigeSupport.load('limited','online_enrollment')")
+        page.evaluate("PigeSupport.load('limited','guardian_portal')")
+        page.evaluate("PigeSupport.load('limited','online_enrollment')")
+        assert len(limited_calls)==1
+        assert page.evaluate("!PigeSupport.status.error.includes('website_token')")
+        counters=[]
+        def config_limited(route):
+            counters.append(1)
+            if len(counters)==1:
+                route.fulfill(status=429,headers={'Retry-After':'1'},body='')
+            else:
+                route.continue_()
+        page.route('**/schools/slow/support-widget?*',config_limited)
+        page.evaluate("PigeSupport.load('slow','online_enrollment')")
+        page.evaluate("PigeSupport.load('slow','online_enrollment')")
+        assert len(counters)==1 and 'Aguarde' in page.evaluate('PigeSupport.status.error')
+        page.wait_for_timeout(1050)
+        page.evaluate("PigeSupport.load('slow','online_enrollment')")
+        expect(frame.get_by_role('button',name='Atendimento slow')).to_be_visible()
+        checks.append('429 simulado do Hub sem reinicialização por navegação e Retry-After da configuração respeitado')
         browser.close()
 finally:
     server.shutdown()
