@@ -57,7 +57,7 @@ config['name']=project
 content=Path(envfile).read_text()+'\nCOMPOSE_PROJECT_NAME='+project+'\nCOMPOSE_PROFILES=website,portal,teacher\n'
 (deployment/'.env.ci').write_text(content);(deployment/'.env.ci').chmod(0o600)
 with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
-process=subprocess.Popen([sys.executable,str(ROOT/'scripts/deployer.py'),'--root',str(checkout),'--port',str(port)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+process=subprocess.Popen([sys.executable,str(ROOT/'scripts/deployer.py'),'--root',str(checkout),'--port',str(port)],stdout=subprocess.PIPE,text=True)
 out=ROOT/'ci-evidence/browser/restore';out.mkdir(parents=True,exist_ok=True)
 try:
     line=process.stdout.readline();secret=re.search(r'Senha temporária:\s*(\S+)',line).group(1)
@@ -85,10 +85,19 @@ try:
         control.get_by_label('ID do plano preparado no gestor').fill(plan['id']);control.get_by_label('Confirmação exibida no plano').fill(plan['confirmation']);control.get_by_role('button',name='Confirmar restauração destrutiva').click()
         expect(control.get_by_text('Restauração iniciada.',exact=False)).to_be_visible()
         for _ in range(180):
-            control.get_by_role('button',name='Acompanhar restauração',exact=True).click()
-            body=control.locator('body').inner_text()
-            if '"status": "completed"' in body:break
-            if '"status": "failed"' in body or '"status": "interrupted"' in body:raise AssertionError('Restauração visual falhou: '+body)
+            dashboard = control.goto(deployer, wait_until='domcontentloaded')
+            assert dashboard and dashboard.ok, 'O painel do deployer não respondeu durante a restauração'
+            with control.expect_navigation(wait_until='domcontentloaded') as navigation:
+                control.get_by_role('button', name='Acompanhar restauração', exact=True).click()
+            response = navigation.value
+            assert response and response.url == deployer + '/restore-history' and response.ok, (
+                'Falha ao consultar o histórico pelo deployer', response.status if response else None)
+            rows = json.loads(control.get_by_role('status').inner_text())
+            current = next((row for row in rows if row['id'] == plan['id']), None)
+            assert current, 'Plano iniciado não consta no histórico do deployer'
+            if current['status'] == 'completed':
+                break
+            assert current['status'] == 'processing', (current['status'], current.get('error_code'))
             time.sleep(1)
         else:raise AssertionError('Restauração visual não terminou')
         control.screenshot(path=str(out/'restore-completed.png'),full_page=True)
