@@ -126,6 +126,7 @@ def test_diary_lesson_attendance_close_and_reopen(api):
     assert api.get('/diaries/'+diary['id']+'/history') == original_report
     with SessionLocal() as db:
         closure = db.get(m.DiaryClosure, full_close["closure"]["id"])
+        assert closure.snapshot["lessons"][0]["expected_enrollment_ids"] == [enrollment["id"]]
         assert len(closure.snapshot["assessments"]) == 1
         assert len(closure.snapshot["assessment_results"]) == 1
         assert len(closure.snapshot["opinions"]) == 1

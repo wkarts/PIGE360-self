@@ -785,11 +785,19 @@ def close_diary(diary_id: str, data: s.CloseDiaryInput, db: DB, user: Actor, sch
     _require_unclosed_period(db, diary, data.academic_period_id)
     snapshot=_snapshot(db,diary,data.academic_period_id)
     if not snapshot["lessons"]: fail(409,"Não é possível fechar um diário sem aulas registradas.")
-    missing=[]
+    missing = []
+    marked = {}
+    for row in snapshot["attendance"]:
+        marked.setdefault(row["lesson_id"], set()).add(row["enrollment_id"])
+    rosters = {}
     for lesson in snapshot["lessons"]:
-        count=db.scalar(select(func.count()).select_from(m.DiaryAttendance).where(m.DiaryAttendance.lesson_id==lesson["id"])) or 0
-        expected=len(_attendance_roster(db,diary,date.fromisoformat(lesson["lesson_date"])))
-        if count < expected: missing.append(lesson["lesson_date"])
+        day = date.fromisoformat(lesson["lesson_date"])
+        if day not in rosters:
+            rosters[day] = sorted(row["enrollment_id"] for row in _attendance_roster(db, diary, day))
+        expected = rosters[day]
+        lesson["expected_enrollment_ids"] = expected
+        if not marked.get(lesson["id"], set()).issuperset(expected):
+            missing.append(lesson["lesson_date"])
     if missing:
         fail(409,"Existem aulas sem chamada completa: "+", ".join(missing[:5]))
     canonical=json.dumps(snapshot,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
