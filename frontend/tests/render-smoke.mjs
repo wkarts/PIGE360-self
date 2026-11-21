@@ -115,11 +115,15 @@ importContext.state.preview={can_apply:true,selected_record_count:2,destination:
 assert.match(loginText(importRender()),/Confira antes de importar/);
 importContext.toggleTable('alunos');assert.equal(importContext.state.preview,null,'Mudar seleção invalida a confirmação');
 const reportContext=sandbox.PigeReports.component.setup({schoolId:'school-test',catalogs:{}});
+reportContext.identity={display_name:'Instituição Sintética',logo_url:'/logo-escola',app_version:'0.0.1'};
 const reportRender=()=>sandbox.PigeRenders.reports.call(reportContext,reportContext,[]);
 reportContext.period();assert.ok(reportContext.state.dateFrom<reportContext.state.dateTo);
 assert.match(loginText(reportRender()),/Últimos três meses completos/);
-reportContext.state.result={title:'Matrículas',period:{label:'Teste',date_from:'2026-07-01',date_to:'2026-09-30'},summary:[{key:'total',label:'Total',value:1,type:'integer'}],filters:[],columns:[{key:'name',label:'Aluno',type:'text'}],items:[{name:'Aluno Sintético'}],total:1,page_size:30,monthly:[],notes:[]};
+reportContext.state.result={module:'Matrículas',school_name:'Unidade de teste',generated_at:'2026-09-30T11:00:00Z',description:'Matrículas da unidade',status_summary:[{label:'Ativo',count:1}],title:'Matrículas',period:{label:'Teste',date_from:'2026-07-01',date_to:'2026-09-30'},summary:[{key:'total',label:'Total',value:1,type:'integer'}],filters:[],columns:[{key:'name',label:'Aluno',type:'text'}],items:[{name:'Aluno Sintético'}],total:1,page_size:30,monthly:[],notes:[]};
 assert.match(loginText(reportRender()),/Aluno Sintético/);
+assert.match(loginText(reportRender()),/Distribuição por situação/);
+assert.match(loginText(reportRender()),/Uso restrito/);
+assert.ok(nodes(reportRender()).some(node=>node.type==='img' && node.props.src==='/logo-escola'));
 context.state.page='help';let guideTree=render();assert.match(loginText(guideTree),/Siga a ordem da rotina escolar/);assert.match(loginText(guideTree),/Cadastre cada pessoa uma vez/);
 context.state.page='students';assert.match(loginText(render()),/Novo aluno/);assert.ok(!loginText(render()).includes('Pesquise antes de criar uma nova identidade'),'Orientação redundante removida da listagem');
 const originalRequest=sandbox.PigeAPI.request;let routeCalls=[];

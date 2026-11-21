@@ -671,11 +671,11 @@ def receipt(id:str,request:Request,db:DB,account:Parent):
     obj=own_admission(db,account,id)
     if obj.status=='draft':fail(409,'Envie a inscrição antes de obter o protocolo.')
     school=db.get(m.School,obj.school_id)
-    data=render_pdf(school.name,'Protocolo de inscrição online',[
+    data=render_pdf(school,'Protocolo de inscrição online',[
         ('Protocolo',obj.number),('Aluno',obj.student_data['name']),('Responsável',obj.guardian_snapshot.get('name',account.name)),
         ('Processo',db.get(m.AdmissionCampaign,obj.campaign_id).title),('Turma pretendida',db.get(m.ClassGroup,obj.class_group_id).name),
         ('Situação',STATUS_LABELS[obj.status]),('Enviada em',str(obj.submitted_at)),
-    ],'Protocolo de recebimento. Não constitui garantia de vaga, comprovação de pagamento ou declaração de matrícula ativa.')
+    ],'Protocolo de recebimento. Não constitui garantia de vaga, comprovação de pagamento ou declaração de matrícula ativa.', db=db, module='Inscrições online')
     parent_audit(db,request,account,'receipt.generated',obj)
     return Response(data,media_type='application/pdf',headers={'Content-Disposition':f'attachment; filename="inscricao-{obj.number}.pdf"','Cache-Control':'no-store'})
 

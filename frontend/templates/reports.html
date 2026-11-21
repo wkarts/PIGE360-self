@@ -4,7 +4,7 @@
     <form @submit.prevent="generate()">
       <fieldset :disabled="state.busy" class="report-filter-fields">
         <div class="x-grid">
-          <label>Relatório<select aria-label="Relatório" v-model="state.kind" @change="changeKind" required><option v-for="item in state.catalog" :key="item.id" :value="item.id">{{ item.title }}</option></select></label>
+          <label>Relatório<select aria-label="Relatório" v-model="state.kind" @change="changeKind" required><optgroup v-for="module in modules()" :key="module" :label="module"><option v-for="item in state.catalog.filter(entry=>entry.module===module)" :key="item.id" :value="item.id">{{ item.title }}</option></optgroup></select></label>
           <label>Período<select aria-label="Período" v-model="state.preset" @change="period"><option value="last-three">Últimos três meses completos</option><option value="month">Mês atual</option><option value="quarter">Trimestre atual</option><option value="year">Ano atual</option><option value="custom">Personalizado</option></select></label>
           <label>De<input type="date" v-model="state.dateFrom" @input="state.preset='custom'" required></label>
           <label>Até<input type="date" v-model="state.dateTo" @input="state.preset='custom'" :min="state.dateFrom" required></label>
@@ -23,16 +23,28 @@
   </section>
   <section v-if="state.result" class="report-result" aria-live="polite" :aria-busy="state.busy">
     <div v-if="changed()" class="alert warning">Os filtros foram alterados. Clique em Gerar relatório para atualizar os resultados.</div>
+    <header class="report-masthead">
+      <img v-if="identity?.logo_url" :src="identity.logo_url" alt="">
+      <div><p>{{ identity?.display_name }}<span v-if="state.result.school_name!==identity?.display_name"> · {{ state.result.school_name }}</span></p>
+        <p class="report-module">{{ state.result.module }}</p><h2>{{ state.result.title }}</h2>
+        <p>{{ state.result.description }}</p><strong>{{ state.result.period.label }}</strong>
+      </div>
+    </header>
     <div class="report-metrics"><article v-for="metric in state.result.summary" :key="metric.key" class="panel report-metric"><span>{{ metric.label }}</span><strong>{{ value(metric.value,metric.type) }}</strong></article></div>
     <section class="panel">
-      <div class="panel-header"><div><h2>{{ state.result.title }}</h2><p class="muted small">{{ state.result.period.label }} · {{ state.result.total }} registro(s)</p></div><div class="actions"><button class="btn btn-secondary" :disabled="state.busy || changed()" @click="download('csv')">Exportar CSV</button><button class="btn btn-primary" :disabled="state.busy || changed()" @click="download('pdf')">Baixar PDF</button></div></div>
+      <div class="panel-header"><div><h3>Registros do período</h3><p class="muted small">{{ state.result.total }} registro(s) · {{ state.result.date_basis }}</p></div><div class="actions"><button class="btn btn-secondary" :disabled="state.busy || changed()" @click="download('csv')">Exportar CSV</button><button class="btn btn-primary" :disabled="state.busy || changed()" @click="download('pdf')">Baixar PDF</button></div></div>
       <div class="report-applied-filters"><span v-for="filter in state.result.filters" :key="filter.label" class="badge">{{ filter.label }}: {{ filter.value }}</span></div>
-      <div class="table-scroll"><table><caption class="sr-only">{{ state.result.title }}</caption><thead><tr><th v-for="column in state.result.columns" :key="column.key" scope="col">{{ column.label }}</th></tr></thead><tbody><tr v-for="(item,index) in state.result.items" :key="index"><td v-for="column in state.result.columns" :key="column.key" :class="{'numeric-cell':column.type==='currency'}">{{ value(item[column.key],column.type) }}</td></tr></tbody></table></div>
+      <div class="table-scroll report-records"><table><caption class="sr-only">{{ state.result.title }}</caption><thead><tr><th v-for="column in state.result.columns" :key="column.key" scope="col">{{ column.label }}</th></tr></thead><tbody><tr v-for="(item,index) in state.result.items" :key="index"><td v-for="column in state.result.columns" :key="column.key" :data-label="column.label" :class="{'numeric-cell':['currency','number','percent'].includes(column.type)}">{{ value(item[column.key],column.type) }}</td></tr></tbody></table></div>
       <div v-if="!state.result.total" class="empty-state"><h3>Nenhum registro neste período</h3><p>Ajuste as datas ou os filtros para ampliar a consulta.</p></div>
       <div v-if="state.result.total>state.result.page_size" class="pagination"><button class="btn btn-secondary" :disabled="state.busy || changed() || state.page<=1" @click="generate(state.page-1)">Anterior</button><span>Página {{ state.page }} de {{ Math.ceil(state.result.total/state.result.page_size) }}</span><button class="btn btn-secondary" :disabled="state.busy || changed() || state.page*state.result.page_size>=state.result.total" @click="generate(state.page+1)">Próxima</button></div>
     </section>
+    <section v-if="state.result.status_summary?.length" class="panel x-card"><h3>Distribuição por situação</h3>
+      <dl class="report-status-list"><div v-for="item in state.result.status_summary" :key="item.label"><dt>{{ item.label }}</dt><dd>{{ item.count }}</dd></div></dl>
+    </section>
     <section v-if="state.result.monthly.length" class="panel x-card"><h3>Resumo por mês</h3><div class="report-months"><article v-for="month in state.result.monthly" :key="month.month"><span>{{ month.label }}</span><strong>{{ month.count }} registro(s)</strong><small v-if="month.amount!==undefined">{{ value(month.amount,'currency') }}</small></article></div></section>
     <details v-if="state.result.notes.length" class="panel x-card"><summary>Critérios do relatório</summary><ul><li v-for="note in state.result.notes" :key="note">{{ note }}</li></ul></details>
+    <footer class="report-imprint"><span>{{ state.result.school_name }} · Sistema de gestão escolar<span v-if="identity?.app_version"> · {{ identity.app_version }}</span></span>
+      <span>Consulta em {{ issuedAt(state.result.generated_at) }} (Bahia)</span><strong>Uso restrito aos destinatários autorizados</strong></footer>
   </section>
   <section v-else-if="!state.busy" class="panel empty-state"><h3>A informação que você precisa, no período certo</h3><p>Consulte os registros em tela ou gere um documento com os filtros, os totais e a identificação da escola.</p></section>
 </div>

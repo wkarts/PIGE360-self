@@ -96,4 +96,11 @@ def test_audit_filters_scope_redaction_csv(client,admin,api):
     assert '.csv"' in r.headers['content-disposition']
     assert 'Depois' in r.content.decode('utf-8-sig')
     assert 'record-1' not in r.text and 'never-export' not in r.text
+    from io import BytesIO
+    from pypdf import PdfReader
+    pdf = client.get(api.base+'/audit/export?format=pdf&request_id='+ref, headers=admin)
+    assert pdf.status_code == 200 and pdf.headers['cache-control'] == 'no-store'
+    text = ' '.join(page.extract_text() for page in PdfReader(BytesIO(pdf.content)).pages)
+    assert 'Uso administrativo restrito' in text and 'record-0' in text
+    assert all(private not in text for private in ('record-1', 'never-export', 'Depois', '127.0.0.1'))
     assert client.get(api.base+'/audit?since=2026-10-02&until=2026-10-01',headers=admin).status_code==422

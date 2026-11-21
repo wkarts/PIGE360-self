@@ -102,6 +102,7 @@ def _period_data(snapshot, enrollment, period, closure):
                   and rule.get('justified_absence_counts_as_present') is not None else None)
     return {
         'period_id': period.id, 'period_name': period.name,
+        'order_index': period.order_index, 'starts_on': period.starts_on.isoformat(),
         'grade_display': _grade(result), 'result_status': result.get('status', 'pending') if result else 'pending',
         'result_label': RESULT_LABELS.get(result.get('status'), 'Consolidado') if result else 'Consolidação pendente',
         'attendance': {**counts, 'percentage': percentage}, 'published': True,
@@ -185,28 +186,47 @@ def report_response(db, students, student_id, enrollment_id, issuer):
     enrollments = [row for row in info['enrollments'] if not enrollment_id or row['enrollment_id'] == enrollment_id]
     if enrollment_id and not enrollments:
         fail(404, 'Matrícula não encontrada para este acesso.')
-    rows = []
+    sections = []
     for enrollment in enrollments:
+        groups = {}
         for subject in enrollment['subjects']:
             for period in subject['periods']:
-                a = period['attendance']
-                rows.append({'year': enrollment['year_name'], 'class': period['class_name'] or enrollment['class_name'],
-                             'subject': period['component_name'] or subject['component_name'], 'period': period['period_name'],
-                             'grade': period['grade_display'], 'present': a['present'], 'absent': a['absent'],
-                             'justified': a['justified_absence'], 'attendance': f"{a['percentage']:.2f}%".replace('.', ',') if a['percentage'] is not None else 'Não consolidada',
-                             'result': period['result_label']})
-    if not rows:
+                group_name = period['class_name'] or enrollment['class_name']
+                key = (period['order_index'], period['starts_on'], period['period_id'], group_name)
+                if key not in groups:
+                    groups[key] = {'title': period['period_name'] + ' · ' + group_name, 'rows': []}
+                attendance = period['attendance']
+                groups[key]['rows'].append({
+                    'subject': period['component_name'] or subject['component_name'],
+                    'grade': period['grade_display'], 'total': attendance['total'],
+                    'absences': f"{attendance['absent']} / {attendance['justified_absence']}",
+                    'frequency': attendance['percentage'], 'result': period['result_label'],
+                    'unrecorded': attendance['unrecorded'],
+                })
+        if not groups:
+            continue
+        sections.append({'title': 'Matrícula ' + enrollment['number'], 'fields': [
+            ('Ano letivo', enrollment['year_name']), ('Turma atual', enrollment['class_name'])]})
+        columns = [{'key':'subject','label':'Componente curricular','width':1.8},
+                   {'key':'grade','label':'Nota / conceito','width':1},
+                   {'key':'total','label':'Aulas','type':'integer','width':.55},
+                   {'key':'absences','label':'Faltas¹','width':.7},
+                   {'key':'frequency','label':'Frequência','type':'percent','width':.95},
+                   {'key':'result','label':'Resultado do período','width':1.55}]
+        for key in sorted(groups):
+            group = groups[key]
+            sections.append({**group, 'columns': columns})
+            pending = sum(row['unrecorded'] for row in group['rows'])
+            if pending:
+                sections.append({'title': 'Conferência da chamada', 'text':
+                                 f'{pending} registro(s) de presença sem lançamento neste quadro.'})
+    if not sections:
         fail(409, 'O boletim ficará disponível após a escola publicar o fechamento do período.')
     from .school_reports import render_table
-    columns = [{'key': key, 'label': label, 'type': 'text', 'width': width} for key, label, width in [
-        ('year', 'Ano', .6), ('class', 'Turma', .9), ('subject', 'Componente', 1.35), ('period', 'Período', 1),
-        ('grade', 'Nota / conceito', .9), ('present', 'Presenças', .7), ('absent', 'Faltas', .55),
-        ('justified', 'Justif.', .55), ('attendance', 'Frequência', .9), ('result', 'Resultado do período', 1.3),
-    ]]
-    content = render_table(info['school_name'], 'Boletim escolar', columns, rows,
-                           profile={'name': info['student_name'], 'detail': 'Registro escolar ' + info['student_number']},
-                           notes=[NOTE, 'Presenças e ausências são contadas pela quantidade de aulas registrada em cada dia.'],
-                           issuer=issuer, db=db)
+    content = render_table(db.get(m.School, student.school_id), 'Boletim escolar', [], [], sections=sections,
+                           module='Escrituração escolar', profile={'name': info['student_name'], 'detail': 'Registro escolar ' + info['student_number']},
+                           notes=[NOTE, '¹ Faltas sem justificativa / faltas justificadas, em aulas. A frequência segue a regra do período. Um traço indica percentual ainda não consolidado.'],
+                           circulation='Uso restrito ao aluno e aos responsáveis autorizados', issuer=issuer, db=db)
     return Response(content, media_type='application/pdf', headers={
         'Content-Disposition': 'attachment; filename="boletim-escolar.pdf"', 'Cache-Control': 'no-store',
     })
