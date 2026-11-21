@@ -48,7 +48,7 @@
       </section>
     </section>
     <section v-if="s.agenda?.diaries.length" v-show="s.section==='diary'" aria-label="Diário de classe">
-      <school-diary :key="s.schoolId" :school-id="s.schoolId" :permissions="s.user.permissions" :teacher-portal="true" :requested-diary="s.requestedDiary"></school-diary>
+      <school-diary :school-name="s.schools.find(item=>item.id===s.schoolId)?.name" :key="s.schoolId" :school-id="s.schoolId" :permissions="s.user.permissions" :teacher-portal="true" :requested-diary="s.requestedDiary"></school-diary>
     </section>
   </main></div></div>
 </div>
