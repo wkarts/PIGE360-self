@@ -124,6 +124,34 @@ try:
     with sync_playwright() as pw, capture_browser_failure():
         binary=os.getenv('CHROMIUM_PATH') or (None if Path(pw.chromium.executable_path).exists() else shutil.which('chromium'))
         browser=pw.chromium.launch(headless=True,**({'executable_path':binary} if binary else {}),args=['--no-sandbox'])
+        hub='https://atendimento.example.test'
+        config={'enabled':True,'base_url':hub,'token':'canal-ficticio-portal','position':'right',
+                'widget_type':'standard','launcher_title':'Secretaria','enabled_areas':['login','teacher_portal']}
+        enabled=client.put(base+'/support-hub',headers=headers,json=config)
+        assert enabled.status_code==200, enabled.text
+        sdk="""window.hubSDK={run(options){
+            if(options.websiteToken!=='canal-ficticio-portal'||options.baseUrl!=='https://atendimento.example.test')return;
+            const button=document.createElement('button');button.textContent=window.hubSettings.launcherTitle;
+            document.body.append(button);
+        }};"""
+        for origin in (PORTAL_URL,TEACHER_URL):
+            probe=browser.new_page()
+            probe.route(hub+'/packs/js/sdk.js',lambda route:route.fulfill(content_type='application/javascript',body=sdk))
+            probe.goto(origin)
+            widget=probe.frame_locator('[data-pige-support-frame]').get_by_role('button',name='Secretaria')
+            expect(widget).to_be_visible()
+            if origin==TEACHER_URL:
+                probe.get_by_label('E-mail',exact=True).fill(teacher['email'])
+                probe.get_by_label('Senha',exact=True).fill(password)
+                with probe.expect_response(lambda r:'/support-widget?area=teacher_portal' in r.url and r.ok):
+                    probe.get_by_role('button',name='Entrar como professor').click()
+                expect(widget).to_be_visible()
+            probe.close()
+        assert httpx.get(PORTAL_URL+base+'/support-widget?area=teacher_portal').status_code==404
+        assert httpx.get(TEACHER_URL+base+'/support-widget?area=guardian_portal').status_code==404
+        config.update(enabled=False,version=enabled.json()['version'],token='')
+        assert client.put(base+'/support-hub',headers=headers,json=config).status_code==200
+        record('Hub parametrizado nos dois serviços de portal, com CSP real e permissões de área')
         parentContext=browser.new_context(viewport={'width':1366,'height':950},locale='pt-BR',accept_downloads=True)
         parent=parentContext.new_page();parent.set_default_timeout(8000);parent.on('pageerror',lambda e:errors.append('portal: '+str(e)));page=parent
         if bridge:

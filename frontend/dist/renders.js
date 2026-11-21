@@ -4557,16 +4557,26 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                     ? (_openBlock(), _createElementBlock("fieldset", {
                         key: 14,
                         class: "panel"
-                      }, [_createElementVNode("legend", null, "Onde exibir o atendimento"), _createElementVNode("p", { class: "small muted" }, "Escolha as áreas desta escola que terão o botão de atendimento."), _createElementVNode("div", { class: "form-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(supportAreas, (area) => {
-                        return (_openBlock(), _createElementBlock("label", {
-                          key: area.value,
-                          class: "checkbox-label"
-                        }, [_withDirectives(_createElementVNode("input", {
-                          type: "checkbox",
-                          "onUpdate:modelValue": $event => ((state.modal.form.enabled_areas) = $event),
-                          value: area.value
-                        }, null, 8, ["onUpdate:modelValue", "value"]), [[_vModelCheckbox, state.modal.form.enabled_areas]]), _createElementVNode("span", null, _toDisplayString(area.label), 1)]))
-                      }), 128))])]))
+                      }, [
+                        _createElementVNode("legend", null, "Onde exibir o atendimento"),
+                        _createElementVNode("p", { class: "small muted" }, "Informe a URL base do Hub e o token público do canal de site (websiteToken). O navegador usa esse identificador para abrir o atendimento."),
+                        (state.supportHub.token_configured)
+                          ? (_openBlock(), _createElementBlock("p", {
+                              key: 0,
+                              class: "small"
+                            }, "Token já cadastrado. Deixe o campo em branco para mantê-lo."))
+                          : _createCommentVNode("", true),
+                        _createElementVNode("div", { class: "form-grid" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(supportAreas, (area) => {
+                          return (_openBlock(), _createElementBlock("label", {
+                            key: area.value,
+                            class: "checkbox-label"
+                          }, [_withDirectives(_createElementVNode("input", {
+                            type: "checkbox",
+                            "onUpdate:modelValue": $event => ((state.modal.form.enabled_areas) = $event),
+                            value: area.value
+                          }, null, 8, ["onUpdate:modelValue", "value"]), [[_vModelCheckbox, state.modal.form.enabled_areas]]), _createElementVNode("span", null, _toDisplayString(area.label), 1)]))
+                        }), 128))])
+                      ]))
                     : _createCommentVNode("", true),
                   (familyRelevant())
                     ? _withDirectives((_openBlock(), _createElementBlock("section", {

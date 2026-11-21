@@ -9,7 +9,10 @@ namespace PigeSupport {
     hubSDK?: {run:(options:{websiteToken:string;baseUrl:string})=>void;destroy?:()=>void};
   }
   export const status=Vue.reactive({error:''});
-  let loadedSource='',activeContext='';
+  let loadedSource='',activeScope='';
+  let pending:{context:string;promise:Promise<void>}|null=null;
+  let retryAt=0;
+  const busyMessage='O atendimento recebeu muitas solicitações. Aguarde antes de tentar novamente.';
   let frame:HTMLIFrameElement|null=null;
   let observer:MutationObserver|null=null;
   let viewportTimer:number|undefined;
@@ -24,7 +27,7 @@ namespace PigeSupport {
     try{(previous?.contentWindow as HubWindow|null)?.hubSDK?.destroy?.();}catch{/* Atendimento não bloqueia a aplicação. */}
     previous?.remove();
   }
-  export function dispose():void {++generation;activeContext='';release();status.error='';}
+  export function dispose():void {++generation;activeScope='';pending=null;retryAt=0;release();status.error='';}
   function clipWidget(element:HTMLIFrameElement):void {
     if(frame!==element)return;
     const doc=element.contentDocument,win=element.contentWindow;
@@ -48,15 +51,32 @@ namespace PigeSupport {
     element.style.visibility=right>left&&bottom>top?'visible':'hidden';
   }
   export async function load(schoolId='',area:Area='login',sessionKey='public'):Promise<void> {
-    const context=[schoolId,area,sessionKey].join('|');
-    if(context!==activeContext){release();activeContext=context;}
+    const scope=JSON.stringify([schoolId,sessionKey]);
+    const context=JSON.stringify([scope,area]);
+    if(scope!==activeScope){dispose();activeScope=scope;}
+    if(pending?.context===context)return pending.promise;
+    pending=null;
     const request=++generation;
-    status.error='';
+    if(frame)frame.style.display='none';
     if(!schoolId&&area!=='login'){release();return;}
+    if(Date.now()<retryAt){release();status.error=busyMessage;return;}
+    status.error='';
+    const promise=loadArea(schoolId,area,scope,request);
+    pending={context,promise};
+    try{await promise;}finally{if(pending?.promise===promise)pending=null;}
+  }
+  async function loadArea(schoolId:string,area:Area,scope:string,request:number):Promise<void> {
     let config:WidgetConfig|null=null;
     try{
       const path=schoolId?'/api/v1/schools/'+encodeURIComponent(schoolId)+'/support-widget?area='+encodeURIComponent(area):'/api/v1/support-widget';
       const response=await fetch(path,{credentials:'same-origin',cache:'no-store'});
+      if(request!==generation)return;
+      if(response.status===429){
+        const header=response.headers.get('Retry-After')?.trim()||'';
+        const delay=/^\d+$/.test(header)?Number(header)*1000:Date.parse(header)-Date.now();
+        retryAt=Date.now()+(Number.isFinite(delay)&&delay>=0?delay:60000);
+        release();status.error=busyMessage;return;
+      }
       if(response.ok)config=await response.json() as WidgetConfig;
     }catch{/* Indisponibilidade do atendimento não bloqueia o formulário. */}
     if(request!==generation)return;
@@ -67,8 +87,8 @@ namespace PigeSupport {
       if(!['https:','http:'].includes(url.protocol)||url.username||url.password||url.search||url.hash)throw new Error('URL inválida');
       baseUrl=url.href.replace(/\/+$/,'');
     }catch{release();status.error='Revise o endereço configurado para o atendimento.';return;}
-    const sourceKey=[context,baseUrl,config.website_token,config.position,config.type,config.launcherTitle].join('|');
-    if(sourceKey===loadedSource&&frame)return;
+    const sourceKey=JSON.stringify([scope,baseUrl,config.website_token,config.position,config.type,config.launcherTitle]);
+    if(sourceKey===loadedSource&&frame){frame.style.display='';return;}
     release();
     const element=document.createElement('iframe');
     element.dataset.pigeSupportFrame='true';element.title='Atendimento da instituição';
