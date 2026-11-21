@@ -2,6 +2,8 @@
 
 Backend FastAPI/Python 3.13, cliente Vue 3 Web/PWA. Preserve arquitetura, cadastros, permissões, migrations e branding existentes. Não criar aplicativos nativos nem introduzir nova plataforma de hospedagem.
 
+Adicionar uma nova variável de ambiente à aplicação ou passar a usá-la para habilitar um recurso exige concordância explícita de Wallace. Configure recursos por escola na aplicação e persista a escolha no banco.
+
 ## Git e CI/CD
 
 Use `feature/*`, `fix/*`, `ci/*`, `chore/*` ou outro prefixo aceito pelo validador para PR em `develop`. Produção recebe PR de `develop` para `main`, com título `release(patch|minor|major): descrição`. Toda PR deve conter `## Descrição` e `## Branch`.
