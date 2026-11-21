@@ -58,3 +58,13 @@ def test_migration_preserves_existing_publications():
             assert connection.execute(sa.text('SELECT show_student_portal_button FROM admission_campaigns')).scalar_one()==1
             migration.downgrade()
         assert connection.execute(sa.text('SELECT id FROM admission_campaigns')).scalar_one()=='existing'
+
+
+def test_manager_legacy_entries_use_the_correct_dedicated_origin(client, monkeypatch):
+    monkeypatch.setattr(settings(), 'portal_public_url', 'https://familia.example.test')
+    monkeypatch.setattr(settings(), 'teacher_portal_public_url', 'https://professor.example.test')
+    for path, destination in [('/family.html?view=academic', 'https://familia.example.test/family.html?view=academic'),
+                              ('/professor.html?diarioPiloto=abc', 'https://professor.example.test/?diarioPiloto=abc')]:
+        response = client.get(path, follow_redirects=False)
+        assert response.status_code == 302
+        assert response.headers['location'] == destination

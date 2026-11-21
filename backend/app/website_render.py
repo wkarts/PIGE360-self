@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 
 THEMES = {'horizon', 'editorial', 'culture', 'campus'}
-DIRECTIONS = {'standard', 'atelier', 'rota', 'nucleo'}
+DIRECTIONS = {'standard', 'atelier', 'rota', 'nucleo', 'praca', 'caderno'}
 SECTION_KINDS = {'cards', 'split', 'gallery', 'steps', 'cta', 'news', 'agenda', 'text'}
 
 
@@ -193,6 +193,12 @@ def render(data):
         repeated_cover = page_image_url and page_image_url == (leading_section.get('image') or {}).get('url')
         page_media = f'<div class="page-media">{hero_image}</div>' if hero_image and not (composition_v2 and repeated_cover) else ''
         hero = f'<section class="hero internal-cover container">{page_copy}{page_media}</section>'
+    elif direction == 'praca':
+        shortcuts = ''.join(action(item, 'directory-link') for item in design.get('menu', [])[:6])
+        hero = f'<section class="service-directory container">{hero_copy}<nav aria-label="Acesso rápido">{shortcuts}</nav></section>'
+    elif direction == 'caderno':
+        media = captioned(design.get("hero_image"), "field-photo", eager=True) if hero_image else ''
+        hero = f'<section class="field-cover container">{media}{hero_copy}</section>'
     elif direction == 'atelier':
         hero = f'<section class="hero atelier-cover container"><div class="atelier-copy">{hero_copy}</div><div class="atelier-media">{hero_image or ""}</div></section>'
     elif direction == 'rota':

@@ -24,7 +24,7 @@ namespace PigeCommunity {
   interface SiteItem {eyebrow?:string;title:string;text:string;image:SiteImage|null;action:SiteLink|null}
   interface SiteSection {layout?:string;id:string;kind:string;visible:boolean;eyebrow:string;title:string;text:string;image:SiteImage|null;action:SiteLink|null;items:SiteItem[]}
   interface SitePage {model_origin?:string;show_contact_details?:boolean;show_family_links?:boolean;slug:string;title:string;introduction:string;image:SiteImage|null;published:boolean;sections:SiteSection[]}
-  interface SiteDesign {composition_version?:number;direction?:'standard'|'atelier'|'rota'|'nucleo';heading_style?:string;topline?:string;hero_caption?:string;demonstration?:boolean;pages:SitePage[];configured:boolean;header_sticky:boolean;mobile_actions:boolean;eyebrow:string;hero_image:SiteImage|null;hero_gallery:SiteImage[];primary_action:SiteLink|null;secondary_action:SiteLink|null;menu:SiteLink[];footer_text:string;sections:SiteSection[]}
+  interface SiteDesign {composition_version?:number;direction?:'standard'|'atelier'|'rota'|'nucleo'|'praca'|'caderno';heading_style?:string;topline?:string;hero_caption?:string;demonstration?:boolean;pages:SitePage[];configured:boolean;header_sticky:boolean;mobile_actions:boolean;eyebrow:string;hero_image:SiteImage|null;hero_gallery:SiteImage[];primary_action:SiteLink|null;secondary_action:SiteLink|null;menu:SiteLink[];footer_text:string;sections:SiteSection[]}
   const newImage=():SiteImage=>({url:'',alt:'',focal_x:50,focal_y:50});
   const newLink=():SiteLink=>({label:'',url:''});
   const newItem=():SiteItem=>({title:'',text:'',image:null,action:null});

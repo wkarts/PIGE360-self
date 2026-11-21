@@ -7,9 +7,9 @@ from test_school_website_domains import website
 
 def test_catalog_complete_editable_safe_and_fresh():
     entries=catalog()['items']
-    assert {x['id'] for x in entries}=={'horizon','editorial','culture','campus','familias','atelier','rota','nucleo'}
+    assert {x['id'] for x in entries}=={'horizon','editorial','culture','campus','familias','atelier','rota','nucleo','praca','caderno'}
     assert {x['id'] for x in entries[:5]}=={'horizon','editorial','culture','campus','familias'}
-    assert {x['website']['design']['direction'] for x in entries[5:]}=={'atelier','rota','nucleo'}
+    assert {x['website']['design']['direction'] for x in entries[5:]}=={'atelier','rota','nucleo','praca','caderno'}
     for entry in entries:
         value=WebsiteInput(**entry['website'])
         d=value.design
@@ -28,7 +28,7 @@ def test_catalog_complete_editable_safe_and_fresh():
 
 def test_catalog_read_does_not_write_and_needs_auth(api,client):
     before=api.get('/website')
-    assert len(api.get('/website/models')['items'])==8
+    assert len(api.get('/website/models')['items'])==10
     assert api.get('/website')==before
     response=client.get(api.base+'/website/models')
     assert response.status_code in (401,403)

@@ -300,10 +300,7 @@ var PigeFamily;
             PigeMFA.clear();
         } });
     }
-    async function load() { if (s.account?.role === 'teacher') {
-        location.replace('/professor.html');
-        return;
-    } clearPrivate(); s.contextError = false; const current = generation; try {
+    async function load() { clearPrivate(); s.contextError = false; const current = generation; try {
         const data = await request('/family/context');
         if (current !== generation)
             return;

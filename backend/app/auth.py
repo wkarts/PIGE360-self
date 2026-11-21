@@ -98,6 +98,8 @@ def login(data: Login, request: Request, response: Response, db: DB):
             counter.count += 1
         db.commit()  # Persistir limite mesmo quando a resposta é 401.
         fail(401, 'E-mail ou senha inválidos.')
+    from .security import require_portal_role
+    require_portal_role(request, user)
     counters[0].count = 0
     from .mfa import before_login
     challenge = before_login(db, request, 'user', user)
@@ -125,6 +127,8 @@ def refresh(request: Request, response: Response, db: DB):
     user = db.get(User, session.user_id)
     if not user or not user.active:
         fail(401, 'Usuário inativo.')
+    from .security import require_portal_role
+    require_portal_role(request, user)
     from .mfa import enforce_session
     enforce_session(db, 'user', user, session)
     secret = secrets.token_urlsafe(48)

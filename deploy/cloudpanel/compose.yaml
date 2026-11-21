@@ -118,8 +118,8 @@ services:
     environment: &application_environment
       APP_ENV: ${APP_ENV:-production}
       APP_URL: ${APP_URL:-http://localhost:58080}
-      TEACHER_PORTAL_PUBLIC_URL: ${TEACHER_PORTAL_PUBLIC_URL:-}
-      PORTAL_PUBLIC_URL: ${PORTAL_PUBLIC_URL:-}
+      TEACHER_PORTAL_PUBLIC_URL: ${TEACHER_PORTAL_PUBLIC_URL:-http://localhost:58084}
+      PORTAL_PUBLIC_URL: ${PORTAL_PUBLIC_URL:-http://localhost:58083}
       PORTAL_INTERNAL_TOKEN: ${PORTAL_INTERNAL_TOKEN:-}
       WEBSITE_INTERNAL_TOKEN: ${WEBSITE_INTERNAL_TOKEN:-}
       INVITATION_HOURS: ${INVITATION_HOURS:-24}
@@ -211,6 +211,30 @@ services:
       driver: json-file
       options: {max-size: "10m", max-file: "3"}
 
+  teacher-portal:
+    profiles: [teacher]
+    image: ${TEACHER_PORTAL_IMAGE:-ghcr.io/wkarts/pige360-self-teacher-portal:latest}
+    build: {context: ../.., dockerfile: services/portal/Dockerfile, target: teacher}
+    restart: unless-stopped
+    init: true
+    environment:
+      PIGE_INTERNAL_URL: http://app:8000
+      PORTAL_PUBLIC_URL: ${TEACHER_PORTAL_PUBLIC_URL:-http://localhost:58084}
+      PORTAL_INTERNAL_TOKEN: ${PORTAL_INTERNAL_TOKEN:-}
+      PORTAL_TRUSTED_PROXY_IPS: ${PORTAL_TRUSTED_PROXY_IPS:-}
+    ports:
+      - "${TEACHER_PORTAL_BIND:-127.0.0.1}:${TEACHER_PORTAL_PORT:-58084}:8080"
+    depends_on:
+      app: {condition: service_healthy}
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
   portal:
     profiles: [portal]
     image: ${PORTAL_IMAGE:-ghcr.io/wkarts/pige360-self-portal:latest}
@@ -219,7 +243,6 @@ services:
     init: true
     environment:
       PIGE_INTERNAL_URL: http://app:8000
-      TEACHER_PORTAL_PUBLIC_URL: ${TEACHER_PORTAL_PUBLIC_URL:-}
       PORTAL_PUBLIC_URL: ${PORTAL_PUBLIC_URL:-http://localhost:58083}
       PORTAL_INTERNAL_TOKEN: ${PORTAL_INTERNAL_TOKEN:-}
       PORTAL_TRUSTED_PROXY_IPS: ${PORTAL_TRUSTED_PROXY_IPS:-}

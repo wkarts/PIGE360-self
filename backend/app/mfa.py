@@ -247,6 +247,9 @@ def finish_challenge(payload: VerifyInput, request: Request, response: Response,
     # Limite por token/IP e, abaixo, cinco falhas por desafio.
     throttle(db, request, 'verify:'+digest(payload.token), 15)
     row, kind, account = get_challenge(db, payload.token)
+    if kind == 'user':
+        from .security import require_portal_role
+        require_portal_role(request, account)
     cred = db.scalar(select(m.MFACredential).where(m.MFACredential.subject == row.subject).with_for_update())
     codes = []
     if row.purpose == 'enroll':

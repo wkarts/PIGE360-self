@@ -41,16 +41,20 @@ unknown=httpx.get(website_url+'/',headers={'Host':'unknown.example.test'},trust_
 assert unknown.status_code==404 and 'Site em manutenção' in unknown.text and 'Site integrado no Docker' not in unknown.text
 assert httpx.get(portal_url+'/',headers=portal_headers,trust_env=False).status_code==200
 assert httpx.get(portal_url+'/api/v1/backups',headers=portal_headers,trust_env=False).status_code==404
+teacher_url=surface_url('teacher-portal')
+for base_url, host, allowed_page, denied_page in [(teacher_url,'localhost:58084','/professor.html','/family.html'),(portal_url,'localhost','/family.html','/professor.html')]:
+    assert httpx.get(base_url+allowed_page,headers={'Host':host},trust_env=False).status_code==200
+    assert httpx.get(base_url+denied_page,headers={'Host':host},trust_env=False).status_code==404
 print('PASS: site e portal em imagens próprias, conteúdo interno autenticado e bloqueio administrativo',flush=True)
 
 # Adota a composição CI existente, com caminhos absolutos e o MESMO nome de projeto.
 # Isto demonstra a atualização de uma instalação; não inicia outra stack.
 checkout=stack/'restore-checkout';deployment=checkout/'deploy/docker';deployment.mkdir(parents=True)
 (checkout/'scripts').mkdir();shutil.copy2(ROOT/'scripts/configure.py',checkout/'scripts/configure.py')
-config=json.loads(subprocess.check_output([*command,'--profile','website','--profile','portal','config','--format','json'],text=True))
+config=json.loads(subprocess.check_output([*command,'--profile','website','--profile','portal','--profile','teacher','config','--format','json'],text=True))
 config['name']=project
 (deployment/'compose.yaml').write_text(json.dumps(config))
-content=Path(envfile).read_text()+'\nCOMPOSE_PROJECT_NAME='+project+'\nCOMPOSE_PROFILES=website,portal\n'
+content=Path(envfile).read_text()+'\nCOMPOSE_PROJECT_NAME='+project+'\nCOMPOSE_PROFILES=website,portal,teacher\n'
 (deployment/'.env.ci').write_text(content);(deployment/'.env.ci').chmod(0o600)
 with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
 process=subprocess.Popen([sys.executable,str(ROOT/'scripts/deployer.py'),'--root',str(checkout),'--port',str(port)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)

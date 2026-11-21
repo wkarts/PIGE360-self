@@ -12,7 +12,6 @@
         <div class="field"><label for="family-password">Senha</label><div class="password-control"><input id="family-password" v-model="s.password" :type="s.passwordVisible?'text':'password'" required maxlength="128" autocomplete="current-password" enterkeyhint="go" placeholder="Sua senha de acesso" :disabled="s.busy"><button class="password-toggle" type="button" :aria-label="s.passwordVisible?'Ocultar senha':'Mostrar senha'" :aria-pressed="s.passwordVisible" aria-controls="family-password" @click="s.passwordVisible=!s.passwordVisible">{{s.passwordVisible?'Ocultar':'Mostrar'}}</button></div></div>
         <button class="btn btn-primary full" :disabled="s.busy">{{s.busy?'Autenticando…':'Entrar no portal'}} <span aria-hidden="true">→</span></button>
         <p class="auth-help muted">Precisa recuperar seu acesso? Fale com a secretaria da escola.</p>
-        <a class="text-link" href="/professor.html">Portal do Professor</a>
         <details class="family-first-access"><summary>Primeiro acesso?</summary><p>Utilize o convite enviado ao e-mail do seu cadastro. A conta da inscrição é independente do acesso escolar.</p><a href="/online.html">Inscrição e matrícula online →</a></details>
       </form>
     </section>

@@ -52,7 +52,7 @@ def test_renderer_escapes_long_content_and_separates_actions(api):
 
 def test_opt_in_direction_models_preview_and_apply_without_changing_published_site(api,client):
     original=api.call('PUT','/website',website('Publicação anterior','direction.example.test'))
-    for model_id,marker in [('atelier','atelier-cover'),('rota','route-cover'),('nucleo','nucleus-cover')]:
+    for model_id,marker in [('atelier','atelier-cover'),('rota','route-cover'),('nucleo','nucleus-cover'),('praca','service-directory'),('caderno','field-cover')]:
         preview=api.post('/website/preview-model',{'model_id':model_id,'website':{'version':original['version']}},200)
         assert preview['website']['design']['direction']==model_id
         assert marker in preview['html']

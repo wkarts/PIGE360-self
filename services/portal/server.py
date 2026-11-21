@@ -23,19 +23,6 @@ ASSETS={'teacher.js','teacher.css','auth.css','ui-icons.svg','family.js','family
 TEACHER_ONLY = os.environ.get('PORTAL_SURFACE', '') == 'teacher'
 
 
-def external_origin(variable):
-    value = os.environ.get(variable, '').rstrip('/')
-    parts = urlsplit(value)
-    if value and (parts.scheme not in ('http', 'https') or not parts.hostname or parts.username
-                  or parts.password or parts.path or parts.query or parts.fragment or any(ord(c)<33 for c in value)):
-        raise ValueError(variable + ' exige uma origem pública exata.')
-    return value
-
-
-TEACHER_URL = external_origin('TEACHER_PORTAL_PUBLIC_URL')
-FAMILY_URL = external_origin('FAMILY_PORTAL_PUBLIC_URL')
-
-
 def proxy_networks(value):
     networks=[]
     for item in value.split(','):
@@ -75,7 +62,7 @@ def allowed(path,method):
     if TEACHER_ONLY and not (path.startswith(('/api/v1/teacher/', '/api/v1/auth/', '/api/v1/institution/'))
             or re.fullmatch(r'/api/v1/schools/[0-9a-f-]{36}/community-feed', path)):
         return False
-    if TEACHER_URL and not TEACHER_ONLY and path.startswith('/api/v1/teacher/'):
+    if not TEACHER_ONLY and path.startswith('/api/v1/teacher/'):
         return False
     if path=='/api/v1/teacher/schools':return method=='GET'
     teacher=re.fullmatch(r'/api/v1/teacher/schools/[0-9a-f-]{36}/(.+)',path)
@@ -148,13 +135,12 @@ class Handler(BaseHTTPRequestHandler):
         name='professor.html' if path.rstrip('/')=='/professor' else 'family.html' if path=='/' or re.fullmatch(r'/(?:academic|documents|finance)/?',path) else 'online.html' if path=='/online.html' else path.lstrip('/')
         if TEACHER_ONLY and path == '/':
             name = 'professor.html'
-        if TEACHER_ONLY and name in {'family.html','online.html','first-access.html'}:
-            if FAMILY_URL and name == 'family.html':
-                return self.respond(302, b'', headers=[('Location', FAMILY_URL + '/family.html')])
+        teacher_files = {'professor.html', 'teacher.js', 'teacher.css'}
+        shared_files = {'auth.css', 'app.css', 'family.css', 'portal.css', 'institution-layout.css', 'mfa.css',
+                        'ui-icons.svg', 'renders.js', 'vendor/vue-3.5.13.global.prod.js', 'favicon.svg'}
+        files = teacher_files | shared_files if TEACHER_ONLY else (ASSETS | {'family.html', 'online.html'}) - teacher_files
+        if name not in files:
             return self.respond(404, b'Not found')
-        if not TEACHER_ONLY and TEACHER_URL and name == 'professor.html':
-            return self.respond(302, b'', headers=[('Location', TEACHER_URL + '/')])
-        if name not in ASSETS|{'professor.html','family.html','online.html'}:return self.respond(404,b'Not found')
         file=STATIC/name
         if not file.is_file():return self.respond(404,b'Not found')
         import mimetypes

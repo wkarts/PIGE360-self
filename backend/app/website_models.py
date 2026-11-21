@@ -71,6 +71,38 @@ def family_services_model():
                        'about':'','notice':'','design':layout}}
 
 
+def special_model(key):
+    """Complete editable compositions. The directory also works without photography."""
+    directory = key == 'praca'
+    entry = family_services_model()
+    site = entry['website']
+    layout = site['design']
+    if directory:
+        entry.update(id=key, name='Praça da escola', description='Guia de serviços com índice de acesso e mural de notícias.')
+        site.update(headline='Como podemos ajudar sua família?', introduction='Consulte as matrículas, acompanhe as notícias e encontre a secretaria.')
+        layout.update(hero_image=None, eyebrow='', sections=[
+            section('mural', 'news', 'Mural da escola'), section('calendario', 'agenda', 'Próximos encontros')])
+    else:
+        entry.update(id=key, name='Caderno de campo', description='Portfólio de projetos com capa fotográfica e páginas de leitura.')
+        site.update(headline='Por dentro das descobertas', introduction='Um caderno aberto para conhecer projetos, acompanhar encontros e ler as histórias da escola.')
+        layout.update(hero_image=image('lab'), eyebrow='', sections=[
+            section('leituras', 'split', 'Do projeto ao registro', 'Conheça o percurso de uma investigação em sala.', photo='library',
+                    action=link('Explorar o caderno', '/projetos')),
+            section('publicacoes', 'news', 'Registros recentes')])
+        project = layout['pages'][1]
+        project.update(slug='projetos', title='Projetos', introduction='Conheça os temas que mobilizam nossa comunidade.',
+                       sections=[section('percurso', 'steps', 'Como nasce um projeto', items=[
+                           item('Perguntar', 'A turma reúne perguntas sobre o tema.', label=''),
+                           item('Investigar', 'Estudantes registram observações e conversam sobre as descobertas.', label=''),
+                           item('Compartilhar', 'As conclusões ganham forma em apresentações e registros.', label='')])])
+        layout['menu'][1] = link('Projetos', '/projetos')
+        layout['primary_action'] = link('Conhecer os projetos', '/projetos')
+    layout.update(direction=key, hero_caption='', topline='', heading_style='inherit')
+    for page in layout['pages']:
+        page['model_origin'] = key + ':' + page['slug']
+    return entry
+
+
 def catalog():
     visit=section('visita','cta','Venha sentir a nossa escola.','Conheça os espaços, a equipe e nosso jeito de aprender.',eyebrow='O próximo passo pode ser uma conversa',action=link('Agendar visita','#contato'))
     horizon=[section('pilares','cards','',layout='pillars',items=[item('Aprendizagem com sentido','Projetos conectados ao mundo.',label=''),item('Olhar para cada estudante','Acompanhamento próximo e humano.',label=''),item('Família presente','Diálogo que fortalece a jornada.',label='')]),
@@ -132,6 +164,7 @@ def catalog():
                 'website':{'theme':theme,'headline':headline,'introduction':intro,'about':'','notice':'','design':design(theme,sections,hero,gallery,direction=key)}}
         preset['website']=multipage_website(preset['website'])
         result['items'].append(preset)
+    result['items'].extend([special_model('praca'), special_model('caderno')])
     return result
 
 

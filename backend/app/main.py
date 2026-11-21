@@ -8,7 +8,7 @@ import httpx
 from . import educacenso
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse, RedirectResponse
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from sqlalchemy import text
@@ -229,6 +229,12 @@ def ready():
 def frontend(path: str, request: Request, db: auth.DB):
     if path.startswith(('api/', 'health/')):
         raise HTTPException(404, 'Rota não encontrada.')
+    if path.rstrip('/') in ('professor', 'professor.html') and cfg.teacher_portal_public_url:
+        destination = cfg.teacher_portal_public_url.rstrip('/') + '/'
+        return RedirectResponse(destination + ('?' + request.url.query if request.url.query else ''), status_code=302)
+    if path == 'family.html' and cfg.portal_public_url:
+        destination = cfg.portal_public_url.rstrip('/') + '/family.html'
+        return RedirectResponse(destination + ('?' + request.url.query if request.url.query else ''), status_code=302)
     root = cfg.frontend_path.resolve()
     requested = (root / path).resolve()
     if not requested.is_relative_to(root):

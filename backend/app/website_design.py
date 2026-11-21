@@ -152,7 +152,7 @@ class WebsiteDesign(Input):
     composition_version: Literal[1,2] = 1
     # The original compositions remain the default.  Directions are an
     # explicit, opt-in visual variant and do not change the stored theme IDs.
-    direction: Literal['standard', 'atelier', 'rota', 'nucleo'] = 'standard'
+    direction: Literal['standard', 'atelier', 'rota', 'nucleo', 'praca', 'caderno'] = 'standard'
     demonstration: bool = False
     heading_style: Literal['inherit','editorial'] = 'inherit'
     topline: str = Field(default='', max_length=180)

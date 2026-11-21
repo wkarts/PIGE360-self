@@ -1,13 +1,11 @@
 services:
   teacher-portal:
-    image: ${PORTAL_IMAGE:-ghcr.io/wkarts/pige360-self-portal:latest}
+    image: ${TEACHER_PORTAL_IMAGE:-ghcr.io/wkarts/pige360-self-teacher-portal:latest}
     restart: unless-stopped
     init: true
     environment:
       PIGE_INTERNAL_URL: http://app:8000
-      PORTAL_PUBLIC_URL: ${TEACHER_PORTAL_PUBLIC_URL:?Informe a origem do portal docente}
-      FAMILY_PORTAL_PUBLIC_URL: ${PORTAL_PUBLIC_URL:-}
-      PORTAL_SURFACE: teacher
+      PORTAL_PUBLIC_URL: ${TEACHER_PORTAL_PUBLIC_URL:-http://localhost:58084}
       PORTAL_INTERNAL_TOKEN: ${PORTAL_INTERNAL_TOKEN:-}
       PORTAL_TRUSTED_PROXY_IPS: ${PORTAL_TRUSTED_PROXY_IPS:-}
     ports:
