@@ -333,6 +333,7 @@ class SchoolInput(Input):
     address: str = Field(default='', max_length=400)
     phone: str = Field(default='', max_length=32)
     email: str = Field(default='', max_length=254)
+    diary_catalog: bool | None = None
     document_policy: Literal['warn','block'] = 'warn'
     active: bool = True
 
