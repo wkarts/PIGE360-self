@@ -60,6 +60,17 @@ def test_frequency_uses_class_units_and_explicit_justification_policy(api):
     recalculated = api.post(path + f"/periods/{period['id']}/consolidate", {"version": diary["version"]}, 200)["results"][0]
     assert Decimal(recalculated["calculation"]["attendance_percent"]) == Decimal("80")
     assert recalculated["status"] == "calculated"
+    submitted = api.post(path + "/submit", {"version": diary["version"]}, 200)
+    reviewed = api.post(path + "/review", {"version": submitted["version"]}, 200)
+    close = {"academic_period_id": period["id"], "reason":"Conferência do período", "version": reviewed["version"]}
+    closure = api.post(path + "/close", close, 200)
+    revision = closure["diary"]["version"]
+    api.post(path + f"/periods/{period['id']}/consolidate", {"version": revision}, 409)
+    api.post(path + "/close", {**close,"version":revision}, 409)
+    frozen = api.get(path + f"/periods/{period['id']}/results")["items"][0]
+    assert frozen["version"] == recalculated["version"] and frozen["source_hash"] == recalculated["source_hash"]
+    reopened = api.post(path + "/reopen", {"version":revision, "reason":"Retificação autorizada do período"}, 200)
+    assert api.post(path + f"/periods/{period['id']}/consolidate", {"version":reopened["diary"]["version"]}, 200)["count"] == 1
     # A atualização da regra atual não altera o snapshot já produzido.
     with SessionLocal() as db:
         assert "60,0%" in _report_attendance(db, snapshot)[0][1]

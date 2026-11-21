@@ -139,7 +139,7 @@ def test_manifest_uses_identity_and_surface_specific_navigation(client):
         assert manifest['name']==identity['display_name']
         assert manifest['theme_color']==identity['primary_color']
         assert all(icon['src'].startswith('/api/v1/institution/icon.png') for icon in manifest['icons'])
-    assert portal['shortcuts']==[{'name':'Boletim','url':'/academic'},{'name':'Documentos','url':'/documents'},{'name':'Inscrição','url':'/online.html'}]
+    assert portal['shortcuts']==[{'name':'Boletim','url':'/academic'},{'name':'Documentos','url':'/documents'},{'name':'Inscrição','url':'/online'}]
     assert website['display']=='browser'
     assert all('/#/' not in item['url'] for item in portal['shortcuts']+website['shortcuts'])
     assert manager['shortcuts'][0]['url']=='/#/students'

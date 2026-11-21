@@ -24,24 +24,32 @@ namespace PigeCommunity {
   interface SiteItem {eyebrow?:string;title:string;text:string;image:SiteImage|null;action:SiteLink|null}
   interface SiteSection {layout?:string;id:string;kind:string;visible:boolean;eyebrow:string;title:string;text:string;image:SiteImage|null;action:SiteLink|null;items:SiteItem[]}
   interface SitePage {model_origin?:string;show_contact_details?:boolean;show_family_links?:boolean;slug:string;title:string;introduction:string;image:SiteImage|null;published:boolean;sections:SiteSection[]}
-  interface SiteDesign {composition_version?:number;heading_style?:string;topline?:string;hero_caption?:string;demonstration?:boolean;pages:SitePage[];configured:boolean;header_sticky:boolean;mobile_actions:boolean;eyebrow:string;hero_image:SiteImage|null;hero_gallery:SiteImage[];primary_action:SiteLink|null;secondary_action:SiteLink|null;menu:SiteLink[];footer_text:string;sections:SiteSection[]}
+  interface SiteDesign {composition_version?:number;direction?:'standard'|'atelier'|'rota'|'nucleo'|'praca'|'caderno';heading_style?:string;topline?:string;hero_caption?:string;demonstration?:boolean;pages:SitePage[];configured:boolean;header_sticky:boolean;mobile_actions:boolean;eyebrow:string;hero_image:SiteImage|null;hero_gallery:SiteImage[];primary_action:SiteLink|null;secondary_action:SiteLink|null;menu:SiteLink[];footer_text:string;sections:SiteSection[]}
   const newImage=():SiteImage=>({url:'',alt:'',focal_x:50,focal_y:50});
   const newLink=():SiteLink=>({label:'',url:''});
   const newItem=():SiteItem=>({title:'',text:'',image:null,action:null});
   const newDesign=():SiteDesign=>({pages:[],configured:false,header_sticky:false,mobile_actions:false,eyebrow:'',hero_image:null,hero_gallery:[],primary_action:null,secondary_action:null,menu:[],footer_text:'',sections:[]});
   const sectionLabels:Record<string,string>={cards:'Etapas e cartões',split:'Texto e fotografia',gallery:'Galeria de imagens',steps:'Jornada e passos',cta:'Convite e botão',news:'Notícias publicadas',agenda:'Agenda publicada',text:'Texto de conteúdo'};
   interface Website {has_checkpoint?:boolean;design?:SiteDesign;admission_url?:string;brand?:{display_name:string;primary_color:string;secondary_color:string;font_family:string};draft?:Record<string,unknown>|null;published_version?:number;version?:number;enabled:boolean;theme:string;headline:string;introduction:string;about:string;public_url:string;portal_url:string;notice:string}
+  interface AdmissionReadiness {ready:boolean;campaigns:Array<{id:string;title:string;slug:string;opens_on:string;closes_on:string;ready:boolean;reasons:string[]}>;issues:Array<{code:string;message:string}>}
   interface SiteModel {id:string;name:string;description:string;website:Partial<Website>}
   export const component={props:['schoolId','permissions','publicMode','portalMode','request','compact','websiteRequest'],render:PigeRenders.community,setup(props:Props){
-    const s=Vue.reactive({siteGuide:'models',models:[] as SiteModel[],modelChoice:'horizon',resolvedModel:null as Website|null,modelPreviewInput:'',modelPreviewPage:'',modelPreviewActive:false,hasModelCheckpoint:false,demoConfirmed:false,sitePageIndex:-1,assets:[] as {id:string;url:string;sha256:string;created_at:string;thumbnail?:string}[],websiteInitial:'',sectionKind:'cards',previewHtml:'',previewWidth:'100%',publishedVersion:0,publishedUrl:'',published:false,hasDraft:false,website:{design:newDesign(),enabled:false,theme:'horizon',headline:'',introduction:'',about:'',public_url:'',portal_url:'',notice:'',admission_url:'',brand:{display_name:'',primary_color:'',secondary_color:'',font_family:''}} as Website,websiteOpen:false,busy:false,error:'',notice:'',items:[] as Post[],page:1,total:0,q:'',kind:'',status:'',upcoming:false,selected:null as Post|null,editing:false,discard:false,deleteConfirm:false,initial:'',form:empty()});
+    type EditorStep='content'|'media'|'publish';
+    const editorSteps:ReadonlyArray<{id:EditorStep;number:string;label:string;description:string}>=[
+      {id:'content',number:'1',label:'Conteúdo',description:'Defina o tipo, público, título, resumo e texto da publicação.'},
+      {id:'media',number:'2',label:'Imagem',description:'Adicione uma fotografia acessível ou reutilize uma imagem da biblioteca.'},
+      {id:'publish',number:'3',label:'Publicação',description:'Escolha o período, destaque e situação da publicação antes de salvar.'},
+    ];
+    const s=Vue.reactive({siteGuide:'models',models:[] as SiteModel[],modelChoice:'horizon',resolvedModel:null as Website|null,modelPreviewInput:'',modelPreviewPage:'',modelPreviewActive:false,hasModelCheckpoint:false,demoConfirmed:false,sitePageIndex:-1,assets:[] as {id:string;url:string;sha256:string;created_at:string;thumbnail?:string}[],admissionReadiness:null as AdmissionReadiness|null,websiteInitial:'',sectionKind:'cards',previewHtml:'',previewWidth:'100%',publishedVersion:0,publishedUrl:'',published:false,hasDraft:false,website:{design:newDesign(),enabled:false,theme:'horizon',headline:'',introduction:'',about:'',public_url:'',portal_url:'',notice:'',admission_url:'',brand:{display_name:'',primary_color:'',secondary_color:'',font_family:''}} as Website,websiteOpen:false,busy:false,error:'',notice:'',items:[] as Post[],page:1,total:0,q:'',kind:'',status:'',upcoming:false,selected:null as Post|null,editing:false,savedPostStatus:'',editorStep:'content' as EditorStep,discard:false,deleteConfirm:false,initial:'',form:empty()});
     const manage=()=>!props.publicMode&&!props.portalMode&&Boolean(props.permissions?.includes('schools.manage'));
     const endpoint=()=>props.portalMode?'/portal/community-feed':props.publicMode?'/public/schools/'+props.schoolId+'/community-feed':'/schools/'+props.schoolId+(manage()?'/community-posts':'/community-feed');
     const transport=(path:string,options?:RequestInit)=>(props.request||request)(path,options);
     async function run(action:()=>Promise<void>):Promise<void>{if(s.busy)return;s.busy=true;s.error='';s.notice='';try{await action();}catch(error){s.error=error instanceof Error?error.message:String(error);}finally{s.busy=false;}}
+    let previewAnchor='';
     let previewEpoch=0;
     let previewController:AbortController|null=null;
     function closePreview():void{
-      s.previewHtml='';s.modelPreviewActive=false;
+      s.previewHtml='';s.modelPreviewActive=false;previewAnchor='';
       if(previewController){const controller=previewController;previewController=null;previewEpoch++;controller.abort();s.busy=false;}
     }
     async function runPreview(action:(signal:AbortSignal,current:()=>boolean)=>Promise<void>):Promise<void>{
@@ -60,12 +68,20 @@ namespace PigeCommunity {
     async function loadWebsite():Promise<void>{if(manage()&&!props.compact){const data=await transport('/schools/'+props.schoolId+'/website') as {configuration:Website|null};if(data.configuration){const c=data.configuration;s.published=c.enabled;s.publishedVersion=c.published_version||0;s.publishedUrl=c.public_url;s.hasDraft=Boolean(c.draft);s.website={...s.website,...c,...(c.draft||{}),version:c.version};s.website.brand={display_name:'',primary_color:'',secondary_color:'',font_family:'',...s.website.brand};s.website.design={...newDesign(),...s.website.design};s.hasModelCheckpoint=Boolean(c.has_checkpoint);s.websiteInitial=JSON.stringify(websitePayload());}}}
     function websitePayload():Website{const {version,enabled,theme,headline,introduction,about,public_url,portal_url,notice,admission_url,brand,design}=s.website;return {version,enabled,theme,headline,introduction,about,public_url,portal_url,notice,admission_url,brand,design};}
     async function loadSiteAssets():Promise<void>{await run(async()=>{const data=await transport('/schools/'+props.schoolId+'/website/assets') as {items:typeof s.assets};s.assets=data.items;});}
+    async function loadAdmissionReadiness():Promise<void>{if(!manage()||!props.permissions?.includes('admissions.read'))return;await run(async()=>{s.admissionReadiness=await transport('/schools/'+props.schoolId+'/admission-readiness') as AdmissionReadiness;s.notice='Situação da matrícula atualizada. O CTA continua apontando para o endereço configurado, sem criar outro processo.';});}
     async function removeSiteAsset(asset:{id:string}):Promise<void>{if(!window.confirm('Excluir esta fotografia da biblioteca? Somente fotos sem uso em rascunhos, sites ou publicações podem ser excluídas.'))return;await run(async()=>{await transport('/schools/'+props.schoolId+'/website/assets/'+asset.id,{method:'DELETE'});s.assets=s.assets.filter(x=>x.id!==asset.id);s.notice='Fotografia sem uso excluída.';});}
     async function uploadSiteImage(event:Event,target:SiteImage):Promise<void>{const input=event.target as HTMLInputElement;const file=input.files?.[0];if(!file)return;await run(async()=>{if(file.size>3*1024*1024)throw new Error('Escolha uma imagem de até 3 MB.');if(!['image/jpeg','image/png','image/webp'].includes(file.type))throw new Error('Use uma fotografia JPEG, PNG ou WebP.');const body=new FormData();body.append('image',file);const asset=await transport('/schools/'+props.schoolId+'/website/assets',{method:'POST',body}) as SiteImage;target.url=asset.url;s.previewHtml='';s.notice='Fotografia enviada. Ela só ficará pública quando estiver em um site ou uma publicação pública.';});input.value='';}
     const siteGuides=[{id:'models',label:'Modelos'},{id:'identity',label:'Identidade e textos'},{id:'navigation',label:'Menu e capa'},{id:'pages',label:'Páginas e seções'},{id:'photos',label:'Fotografias'}];
     function modelCover(model:SiteModel):string{
       const design=model.website.design;
-      return design?.hero_image?.url||design?.hero_gallery?.[0]?.url||design?.sections.find(section=>section.image)?.image?.url||'';
+      if(!design)return '';
+      const cover=design.hero_image?.url||design.hero_gallery?.[0]?.url;
+      if(cover)return cover;
+      for(const section of design.sections){
+        const photo=section.image?.url||section.items.find(item=>item.image?.url)?.image?.url;
+        if(photo)return photo;
+      }
+      return '';
     }
     function revealInvalidSiteField(event:Event):void{
       const field=event.target as HTMLElement;
@@ -81,21 +97,50 @@ namespace PigeCommunity {
     function selectedModel():SiteModel|undefined{return s.models.find(model=>model.id===s.modelChoice);}
     function modelInput():string{return JSON.stringify({model_id:s.modelChoice,website:websitePayload()});}
     function modelReady():boolean{return Boolean(s.resolvedModel&&s.modelPreviewInput===modelInput());}
-    function clearModelPreview():void{s.resolvedModel=null;s.modelPreviewInput='';s.modelPreviewPage='';s.modelPreviewActive=false;s.previewHtml='';}
+    function clearModelPreview():void{previewAnchor='';s.resolvedModel=null;s.modelPreviewInput='';s.modelPreviewPage='';s.modelPreviewActive=false;s.previewHtml='';}
     function modelNewPages():SitePage[]{const existing=new Set(s.website.design?.pages.map(page=>page.slug)||[]);return s.resolvedModel?.design?.pages.filter(page=>!existing.has(page.slug))||[];}
     function modelRenames():string[]{const proposed=selectedModel()?.website.design?.menu||[];const resolved=s.resolvedModel?.design?.menu||[];return proposed.flatMap((link,index)=>resolved[index]&&link.url!==resolved[index].url?[link.url+' → '+resolved[index].url]:[]);}
     async function previewModel():Promise<void>{if(!selectedModel()){s.error='Carregue e escolha um modelo completo.';return;}await runPreview(async(signal,current)=>{clearModelPreview();const input=modelInput();const result=await transport('/schools/'+props.schoolId+'/website/preview-model',{method:'POST',signal,body:input}) as {website:Website;html:string};if(!current())return;s.resolvedModel=result.website;s.modelPreviewInput=input;s.modelPreviewActive=true;s.previewHtml=result.html;s.notice='Prévia sem gravação: confira a página inicial curta, cada página interna e o mapa do menu antes de aplicar. Nenhum campo do seu rascunho foi alterado.';});}
-    async function previewModelPage():Promise<void>{if(!modelReady()){s.error='O conteúdo ou modelo mudou. Gere novamente a prévia completa antes de escolher uma página.';return;}await runPreview(async(signal,current)=>{const result=await transport('/schools/'+props.schoolId+'/website/preview'+(s.modelPreviewPage?'?page='+encodeURIComponent(s.modelPreviewPage):''),{method:'POST',signal,body:JSON.stringify(s.resolvedModel)}) as {html:string};if(!current())return;s.modelPreviewActive=true;s.previewHtml=result.html;});}
+    async function previewPage(slug:string,model:boolean):Promise<void>{
+      if(model&&!modelReady()){s.error='Gere novamente a prévia do modelo após editar o rascunho.';return;}
+      await runPreview(async(signal,current)=>{
+        editorialCheck();
+        const website=model?s.resolvedModel:websitePayload();
+        const path='/schools/'+props.schoolId+'/website/preview'+(slug?'?page='+encodeURIComponent(slug):'');
+        const result=await transport(path,{method:'POST',signal,body:JSON.stringify(website)}) as {html:string};
+        if(!current())return;
+        s.modelPreviewActive=model;
+        s.modelPreviewPage=slug;
+        s.previewHtml=result.html;
+      });
+    }
+    function previewDraftPage(event:Event):Promise<void>{
+      return previewPage((event.target as HTMLSelectElement).value,false);
+    }
+    function previewModelPage():Promise<void>{return previewPage(s.modelPreviewPage,true);}
     function bindPreviewLinks(event:Event):void{
-      let document:Document|null;
-      try{document=(event.currentTarget as HTMLIFrameElement).contentDocument;}catch{return;}
-      if(!document)return;
-      document.addEventListener('click',(event:MouseEvent)=>{
-        if(event.defaultPrevented||event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey||!s.modelPreviewActive||!modelReady())return;
-        const anchor=(event.target as Element)?.closest?.('a[href]');const href=anchor?.getAttribute('href')||'';
-        if(href!=='/'&&(!/^\/[a-z][a-z0-9-]{0,59}$/.test(href)||!s.resolvedModel?.design?.pages.some(page=>'/'+page.slug===href)))return;
-        event.preventDefault();if(s.busy)return;
-        s.modelPreviewPage=href==='/'?'':href.slice(1);void previewModelPage();
+      let frameDoc:Document|null;
+      try{frameDoc=(event.currentTarget as HTMLIFrameElement).contentDocument;}catch{return;}
+      if(!frameDoc)return;
+      if(previewAnchor){frameDoc.getElementById(previewAnchor)?.scrollIntoView();previewAnchor='';}
+      frameDoc.addEventListener('click',(click:MouseEvent)=>{
+        if(click.defaultPrevented||click.button!==0)return;
+        const href=(click.target as Element)?.closest?.('a[href]')?.getAttribute('href');
+        if(!href)return;
+        click.preventDefault();
+        if(s.busy)return;
+        if(href.startsWith('#')){frameDoc.getElementById(href.slice(1))?.scrollIntoView();return;}
+        const match=/^\/([a-z][a-z0-9-]{0,59})?(?:#([a-zA-Z0-9_-]+))?$/.exec(href);
+        const website=s.modelPreviewActive?s.resolvedModel:s.website;
+        if(!match||(match[1]&&!website?.design?.pages.some(page=>page.slug===match[1]))){
+          s.notice='Este destino está fora das páginas da prévia privada.';
+          return;
+        }
+        previewAnchor=match[2]||'';
+        if((match[1]||'')===s.modelPreviewPage&&previewAnchor){
+          frameDoc.getElementById(previewAnchor)?.scrollIntoView();previewAnchor='';return;
+        }
+        void previewPage(match[1]||'',s.modelPreviewActive);
       });
     }
     async function applyModel():Promise<void>{if(!modelReady()){await previewModel();if(modelReady())s.notice='Confira o mapa e as páginas na prévia. Depois clique novamente em Aplicar para confirmar o rascunho.';return;}const added=modelNewPages();const renamed=modelRenames();if(!window.confirm('Aplicar ao rascunho a página inicial curta, '+added.length+' novas páginas completas e o novo menu? Todas as páginas atuais, identidade e endereços serão preservados.'+(renamed.length?' Endereços ajustados para evitar colisões: '+renamed.join(', ')+'.':'')+' O site publicado NÃO muda. As páginas marcadas para inclusão só entrarão no ar após a ação Publicar site. A cópia original antes de testar modelos ficará salva na plataforma, inclusive após sair desta tela.'))return;await run(async()=>{await transport('/schools/'+props.schoolId+'/website/apply-model',{method:'POST',body:modelInput()});await loadWebsite();s.sitePageIndex=-1;s.demoConfirmed=false;clearModelPreview();s.notice='Página inicial, novas páginas e menu salvos somente em rascunho. Páginas anteriores preservadas; cópia original durável disponível. Nada foi publicado.';});}
@@ -111,16 +156,45 @@ namespace PigeCommunity {
     function addSection():void{const d=s.website.design,sections=contentSections();if(!d||sections.length>=20)return;if(!editingPage())d.configured=true;let n=1;while(sections.some(x=>x.id==='secao-'+n))n++;sections.push({id:'secao-'+n,kind:s.sectionKind,visible:true,eyebrow:'',title:'',text:'',image:null,action:null,items:[]});s.previewHtml='';}
     function inheritBrand():void{if(!window.confirm('Restaurar a identidade herdada do PIGE neste rascunho?'))return;s.website.brand={display_name:'',primary_color:'',secondary_color:'',font_family:''};s.previewHtml='';}
     function editorialCheck():void{if(/^(https?:\/\/|www\.)/i.test(s.website.headline.trim()))throw new Error('Use um título na chamada principal. Informe a URL no endereço do botão.');}
+    function admissionReasonLabel(reason:string):string{return ({not_published:'não publicado',not_started:'abertura futura',closed:'prazo encerrado',no_active_groups:'sem turma ativa',inactive_school:'unidade inativa'} as Record<string,string>)[reason]||reason;}
     async function saveWebsite():Promise<void>{await run(async()=>{await transport('/schools/'+props.schoolId+'/website/draft',{method:'PUT',body:JSON.stringify(websitePayload())});await loadWebsite();s.notice='Rascunho salvo. A versão pública permanece a mesma até você publicar.';});}
     async function publishWebsite():Promise<void>{if(s.website.design?.demonstration&&!s.demoConfirmed){s.error='Confirme explicitamente a publicação de conteúdo demonstrativo ou substitua e revise os exemplos.';return;}if(!window.confirm(s.website.design?.demonstration?'Publicar EXEMPLOS DEMONSTRATIVOS com identificação visível?':'Publicar este conteúdo no site da escola?'))return;await run(async()=>{editorialCheck();await transport('/schools/'+props.schoolId+'/website/draft',{method:'PUT',body:JSON.stringify(websitePayload())});await loadWebsite();await transport('/schools/'+props.schoolId+'/website/publish',{method:'POST',body:JSON.stringify({version:s.website.version,confirm_demonstration:s.demoConfirmed})});await loadWebsite();s.notice='Site publicado com sucesso.';});}
-    async function previewWebsite():Promise<void>{await runPreview(async(signal,current)=>{s.modelPreviewActive=false;editorialCheck();const result=await transport('/schools/'+props.schoolId+'/website/preview'+(editingPage()?'?page='+encodeURIComponent(editingPage()!.slug):''),{method:'POST',signal,body:JSON.stringify(websitePayload())}) as {html:string};if(!current())return;s.previewHtml=result.html;});}
+    function previewWebsite():Promise<void>{previewAnchor='';return previewPage(editingPage()?.slug||'',false);}
     async function unpublishWebsite():Promise<void>{if(!window.confirm('Retirar o site do ar? O conteúdo será preservado em rascunho.'))return;await run(async()=>{await transport('/schools/'+props.schoolId+'/website/unpublish',{method:'POST',body:JSON.stringify(websitePayload())});await loadWebsite();s.notice='Site retirado da publicação. Rascunho preservado.';});}
     async function search():Promise<void>{s.page=1;await run(load);}
     async function page(delta:number):Promise<void>{s.page+=delta;await run(load);}
     function open(post:Post):void{s.selected=post;s.error='';}
+    function editorStepSummary():string{return editorSteps.find(step=>step.id===s.editorStep)?.description||'';}
+    function setEditorStep(step:EditorStep):void{
+      if(!editorSteps.some(item=>item.id===step))return;
+      s.editorStep=step;
+      void Vue.nextTick(()=>{const field=document.querySelector<HTMLElement>('.community-editor [data-editor-step="'+step+'"]');field?.scrollIntoView?.({block:'start'});});
+    }
+    function nextEditorStep():void{const index=editorSteps.findIndex(step=>step.id===s.editorStep);if(index<editorSteps.length-1)setEditorStep(editorSteps[index+1].id);}
+    function previousEditorStep():void{const index=editorSteps.findIndex(step=>step.id===s.editorStep);if(index>0)setEditorStep(editorSteps[index-1].id);}
     function edit(post?:Post):void{
       s.form=post?{image:post.image?{...post.image}:null,id:post.id,version:post.version||1,title:post.title,summary:post.summary,content:post.content,kind:post.kind,audience:post.audience,status:post.status||'draft',pinned:post.pinned,publish_at:local(post.publish_at),expires_at:local(post.expires_at),event_start:local(post.event_start),event_end:local(post.event_end),location:post.location}:empty();
-      s.initial=JSON.stringify(s.form);s.editing=true;s.discard=false;s.deleteConfirm=false;s.selected=null;s.error='';
+      s.savedPostStatus=post?.status||'';s.initial=JSON.stringify(s.form);s.editing=true;s.editorStep='content';s.discard=false;s.deleteConfirm=false;s.selected=null;s.error='';
+    }
+    function prepareUnpublish():void{
+      if(s.busy||s.savedPostStatus!=='published')return;
+      s.form.status='draft';
+      setEditorStep('publish');
+    }
+    function canDeleteDraft():boolean{
+      return Boolean(s.form.id)&&s.savedPostStatus==='draft'&&s.form.status==='draft';
+    }
+    function postSaveLabel():string{
+      if(s.form.status==='published')return 'Salvar e publicar';
+      if(s.form.status==='archived')return 'Salvar como arquivado';
+      if(s.savedPostStatus==='published')return 'Confirmar despublicação';
+      return 'Salvar publicação';
+    }
+    function revealInvalidPostField(event:Event):void{
+      const field=event.target as HTMLElement;
+      const panel=field.closest<HTMLElement>('[data-editor-step]');
+      const step=editorSteps.find(item=>item.id===panel?.dataset.editorStep);
+      if(step){setEditorStep(step.id);void Vue.nextTick(()=>field.focus());}
     }
     function closeEditor(force=false):void{if(s.busy)return;if(!force&&JSON.stringify(s.form)!==s.initial){s.discard=true;return;}s.editing=false;s.discard=false;s.deleteConfirm=false;}
     async function save():Promise<void>{await run(async()=>{
@@ -129,7 +203,7 @@ namespace PigeCommunity {
       await transport('/schools/'+props.schoolId+'/community-posts'+(id?'/'+id:''),{method:id?'PATCH':'POST',body:JSON.stringify(payload)});
       s.editing=false;await load();s.notice=form.status==='published'?(form.publish_at&&new Date(payload.publish_at as string)>new Date()?'Publicação agendada.':'Publicação disponível para o público selecionado.'):form.status==='archived'?'Publicação arquivada.':'Rascunho salvo.';
     });}
-    async function remove():Promise<void>{await run(async()=>{if(!s.deleteConfirm||!s.form.id)return;await transport('/schools/'+props.schoolId+'/community-posts/'+s.form.id+'?version='+s.form.version,{method:'DELETE'});s.editing=false;await load();s.notice='Rascunho excluído.';});}
+    async function remove():Promise<void>{await run(async()=>{if(!s.deleteConfirm||!canDeleteDraft())return;await transport('/schools/'+props.schoolId+'/community-posts/'+s.form.id+'?version='+s.form.version,{method:'DELETE'});s.editing=false;await load();s.notice='Rascunho excluído.';});}
     const scheduled=(post:Post)=>post.status==='published'&&Boolean(post.publish_at)&&new Date(post.publish_at as string)>new Date();
     const expired=(post:Post)=>Boolean(post.expires_at)&&new Date(post.expires_at as string)<=new Date();
     const paragraphs=(value:string)=>value.split(/\n\s*\n/).filter(Boolean);
@@ -143,6 +217,6 @@ namespace PigeCommunity {
     Vue.watch(()=>props.websiteRequest,openRequestedSite);
     Vue.watch(()=>s.busy,openRequestedSite);
     Vue.onMounted(()=>{void run(async()=>{await load();await loadWebsite();}).then(openRequestedSite);});
-    return {dialogTarget:Vue.inject<HTMLElement|string>('school-dialog-host','body')||'body',siteGuides,modelCover,revealInvalidSiteField,s,props,manage,run,load,toggleWebsite,loadSiteAssets,removeSiteAsset,uploadSiteImage,move,removeSiteItem,addSection,loadSiteModels,selectedModel,modelReady,clearModelPreview,modelNewPages,modelRenames,previewModel,previewModelPage,bindPreviewLinks,closePreview,applyModel,restoreModelCheckpoint,markDemoReplaced,editingPage,contentSections,selectSitePage,addSitePage,moveSitePage,removeSitePage,addPageToMenu,inheritBrand,newImage,newLink,newItem,sectionLabels,saveWebsite,publishWebsite,previewWebsite,unpublishWebsite,search,page,open,edit,closeEditor,save,remove,date,audienceLabels,statusLabels,scheduled,expired,paragraphs};
+    return {dialogTarget:Vue.inject<HTMLElement|string>('school-dialog-host','body')||'body',siteGuides,editorSteps,modelCover,revealInvalidSiteField,s,props,manage,run,load,toggleWebsite,loadSiteAssets,loadAdmissionReadiness,removeSiteAsset,uploadSiteImage,move,removeSiteItem,addSection,loadSiteModels,selectedModel,modelReady,clearModelPreview,modelNewPages,modelRenames,previewModel,previewDraftPage,previewModelPage,bindPreviewLinks,closePreview,applyModel,restoreModelCheckpoint,markDemoReplaced,editingPage,contentSections,selectSitePage,addSitePage,moveSitePage,removeSitePage,addPageToMenu,inheritBrand,newImage,newLink,newItem,sectionLabels,saveWebsite,publishWebsite,previewWebsite,unpublishWebsite,search,page,open,edit,closeEditor,save,remove,date,audienceLabels,statusLabels,scheduled,expired,paragraphs,prepareUnpublish,canDeleteDraft,postSaveLabel,revealInvalidPostField,admissionReasonLabel,editorStepSummary,setEditorStep,nextEditorStep,previousEditorStep};
   }};
 }

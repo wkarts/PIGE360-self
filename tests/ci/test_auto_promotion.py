@@ -303,8 +303,8 @@ class StableSetTests(unittest.TestCase):
     def setUp(self):
         import stable_set
         self.module = stable_set
-        self.new = {image: 'sha256:' + char * 64 for image, char in zip(stable_set.IMAGES, 'abcde')}
-        self.old = {image: 'sha256:' + char * 64 for image, char in zip(stable_set.IMAGES, 'efabc')}
+        self.new = {image: 'sha256:' + char * 64 for image, char in zip(stable_set.IMAGES, 'abcdef')}
+        self.old = {image: 'sha256:' + char * 64 for image, char in zip(stable_set.IMAGES, 'efabcd')}
         self.registry = {}
         for image, digest in self.new.items():
             self.registry[image + '@' + digest] = digest

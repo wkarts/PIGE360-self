@@ -328,11 +328,13 @@ class ProtocolInput(Input):
     due_on: date | None = None
 
 class SchoolInput(Input):
+    educacenso_training: bool | None = None
     company_id: str
     name: str = Field(min_length=2, max_length=160)
     address: str = Field(default='', max_length=400)
     phone: str = Field(default='', max_length=32)
     email: str = Field(default='', max_length=254)
+    diary_catalog: bool | None = None
     document_policy: Literal['warn','block'] = 'warn'
     active: bool = True
 

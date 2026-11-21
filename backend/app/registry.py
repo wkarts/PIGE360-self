@@ -49,19 +49,22 @@ def add_school(data: s.SchoolInput, db: DB, user: Actor, request: Request):
     require(user, 'schools.manage')
     if not db.get(m.Company, data.company_id):
         fail(422, 'Empresa inválida.')
-    obj = m.School(**data.model_dump()); db.add(obj); db.flush()
+    obj = m.School(**data.model_dump(exclude_none=True)); db.add(obj); db.flush()
     db.add(m.SchoolAccess(user_id=user.id, school_id=obj.id))
     audit(db, request, user, 'school.created', obj, obj.id)
     return output(obj)
 
 @router.patch('/schools/{school_id}')
 def edit_school(data: s.Edit, db: DB, user: Actor, school: Scope, request: Request):
-    require(user, 'schools.manage'); lock_school(db, school.id); check_version(school, data.version)
+    require(user, 'schools.manage')
+    lock_school(db, school.id)
+    db.refresh(school)
+    check_version(school, data.version)
     payload = validate(s.SchoolInput, data.data)
     if payload.company_id != school.company_id:
         fail(422, 'A empresa da escola não pode ser trocada nesta versão.')
     before = output(school)
-    for key, value in payload.model_dump().items():
+    for key, value in payload.model_dump(exclude_none=True).items():
         setattr(school, key, value)
     school.version += 1
     audit(db, request, user, 'school.updated', school, school.id, {'before': before, 'after': output(school)})

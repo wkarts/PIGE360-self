@@ -208,4 +208,4 @@ def readiness(db, school):
         issues.append({'code':'no_open_campaigns', 'message':'Nenhum processo está disponível hoje. Confira publicação, prazos e turmas abaixo.'})
     return {'school_id':school.id, 'server_date':day.isoformat(), 'ready':any(c['ready'] for c in items),
             'active_years':len(years), 'active_groups':len(groups), 'campaigns':items, 'issues':issues,
-            'portal_path':'/online.html?school='+school.id}
+            'portal_path':'/online?school='+school.id}

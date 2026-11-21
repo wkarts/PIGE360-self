@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 from sqlalchemy import func, select
 
+from .diary_components import available_on, drafts_for
 from . import class_materials
 from . import diary_schemas as s, models as m
 from .common import audit, output
@@ -60,6 +61,21 @@ def _scoped(db, model, record_id, school_id):
     if obj is None:
         fail(404, "Registro não encontrado nesta escola.")
     return obj
+
+
+def _locked_diary(db, school_id, diary_id):
+    diary = db.scalar(select(m.SchoolDiary).where(
+        m.SchoolDiary.school_id == school_id, m.SchoolDiary.id == diary_id).with_for_update())
+    if diary is None:
+        fail(404, "Registro não encontrado nesta escola.")
+    return diary
+
+
+def _require_unclosed_period(db, diary, period_id):
+    active = select(m.DiaryClosure.id).where(m.DiaryClosure.diary_id == diary.id,
+        m.DiaryClosure.academic_period_id == period_id, m.DiaryClosure.active.is_(True))
+    if db.scalar(active):
+        fail(409, "O período já está fechado. Registre uma reabertura justificada antes de alterá-lo.")
 
 
 def _teacher_owns(db, user, diary):
@@ -351,9 +367,11 @@ def create_period(data: s.AcademicPeriodInput, db: DB, user: Actor, school: Diar
 @router.get("/curriculum-components")
 def components(db: DB, user: Actor, school: DiaryScope):
     require(user, "diary.read")
-    return [output(x) for x in db.scalars(select(m.CurriculumComponent).where(
-        m.CurriculumComponent.school_id == school.id
-    ).order_by(m.CurriculumComponent.name))]
+    stmt = select(m.CurriculumComponent).where(m.CurriculumComponent.school_id == school.id)
+    # Sugestões são privadas até a decisão da coordenação.
+    stmt = stmt.where(m.CurriculumComponent.id.not_in(drafts_for(school.id)))
+    return [output(x) for x in db.scalars(stmt.order_by(m.CurriculumComponent.name))]
+
 
 
 @router.post("/curriculum-components", status_code=201)
@@ -390,7 +408,7 @@ def create_plan(data: s.CurriculumPlanInput, db: DB, user: Actor, school: DiaryS
     group = _scoped(db, m.ClassGroup, data.class_group_id, school.id)
     require_available(db, group)
     require_available(db, _scoped(db, m.AcademicYear, group.academic_year_id, school.id))
-    _scoped(db, m.CurriculumComponent, data.component_id, school.id)
+    available_on(db, _scoped(db, m.CurriculumComponent, data.component_id, school.id))
     if data.academic_period_id: _period(db, school.id, data.academic_period_id, group.academic_year_id)
     if data.teacher_assignment_id:
         assignment = _scoped(db, m.TeacherAssignment, data.teacher_assignment_id, school.id)
@@ -433,7 +451,8 @@ def edit_plan(plan_id: str, data: s.PlanEdit, db: DB, user: Actor, school: Diary
     if group.id != obj.class_group_id or data.status != 'archived':
         require_available(db, group)
         require_available(db, _scoped(db, m.AcademicYear, group.academic_year_id, school.id))
-    _scoped(db, m.CurriculumComponent, data.component_id, school.id)
+    if data.component_id != obj.component_id:
+        available_on(db, _scoped(db, m.CurriculumComponent, data.component_id, school.id))
     if data.academic_period_id:
         _period(db, school.id, data.academic_period_id, group.academic_year_id)
     if data.teacher_assignment_id:
@@ -478,7 +497,7 @@ def create_diary(data: s.DiaryInput, db: DB, user: Actor, school: DiaryScope, re
     group = _scoped(db, m.ClassGroup, data.class_group_id, school.id)
     require_available(db, group)
     require_available(db, _scoped(db, m.AcademicYear, group.academic_year_id, school.id))
-    _scoped(db, m.CurriculumComponent, data.component_id, school.id)
+    available_on(db, _scoped(db, m.CurriculumComponent, data.component_id, school.id))
     assignment = None
     if data.teacher_assignment_id:
         assignment = _scoped(db, m.TeacherAssignment, data.teacher_assignment_id, school.id)
@@ -544,6 +563,7 @@ def create_lesson(diary_id: str, data: s.LessonInput, db: DB, user: Actor, schoo
     diary = _scoped(db,m.SchoolDiary,diary_id,school.id)
     _require_diary(db,user,diary,"diary.write")
     _require_open_diary(diary)
+    available_on(db, db.get(m.CurriculumComponent, diary.component_id), data.lesson_date)
     group = db.get(m.ClassGroup,diary.class_group_id)
     year = db.get(m.AcademicYear,diary.academic_year_id)
     if data.lesson_date < year.starts_on or data.lesson_date > year.ends_on:
@@ -566,6 +586,7 @@ def edit_lesson(diary_id: str, lesson_id: str, data: s.LessonEdit, db: DB, user:
     obj = _scoped(db,m.DiaryLesson,lesson_id,school.id)
     if obj.diary_id != diary.id: fail(404,"Aula não encontrada neste diário.")
     check_version(obj,data.version)
+    available_on(db, db.get(m.CurriculumComponent, diary.component_id), data.lesson_date)
     values=data.model_dump(exclude={"version"})
     if values.get("academic_period_id"):
         period=_period(db,school.id,values["academic_period_id"],diary.academic_year_id)
@@ -624,6 +645,7 @@ def assessments(diary_id: str, db: DB, user: Actor, school: DiaryScope):
 def create_assessment(diary_id: str, data: s.AssessmentInstrumentInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.assessments")
     _require_open_diary(diary)
+    available_on(db, db.get(m.CurriculumComponent, diary.component_id), data.assessment_date)
     if data.academic_period_id:
         period=_period(db,school.id,data.academic_period_id,diary.academic_year_id)
         if data.assessment_date < period.starts_on or data.assessment_date > period.ends_on:
@@ -641,6 +663,7 @@ def create_assessment(diary_id: str, data: s.AssessmentInstrumentInput, db: DB, 
 def edit_assessment(diary_id: str, instrument_id: str, data: s.AssessmentInstrumentEdit, db: DB, user: Actor, school: DiaryScope, request: Request):
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.assessments")
     _require_open_diary(diary)
+    available_on(db, db.get(m.CurriculumComponent, diary.component_id), data.assessment_date)
     obj=_scoped(db,m.AssessmentInstrument,instrument_id,school.id)
     if obj.diary_id!=diary.id: fail(404,"Avaliação não encontrada neste diário.")
     check_version(obj,data.version)
@@ -716,6 +739,7 @@ def opinions(diary_id: str, db: DB, user: Actor, school: DiaryScope):
 def save_opinion(diary_id: str, data: s.DescriptiveOpinionInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.write")
     _require_open_diary(diary)
+    available_on(db, db.get(m.CurriculumComponent, diary.component_id), None)
     enrollment=_enrollment_for_diary(db,diary,data.enrollment_id)
     if data.status in ("reviewed","final"):
         require(user,"diary.review")
@@ -744,6 +768,7 @@ def pedagogical_records(diary_id: str, db: DB, user: Actor, school: DiaryScope):
 def create_pedagogical_record(diary_id: str, data: s.PedagogicalRecordInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.write")
     _require_open_diary(diary)
+    available_on(db, db.get(m.CurriculumComponent, diary.component_id), data.record_date)
     enrollment=_enrollment_for_diary(db,diary,data.enrollment_id,data.record_date)
     obj=m.PedagogicalRecord(school_id=school.id,diary_id=diary.id,enrollment_id=enrollment.id,student_id=enrollment.student_id,recorded_by=user.id,**data.model_dump(exclude={"enrollment_id"}))
     db.add(obj);db.flush()
@@ -753,10 +778,11 @@ def create_pedagogical_record(diary_id: str, data: s.PedagogicalRecordInput, db:
 
 @router.post("/diaries/{diary_id}/close")
 def close_diary(diary_id: str, data: s.CloseDiaryInput, db: DB, user: Actor, school: DiaryScope, request: Request):
-    diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.close")
+    diary=_locked_diary(db, school.id, diary_id); _require_diary(db,user,diary,"diary.close")
     check_version(diary, data.version)
     if diary.status != "reviewed": fail(409,"Somente um diário revisado pode ser fechado.")
     if data.academic_period_id: _period(db,school.id,data.academic_period_id,diary.academic_year_id)
+    _require_unclosed_period(db, diary, data.academic_period_id)
     snapshot=_snapshot(db,diary,data.academic_period_id)
     if not snapshot["lessons"]: fail(409,"Não é possível fechar um diário sem aulas registradas.")
     missing=[]
@@ -769,16 +795,6 @@ def close_diary(diary_id: str, data: s.CloseDiaryInput, db: DB, user: Actor, sch
     canonical=json.dumps(snapshot,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
     digest=hashlib.sha256(canonical).hexdigest()
     stamp=datetime.now(UTC)
-    scope = select(m.DiaryClosure).where(
-        m.DiaryClosure.diary_id==diary.id,
-        m.DiaryClosure.active.is_(True),
-    )
-    scope = scope.where(
-        m.DiaryClosure.academic_period_id == data.academic_period_id
-        if data.academic_period_id else m.DiaryClosure.academic_period_id.is_(None)
-    )
-    for old in db.scalars(scope):
-        old.active=False; old.version += 1
     closure=m.DiaryClosure(school_id=school.id,diary_id=diary.id,academic_period_id=data.academic_period_id,snapshot=snapshot,snapshot_hash=digest,reason=data.reason,closed_by=user.id,closed_at=stamp,active=True)
     db.add(closure)
     if not data.academic_period_id:
@@ -792,7 +808,7 @@ def close_diary(diary_id: str, data: s.CloseDiaryInput, db: DB, user: Actor, sch
 
 @router.post("/diaries/{diary_id}/reopen")
 def reopen_diary(diary_id: str, data: s.ReopenDiaryInput, db: DB, user: Actor, school: DiaryScope, request: Request):
-    diary=_scoped(db,m.SchoolDiary,diary_id,school.id); _require_diary(db,user,diary,"diary.reopen")
+    diary=_locked_diary(db, school.id, diary_id); _require_diary(db,user,diary,"diary.reopen")
     check_version(diary, data.version)
     if diary.status not in {"submitted","reviewed","closed"}:
         fail(409,"Somente um diário enviado, revisado ou fechado pode ser reaberto.")
@@ -948,10 +964,11 @@ def assessment_rules(diary_id: str, db: DB, user: Actor, school: DiaryScope):
 
 @router.put("/diaries/{diary_id}/assessment-rules/{period_id}")
 def save_assessment_rule(diary_id: str, period_id: str, data: s.PeriodAssessmentRuleInput, db: DB, user: Actor, school: DiaryScope, request: Request):
-    diary = _scoped(db, m.SchoolDiary, diary_id, school.id)
+    diary = _locked_diary(db, school.id, diary_id)
     _require_diary(db, user, diary, "diary.configure")
     _require_open_diary(diary)
     period = _period(db, school.id, period_id, diary.academic_year_id)
+    _require_unclosed_period(db, diary, period.id)
     obj = _assessment_rule_data(db, diary, period)
     values = data.model_dump(exclude={"version"})
     if obj:
@@ -1002,11 +1019,12 @@ def _concept_from_rank(rank, scale):
 
 @router.post("/diaries/{diary_id}/periods/{period_id}/consolidate")
 def consolidate_period(diary_id: str, period_id: str, data: s.DiaryTransitionInput, db: DB, user: Actor, school: DiaryScope, request: Request):
-    diary = _scoped(db, m.SchoolDiary, diary_id, school.id)
+    diary = _locked_diary(db, school.id, diary_id)
     _require_diary(db, user, diary, "diary.review")
     check_version(diary, data.version)
     if diary.status not in {"open", "reviewed"}: fail(409, "A consolidação exige diário aberto ou revisado.")
     period = _period(db, school.id, period_id, diary.academic_year_id)
+    _require_unclosed_period(db, diary, period.id)
     rule = _assessment_rule_data(db, diary, period)
     if not rule: fail(409, "Configure a regra de avaliação antes de consolidar.")
     instruments = list(db.scalars(select(m.AssessmentInstrument).where(
@@ -1026,11 +1044,16 @@ def consolidate_period(diary_id: str, period_id: str, data: s.DiaryTransitionInp
     marks = {}
     roster_by_id = {r["enrollment_id"]: r for r in _attendance_roster(db, diary, period.ends_on)}
     for item in instruments: roster_by_id.update(expected[item.id])
+    enrolled_by_date = {}
     for lesson in lessons:
-        lesson_roster = _attendance_roster(db, diary, lesson.lesson_date)
+        if lesson.lesson_date not in enrolled_by_date:
+            enrolled_by_date[lesson.lesson_date] = {
+                row["enrollment_id"]: row for row in _attendance_roster(db, diary, lesson.lesson_date)
+            }
+        lesson_roster = enrolled_by_date[lesson.lesson_date]
         marks[lesson.id] = {r.enrollment_id: r for r in db.scalars(select(m.DiaryAttendance).where(m.DiaryAttendance.lesson_id == lesson.id))}
-        if len(marks[lesson.id]) < len(lesson_roster): fail(409, "Complete a chamada das aulas do período antes de consolidar.")
-        roster_by_id.update({r["enrollment_id"]: r for r in lesson_roster})
+        if not lesson_roster.keys() <= marks[lesson.id].keys(): fail(409, "Complete a chamada das aulas do período antes de consolidar.")
+        roster_by_id.update(lesson_roster)
     opinions = {o.enrollment_id:o for o in db.scalars(select(m.DescriptiveOpinion).where(
         m.DescriptiveOpinion.diary_id == diary.id, m.DescriptiveOpinion.academic_period_id == period.id
     ))}
@@ -1061,7 +1084,7 @@ def consolidate_period(diary_id: str, period_id: str, data: s.DiaryTransitionInp
         attendance_total = attendance_credit = 0
         attendance_trace = []
         for lesson in lessons:
-            if enrollment_id not in {r["enrollment_id"] for r in _attendance_roster(db, diary, lesson.lesson_date)}: continue
+            if enrollment_id not in enrolled_by_date[lesson.lesson_date]: continue
             lesson_units = max(1, int(lesson.lesson_count))
             attendance_total += lesson_units
             mark = marks[lesson.id].get(enrollment_id)
@@ -1354,6 +1377,7 @@ def _occurrence_period(db, school_id, diary, supplied_period, occurrence_date):
 @router.post("/diaries/{diary_id}/occurrences",status_code=201)
 def create_diary_occurrence(diary_id: str,data: s.DiaryOccurrenceInput,db: DB,user: Actor,school: DiaryScope,request: Request):
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id);_require_diary(db,user,diary,"diary.write");_require_open_diary(diary)
+    available_on(db, db.get(m.CurriculumComponent, diary.component_id), data.occurrence_date)
     enrollment=_enrollment_for_diary(db,diary,data.enrollment_id,data.occurrence_date)
     period=_occurrence_period(db,school.id,diary,data.academic_period_id,data.occurrence_date)
     if data.status=="reviewed":require(user,"diary.review")
@@ -1365,6 +1389,7 @@ def create_diary_occurrence(diary_id: str,data: s.DiaryOccurrenceInput,db: DB,us
 @router.patch("/diaries/{diary_id}/occurrences/{occurrence_id}")
 def edit_diary_occurrence(diary_id: str,occurrence_id: str,data: s.DiaryOccurrenceEdit,db: DB,user: Actor,school: DiaryScope,request: Request):
     diary=_scoped(db,m.SchoolDiary,diary_id,school.id);_require_diary(db,user,diary,"diary.write");_require_open_diary(diary)
+    available_on(db, db.get(m.CurriculumComponent, diary.component_id), data.occurrence_date)
     obj=_scoped(db,m.DiaryOccurrence,occurrence_id,school.id)
     if obj.diary_id!=diary.id:fail(404,"Ocorrência não encontrada neste diário.")
     if obj.status=="reviewed":fail(409,"Ocorrência revisada é imutável; reabra o diário e registre retificação justificada como novo lançamento.")
