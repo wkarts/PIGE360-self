@@ -17,9 +17,9 @@ def test_stationery_on_student_and_family_exports(api, client, admin):
     cookies, _ = portal_session(api)
     activate(client, cookies, student)
     bulletin = portal_call(client, cookies, 'GET', '/learning/'+student['id']+'/report.pdf')
-    for content in (fiche.content, bulletin.content):
+    for content, portrait in ((fiche.content, True), (bulletin.content, False)):
         for page in PdfReader(io.BytesIO(content)).pages:
-            assert page.mediabox.height > page.mediabox.width
+            assert (page.mediabox.height > page.mediabox.width) == portrait
             assert page.images and b' Do' in page.get_contents().get_data()
             assert 'secretaria@example.test' in page.extract_text()
     grades = '\n'.join(page.extract_text() for page in PdfReader(io.BytesIO(bulletin.content)).pages)

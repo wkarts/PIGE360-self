@@ -44,7 +44,7 @@ namespace PigeDiary {
     const state=Vue.reactive({
       busy:false,error:'',notice:'',tab:'diaries',page:'diaries',diaryFilter:'',lessonPeriod:'',dirty:false,
       diaries:[] as Diary[],selected:null as Diary|null,academicYears:[] as Row[],periods:[] as Row[],components:[] as Row[],groups:[] as Row[],assignments:[] as Row[],plans:[] as Row[],
-      periodForm:{academic_year_id:'',name:'',starts_on:'',ends_on:'',order_index:1,active:true},
+      calendarIds:[] as string[],periodForm:{academic_year_id:'',class_group_id:'',name:'',starts_on:'',ends_on:'',order_index:1,active:true},
       componentForm:{name:'',code:'',workload_hours:0,active:true},
       diaryForm:{class_group_id:'',component_id:'',teacher_assignment_id:'',notes:''},
       planForm:{class_group_id:'',component_id:'',academic_period_id:'',teacher_assignment_id:'',objectives:'',thematic_units:'',knowledge_objects:'',bncc_references:'',methodology:'',resources:'',assessment_strategy:'',notes:'',status:'draft'},
@@ -66,7 +66,7 @@ namespace PigeDiary {
       communicationRecipients:[] as CommunicationRecipient[],communications:[] as Row[],
       communicationForm:{enrollment_id:'',academic_period_id:'',occurrence_id:'',recipient_guardian_link_ids:[] as string[],title:'',message:'',client_key:PigeOnline.newId()},
       occurrenceForm:{academic_period_id:'',enrollment_id:'',occurrence_date:today(),kind:'pedagogical',title:'',description:'',status:'draft'},
-      reportType:'class_diary',reportPeriod:'',reportEnrollment:''
+      reportFrom:'',reportTo:'',reportType:'class_diary',reportPeriod:'',reportEnrollment:''
     });
     const base=()=>(props.teacherPortal?'/teacher':'')+'/schools/'+props.schoolId;
     const can=(p:string)=>props.permissions.includes(p);
@@ -204,7 +204,7 @@ namespace PigeDiary {
         state.reportPeriod='';state.reportEnrollment='';state.closePeriod='';
       }
       state.occurrenceForm={academic_period_id:'',enrollment_id:'',occurrence_date:today(),kind:'pedagogical',title:'',description:'',status:'draft'};
-      const firstPeriod=state.periods.find(p=>p.academic_year_id===d.academic_year_id);
+      const firstPeriod=periodsFor(d)[0];
       selectRulePeriod(firstPeriod?str(firstPeriod.id):'');
       state.communicationRecipients=[];
       state.communicationForm={enrollment_id:'',academic_period_id:'',occurrence_id:'',recipient_guardian_link_ids:[],title:'',message:'',client_key:PigeOnline.newId()};
@@ -222,7 +222,16 @@ namespace PigeDiary {
     async function loadCommunicationRecipients(){if(!state.selected||!state.communicationForm.enrollment_id){state.communicationRecipients=[];state.communicationForm.recipient_guardian_link_ids=[];return;}const query='?enrollment_id='+encodeURIComponent(state.communicationForm.enrollment_id);state.communicationRecipients=await PigeAPI.request<CommunicationRecipient[]>(base()+'/diaries/'+state.selected.id+'/communication-recipients'+query);state.communicationForm.recipient_guardian_link_ids=[];}
     function communicationOccurrenceChanged(){const occurrence=state.occurrences.find(x=>x.id===state.communicationForm.occurrence_id);if(occurrence?.academic_period_id)state.communicationForm.academic_period_id=str(occurrence.academic_period_id);}
     async function sendCommunication(){if(!state.selected)return;await run(async()=>{const f=state.communicationForm;const result=await PigeAPI.post<{created:number;messages:Row[];channel:string}>(base()+'/diaries/'+state.selected!.id+'/communications',{...f,academic_period_id:f.academic_period_id||null,occurrence_id:f.occurrence_id||null});state.communications=await PigeAPI.request<Row[]>(base()+'/diaries/'+state.selected!.id+'/communications');state.communicationForm={...f,occurrence_id:'',recipient_guardian_link_ids:[],title:'',message:'',client_key:PigeOnline.newId()};state.communicationRecipients=[];state.notice=result.created?'Comunicado disponibilizado no portal para '+result.created+' conta(s).':'Esta operação já havia sido processada; nenhum comunicado duplicado foi criado.';});}
-    async function createPeriod(){await run(async()=>{await PigeAPI.post(base()+'/academic-periods',state.periodForm);state.periodForm={academic_year_id:state.periodForm.academic_year_id,name:'',starts_on:'',ends_on:'',order_index:state.periodForm.order_index+1,active:true};await loadBase();state.notice='Período letivo criado.';});}
+    function periodsFor(d:Diary){const group=state.groups.find(g=>g.id===d.class_group_id);
+      const ids=group?.academic_period_ids||d.academic_period_ids;
+      return state.periods.filter(p=>p.academic_year_id===d.academic_year_id && (Array.isArray(ids)&&ids.length?ids.includes(p.id):!p.class_calendar_only));}
+    function loadCalendar(){const group=state.groups.find(g=>g.id===state.periodForm.class_group_id);
+      state.calendarIds=Array.isArray(group?.academic_period_ids)&&group.academic_period_ids.length?[...group.academic_period_ids]:
+        state.periods.filter(p=>p.academic_year_id===state.periodForm.academic_year_id && !p.class_calendar_only).map(p=>p.id);}
+    async function saveCalendar(){await run(async()=>{const group=state.groups.find(g=>g.id===state.periodForm.class_group_id);
+      if(!group)return;await PigeAPI.request(base()+'/class-groups/'+group.id+'/calendar',{method:'PUT',body:JSON.stringify({period_ids:state.calendarIds,version:group.version})});
+      await loadBase();loadCalendar();state.notice='Calendário da turma atualizado.';});}
+    async function createPeriod(){await run(async()=>{await PigeAPI.post(base()+'/academic-periods',state.periodForm);state.periodForm={class_group_id:state.periodForm.class_group_id,academic_year_id:state.periodForm.academic_year_id,name:'',starts_on:'',ends_on:'',order_index:state.periodForm.order_index+1,active:true};await loadBase();loadCalendar();state.notice='Período letivo criado.';});}
     async function createComponent(){await run(async()=>{await PigeAPI.post(base()+'/curriculum-components',state.componentForm);state.componentForm={name:'',code:'',workload_hours:0,active:true};await loadBase();state.notice='Componente curricular criado.';});}
     async function createDiary(){await run(async()=>{const body={...state.diaryForm,teacher_assignment_id:state.diaryForm.teacher_assignment_id||null};const d=await PigeAPI.post<Diary>(base()+'/diaries',body);state.diaryForm={class_group_id:'',component_id:'',teacher_assignment_id:'',notes:''};await loadBase();await loadDiary(d);if(pilot){navigatePage('diaries',false);syncLink();}else state.tab='diaries';state.notice='Diário aberto.';});}
     async function createPlan(){if(!state.selected)return;await run(async()=>{const f=state.planForm;await PigeAPI.post(base()+'/curriculum-plans',{...f,academic_period_id:f.academic_period_id||null,teacher_assignment_id:f.teacher_assignment_id||null,bncc_references:f.bncc_references.split(/[\s,;]+/).map(x=>x.trim()).filter(Boolean)});state.plans=await PigeAPI.request<Row[]>(base()+'/curriculum-plans?class_group_id='+encodeURIComponent(state.selected!.class_group_id)+'&component_id='+encodeURIComponent(state.selected!.component_id));state.notice='Planejamento registrado.';});}
@@ -281,7 +290,7 @@ namespace PigeDiary {
       state.notice='Material publicado no portal do aluno e do responsável.';
     });}
     async function printMaterial(id:string){if(state.selected)await run(()=>PigeAPI.download(base()+'/diaries/'+state.selected!.id+'/materials/'+id+'/print.pdf','material-escolar.pdf'));}
-    async function report(){if(state.selected)await run(()=>{const q=new URLSearchParams();if(state.reportPeriod)q.set('academic_period_id',state.reportPeriod);if(state.reportType==='student_record'&&state.reportEnrollment)q.set('enrollment_id',state.reportEnrollment);const query=q.toString();return PigeAPI.download(base()+'/diaries/'+state.selected!.id+'/reports/'+state.reportType+'.pdf'+(query?'?'+query:''),'diario-'+state.reportType+'.pdf');});}
+    async function report(){if(state.selected)await run(()=>{const q=new URLSearchParams();if(['attendance','pedagogical_register'].includes(state.reportType)){if(state.reportFrom)q.set('date_from',state.reportFrom);if(state.reportTo)q.set('date_to',state.reportTo);}if(state.reportPeriod)q.set('academic_period_id',state.reportPeriod);if(state.reportType==='student_record'&&state.reportEnrollment)q.set('enrollment_id',state.reportEnrollment);const query=q.toString();return PigeAPI.download(base()+'/diaries/'+state.selected!.id+'/reports/'+state.reportType+'.pdf'+(query?'?'+query:''),'diario-'+state.reportType+'.pdf');});}
     let handled:Props['requestedDiary'];
     function openRequestedDiary():void {
       const request=props.requestedDiary;
@@ -312,6 +321,6 @@ namespace PigeDiary {
       }
     });
     Vue.onUnmounted(()=>{if(pilot)window.removeEventListener('beforeunload',beforeUnload);});
-    return{props,state,pilot,catalog,catalogImpact,suggest,decide,lessons,filterPeriod,save,navigation,activeGroup,filteredDiaries,pageLink,go,show,chooseAnother,markDraft,publishMaterial,printMaterial,can,str,date,label,load,selectDiary,loadCommunicationRecipients,communicationOccurrenceChanged,sendCommunication,createPeriod,createComponent,createDiary,createPlan,createLesson,openAttendance,saveAttendance,createAssessment,editAssessment,cancelAssessmentEdit,openAssessment,saveAssessmentResults,saveOpinion,createPedagogicalRecord,submitDiary,reviewDiary,closeDiary,reopenDiary,report,selectRulePeriod,saveAssessmentRule,loadPeriodResults,consolidatePeriod,saveOccurrence};
+    return{props,state,periodsFor,loadCalendar,saveCalendar,pilot,catalog,catalogImpact,suggest,decide,lessons,filterPeriod,save,navigation,activeGroup,filteredDiaries,pageLink,go,show,chooseAnother,markDraft,publishMaterial,printMaterial,can,str,date,label,load,selectDiary,loadCommunicationRecipients,communicationOccurrenceChanged,sendCommunication,createPeriod,createComponent,createDiary,createPlan,createLesson,openAttendance,saveAttendance,createAssessment,editAssessment,cancelAssessmentEdit,openAssessment,saveAssessmentResults,saveOpinion,createPedagogicalRecord,submitDiary,reviewDiary,closeDiary,reopenDiary,report,selectRulePeriod,saveAssessmentRule,loadPeriodResults,consolidatePeriod,saveOccurrence};
   }};
 }

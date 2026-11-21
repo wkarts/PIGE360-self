@@ -2395,9 +2395,24 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                               }, _toDisplayString(initials(state.personRecord.person.name)), 1)),
                           _createElementVNode("div", { class: "grow" }, [_createElementVNode("h2", null, _toDisplayString(state.personRecord.person.social_name || state.personRecord.person.trade_name || state.personRecord.person.name), 1), _createElementVNode("p", null, _toDisplayString((state.personRecord.person.person_types || []).map(personTypeLabel).join(' · ')), 1)]),
                           _createElementVNode("span", { class: "badge" }, _toDisplayString(state.personRecord.person.archived?'Arquivado':state.personRecord.person.active?'Ativo':'Inativo'), 1),
+                          (can('documents.generate') && (state.personRecord.profiles.teacher || state.personRecord.profiles.employee))
+                            ? (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [_createElementVNode("label", null, [_createTextVNode("Orientação"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.recordOrientation) = $event) }, [_createElementVNode("option", { value: "" }, "Padrão da escola"), _createElementVNode("option", { value: "portrait" }, "Retrato"), _createElementVNode("option", { value: "landscape" }, "Paisagem")], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.recordOrientation]])]), (state.personRecord.profiles.teacher)
+                                ? (_openBlock(), _createElementBlock("button", {
+                                    key: 0,
+                                    class: "btn btn-secondary",
+                                    onClick: $event => (printStaff('teacher'))
+                                  }, "Ficha do professor em PDF", 8, ["onClick"]))
+                                : _createCommentVNode("", true), (state.personRecord.profiles.employee)
+                                ? (_openBlock(), _createElementBlock("button", {
+                                    key: 1,
+                                    class: "btn btn-secondary",
+                                    onClick: $event => (printStaff('employee'))
+                                  }, "Ficha do colaborador em PDF", 8, ["onClick"]))
+                                : _createCommentVNode("", true)], 64))
+                            : _createCommentVNode("", true),
                           (can('people.write') && !state.recordArchived && !state.personRecord.person.archived)
                             ? (_openBlock(), _createElementBlock("button", {
-                                key: 2,
+                                key: 3,
                                 class: "btn btn-secondary",
                                 onClick: editRecord
                               }, "Editar cadastro", 8, ["onClick"]))
@@ -3941,11 +3956,14 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                       : _createCommentVNode("", true),
                     (state.page==='reports')
                       ? (_openBlock(), _createBlock(_component_reports_panel, {
+                          "can-configure": can('schools.manage'),
+                          "can-issue": can('documents.generate') && ['admin','direction','coordination','secretary'].includes(state.user?.role),
+                          "can-sign": ['admin','direction'].includes(state.user?.role),
                           identity: identity,
                           key: state.schoolId,
                           "school-id": state.schoolId,
                           catalogs: state.catalogs
-                        }, null, 8, ["identity", "school-id", "catalogs"]))
+                        }, null, 8, ["can-configure", "can-issue", "can-sign", "identity", "school-id", "catalogs"]))
                       : _createCommentVNode("", true),
                     (state.page==='enrollments'&&can('enrollments.write'))
                       ? (_openBlock(), _createBlock(_component_enrollment_workflow, {
@@ -11404,13 +11422,23 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                 }, [
                   _createElementVNode("label", null, [_createTextVNode("Ano letivo"), _withDirectives(_createElementVNode("select", {
                     "onUpdate:modelValue": $event => ((state.periodForm.academic_year_id) = $event),
+                    onChange: $event => (state.periodForm.class_group_id=''),
                     required: ""
                   }, [_createElementVNode("option", { value: "" }, "Selecione"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.academicYears, (year) => {
                     return (_openBlock(), _createElementBlock("option", {
                       key: year.id,
                       value: year.id
                     }, _toDisplayString(year.name) + " · " + _toDisplayString(date(year.starts_on)) + " a " + _toDisplayString(date(year.ends_on)), 9, ["value"]))
-                  }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.periodForm.academic_year_id]])]),
+                  }), 128))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.periodForm.academic_year_id]])]),
+                  _createElementVNode("label", null, [_createTextVNode("Calendário da turma"), _withDirectives(_createElementVNode("select", {
+                    "onUpdate:modelValue": $event => ((state.periodForm.class_group_id) = $event),
+                    onChange: loadCalendar
+                  }, [_createElementVNode("option", { value: "" }, "Padrão do ano letivo"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.groups.filter(g=>g.academic_year_id===state.periodForm.academic_year_id), (g) => {
+                    return (_openBlock(), _createElementBlock("option", {
+                      value: g.id,
+                      key: g.id
+                    }, _toDisplayString(g.name), 9, ["value"]))
+                  }), 128))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.periodForm.class_group_id]])]),
                   _createElementVNode("label", null, [_createTextVNode("Nome"), _withDirectives(_createElementVNode("input", {
                     "onUpdate:modelValue": $event => ((state.periodForm.name) = $event),
                     required: "",
@@ -11442,6 +11470,19 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                     disabled: !state.academicYears.length
                   }, "Criar período", 8, ["disabled"])
                 ], 40, ["onSubmit"]),
+                (state.periodForm.class_group_id)
+                  ? (_openBlock(), _createElementBlock("fieldset", { key: 1 }, [_createElementVNode("legend", null, "Períodos desta turma"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.periods.filter(p=>p.academic_year_id===state.periodForm.academic_year_id), (p) => {
+                      return (_openBlock(), _createElementBlock("label", { key: p.id }, [_withDirectives(_createElementVNode("input", {
+                        type: "checkbox",
+                        value: p.id,
+                        "onUpdate:modelValue": $event => ((state.calendarIds) = $event)
+                      }, null, 8, ["value", "onUpdate:modelValue"]), [[_vModelCheckbox, state.calendarIds]]), _createTextVNode(_toDisplayString(p.name), 1)]))
+                    }), 128)), _createElementVNode("button", {
+                      class: "btn btn-secondary",
+                      disabled: !state.calendarIds.length || state.busy,
+                      onClick: saveCalendar
+                    }, "Aplicar calendário à turma", 8, ["disabled", "onClick"])]))
+                  : _createCommentVNode("", true),
                 _createElementVNode("div", { class: "x-list" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.periods, (p) => {
                   return (_openBlock(), _createElementBlock("div", {
                     key: p.id,
@@ -11716,35 +11757,49 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                   ? (_openBlock(), _createElementBlock("section", {
                       key: 1,
                       class: "panel x-card"
-                    }, [_createElementVNode("h2", null, "Relatórios oficiais"), _createElementVNode("div", { class: "x-grid" }, [_createElementVNode("label", null, [_createTextVNode("Relatório"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.reportType) = $event) }, [
-                      _createElementVNode("option", { value: "class_diary" }, "Diário da turma/componente"),
-                      _createElementVNode("option", { value: "lessons" }, "Registro de aulas"),
-                      _createElementVNode("option", { value: "attendance" }, "Mapa de frequência"),
-                      _createElementVNode("option", { value: "assessments" }, "Mapa de avaliações/notas/conceitos"),
-                      _createElementVNode("option", { value: "opinions" }, "Pareceres descritivos"),
-                      _createElementVNode("option", { value: "occurrences" }, "Ocorrências pedagógicas"),
-                      _createElementVNode("option", { value: "communications" }, "Comunicações à família"),
-                      _createElementVNode("option", { value: "student_record" }, "Ficha individual"),
-                      _createElementVNode("option", { value: "period_consolidation" }, "Consolidação por período"),
-                      _createElementVNode("option", { value: "closure" }, "Relatório de fechamento"),
-                      _createElementVNode("option", { value: "pending" }, "Relatório de pendências"),
-                      _createElementVNode("option", { value: "revision_history" }, "Histórico de retificações"),
-                      _createElementVNode("option", { value: "audit_validation" }, "Auditoria e validação")
-                    ], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.reportType]])]), (['period_consolidation','class_diary','attendance','assessments','opinions','occurrences','communications','student_record'].includes(state.reportType))
-                      ? (_openBlock(), _createElementBlock("label", { key: 0 }, [_createTextVNode("Período"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.reportPeriod) = $event) }, [_createElementVNode("option", { value: "" }, "Todos"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id), (p) => {
-                          return (_openBlock(), _createElementBlock("option", {
-                            key: p.id,
-                            value: p.id
-                          }, _toDisplayString(p.name), 9, ["value"]))
-                        }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.reportPeriod]])]))
-                      : _createCommentVNode("", true), (state.reportType==='student_record')
-                      ? (_openBlock(), _createElementBlock("label", { key: 1 }, [_createTextVNode("Aluno"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.reportEnrollment) = $event) }, [_createElementVNode("option", { value: "" }, "Selecione"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.selected.roster||[], (r) => {
-                          return (_openBlock(), _createElementBlock("option", {
-                            key: r.enrollment_id,
-                            value: r.enrollment_id
-                          }, _toDisplayString(r.name) + " · " + _toDisplayString(r.number), 9, ["value"]))
-                        }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.reportEnrollment]])]))
-                      : _createCommentVNode("", true)]), _createElementVNode("button", {
+                    }, [_createElementVNode("h2", null, "Relatórios oficiais"), _createElementVNode("div", { class: "x-grid" }, [
+                      _createElementVNode("label", null, [_createTextVNode("Relatório"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.reportType) = $event) }, [
+                        _createElementVNode("option", { value: "class_diary" }, "Diário da turma/componente"),
+                        _createElementVNode("option", { value: "lessons" }, "Registro de aulas"),
+                        _createElementVNode("option", { value: "attendance" }, "Mapa de frequência por aula"),
+                        _createElementVNode("option", { value: "pedagogical_register" }, "Registro pedagógico"),
+                        _createElementVNode("option", { value: "assessments" }, "Mapa de avaliações/notas/conceitos"),
+                        _createElementVNode("option", { value: "opinions" }, "Pareceres descritivos"),
+                        _createElementVNode("option", { value: "occurrences" }, "Ocorrências pedagógicas"),
+                        _createElementVNode("option", { value: "communications" }, "Comunicações à família"),
+                        _createElementVNode("option", { value: "student_record" }, "Ficha individual"),
+                        _createElementVNode("option", { value: "period_consolidation" }, "Consolidação por período"),
+                        _createElementVNode("option", { value: "closure" }, "Relatório de fechamento"),
+                        _createElementVNode("option", { value: "pending" }, "Relatório de pendências"),
+                        _createElementVNode("option", { value: "revision_history" }, "Histórico de retificações"),
+                        _createElementVNode("option", { value: "audit_validation" }, "Auditoria e validação")
+                      ], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.reportType]])]),
+                      (['period_consolidation','class_diary','attendance','pedagogical_register','assessments','opinions','occurrences','communications','student_record'].includes(state.reportType))
+                        ? (_openBlock(), _createElementBlock("label", { key: 0 }, [_createTextVNode("Período"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.reportPeriod) = $event) }, [_createElementVNode("option", { value: "" }, "Todos"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(periodsFor(state.selected), (p) => {
+                            return (_openBlock(), _createElementBlock("option", {
+                              key: p.id,
+                              value: p.id
+                            }, _toDisplayString(p.name), 9, ["value"]))
+                          }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.reportPeriod]])]))
+                        : _createCommentVNode("", true),
+                      (['attendance','pedagogical_register'].includes(state.reportType))
+                        ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [_createElementVNode("label", null, [_createTextVNode("De"), _withDirectives(_createElementVNode("input", {
+                            type: "date",
+                            "onUpdate:modelValue": $event => ((state.reportFrom) = $event)
+                          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.reportFrom]])]), _createElementVNode("label", null, [_createTextVNode("Até"), _withDirectives(_createElementVNode("input", {
+                            type: "date",
+                            "onUpdate:modelValue": $event => ((state.reportTo) = $event)
+                          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.reportTo]])])], 64))
+                        : _createCommentVNode("", true),
+                      (state.reportType==='student_record')
+                        ? (_openBlock(), _createElementBlock("label", { key: 2 }, [_createTextVNode("Aluno"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.reportEnrollment) = $event) }, [_createElementVNode("option", { value: "" }, "Selecione"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.selected.roster||[], (r) => {
+                            return (_openBlock(), _createElementBlock("option", {
+                              key: r.enrollment_id,
+                              value: r.enrollment_id
+                            }, _toDisplayString(r.name) + " · " + _toDisplayString(r.number), 9, ["value"]))
+                          }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.reportEnrollment]])]))
+                        : _createCommentVNode("", true)
+                    ]), _createElementVNode("button", {
                       class: "btn btn-primary",
                       onClick: report,
                       disabled: (state.reportType==='period_consolidation'&&!state.reportPeriod)||(state.reportType==='student_record'&&!state.reportEnrollment)
@@ -11772,7 +11827,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                         state.lessonForm.lesson_count,
                         void 0,
                         { number: true }
-                      ]])]), _createElementVNode("label", null, [_createTextVNode("Período"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.lessonForm.academic_period_id) = $event) }, [_createElementVNode("option", { value: "" }, "Sem período"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id), (p) => {
+                      ]])]), _createElementVNode("label", null, [_createTextVNode("Período"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.lessonForm.academic_period_id) = $event) }, [_createElementVNode("option", { value: "" }, "Sem período"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(periodsFor(state.selected), (p) => {
                         return (_openBlock(), _createElementBlock("option", {
                           key: p.id,
                           value: p.id
@@ -11816,7 +11871,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                         ? (_openBlock(), _createElementBlock("label", { key: 0 }, [_createTextVNode("Filtrar aulas por período"), _createElementVNode("select", {
                             value: state.lessonPeriod,
                             onChange: filterPeriod
-                          }, [_createElementVNode("option", { value: "" }, "Todos"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id), (p) => {
+                          }, [_createElementVNode("option", { value: "" }, "Todos"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(periodsFor(state.selected), (p) => {
                             return (_openBlock(), _createElementBlock("option", {
                               key: p.id,
                               value: p.id
@@ -11909,7 +11964,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                                 ? (_openBlock(), _createElementBlock("div", {
                                     key: 0,
                                     class: "x-form"
-                                  }, [_createElementVNode("div", { class: "x-grid" }, [_createElementVNode("label", null, [_createTextVNode("Período do fechamento"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.closePeriod) = $event) }, [_createElementVNode("option", { value: "" }, "Diário completo"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id), (p) => {
+                                  }, [_createElementVNode("div", { class: "x-grid" }, [_createElementVNode("label", null, [_createTextVNode("Período do fechamento"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.closePeriod) = $event) }, [_createElementVNode("option", { value: "" }, "Diário completo"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(periodsFor(state.selected), (p) => {
                                     return (_openBlock(), _createElementBlock("option", {
                                       key: p.id,
                                       value: p.id
@@ -11976,7 +12031,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                     class: "x-form",
                     onSubmit: _withModifiers($event => (save(createPlan)), ["prevent"])
                   }, [
-                    _createElementVNode("label", null, [_createTextVNode("Período"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.planForm.academic_period_id) = $event) }, [_createElementVNode("option", { value: "" }, "Planejamento geral"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id), (p) => {
+                    _createElementVNode("label", null, [_createTextVNode("Período"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.planForm.academic_period_id) = $event) }, [_createElementVNode("option", { value: "" }, "Planejamento geral"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(periodsFor(state.selected), (p) => {
                       return (_openBlock(), _createElementBlock("option", {
                         key: p.id,
                         value: p.id
@@ -12046,7 +12101,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                           "onUpdate:modelValue": $event => ((state.assessmentRuleForm.period_id) = $event),
                           onChange: $event => (selectRulePeriod(state.assessmentRuleForm.period_id)),
                           required: ""
-                        }, [_createElementVNode("option", { value: "" }, "Selecione"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id), (p) => {
+                        }, [_createElementVNode("option", { value: "" }, "Selecione"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(periodsFor(state.selected), (p) => {
                           return (_openBlock(), _createElementBlock("option", {
                             key: p.id,
                             value: p.id
@@ -12129,7 +12184,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                       _createElementVNode("div", { class: "x-filter" }, [_createElementVNode("label", null, [_createTextVNode("Período"), _withDirectives(_createElementVNode("select", {
                         "onUpdate:modelValue": $event => ((state.assessmentRuleForm.period_id) = $event),
                         onChange: $event => {selectRulePeriod(state.assessmentRuleForm.period_id);state.periodResults=[]}
-                      }, [_createElementVNode("option", { value: "" }, "Selecione"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id), (p) => {
+                      }, [_createElementVNode("option", { value: "" }, "Selecione"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(periodsFor(state.selected), (p) => {
                         return (_openBlock(), _createElementBlock("option", {
                           key: p.id,
                           value: p.id
@@ -12211,7 +12266,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                           "onUpdate:modelValue": $event => ((state.assessmentForm.assessment_date) = $event),
                           required: ""
                         }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.assessmentForm.assessment_date]])]),
-                        _createElementVNode("label", null, [_createTextVNode("Período"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.assessmentForm.academic_period_id) = $event) }, [_createElementVNode("option", { value: "" }, "Sem período"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id), (p) => {
+                        _createElementVNode("label", null, [_createTextVNode("Período"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.assessmentForm.academic_period_id) = $event) }, [_createElementVNode("option", { value: "" }, "Sem período"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(periodsFor(state.selected), (p) => {
                           return (_openBlock(), _createElementBlock("option", {
                             key: p.id,
                             value: p.id
@@ -12349,7 +12404,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                       key: r.enrollment_id,
                       value: r.enrollment_id
                     }, _toDisplayString(r.name) + " · " + _toDisplayString(r.number), 9, ["value"]))
-                  }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.opinionForm.enrollment_id]])]), _createElementVNode("label", null, [_createTextVNode("Período"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.opinionForm.academic_period_id) = $event) }, [_createElementVNode("option", { value: "" }, "Geral"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id), (p) => {
+                  }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.opinionForm.enrollment_id]])]), _createElementVNode("label", null, [_createTextVNode("Período"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.opinionForm.academic_period_id) = $event) }, [_createElementVNode("option", { value: "" }, "Geral"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(periodsFor(state.selected), (p) => {
                     return (_openBlock(), _createElementBlock("option", {
                       key: p.id,
                       value: p.id
@@ -12466,7 +12521,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                       _createElementVNode("label", null, [_createTextVNode("Período"), _withDirectives(_createElementVNode("select", {
                         "onUpdate:modelValue": $event => ((state.occurrenceForm.academic_period_id) = $event),
                         required: ""
-                      }, [_createElementVNode("option", { value: "" }, "Selecione"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id), (p) => {
+                      }, [_createElementVNode("option", { value: "" }, "Selecione"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(periodsFor(state.selected), (p) => {
                         return (_openBlock(), _createElementBlock("option", {
                           key: p.id,
                           value: p.id
@@ -12533,7 +12588,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                     key: r.enrollment_id,
                     value: r.enrollment_id
                   }, _toDisplayString(r.name) + " · " + _toDisplayString(r.number), 9, ["value"]))
-                }), 128))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.communicationForm.enrollment_id]])]), _createElementVNode("label", null, [_createTextVNode("Período de referência"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.communicationForm.academic_period_id) = $event) }, [_createElementVNode("option", { value: "" }, "Sem período específico"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.periods.filter(x=>x.academic_year_id===state.selected.academic_year_id), (p) => {
+                }), 128))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.communicationForm.enrollment_id]])]), _createElementVNode("label", null, [_createTextVNode("Período de referência"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.communicationForm.academic_period_id) = $event) }, [_createElementVNode("option", { value: "" }, "Sem período específico"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(periodsFor(state.selected), (p) => {
                   return (_openBlock(), _createElementBlock("option", {
                     key: p.id,
                     value: p.id
@@ -13747,9 +13802,128 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
   }
 },reports:function render(_ctx, _cache) {
   with (_ctx) {
-    const { createElementVNode: _createElementVNode, renderList: _renderList, Fragment: _Fragment, openBlock: _openBlock, createElementBlock: _createElementBlock, toDisplayString: _toDisplayString, vModelSelect: _vModelSelect, withDirectives: _withDirectives, createTextVNode: _createTextVNode, vModelText: _vModelText, createCommentVNode: _createCommentVNode, withModifiers: _withModifiers, normalizeClass: _normalizeClass } = _Vue
+    const { createElementVNode: _createElementVNode, createTextVNode: _createTextVNode, vModelSelect: _vModelSelect, withDirectives: _withDirectives, toDisplayString: _toDisplayString, renderList: _renderList, Fragment: _Fragment, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, vModelCheckbox: _vModelCheckbox, vModelText: _vModelText, withModifiers: _withModifiers, normalizeClass: _normalizeClass } = _Vue
 
-    return (_openBlock(), _createElementBlock("div", { class: "reports-workspace" }, [_createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "CONSULTA E EXPORTAÇÃO"), _createElementVNode("h2", null, "Relatórios da escola"), _createElementVNode("p", null, "Escolha o relatório e o período que deseja acompanhar.")])]), _createElementVNode("form", { onSubmit: _withModifiers($event => (generate()), ["prevent"]) }, [_createElementVNode("fieldset", {
+    return (_openBlock(), _createElementBlock("div", { class: "reports-workspace" }, [(permissions.canConfigure || permissions.canIssue)
+      ? (_openBlock(), _createElementBlock("details", {
+          key: 0,
+          class: "panel x-card",
+          onToggle: openKit
+        }, [_createElementVNode("summary", null, "Boletins e fichas escolares"), _createElementVNode("fieldset", { disabled: state.busy }, [(kit.prefs)
+          ? (_openBlock(), _createElementBlock("div", {
+              key: 0,
+              class: "x-grid"
+            }, [
+              _createElementVNode("label", null, [_createTextVNode("Logotipo da escola para relatórios"), _createElementVNode("input", {
+                type: "file",
+                accept: "image/png,image/jpeg",
+                onChange: saveLogo
+              }, null, 40, ["onChange"])]),
+              _createElementVNode("label", null, [_createTextVNode("Tipografia"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((kit.prefs.font_family) = $event) }, [
+                _createElementVNode("option", { value: "inherit" }, "Herdar a identidade da instituição"),
+                _createElementVNode("option", { value: "arial" }, "Arial"),
+                _createElementVNode("option", { value: "verdana" }, "Verdana"),
+                _createElementVNode("option", { value: "georgia" }, "Georgia"),
+                _createElementVNode("option", { value: "times" }, "Times New Roman")
+              ], 8, ["onUpdate:modelValue"]), [[_vModelSelect, kit.prefs.font_family]])]),
+              _createElementVNode("label", null, [_createTextVNode("Modelo de boletim da escola"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((kit.prefs.bulletin) = $event) }, [_createElementVNode("option", { value: "integrated" }, "Grade integrada"), _createElementVNode("option", { value: "panel" }, "Painel do aluno"), _createElementVNode("option", { value: "journey" }, "Percurso acadêmico")], 8, ["onUpdate:modelValue"]), [[_vModelSelect, kit.prefs.bulletin]])]),
+              _createElementVNode("label", null, [_createTextVNode("Cor do boletim"), _createElementVNode("input", {
+                type: "color",
+                value: kit.prefs.color || '#284864',
+                onInput: $event => (kit.prefs.color=$event.target.value)
+              }, null, 40, ["value", "onInput"])]),
+              _createElementVNode("button", {
+                class: "btn btn-secondary",
+                onClick: $event => (kit.prefs.color='')
+              }, _toDisplayString(kit.prefs.color?'Usar cor da escola':'Cor da escola selecionada'), 9, ["onClick"]),
+              (_openBlock(true), _createElementBlock(_Fragment, null, _renderList([['student','Aluno'],['employee','Colaborador'],['teacher','Professor']], ([key,label]) => {
+                return (_openBlock(), _createElementBlock("label", { key: key }, [_createTextVNode("Ficha · " + _toDisplayString(label), 1), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((kit.prefs[key]) = $event) }, [_createElementVNode("option", { value: "portrait" }, "Retrato"), _createElementVNode("option", { value: "landscape" }, "Paisagem")], 8, ["onUpdate:modelValue"]), [[_vModelSelect, kit.prefs[key]]])]))
+              }), 128)),
+              _createElementVNode("button", {
+                class: "btn btn-primary",
+                onClick: savePreferences
+              }, "Salvar padrões da escola", 8, ["onClick"])
+            ]))
+          : _createCommentVNode("", true), (permissions.canIssue)
+          ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
+              _createElementVNode("h3", null, "Emissão por matrícula"),
+              _createElementVNode("div", { class: "x-grid" }, [_createElementVNode("label", null, [_createTextVNode("Ano letivo"), _withDirectives(_createElementVNode("select", {
+                "onUpdate:modelValue": $event => ((kit.year) = $event),
+                onChange: $event => {kit.group='';resetRecipients()}
+              }, [_createElementVNode("option", { value: "" }, "Selecione"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(catalogs['academic-years'], (y) => {
+                return (_openBlock(), _createElementBlock("option", { value: y.id }, _toDisplayString(y.name), 9, ["value"]))
+              }), 256))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, kit.year]])]), _createElementVNode("label", null, [_createTextVNode("Série"), _withDirectives(_createElementVNode("select", {
+                "onUpdate:modelValue": $event => ((kit.grade) = $event),
+                onChange: $event => {kit.group='';resetRecipients()}
+              }, [_createElementVNode("option", { value: "" }, "Todas"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(catalogs.grades, (g) => {
+                return (_openBlock(), _createElementBlock("option", { value: g.id }, _toDisplayString(g.name), 9, ["value"]))
+              }), 256))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, kit.grade]])]), _createElementVNode("label", null, [_createTextVNode("Turma"), _withDirectives(_createElementVNode("select", {
+                "onUpdate:modelValue": $event => ((kit.group) = $event),
+                onChange: resetRecipients
+              }, [_createElementVNode("option", { value: "" }, "Todas"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList((catalogs['class-groups']||[]).filter(g=>g.academic_year_id===kit.year && (!kit.grade||kit.grade===g.grade_id)), (g) => {
+                return (_openBlock(), _createElementBlock("option", { value: g.id }, _toDisplayString(g.name) + " · " + _toDisplayString((catalogs.units||[]).find(u=>u.id===g.unit_id)?.name), 9, ["value"]))
+              }), 256))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, kit.group]])])]),
+              _createElementVNode("button", {
+                class: "btn btn-secondary",
+                disabled: !kit.year,
+                onClick: $event => (findRecipients())
+              }, "Listar matrículas", 8, ["disabled", "onClick"]),
+              (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(kit.recipients, (item) => {
+                return (_openBlock(), _createElementBlock("article", {
+                  key: item.id,
+                  class: "x-record"
+                }, [
+                  _createElementVNode("label", null, [_withDirectives(_createElementVNode("input", {
+                    type: "checkbox",
+                    "onUpdate:modelValue": $event => ((item.checked) = $event),
+                    disabled: !permissions.canSign || !!item.revision
+                  }, null, 8, ["onUpdate:modelValue", "disabled"]), [[_vModelCheckbox, item.checked]]), _createTextVNode(_toDisplayString(item.name) + " · " + _toDisplayString(item.number) + " · " + _toDisplayString(item.class_name), 1)]),
+                  _createElementVNode("button", {
+                    class: "btn btn-secondary",
+                    onClick: $event => (previewBulletin(item))
+                  }, "Visualizar prévia em PDF", 8, ["onClick"]),
+                  (item.revision)
+                    ? (_openBlock(), _createElementBlock("span", { key: 0 }, "Assinado · revisão " + _toDisplayString(item.revision), 1))
+                    : _createCommentVNode("", true),
+                  (item.failure)
+                    ? (_openBlock(), _createElementBlock("span", {
+                        key: 1,
+                        class: "alert error",
+                        role: "alert"
+                      }, _toDisplayString(item.failure), 1))
+                    : _createCommentVNode("", true)
+                ]))
+              }), 128)),
+              (kit.offset)
+                ? (_openBlock(), _createElementBlock("button", {
+                    key: 0,
+                    class: "btn btn-secondary",
+                    onClick: $event => (findRecipients(kit.offset-25))
+                  }, "Anterior", 8, ["onClick"]))
+                : _createCommentVNode("", true),
+              (kit.more)
+                ? (_openBlock(), _createElementBlock("button", {
+                    key: 1,
+                    class: "btn btn-secondary",
+                    onClick: $event => (findRecipients(kit.offset+25))
+                  }, "Próximas matrículas", 8, ["onClick"]))
+                : _createCommentVNode("", true),
+              (permissions.canSign && kit.recipients.length)
+                ? (_openBlock(), _createElementBlock("button", {
+                    key: 2,
+                    class: "btn btn-primary",
+                    disabled: !kit.recipients.some(r=>r.checked&&!r.revision),
+                    onClick: issueSelected
+                  }, "Emitir e assinar selecionados com A1", 8, ["disabled", "onClick"]))
+                : _createCommentVNode("", true)
+            ], 64))
+          : _createCommentVNode("", true), (kit.notice)
+          ? (_openBlock(), _createElementBlock("p", {
+              key: 2,
+              role: "status"
+            }, _toDisplayString(kit.notice), 1))
+          : _createCommentVNode("", true)], 8, ["disabled"])], 40, ["onToggle"]))
+      : _createCommentVNode("", true), _createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, "CONSULTA E EXPORTAÇÃO"), _createElementVNode("h2", null, "Relatórios da escola"), _createElementVNode("p", null, "Escolha o relatório e o período que deseja acompanhar.")])]), _createElementVNode("form", { onSubmit: _withModifiers($event => (generate()), ["prevent"]) }, [_createElementVNode("fieldset", {
       disabled: state.busy,
       class: "report-filter-fields"
     }, [_createElementVNode("div", { class: "x-grid" }, [
@@ -13850,7 +14024,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
         }, _toDisplayString(state.error), 1))
       : _createCommentVNode("", true)]), (state.result)
       ? (_openBlock(), _createElementBlock("section", {
-          key: 0,
+          key: 1,
           class: "report-result",
           "aria-live": "polite",
           "aria-busy": state.busy
@@ -13965,7 +14139,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
         ], 8, ["aria-busy"]))
       : (!state.busy)
         ? (_openBlock(), _createElementBlock("section", {
-            key: 1,
+            key: 2,
             class: "panel empty-state"
           }, [_createElementVNode("h3", null, "A informação que você precisa, no período certo"), _createElementVNode("p", null, "Consulte os registros em tela ou gere um documento com os filtros, os totais e a identificação da escola.")]))
         : _createCommentVNode("", true)]))
@@ -14382,7 +14556,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
   }
 },learning:function render(_ctx, _cache) {
   with (_ctx) {
-    const { createElementVNode: _createElementVNode, toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, renderList: _renderList, Fragment: _Fragment, vModelSelect: _vModelSelect, withDirectives: _withDirectives, createTextVNode: _createTextVNode } = _Vue
+    const { createElementVNode: _createElementVNode, toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, renderList: _renderList, Fragment: _Fragment, vModelSelect: _vModelSelect, withDirectives: _withDirectives, createTextVNode: _createTextVNode, normalizeClass: _normalizeClass, normalizeStyle: _normalizeStyle } = _Vue
 
     return (_openBlock(), _createElementBlock("section", {
       class: "learning-workspace",
@@ -14447,67 +14621,117 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
     ]), (enrollment())
       ? (_openBlock(), _createElementBlock("section", {
           key: 0,
-          class: "panel bulletin-sheet"
-        }, [_createElementVNode("div", { class: "panel-header report-masthead" }, [(props.identity?.logo_url)
-          ? (_openBlock(), _createElementBlock("img", {
-              key: 0,
-              src: props.identity.logo_url,
-              alt: ""
-            }, null, 8, ["src"]))
-          : _createCommentVNode("", true), _createElementVNode("div", null, [_createElementVNode("p", null, _toDisplayString(student()?.school_name) + " · Boletim escolar", 1), _createElementVNode("h2", null, _toDisplayString(student()?.student_name), 1), _createElementVNode("p", { class: "muted small" }, "Registro " + _toDisplayString(student()?.student_number) + " · Matrícula " + _toDisplayString(enrollment().number) + " · " + _toDisplayString(enrollment().year_name), 1)]), _createElementVNode("button", {
-          class: "btn btn-primary",
-          disabled: state.busy || !rows().length,
-          onClick: download
-        }, "Baixar boletim PDF", 8, ["disabled", "onClick"])]), (rows().length)
-          ? (_openBlock(), _createElementBlock("div", { key: 0 }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(enrollment().grade_tables, (matrix, index) => {
-              return (_openBlock(), _createElementBlock("section", {
-                key: index,
-                class: "bulletin-period"
-              }, [_createElementVNode("h3", null, _toDisplayString(matrix.title), 1), _createElementVNode("div", { class: "table-scroll report-records" }, [_createElementVNode("table", null, [_createElementVNode("caption", { class: "sr-only" }, _toDisplayString(matrix.title), 1), _createElementVNode("thead", null, [_createElementVNode("tr", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(matrix.columns, (column) => {
-                return (_openBlock(), _createElementBlock("th", {
-                  key: column.key,
-                  scope: "col"
-                }, _toDisplayString(column.label), 1))
-              }), 128))])]), _createElementVNode("tbody", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(matrix.rows, (record, rowIndex) => {
-                return (_openBlock(), _createElementBlock("tr", { key: rowIndex }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(matrix.columns, (column) => {
-                  return (_openBlock(), _createElementBlock("td", {
-                    key: column.key,
-                    "data-label": column.label
-                  }, _toDisplayString(record[column.key]), 9, ["data-label"]))
-                }), 128))]))
-              }), 128))])])])]))
-            }), 128)), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(periodGroups, (group) => {
-              return (_openBlock(), _createElementBlock("section", {
-                key: group.id,
-                class: "bulletin-period"
-              }, [_createElementVNode("h3", null, _toDisplayString(group.label) + " · " + _toDisplayString(group.className), 1), _createElementVNode("div", { class: "table-scroll report-records" }, [_createElementVNode("table", null, [_createElementVNode("thead", null, [_createElementVNode("tr", null, [
-                _createElementVNode("th", { scope: "col" }, "Componente curricular"),
-                _createElementVNode("th", { scope: "col" }, "Aulas"),
-                _createElementVNode("th", { scope: "col" }, "Nota / conceito"),
-                _createElementVNode("th", { scope: "col" }, "Situação"),
-                _createElementVNode("th", { scope: "col" }, "Frequência"),
-                _createElementVNode("th", { scope: "col" }, "Faltas")
-              ])]), _createElementVNode("tbody", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(group.items, (item) => {
-                return (_openBlock(), _createElementBlock("tr", { key: item.diary_id+'-'+item.period_id }, [
-                  _createElementVNode("td", { "data-label": "Componente curricular" }, [_createElementVNode("strong", null, _toDisplayString(item.component_name), 1)]),
-                  _createElementVNode("td", { "data-label": "Aulas" }, _toDisplayString(item.attendance.total), 1),
-                  _createElementVNode("td", { "data-label": "Nota / conceito" }, [_createElementVNode("strong", null, _toDisplayString(item.grade_display || '—'), 1)]),
-                  _createElementVNode("td", { "data-label": "Situação" }, _toDisplayString(item.result_label), 1),
-                  _createElementVNode("td", { "data-label": "Frequência" }, [_createTextVNode(_toDisplayString(percent(item.attendance.percentage)), 1), (item.attendance.unrecorded)
-                    ? (_openBlock(), _createElementBlock("small", { key: 0 }, _toDisplayString(item.attendance.unrecorded) + " aula(s) sem registro", 1))
-                    : _createCommentVNode("", true)]),
-                  _createElementVNode("td", { "data-label": "Faltas" }, [_createTextVNode(_toDisplayString(item.attendance.absent), 1), (item.attendance.justified_absence)
-                    ? (_openBlock(), _createElementBlock("small", { key: 0 }, _toDisplayString(item.attendance.justified_absence) + " justificada(s)", 1))
-                    : _createCommentVNode("", true)])
+          class: _normalizeClass(["panel bulletin-sheet", 'bulletin-'+enrollment().bulletin_model]),
+          style: _normalizeStyle({'font-family':({arial:'Arial, sans-serif',verdana:'Verdana, sans-serif',georgia:'Georgia, serif',times:'Times New Roman, serif'})[student()?.report_font] || 'inherit','border-top':'3px solid '+(enrollment().report_color||'var(--primary)')})
+        }, [_createElementVNode("div", { class: "panel-header report-masthead" }, [
+          (student()?.report_logo || props.identity?.logo_url)
+            ? (_openBlock(), _createElementBlock("img", {
+                key: 0,
+                src: student()?.report_logo || props.identity.logo_url,
+                alt: ""
+              }, null, 8, ["src"]))
+            : _createCommentVNode("", true),
+          (student()?.photo)
+            ? (_openBlock(), _createElementBlock("img", {
+                key: 1,
+                src: student().photo,
+                alt: "Foto do aluno",
+                class: "avatar large"
+              }, null, 8, ["src"]))
+            : (_openBlock(), _createElementBlock("span", {
+                key: 2,
+                class: "avatar",
+                "aria-label": "Foto não cadastrada"
+              }, _toDisplayString(student()?.student_name.slice(0,1)), 1)),
+          _createElementVNode("div", null, [_createElementVNode("p", null, _toDisplayString(student()?.school_name) + " · Boletim escolar", 1), _createElementVNode("h2", null, _toDisplayString(student()?.student_name), 1), _createElementVNode("p", { class: "muted small" }, "Registro " + _toDisplayString(student()?.student_number) + " · Matrícula " + _toDisplayString(enrollment().number) + " · " + _toDisplayString(enrollment().year_name), 1)]),
+          _createElementVNode("button", {
+            class: "btn btn-primary",
+            disabled: state.busy || !rows().length,
+            onClick: $event => (download())
+          }, "Baixar boletim PDF", 8, ["disabled", "onClick"])
+        ]), (rows().length)
+          ? (_openBlock(), _createElementBlock("div", { key: 0 }, [
+              _createElementVNode("p", { class: "small" }, "O PDF de consulta contém os resultados publicados. Para imprimir a via assinada pela escola, selecione sua revisão."),
+              (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(enrollment().official_editions, (edition) => {
+                return (_openBlock(), _createElementBlock("button", {
+                  key: edition.id,
+                  class: "btn btn-secondary",
+                  onClick: $event => (download(edition.id))
+                }, "Boletim oficial assinado · revisão " + _toDisplayString(edition.revision), 9, ["onClick"]))
+              }), 128)),
+              (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(enrollment().display_sections, (matrix, index) => {
+                return (_openBlock(), _createElementBlock("section", {
+                  key: index,
+                  class: "bulletin-period"
+                }, [
+                  _createElementVNode("h3", null, _toDisplayString(matrix.title), 1),
+                  (matrix.text)
+                    ? (_openBlock(), _createElementBlock("p", {
+                        key: 0,
+                        class: "preserve-lines"
+                      }, _toDisplayString(matrix.text), 1))
+                    : _createCommentVNode("", true),
+                  (matrix.fields)
+                    ? (_openBlock(), _createElementBlock("dl", {
+                        key: 1,
+                        class: "data-grid"
+                      }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(matrix.fields, ([label,value]) => {
+                        return (_openBlock(), _createElementBlock("div", { key: label }, [_createElementVNode("dt", null, _toDisplayString(label), 1), _createElementVNode("dd", null, _toDisplayString(value), 1)]))
+                      }), 128))]))
+                    : _createCommentVNode("", true),
+                  (matrix.columns)
+                    ? (_openBlock(), _createElementBlock("div", {
+                        key: 2,
+                        class: "table-scroll report-records"
+                      }, [_createElementVNode("table", null, [_createElementVNode("caption", { class: "sr-only" }, _toDisplayString(matrix.title), 1), _createElementVNode("thead", null, [_createElementVNode("tr", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(matrix.columns, (column) => {
+                        return (_openBlock(), _createElementBlock("th", {
+                          key: column.key,
+                          scope: "col"
+                        }, _toDisplayString(column.label), 1))
+                      }), 128))])]), _createElementVNode("tbody", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(matrix.rows, (record, rowIndex) => {
+                        return (_openBlock(), _createElementBlock("tr", { key: rowIndex }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(matrix.columns, (column) => {
+                          return (_openBlock(), _createElementBlock("td", {
+                            key: column.key,
+                            "data-label": column.label
+                          }, _toDisplayString(record[column.key]), 9, ["data-label"]))
+                        }), 128))]))
+                      }), 128))])])]))
+                    : _createCommentVNode("", true)
                 ]))
-              }), 128))])])])]))
-            }), 128))]))
+              }), 128)),
+              (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(periodGroups, (group) => {
+                return (_openBlock(), _createElementBlock("section", {
+                  key: group.id,
+                  class: "bulletin-period"
+                }, [_createElementVNode("h3", null, _toDisplayString(group.label) + " · " + _toDisplayString(group.className), 1), _createElementVNode("div", { class: "table-scroll report-records" }, [_createElementVNode("table", null, [_createElementVNode("thead", null, [_createElementVNode("tr", null, [
+                  _createElementVNode("th", { scope: "col" }, "Componente curricular"),
+                  _createElementVNode("th", { scope: "col" }, "Aulas"),
+                  _createElementVNode("th", { scope: "col" }, "Nota / conceito"),
+                  _createElementVNode("th", { scope: "col" }, "Situação"),
+                  _createElementVNode("th", { scope: "col" }, "Frequência"),
+                  _createElementVNode("th", { scope: "col" }, "Faltas")
+                ])]), _createElementVNode("tbody", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(group.items, (item) => {
+                  return (_openBlock(), _createElementBlock("tr", { key: item.diary_id+'-'+item.period_id }, [
+                    _createElementVNode("td", { "data-label": "Componente curricular" }, [_createElementVNode("strong", null, _toDisplayString(item.component_name), 1)]),
+                    _createElementVNode("td", { "data-label": "Aulas" }, _toDisplayString(item.attendance.total), 1),
+                    _createElementVNode("td", { "data-label": "Nota / conceito" }, [_createElementVNode("strong", null, _toDisplayString(item.grade_display || '—'), 1)]),
+                    _createElementVNode("td", { "data-label": "Situação" }, _toDisplayString(item.result_label), 1),
+                    _createElementVNode("td", { "data-label": "Frequência" }, [_createTextVNode(_toDisplayString(percent(item.attendance.percentage)), 1), (item.attendance.unrecorded)
+                      ? (_openBlock(), _createElementBlock("small", { key: 0 }, _toDisplayString(item.attendance.unrecorded) + " aula(s) sem registro", 1))
+                      : _createCommentVNode("", true)]),
+                    _createElementVNode("td", { "data-label": "Faltas" }, [_createTextVNode(_toDisplayString(item.attendance.absent), 1), (item.attendance.justified_absence)
+                      ? (_openBlock(), _createElementBlock("small", { key: 0 }, _toDisplayString(item.attendance.justified_absence) + " justificada(s)", 1))
+                      : _createCommentVNode("", true)])
+                  ]))
+                }), 128))])])])]))
+              }), 128))
+            ]))
           : (_openBlock(), _createElementBlock("div", {
               key: 1,
               class: "empty-state"
             }, [_createElementVNode("h3", null, "Resultados ainda não publicados"), _createElementVNode("p", null, "As notas e a frequência aparecerão após a conferência e publicação pela escola.")])), _createElementVNode("footer", { class: "panel-footer report-imprint" }, [(state.note)
           ? (_openBlock(), _createElementBlock("p", { key: 0 }, _toDisplayString(state.note), 1))
-          : _createCommentVNode("", true), _createElementVNode("span", null, _toDisplayString(student()?.school_name) + " · Uso restrito ao aluno e aos responsáveis autorizados", 1)])]))
+          : _createCommentVNode("", true), _createElementVNode("span", null, _toDisplayString(student()?.school_name) + " · Uso restrito ao aluno e aos responsáveis autorizados", 1)])], 6))
       : _createCommentVNode("", true)], 8, ["aria-busy"]))
   }
 },community:function render(_ctx, _cache) {

@@ -44,7 +44,9 @@ def student_photo(db, school_id, person):
     return content
 
 
-def compose_student_document(db, school, student, person, enrollment_id, kind, issuer, title):
+def compose_student_document(db, school, student, person, enrollment_id, kind, issuer, title, orientation=None):
+    from .report_preferences import preferences
+    orientation = orientation or preferences(school)['student']
     enrollment = None
     if enrollment_id:
         enrollment = scoped(db, m.Enrollment, enrollment_id, school.id)
@@ -57,7 +59,7 @@ def compose_student_document(db, school, student, person, enrollment_id, kind, i
             fail(409, 'Comprovantes e declarações exigem matrícula ativa.')
     identity = public_identity(db)
     snapshot = {'school': output(school), 'person': output(person), 'student': output(student), 'issuer': issuer,
-                'template_version': '3', 'layout_version': '7', 'institution_identity': identity, 'brand': identity['display_name']}
+                'template_version': '3', 'orientation': orientation, 'layout_version': '8', 'institution_identity': identity, 'brand': identity['display_name']}
     detailed = kind in {'student_record', 'enrollment_form'}
     sections = []
     basic = [('Nome completo', person.name), ('Data de nascimento', date_text(person.birth_date))]
@@ -66,9 +68,9 @@ def compose_student_document(db, school, student, person, enrollment_id, kind, i
                   ('Naturalidade', '/'.join(value for value in [person.birth_city, person.birth_state] if value)),
                   ('Nacionalidade', person.nationality)]
         if person.rg:
-            basic += [('RG / órgão expedidor', ' / '.join(value for value in [person.rg, person.rg_issuer, person.rg_state] if value))]
+            basic += [('RG / órgão expedidor', ' / '.join(value for value in ['***' + person.rg[-2:], person.rg_issuer, person.rg_state] if value))]
         if person.birth_certificate:
-            basic += [('Certidão de nascimento', person.birth_certificate)]
+            basic += [('Certidão de nascimento', 'Cadastrada')]
     sections.append({'title': 'Identificação do aluno', 'fields': basic})
     if detailed:
         sections.extend([
@@ -168,6 +170,7 @@ def compose_student_document(db, school, student, person, enrollment_id, kind, i
         profile={'name': person.name, 'detail': f'Aluno {student.number} | Situação cadastral: ' + ('Ativo' if student.status == 'active' else 'Inativo')},
         photo=student_photo(db, school.id, person) if detailed else None,
         signatures=['Responsável / aluno maior de idade', 'Secretaria / instituição'] if detailed else ['Secretaria / representante da instituição'],
-        notes=notes, notes_title='', issuer=issuer, db=db)
+        notes=notes, notes_title='', issuer=issuer, db=db, kit=detailed, layout='record' if detailed else '',
+        orientation=orientation if detailed else 'portrait', reserve_photo=detailed)
     snapshot['report_sections'] = sections
     return content, snapshot

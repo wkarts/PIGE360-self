@@ -299,6 +299,10 @@
             <span v-else class="avatar large">{{ initials(state.personRecord.person.name) }}</span>
             <div class="grow"><h2>{{ state.personRecord.person.social_name || state.personRecord.person.trade_name || state.personRecord.person.name }}</h2><p>{{ (state.personRecord.person.person_types || []).map(personTypeLabel).join(' · ') }}</p></div>
             <span class="badge">{{ state.personRecord.person.archived?'Arquivado':state.personRecord.person.active?'Ativo':'Inativo' }}</span>
+            <template v-if="can('documents.generate') && (state.personRecord.profiles.teacher || state.personRecord.profiles.employee)">
+              <label>Orientação<select v-model="state.recordOrientation"><option value="">Padrão da escola</option><option value="portrait">Retrato</option><option value="landscape">Paisagem</option></select></label>
+              <button v-if="state.personRecord.profiles.teacher" class="btn btn-secondary" @click="printStaff('teacher')">Ficha do professor em PDF</button>
+              <button v-if="state.personRecord.profiles.employee" class="btn btn-secondary" @click="printStaff('employee')">Ficha do colaborador em PDF</button></template>
             <button v-if="can('people.write') && !state.recordArchived && !state.personRecord.person.archived" class="btn btn-secondary" @click="editRecord">Editar cadastro</button>
           </div>
           <div class="tabs" aria-label="Seções da ficha"><button v-for="tab in recordTabs()" :key="tab.value" :class="{active:state.recordTab===tab.value}" :aria-pressed="state.recordTab===tab.value" @click="state.recordTab=tab.value">{{ tab.label }}</button></div>
@@ -378,7 +382,7 @@
             <div v-if="['people','students','teachers','employees','guardians','suppliers','providers','customers','partners','enrollments','documents','protocols'].includes(state.page)" class="pagination"><span>{{ state.total }} {{ state.total===1?'registro':'registros' }} · Página {{ state.pageNumber }}</span><div><button class="btn btn-secondary small-button" :disabled="state.pageNumber<=1 || state.loading" @click="page(-1)">Anterior</button><button class="btn btn-secondary small-button" :disabled="state.pageNumber*30>=state.total || state.loading" @click="page(1)">Próxima</button></div></div>
           </div>
         </section>
-        <reports-panel :identity="identity" v-if="state.page==='reports'" :key="state.schoolId" :school-id="state.schoolId" :catalogs="state.catalogs"></reports-panel>
+        <reports-panel :can-configure="can('schools.manage')" :can-issue="can('documents.generate') && ['admin','direction','coordination','secretary'].includes(state.user?.role)" :can-sign="['admin','direction'].includes(state.user?.role)" :identity="identity" v-if="state.page==='reports'" :key="state.schoolId" :school-id="state.schoolId" :catalogs="state.catalogs"></reports-panel>
         <enrollment-workflow @new-person="newPerson()" @new-student="newStudent()" v-if="state.page==='enrollments'&&can('enrollments.write')" :key="state.schoolId+'-enrollment-workflow'" :school-id="state.schoolId" :permissions="state.user.permissions" :role="state.user.role" />
         <school-community v-if="state.page==='community'" :key="state.schoolId" :website-request="state.websiteRequest" :school-id="state.schoolId" :permissions="state.user.permissions" :request="request"></school-community>
         <users-panel v-if="state.page==='users' &amp;&amp; can('users.manage')" :key="state.schoolId+':users'" :school-id="state.schoolId" :current-user-id="state.user.id" @changed="refreshAccess"></users-panel>

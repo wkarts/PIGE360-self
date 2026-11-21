@@ -117,7 +117,7 @@ def documents(student_id: str, db: DB, user: Actor, school: Scope):
     ).order_by(m.IssuedDocument.created_at.desc())):
         access = access_state(db, x)
         current_file_id = x.file_id if access['downloadable'] else None
-        if x.kind == 'template' and x.signature_status != 'unsigned':
+        if x.kind in {'template', 'official_bulletin'} and x.signature_status != 'unsigned':
             from .contract_signatures import latest_signed_file
             current = latest_signed_file(db, x)
             if current:
@@ -178,6 +178,8 @@ def download(file_id: str, db: DB, user: Actor, school: Scope, request: Request)
             fail(404, 'Arquivo não encontrado.')
         if not access_state(db, document)['downloadable']:
             fail(409, 'Esta via substituída não está disponível para download.')
+    if obj.file_kind == 'bulletin_source':
+        fail(404, 'Utilize a via assinada do boletim.')
     if obj.file_kind == 'educacenso_evidence':
         from .educacenso import authorize
         authorize(user, school)
@@ -220,7 +222,7 @@ def issue(student_id: str, data: s.IssueInput, db: DB, user: Actor, school: Scop
     require(user, 'documents.write')
     student = scoped(db, m.Student, student_id, school.id); person = scoped(db, m.Person, student.person_id, school.id)
     from .student_reports import compose_student_document
-    content, snapshot = compose_student_document(db, school, student, person, data.enrollment_id, data.kind, user.name, PDF_TITLES[data.kind])
+    content, snapshot = compose_student_document(db, school, student, person, data.enrollment_id, data.kind, user.name, PDF_TITLES[data.kind], data.orientation)
     stored = write_file(db, school.id, user.id, f'{data.kind}-{student.number}.pdf', 'application/pdf', content)
     obj = m.IssuedDocument(school_id=school.id, student_id=student.id, enrollment_id=data.enrollment_id, kind=data.kind, file_id=stored.id, snapshot=snapshot, created_by=user.id, template_version='3')
     db.add(obj); db.flush(); audit(db, request, user, 'document.issued', obj, school.id, {'sha256': stored.sha256, 'kind': data.kind})

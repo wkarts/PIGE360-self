@@ -1,4 +1,33 @@
 <div class="reports-workspace">
+  <details v-if="permissions.canConfigure || permissions.canIssue" class="panel x-card" @toggle="openKit">
+    <summary>Boletins e fichas escolares</summary>
+    <fieldset :disabled="state.busy">
+      <div v-if="kit.prefs" class="x-grid">
+        <label>Logotipo da escola para relatórios<input type="file" accept="image/png,image/jpeg" @change="saveLogo"></label>
+        <label>Tipografia<select v-model="kit.prefs.font_family"><option value="inherit">Herdar a identidade da instituição</option><option value="arial">Arial</option><option value="verdana">Verdana</option><option value="georgia">Georgia</option><option value="times">Times New Roman</option></select></label>
+        <label>Modelo de boletim da escola<select v-model="kit.prefs.bulletin"><option value="integrated">Grade integrada</option><option value="panel">Painel do aluno</option><option value="journey">Percurso acadêmico</option></select></label>
+        <label>Cor do boletim<input type="color" :value="kit.prefs.color || '#284864'" @input="kit.prefs.color=$event.target.value"></label>
+        <button class="btn btn-secondary" @click="kit.prefs.color=''">{{kit.prefs.color?'Usar cor da escola':'Cor da escola selecionada'}}</button>
+        <label v-for="[key,label] in [['student','Aluno'],['employee','Colaborador'],['teacher','Professor']]" :key="key">Ficha · {{label}}<select v-model="kit.prefs[key]"><option value="portrait">Retrato</option><option value="landscape">Paisagem</option></select></label>
+        <button class="btn btn-primary" @click="savePreferences">Salvar padrões da escola</button>
+      </div>
+      <template v-if="permissions.canIssue"><h3>Emissão por matrícula</h3>
+        <div class="x-grid"><label>Ano letivo<select v-model="kit.year" @change="kit.group='';resetRecipients()"><option value="">Selecione</option><option v-for="y in catalogs['academic-years']" :value="y.id">{{y.name}}</option></select></label>
+        <label>Série<select v-model="kit.grade" @change="kit.group='';resetRecipients()"><option value="">Todas</option><option v-for="g in catalogs.grades" :value="g.id">{{g.name}}</option></select></label>
+        <label>Turma<select v-model="kit.group" @change="resetRecipients"><option value="">Todas</option><option v-for="g in (catalogs['class-groups']||[]).filter(g=>g.academic_year_id===kit.year && (!kit.grade||kit.grade===g.grade_id))" :value="g.id">{{g.name}} · {{(catalogs.units||[]).find(u=>u.id===g.unit_id)?.name}}</option></select></label></div>
+        <button class="btn btn-secondary" :disabled="!kit.year" @click="findRecipients()">Listar matrículas</button>
+        <article v-for="item in kit.recipients" :key="item.id" class="x-record">
+          <label><input type="checkbox" v-model="item.checked" :disabled="!permissions.canSign || !!item.revision">{{item.name}} · {{item.number}} · {{item.class_name}}</label>
+          <button class="btn btn-secondary" @click="previewBulletin(item)">Visualizar prévia em PDF</button>
+          <span v-if="item.revision">Assinado · revisão {{item.revision}}</span><span v-if="item.failure" class="alert error" role="alert">{{item.failure}}</span>
+        </article>
+        <button v-if="kit.offset" class="btn btn-secondary" @click="findRecipients(kit.offset-25)">Anterior</button>
+        <button v-if="kit.more" class="btn btn-secondary" @click="findRecipients(kit.offset+25)">Próximas matrículas</button>
+        <button v-if="permissions.canSign && kit.recipients.length" class="btn btn-primary" :disabled="!kit.recipients.some(r=>r.checked&&!r.revision)" @click="issueSelected">Emitir e assinar selecionados com A1</button>
+      </template>
+      <p v-if="kit.notice" role="status">{{kit.notice}}</p>
+    </fieldset>
+  </details>
   <section class="panel x-card">
     <div class="x-heading"><div><p class="eyebrow">CONSULTA E EXPORTAÇÃO</p><h2>Relatórios da escola</h2><p>Escolha o relatório e o período que deseja acompanhar.</p></div></div>
     <form @submit.prevent="generate()">

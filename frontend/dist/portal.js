@@ -290,8 +290,8 @@ var PigeLearning;
             const periodGroups = Vue.computed(() => {
                 const groups = new Map();
                 for (const row of rows()) {
-                    const className = row.class_name || enrollment()?.class_name || '';
-                    const id = JSON.stringify([row.period_id, className]);
+                    const className = row.class_label || row.class_name || enrollment()?.class_name || '';
+                    const id = JSON.stringify([row.period_id, row.class_group_id || className]);
                     const group = groups.get(id) || { id, label: row.period_name, className, items: [] };
                     group.items.push(row);
                     groups.set(id, group);
@@ -302,8 +302,8 @@ var PigeLearning;
                 });
             });
             const percent = (value) => value === null || value === undefined ? 'Não apurada' : Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%';
-            async function download() { await run(async () => { if (!student() || !enrollment())
-                return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId), 'boletim-' + student().student_number + '.pdf'); }); }
+            async function download(documentId = '') { await run(async () => { if (!student() || !enrollment())
+                return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId) + (documentId ? '&document_id=' + encodeURIComponent(documentId) : ''), 'boletim-' + student().student_number + '.pdf'); }); }
             Vue.onMounted(() => { void load(); });
             return { props, state, student, enrollment, selectStudent, rows, periodGroups, percent, load, download };
         } };

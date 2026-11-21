@@ -1,10 +1,11 @@
 """Boletins publicados: leitura própria a partir de fechamentos imutáveis do Diário."""
+from collections import defaultdict
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import select
 from . import models as m
-from .school_reports import format_value, render_table
+from .school_reports import format_value
 from .common import audit
 from .security import Actor, DB, fail, require
 
@@ -73,13 +74,14 @@ def _grade(result):
         return 'Aguardando consolidação'
 
 
-def _period_data(snapshot, enrollment, period, closure):
+def _period_data(snapshot, enrollment, period, closure, lessons_in_scope=None):
     result = next((row for row in snapshot.get('period_results', [])
                    if row.get('enrollment_id') == enrollment.id
                    and row.get('student_id') == enrollment.student_id
                    and row.get('academic_period_id') == period.id), None)
     lessons = {row['id']: row for row in snapshot.get('lessons', [])
                if row.get('academic_period_id') == period.id
+               and (lessons_in_scope is None or row['id'] in lessons_in_scope)
                and str(row.get('lesson_date', '')) >= enrollment.enrolled_on.isoformat()
                and ('expected_enrollment_ids' not in row or enrollment.id in row['expected_enrollment_ids'])}
     counts = {'present': 0, 'absent': 0, 'justified_absence': 0, 'unrecorded': 0, 'total': 0}
@@ -101,50 +103,73 @@ def _period_data(snapshot, enrollment, period, closure):
     percentage = (float((Decimal(credited) * 100 / counts['total']).quantize(Decimal('.01'), rounding=ROUND_HALF_UP))
                   if counts['total'] and not counts['unrecorded'] and rule
                   and rule.get('justified_absence_counts_as_present') is not None else None)
+    calculation = (result or {}).get('calculation') or {}
+    if calculation.get('attendance_percent') is not None:
+        percentage = float(Decimal(str(calculation['attendance_percent'])).quantize(Decimal('.01'), rounding=ROUND_HALF_UP))
+    recovery = (calculation.get('aggregation') or {}).get('recovery') or []
+    opinions = [r['text'] for r in snapshot.get('opinions', []) if r.get('status') == 'final'
+                and r.get('enrollment_id') == enrollment.id and r.get('student_id') == enrollment.student_id
+                and r.get('academic_period_id') == period.id]
     return {
         'period_id': period.id, 'period_name': period.name,
         'order_index': period.order_index, 'starts_on': period.starts_on.isoformat(),
         'grade_display': _grade(result), 'result_status': result.get('status', 'pending') if result else 'pending',
         'result_label': RESULT_LABELS.get(result.get('status'), 'Consolidado') if result else 'Consolidação pendente',
         'attendance': {**counts, 'percentage': percentage}, 'published': True,
-        'published_at': closure.closed_at.isoformat(),
+        'published_at': closure.closed_at.isoformat(), 'publication_id': closure.id,
+        'opinions': opinions, 'recovery': [str(v.get('concept') or v['score']).replace('.', ',')
+                                          for v in recovery if v.get('concept') or v.get('score') is not None],
     }
 
 
-def grade_tables(subjects, current_class, *, attendance=False):
+def grade_tables(subjects, current_class, *, attendance=False, style='grade', calendars=None):
     """Quadros por turma de origem. Cada coluna representa um fechamento publicado."""
     classes = {}
     for subject in subjects:
         for period in subject['periods']:
             group = period['class_name'] or current_class
             heading = period['component_name'] or subject['component_name']
-            periods, components = classes.setdefault(group, ({}, {}))
+            periods, components = classes.setdefault((period.get('class_group_id') or group, period.get('class_label') or group), ({}, {}))
             periods.setdefault(period['period_id'], period)
             # Diários diferentes com nomes iguais continuam sendo linhas independentes.
             cells = components.setdefault((heading, subject['diary_id']), {})
-            if attendance:
+            if attendance or style in ('integrated', 'journey'):
                 counts = period['attendance']
                 rate = format_value(counts['percentage'], 'percent') if counts['percentage'] is not None else 'Não apurada'
                 detail = f"{counts['total']} A · {counts['absent']} F · {counts['justified_absence']} J"
                 if counts['unrecorded']:
                     detail += f" · {counts['unrecorded']} S"
-                cells[period['period_id']] = rate + '\n' + detail
+                if style == 'integrated':
+                    detail = period['grade_display'] + '\n' + detail + ' · ' + rate
+                elif style == 'journey':
+                    detail = period['grade_display'] + ' · ' + rate + '\n' + detail
+                    if period.get('recovery'):
+                        detail += '\nRec.: ' + ', '.join(period['recovery'])
+                else:
+                    detail = rate + '\n' + detail
+                cells[period['period_id']] = detail
             else:
                 cells[period['period_id']] = period['grade_display']
 
     tables = []
-    for group, (periods, components) in sorted(classes.items()):
-        ordered = sorted(periods.values(), key=lambda p: (p['order_index'], p['starts_on'], p['period_id']))
-        # Quatro colunas de notas deixam espaço para conceitos escritos em A4 retrato.
+    for (group_id, group), (periods, components) in classes.items():
+        columns_in_scope = {p['period_id']: p for p in (calendars or {}).get(group_id, [])}
+        columns_in_scope.update(periods)  # O nome congelado no fechamento prevalece.
+        ordered = sorted(columns_in_scope.values(), key=lambda p: (p['order_index'], p['starts_on'], p['period_id']))
+        # Limite de leitura por quadro, independente da quantidade de etapas do calendário.
         for start in range(0, len(ordered), 4):
             window = ordered[start:start + 4]
             columns = [{'key': 'subject', 'label': 'Componente curricular', 'width': 2}]
             columns.extend({'key': p['period_id'], 'label': p['period_name']} for p in window)
-            rows = [{'subject': label, **{p['period_id']: cells.get(p['period_id'], '—') for p in window}}
+            rows = [{'subject': label, **{p['period_id']: cells.get(p['period_id'], '—' if p['period_id'] in periods else 'Não publicado') for p in window}}
                     for (label, _), cells in sorted(components.items())
-                    if any(p['period_id'] in cells for p in window)]
+                    if calendars or any(p['period_id'] in cells for p in window)]
             label = 'Frequência por período' if attendance else 'Notas e conceitos'
-            tables.append({'title': label + ' · ' + group, 'columns': columns, 'rows': rows})
+            if style == 'integrated':
+                label = 'Rendimento e frequência'
+            elif style == 'journey':
+                label = 'Percurso por componente'
+            tables.append({'class_group_id': group_id, 'title': label + ' · ' + group, 'columns': columns, 'rows': rows})
     return tables
 
 
@@ -166,25 +191,61 @@ def learning_data(db, students):
                 m.AcademicPeriod.academic_year_id == enrollment.academic_year_id,
             ).order_by(m.AcademicPeriod.order_index, m.AcademicPeriod.starts_on)))
             class_ids = {enrollment.class_group_id}
-            moves = db.execute(select(m.EnrollmentEvent.before, m.EnrollmentEvent.after).where(
+            moves = db.execute(select(m.EnrollmentEvent.created_at, m.EnrollmentEvent.before, m.EnrollmentEvent.after).where(
                 m.EnrollmentEvent.school_id == student.school_id,
                 m.EnrollmentEvent.enrollment_id == enrollment.id,
-                m.EnrollmentEvent.action == 'change_class'))
-            for before, after in moves:
+                m.EnrollmentEvent.action == 'change_class').order_by(m.EnrollmentEvent.created_at.desc(), m.EnrollmentEvent.id.desc())).all()
+            for _, before, after in moves:
                 for state in (before, after):
                     if isinstance(state, dict) and state.get('class_group_id'):
                         class_ids.add(state['class_group_id'])
+            def enrolled_for_lesson(lesson, diary):
+                if 'expected_enrollment_ids' in lesson:
+                    return enrollment.id in lesson['expected_enrollment_ids']
+                origin = enrollment.class_group_id
+                for stamp, before, _ in moves:
+                    if stamp.date().isoformat() <= lesson['lesson_date']:
+                        break
+                    origin = (before or {}).get('class_group_id', origin)
+                return origin == diary.class_group_id
+
             diaries = list(db.scalars(select(m.SchoolDiary).where(
                 m.SchoolDiary.school_id == student.school_id,
                 m.SchoolDiary.class_group_id.in_(class_ids),
                 m.SchoolDiary.academic_year_id == enrollment.academic_year_id,
             )))
+            groups = {g.id: g for g in db.scalars(select(m.ClassGroup).where(m.ClassGroup.school_id == student.school_id,
+                                                                                    m.ClassGroup.id.in_(class_ids)))}
+            units = dict(db.execute(select(m.Unit.id, m.Unit.name).where(m.Unit.school_id == student.school_id,
+                          m.Unit.id.in_({g.unit_id for g in groups.values()}))).all())
+            from .diary import period_applies
+            inactive = set(db.execute(select(m.SchoolDiary.class_group_id, m.DiaryClosure.academic_period_id).join(
+                m.SchoolDiary, m.SchoolDiary.id == m.DiaryClosure.diary_id).where(m.DiaryClosure.school_id == student.school_id,
+                m.SchoolDiary.id.in_([d.id for d in diaries]), m.DiaryClosure.active.is_(False))).all())
+            intervals = defaultdict(list)
+            last_group, last_day = enrollment.class_group_id, year.ends_on
+            from datetime import timedelta
+            for stamp, before, _ in moves:
+                day = stamp.date()
+                intervals[last_group].append((max(day, enrollment.enrolled_on), last_day))
+                last_day = min(last_day, day - timedelta(days=1))
+                last_group = (before or {}).get('class_group_id') or last_group
+            intervals[last_group].append((enrollment.enrolled_on, last_day))
+            calendars = {gid: [{'period_id': p.id, 'period_name': p.name, 'order_index': p.order_index,
+                                'starts_on': p.starts_on.isoformat()} for p in periods
+                               if period_applies(origin, p) and (gid, p.id) not in inactive
+                               and any(start <= end and start <= p.ends_on and end >= p.starts_on for start, end in intervals[gid])]
+                         for gid, origin in groups.items()}
+            by_diary = defaultdict(list)
+            for revision in db.scalars(select(m.DiaryClosure).where(m.DiaryClosure.school_id == student.school_id,
+                    m.DiaryClosure.diary_id.in_([d.id for d in diaries]), m.DiaryClosure.active.is_(True))
+                    .order_by(m.DiaryClosure.closed_at.desc(), m.DiaryClosure.id.desc())):
+                by_diary[revision.diary_id].append(revision)
+            component_names = dict(db.execute(select(m.CurriculumComponent.id, m.CurriculumComponent.name).where(
+                m.CurriculumComponent.school_id == student.school_id, m.CurriculumComponent.id.in_([d.component_id for d in diaries]))).all())
             subjects = []
             for diary in diaries:
-                closures = list(db.scalars(select(m.DiaryClosure).where(
-                    m.DiaryClosure.school_id == student.school_id,
-                    m.DiaryClosure.diary_id == diary.id, m.DiaryClosure.active.is_(True),
-                ).order_by(m.DiaryClosure.closed_at.desc(), m.DiaryClosure.id.desc())))
+                closures = by_diary[diary.id]
                 published = []
                 for period in periods:
                     closure = next((row for row in closures
@@ -194,30 +255,66 @@ def learning_data(db, students):
                     snapshot = closure.snapshot or {}
                     if not any(row.get('enrollment_id') == enrollment.id and row.get('student_id') == student.id for key in ('roster', 'attendance', 'period_results') for row in snapshot.get(key, [])):
                         continue
-                    if not any(row.get('academic_period_id') == period.id for row in snapshot.get('lessons', [])):
+                    eligible = {r['id'] for r in snapshot.get('lessons', []) if r.get('academic_period_id') == period.id
+                                and str(r.get('lesson_date', '')) >= enrollment.enrolled_on.isoformat()
+                                and enrolled_for_lesson(r, diary)}
+                    personal = any(r.get('enrollment_id') == enrollment.id and r.get('student_id') == student.id
+                                   and r.get('academic_period_id') == period.id for key in ('period_results', 'opinions')
+                                   for r in snapshot.get(key, []))
+                    if not eligible and not personal:
                         continue
                     # Nenhum resultado de outro estudante, anotação interna ou rascunho é serializado.
-                    item = _period_data(snapshot, enrollment, period, closure)
+                    item = _period_data(snapshot, enrollment, period, closure, eligible)
                     origin = snapshot.get('diary') or {}
-                    item['class_name'] = origin.get('class_name') or ''
+                    source_group = groups[diary.class_group_id]
+                    item['class_group_id'] = source_group.id
+                    item['class_name'] = origin.get('class_name') or source_group.name
+                    item['class_label'] = item['class_name'] + ' · ' + units.get(source_group.unit_id, '')
+                    item['unit_id'] = source_group.unit_id
                     item['component_name'] = origin.get('component_name') or ''
                     if closure.academic_period_id == period.id and snapshot.get('period'):
                         item['period_name'] = snapshot['period'].get('name') or period.name
                     published.append(item)
                 if published:
-                    component = db.get(m.CurriculumComponent, diary.component_id)
-                    subjects.append({'diary_id': diary.id, 'component_name': published[-1]['component_name'] or (component.name if component else ''), 'periods': published})
-            items.append({'enrollment_id': enrollment.id, 'number': enrollment.number,
+                    subjects.append({'diary_id': diary.id, 'component_name': published[-1]['component_name'] or component_names.get(diary.component_id, ''), 'periods': published})
+            from .report_preferences import preferences
+            prefs = preferences(school)
+            grade = db.get(m.Grade, group.grade_id)
+            shift = db.get(m.Shift, group.shift_id)
+            items.append({'class_group_id': group.id, 'academic_year_id': year.id,
+                          'grade_id': grade.id, 'grade_name': grade.name, 'stage': grade.level, 'shift': shift.name,
+                          'unit': units.get(group.unit_id), 'bulletin_model': prefs['bulletin'], 'report_color': prefs['color'],
+                          'calendar': [{'id': p.id, 'name': p.name, 'starts_on': p.starts_on.isoformat(), 'ends_on': p.ends_on.isoformat()}
+                                       for p in periods if period_applies(group, p)],
+                          'enrollment_id': enrollment.id, 'number': enrollment.number,
                           'class_name': group.name if group else '', 'year_name': year.name if year else '',
-                          'status': enrollment.status, 'grade_tables': grade_tables(subjects, group.name if group else ''),
+                          'status': enrollment.status, 'class_calendars': calendars, 'grade_tables': grade_tables(subjects, group.name, calendars=calendars),
                           'subjects': sorted(subjects, key=lambda item: item['component_name'])})
-        output.append({'student_id': student.id, 'student_name': (person.social_name or person.name) if person else '',
+        from .report_bulletins import published_editions, bulletin_sections
+        editions = published_editions(db, student, items)
+        for item in items:
+            item['display_sections'] = bulletin_sections([item], item['bulletin_model'])
+            item['official_editions'] = editions[item['enrollment_id']]
+        from .student_reports import student_photo
+        import base64
+        from io import BytesIO
+        from PIL import Image
+        thumbnail = ''
+        photo = student_photo(db, student.school_id, person) if person else None
+        if photo:
+            with Image.open(BytesIO(photo)) as picture:
+                picture.thumbnail((128, 160))
+                stream = BytesIO()
+                picture.convert('RGB').save(stream, format='JPEG')
+                thumbnail = 'data:image/jpeg;base64,' + base64.b64encode(stream.getvalue()).decode()
+        logo = 'data:image/png;base64,' + base64.b64encode(school.report_logo).decode() if school.report_logo else ''
+        output.append({'report_logo': logo, 'report_font': (school.report_preferences or {}).get('font_family', 'inherit'), 'photo': thumbnail, 'student_id': student.id, 'student_name': (person.social_name or person.name) if person else '',
                        'student_number': student.number, 'school_id': student.school_id,
                        'school_name': school.name if school else '', 'enrollments': items})
     return {'students': output, 'note': NOTE}
 
 
-def report_response(db, students, student_id, enrollment_id, issuer):
+def report_response(db, students, student_id, enrollment_id, issuer, document_id=''):
     student = next((item for item in students if item.id == student_id), None)
     if not student:
         fail(404, 'Estudante não encontrado para este acesso.')
@@ -225,34 +322,8 @@ def report_response(db, students, student_id, enrollment_id, issuer):
     enrollments = [row for row in info['enrollments'] if not enrollment_id or row['enrollment_id'] == enrollment_id]
     if enrollment_id and not enrollments:
         fail(404, 'Matrícula não encontrada para este acesso.')
-    sections = []
-    for enrollment in enrollments:
-        if not enrollment['subjects']:
-            continue
-        sections.append({'title': 'Matrícula ' + enrollment['number'], 'fields': [
-            ('Ano letivo', enrollment['year_name']), ('Turma atual', enrollment['class_name'])]})
-        sections.extend(enrollment['grade_tables'])
-        sections.extend(grade_tables(enrollment['subjects'], enrollment['class_name'], attendance=True))
-        statuses = []
-        for subject in enrollment['subjects']:
-            for period in subject['periods']:
-                statuses.append({'subject': period['component_name'] or subject['component_name'],
-                                 'class': period['class_name'] or enrollment['class_name'],
-                                 'period': period['period_name'], 'result': period['result_label']})
-        labels = {r['result'] for r in statuses}
-        if len(labels) == 1:
-            sections.append({'title': 'Situação dos resultados publicados', 'text': statuses[0]['result'] + ' em todos os registros acima.'})
-        else:
-            sections.append({'title': 'Situação dos resultados publicados', 'columns': [
-                {'key': 'subject', 'label': 'Componente curricular', 'width': 1.5},
-                {'key': 'class', 'label': 'Turma'}, {'key': 'period', 'label': 'Período'},
-                {'key': 'result', 'label': 'Situação', 'width': 1.6}], 'rows': statuses})
-    if not sections:
-        fail(409, 'O boletim ficará disponível após a escola publicar o fechamento do período.')
-    content = render_table(db.get(m.School, student.school_id), 'Boletim escolar', [], [], sections=sections,
-                           module='Escrituração escolar', profile={'name': info['student_name'], 'detail': 'Registro escolar ' + info['student_number']},
-                           notes=['A = aulas · F = faltas sem justificativa · J = faltas justificadas · S = aulas sem chamada. O traço indica ausência de publicação para o componente naquele período.', NOTE],
-                           circulation='Uso restrito ao aluno e aos responsáveis autorizados', issuer=issuer, db=db)
+    from .report_bulletins import render_bulletin, official_content
+    content = official_content(db, student, enrollments, document_id) if document_id else render_bulletin(db, student, info, enrollments, issuer)
     return Response(content, media_type='application/pdf', headers={
         'Content-Disposition': 'attachment; filename="boletim-escolar.pdf"', 'Cache-Control': 'no-store',
     })
@@ -265,9 +336,9 @@ def profile_learning(db: DB, user: Actor, school_id: str = Query(default='', max
 
 @router.get('/profile/learning/{student_id}/report.pdf')
 def profile_report(student_id: str, request: Request, db: DB, user: Actor,
-                   enrollment_id: str = Query(default='', max_length=36), school_id: str = Query(default='', max_length=36)):
+                   enrollment_id: str = Query(default='', max_length=36), document_id: str = Query(default='', max_length=36), school_id: str = Query(default='', max_length=36)):
     students = own_profile_students(db, user, school_id)
-    response = report_response(db, students, student_id, enrollment_id, user.name)
+    response = report_response(db, students, student_id, enrollment_id, user.name, document_id)
     student = next(item for item in students if item.id == student_id)
     audit(db, request, user, 'learning.report.downloaded', student, student.school_id)
     return response

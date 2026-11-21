@@ -187,9 +187,11 @@ def _store_revision(db, issued, pdf, actor_id, request, *, source, operation_key
     if source == 'company_a1' and not signer['chain_trusted']:
         fail(422, 'O certificado institucional não pertence à cadeia de confiança disponível.')
     user = db.get(m.User, actor_id)
+    bulletin = issued.kind == 'official_bulletin'
+    stem = 'boletim' if bulletin else 'contrato'
     file = write_file(db, issued.school_id, user.id if user else issued.created_by,
-                      f'contrato-{issued.id}-assinado-{required}.pdf',
-                      'application/pdf', pdf, file_kind='signed_contract')
+                      f'{stem}-{issued.id}-assinado-{required}.pdf',
+                      'application/pdf', pdf, file_kind='signed_bulletin' if bulletin else 'signed_contract')
     revision = IssuedDocumentSignature(
         school_id=issued.school_id, issued_document_id=issued.id, file_id=file.id,
         previous_sha256=parent.sha256, sha256=file.sha256, source=source,
@@ -245,7 +247,7 @@ def auto_sign_issued_document(db, issued, actor_id, request):
         fail(409,'Confira a assinatura do responsável antes da conclusão.')
     configured = _certificate(db, issued.school_id)
     if configured is None:
-        fail(409, 'Configure o certificado A1 da escola antes de emitir este contrato.')
+        fail(409, 'Configure o certificado A1 da escola antes de emitir este documento.')
     try:
         secret = unseal(configured.encrypted_credentials)
         pfx = base64.b64decode(secret['pfx_base64'], validate=True)
@@ -269,6 +271,8 @@ def submit_external_signature(db, issued, signed_pdf, actor_id, request,
                               expected_signer_cpf=None, idempotency_key=None):
     """Só aceita uma nova assinatura sobre os bytes exatos do PDF da escola."""
     document = scoped(db, m.IssuedDocument, issued.id, issued.school_id)
+    if document.kind == 'official_bulletin':
+        fail(409, 'O boletim oficial preserva a assinatura institucional original.')
     ensure_current_contract(db,document)
     if idempotency_key and not re.fullmatch(r'[A-Za-z0-9._:-]{8,128}', idempotency_key):
         fail(422, 'Chave de idempotência inválida.')
