@@ -4496,6 +4496,7 @@ var PigeUI;
             error: '', success: '', menuOpen: false, loginPasswordVisible: false, registryFiltersOpen: false, user: null, userPhotoUrl: '', profilePhotoPreview: '', cameraTarget: '', captureName: '',
             schools: [], schoolId: '', page: 'dashboard', q: '', pageNumber: 1, total: 0,
             rows: [], dashboard: {}, catalogs: {}, catalog: 'class-groups',
+            personRecord: null, recordTab: 'general', recordArchived: false, familyBusy: false,
             selectedStudent: null, studentTab: 'cadastro', contractEnrollmentId: '', contractReviewIssuedId: '', profileContext: {}, studentDocs: { items: [], checklist: [], issued: [] }, history: [],
             studentChoices: [], personChoices: [], studentSearchQuery: '', studentSearchBusy: false, studentSearchMessage: 'Digite ao menos 2 caracteres para pesquisar.', personSearchQuery: '', personSearchBusy: false, personSearchMessage: 'Digite ao menos 2 caracteres para pesquisar.', photoUrls: {}, companies: [], reportClass: '', reportRows: [],
             supportHub: blankSupport(),
@@ -4972,6 +4973,7 @@ var PigeUI;
                 pinHome(state.page);
                 history.replaceState({}, '', '#/' + state.page);
             }
+            closePersonRecord();
             const epoch = ++schoolSequence, sid = state.schoolId;
             loadedSchoolId = sid;
             state.schoolLoading = true;
@@ -5089,6 +5091,7 @@ var PigeUI;
                 return;
             if (page !== 'contracts' && contractDirty() && !window.confirm('Descartar as alterações não salvas no modelo?'))
                 return;
+            closePersonRecord();
             resetFilters();
             state.archiveFilter = 'active';
             state.lifecycleTarget = null;
@@ -5440,6 +5443,110 @@ var PigeUI;
                 state.loading = false;
             }
         }
+        let recordSequence = 0;
+        function closePersonRecord() {
+            ++recordSequence;
+            state.personRecord = null;
+            state.familyBusy = false;
+        }
+        function recordKind() {
+            const kinds = { teachers: 'teacher', employees: 'employee', guardians: 'guardian' };
+            return kinds[state.page] || businessTypes[state.page]?.code || '';
+        }
+        function recordTabs() {
+            const record = state.personRecord;
+            if (!record)
+                return [];
+            const kind = recordKind();
+            const tabs = [{ value: 'general', label: 'Dados cadastrais' }];
+            for (const profile of Object.keys(record.profiles)) {
+                if (!kind || kind === profile)
+                    tabs.push({ value: profile, label: personTypeLabel(profile) });
+            }
+            if (kind === 'guardian' || (!kind && (record.family.total || record.person.is_guardian)))
+                tabs.push({ value: 'family', label: 'Vínculos familiares' });
+            return tabs;
+        }
+        async function viewPersonRecord(row, tab = '') {
+            const person = row.person || row, schoolId = state.schoolId, page = state.page;
+            if (!can('people.read') || !registryPages.includes(page))
+                return;
+            const current = ++recordSequence;
+            state.familyBusy = false;
+            try {
+                const result = await PigeAPI.request(base() + '/persons/' + person.id + '/dossier');
+                if (current !== recordSequence || state.schoolId !== schoolId || state.page !== page)
+                    return;
+                state.recordArchived = Boolean(row.archived || result.person.archived);
+                state.personRecord = result;
+                const desired = tab || (recordKind() === 'guardian' ? 'family' : recordKind());
+                state.recordTab = recordTabs().some(t => t.value === desired) ? desired : 'general';
+            }
+            catch (error) {
+                if (current === recordSequence)
+                    notify(error);
+            }
+        }
+        async function moreRecordFamily() {
+            const record = state.personRecord, current = recordSequence;
+            if (!record || state.familyBusy || record.family.items.length >= record.family.total)
+                return;
+            state.familyBusy = true;
+            try {
+                const next = await PigeAPI.request(base() + '/persons/' + record.person.id + '/family?page=' + (record.family.page + 1));
+                if (current === recordSequence)
+                    record.family = { ...next, items: [...record.family.items, ...next.items] };
+            }
+            catch (error) {
+                if (current === recordSequence)
+                    notify(error);
+            }
+            finally {
+                if (current === recordSequence)
+                    state.familyBusy = false;
+            }
+        }
+        function recordDetails() {
+            const record = state.personRecord;
+            if (!record)
+                return [];
+            const tab = state.recordTab, data = tab === 'general' ? record.person : record.profiles[tab];
+            if (!data)
+                return [];
+            let fields;
+            if (tab === 'general') {
+                const keys = ['name', 'entity_kind', ...(data.entity_kind === 'organization' ? ['trade_name', 'cnpj', 'state_registration', 'municipal_registration', 'main_activity'] : ['social_name', 'cpf', 'birth_date']), 'phone', 'phone_secondary', 'email', 'street', 'address_number', 'address_complement', 'district', 'city', 'state', 'postal_code', 'address', 'notes'];
+                fields = personFields().filter(f => keys.includes(f.key));
+            }
+            else if (tab === 'teacher')
+                fields = teacherFields();
+            else if (tab === 'employee')
+                fields = employeeFields();
+            else if (tab === 'student')
+                fields = studentFields();
+            else {
+                const business = Object.values(businessTypes).find(t => t.code === tab);
+                fields = [field('contact_name', 'Pessoa de contato'), field('category', business?.category || 'Categoria'), field('reference', 'Referência interna'), field('notes', 'Observações deste vínculo')];
+            }
+            return fields.map(f => {
+                const raw = data[f.key], value = f.key === 'cpf' ? cpf(raw) : f.type === 'date' ? date(raw) : f.options?.find(o => o.value === raw)?.label || text(raw);
+                return { label: f.label, value: value || 'Não informado' };
+            });
+        }
+        function editRecord() {
+            const record = state.personRecord;
+            if (!record || !can('people.write') || state.recordArchived || record.person.archived)
+                return;
+            const kind = recordKind(), profile = record.profiles[kind];
+            if (kind === 'teacher' && profile)
+                editTeacher({ ...profile, person: record.person });
+            else if (kind === 'employee' && profile)
+                editEmployee({ ...profile, person: record.person });
+            else if (isBusiness())
+                newBusiness(record.person);
+            else
+                editPerson(record.person);
+        }
         async function studentList() { state.selectedStudent = null; await loadPage(); }
         async function studentSection(tab) {
             state.studentTab = tab;
@@ -5663,8 +5770,7 @@ var PigeUI;
                 birth.required = true;
             openModal('student', 'Cadastrar aluno', fields, { active: true, person_types: ['student'] });
         }
-        function editStudent() {
-            const student = state.selectedStudent;
+        function editStudent(student = state.selectedStudent) {
             if (!student)
                 return;
             const types = personTypesFrom(student.person), personFieldsList = personFields(types), fields = [...personFieldsList, ...studentFields()];
@@ -5917,6 +6023,15 @@ var PigeUI;
         }
         function uploadDocument() { openModal('upload', 'Receber documento', [field('document_type_id', 'Tipo de documento', 'select', true, options('document-types')), field('expires_on', 'Validade (opcional)', 'date'), field('file', 'Arquivo PDF, PNG ou JPEG', 'file', true, undefined, true), field('notes', 'Observações', 'textarea', false, undefined, true)]); }
         function fileChange(event) { selectedFile = event.target.files?.[0] || null; state.captureName = selectedFile?.name || ''; }
+        function personPhotoChange(event) {
+            fileChange(event);
+            clearProfilePreview();
+            if (selectedFile)
+                state.profilePhotoPreview = URL.createObjectURL(selectedFile);
+        }
+        function editorPhoto() {
+            return state.profilePhotoPreview || photoSrc(state.modal.target?.person || state.modal.target);
+        }
         function openCamera(target) { if (!state.busy)
             state.cameraTarget = target; }
         function photoCaptured(file) { const target = state.cameraTarget; if (!target)
@@ -6386,8 +6501,11 @@ var PigeUI;
                     await viewStudent(studentId);
                     state.studentTab = tab;
                 }
-                else
+                else {
+                    if (state.personRecord && savedPersonId === state.personRecord.person.id)
+                        await viewPersonRecord(state.personRecord.person, state.recordTab);
                     await loadPage();
+                }
                 if (modal.kind === 'protocol-note')
                     await viewProtocol(target.id);
                 if (modal.kind === 'draft-edit')
@@ -6443,6 +6561,7 @@ var PigeUI;
                 URL.revokeObjectURL(state.userPhotoUrl);
             state.userPhotoUrl = '';
             clearProfilePreview();
+            closePersonRecord();
             PigeAPI.clear();
             state.schoolId = '';
             loadedSchoolId = '';
@@ -6514,6 +6633,7 @@ var PigeUI;
             } });
         }
         function dispose() {
+            closePersonRecord();
             ++sequence;
             ++schoolSequence;
             ++personSearchSequence;
@@ -6523,7 +6643,7 @@ var PigeUI;
             clearPhotos();
             clearProfilePreview();
         }
-        return { openSiteEditor, studentList, studentSection, selectSchool, taskState, openDesk, closeDesk, resumeForm, keyTabs, scrollTabs, pageAllowed, loadShell, landingPage, safe, initialize, setupPWA, dispose, afterMFA, dialogHost, academicPrepared, importedDataChanged, openCamera, photoCaptured, documentPages, configurationPages, supportAreas, supportAreaLabels, refreshAccess, isEnrollmentForm, enrollmentStudent, enrollmentClass, administrationPages, institutionTabs, catalogDescriptions, adminTool, manageRecord, lifecycleCompleted, request: PigeAPI.request, download: PigeAPI.download, state, base, familyAssistFields, assistRequest, assistFields, assistEligible, assistCompany, setupCompany, setupCompanyFields, companyExtra, setupLookup, readStudentDocument, readResponsibleDocument, editIntake, mfa: PigeMFA, dossier, selectedPersonTypes, availablePersonTypes, togglePersonType, lockedPersonType, familyRelevant, manageMFA, editMFAPolicy, editEmbedding, probeEmbedding, editMyProfile, myPhotoChange, profilePassword, registryPages, integrationPages, businessTypes, isBusiness, newBusiness, reusePerson, personDocument, modalSections, modalTab, visibleSection, modalFieldLabel, modalFieldRelevant, advancedPersonField, isPersonModal, personTypeOptions, personTypeLabel, modalDirty, contractDirty, identity: PigeInstitution.state, supportStatus: PigeSupport.status, editIdentity, identityFileChange, manageUnits, editMaintainer, text, can, isProfileRole, school, label, enrollmentLabel, date, cpf, initials, photoSrc, getName, options, pageLabels, catalogLabels, configure, login, logout, navigate, changeSchool, setCatalog, search, page, loadPage, openSogoWebmail, webmailFrameLoaded, saveWebmailPreference, saveWebmailDefault, legacyImportFileChange, previewLegacyImport, applyLegacyImport, populatedImportTables, downloadLegacyArchive, viewStudent, newPerson, newStudent, editStudent, newGuardian, newTeacher, editTeacher, newEmployee, editEmployee, editPerson, newCatalog, newEnrollment, viewEnrollment, contractsForEnrollment, startMovement, reenroll, newLink, enrollmentLinkStudentId, linkFromEnrollment, editLink, uploadDocument, fileChange, reviewDocument, waiveDocument, issueDocument, downloadFile, newProtocol, newCompany, newSchool, editSupportHub, password, archiveStudent, closeModal, saveModal, loadReport, exportStudents, exportClass, searchStudents, searchPersons, filteredClasses, clearFilters, yearChanged, editDraft, viewProtocol, protocolNote, protocolReceipt, exportPendencies, install, updateApp };
+        return { editorPhoto, personPhotoChange, viewPersonRecord, recordKind, recordTabs, recordDetails, editRecord, closePersonRecord, moreRecordFamily, openSiteEditor, studentList, studentSection, selectSchool, taskState, openDesk, closeDesk, resumeForm, keyTabs, scrollTabs, pageAllowed, loadShell, landingPage, safe, initialize, setupPWA, dispose, afterMFA, dialogHost, academicPrepared, importedDataChanged, openCamera, photoCaptured, documentPages, configurationPages, supportAreas, supportAreaLabels, refreshAccess, isEnrollmentForm, enrollmentStudent, enrollmentClass, administrationPages, institutionTabs, catalogDescriptions, adminTool, manageRecord, lifecycleCompleted, request: PigeAPI.request, download: PigeAPI.download, state, base, familyAssistFields, assistRequest, assistFields, assistEligible, assistCompany, setupCompany, setupCompanyFields, companyExtra, setupLookup, readStudentDocument, readResponsibleDocument, editIntake, mfa: PigeMFA, dossier, selectedPersonTypes, availablePersonTypes, togglePersonType, lockedPersonType, familyRelevant, manageMFA, editMFAPolicy, editEmbedding, probeEmbedding, editMyProfile, myPhotoChange, profilePassword, registryPages, integrationPages, businessTypes, isBusiness, newBusiness, reusePerson, personDocument, modalSections, modalTab, visibleSection, modalFieldLabel, modalFieldRelevant, advancedPersonField, isPersonModal, personTypeOptions, personTypeLabel, modalDirty, contractDirty, identity: PigeInstitution.state, supportStatus: PigeSupport.status, editIdentity, identityFileChange, manageUnits, editMaintainer, text, can, isProfileRole, school, label, enrollmentLabel, date, cpf, initials, photoSrc, getName, options, pageLabels, catalogLabels, configure, login, logout, navigate, changeSchool, setCatalog, search, page, loadPage, openSogoWebmail, webmailFrameLoaded, saveWebmailPreference, saveWebmailDefault, legacyImportFileChange, previewLegacyImport, applyLegacyImport, populatedImportTables, downloadLegacyArchive, viewStudent, newPerson, newStudent, editStudent, newGuardian, newTeacher, editTeacher, newEmployee, editEmployee, editPerson, newCatalog, newEnrollment, viewEnrollment, contractsForEnrollment, startMovement, reenroll, newLink, enrollmentLinkStudentId, linkFromEnrollment, editLink, uploadDocument, fileChange, reviewDocument, waiveDocument, issueDocument, downloadFile, newProtocol, newCompany, newSchool, editSupportHub, password, archiveStudent, closeModal, saveModal, loadReport, exportStudents, exportClass, searchStudents, searchPersons, filteredClasses, clearFilters, yearChanged, editDraft, viewProtocol, protocolNote, protocolReceipt, exportPendencies, install, updateApp };
     }
     const components = { 'educacenso-panel': PigeEducacenso.component, 'contract-value-field': PigeContractFields.component, 'enrollment-workflow': PigeEnrollmentWorkflow.component, 'academic-preparation': PigeAcademicPreparation.component, 'notification-email': PigeNotificationEmail.component, 'camera-capture': PigeCamera.component, 'users-panel': PigeUsers.component, 'institutional-email': PigeEmail.component, 'audit-panel': PigeAudit.component, 'lifecycle-panel': PigeLifecycle.component, 'mailcow-panel': PigeMailcow.component, 'school-community': PigeCommunity.component, 'learning-panel': PigeLearning.component, 'reports-panel': PigeReports.component, 'legacy-import-panel': PigeLegacyImport.component, 'diagnostics-panel': PigeDiagnostics.component, 'expansion-panel': PigeExpansion.component, 'diary-panel': PigeDiary.component, 'contracts-panel': PigeContracts.component, 'signing-panel': PigeSigning.component, 'assist-panel': PigeAssist.component };
     function mountDesk(page, shared) {
