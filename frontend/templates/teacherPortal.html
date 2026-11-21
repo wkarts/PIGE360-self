@@ -37,7 +37,10 @@
       <section v-show="s.section!=='agenda'" class="panel x-card"><h2>Minhas turmas</h2>
         <p v-if="!s.agenda.assignments.length">A Coordenação precisa associar seu cadastro à turma e à disciplina em Atribuições docentes.</p>
         <ul class="teacher-list"><li v-for="a in s.agenda.assignments" :key="a.id"><strong>{{a.class_name}} · {{a.subject_name}}</strong><span>{{[a.shift_name,a.year_name].filter(Boolean).join(' · ')}}</span>
-          <button v-for="d in s.agenda.diaries.filter(item=>item.teacher_assignment_id===a.id)" :key="d.id" class="btn btn-secondary teacher-open" @click="s.requestedDiary={id:d.id,tab:s.section==='materials'?'materials':'diaries'};s.section='diary'">{{s.section==='materials'?'Abrir materiais':'Abrir diário'}} · {{d.component}}</button>
+          <template v-for="d in s.agenda.diaries.filter(item=>item.teacher_assignment_id===a.id)" :key="d.id">
+            <button class="btn btn-secondary teacher-open" @click="s.requestedDiary={id:d.id,tab:s.section==='materials'?'materials':'diaries'};s.section='diary'">{{s.section==='materials'?'Abrir materiais':'Abrir diário'}} · {{d.component}}</button>
+            <button v-if="s.section==='overview' && pilotForSchool(s.schoolId)" class="btn btn-secondary teacher-open" @click="s.requestedDiary={id:d.id,tab:'attendance'};s.section='diary'">Fazer chamada · {{d.component}}</button>
+          </template>
           <small v-if="!s.agenda.diaries.some(d=>d.teacher_assignment_id===a.id)">Peça à Coordenação que abra o diário desta turma e o vincule à sua atribuição.</small></li></ul>
       </section>
       <section v-show="s.section!=='materials'" class="panel x-card"><div class="teacher-week"><h2>Programação da semana</h2><label>Semana de<input type="date" v-model="s.week" :disabled="s.busy" @change="run(agenda)"></label></div>

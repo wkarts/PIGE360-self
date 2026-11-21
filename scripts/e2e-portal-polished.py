@@ -257,6 +257,12 @@ try:
         # Piloto no mesmo serviço do professor, com os cookies e a matrícula sintética já criados.
         legacy_url=teacher_page.url
         pilot_url=f"{TEACHER_URL}/?diarioPiloto={school['id']}&guia=attendance&diario={diary['id']}#diario"
+        expect(teacher_page.get_by_role('button',name='Fazer chamada · Matemática')).to_have_count(0)
+        teacher_page.goto(f"{TEACHER_URL}/?diarioPiloto={school['id']}")
+        teacher_page.get_by_role('button',name='Fazer chamada · Matemática').click()
+        expect(workspace.get_by_role('link',name='Frequência')).to_have_attribute('aria-current','page')
+        expect(workspace.get_by_role('button',name='Abrir chamada')).to_be_visible()
+        record('Minhas turmas abre a frequência do diário atribuído pelo atalho do piloto')
         teacher_page.goto(pilot_url)
         for width in (1440,390):
             teacher_page.set_viewport_size({'width':width,'height':900})
