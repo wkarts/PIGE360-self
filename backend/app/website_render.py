@@ -124,9 +124,12 @@ def render(data):
         value = brand.get(key)
         return value if isinstance(value, str) and re.fullmatch(r'#[0-9a-fA-F]{6}', value) else fallback
     primary, secondary = color('primary_color', '#006D77'), color('secondary_color', '#193549')
-    # Legacy explicit serif/sans overrides remain readable; the normal route is
-    # the application's existing institution theme (including its custom font).
-    font = {'serif': 'Georgia,serif', 'sans': 'Arial,sans-serif'}.get(brand.get('font_family'), 'var(--institution-font,system-ui,sans-serif)')
+    # An empty override follows the live institution theme, including its uploaded font.
+    fonts = {'system': 'system-ui,sans-serif', 'arial': 'Arial,Helvetica,sans-serif',
+             'verdana': 'Verdana,Geneva,sans-serif', 'georgia': 'Georgia,serif',
+             'times': '"Times New Roman",Times,serif', 'serif': 'Georgia,serif', 'sans': 'Arial,sans-serif'}
+    override = site.get('font_override', '')
+    font = fonts.get(override, 'var(--institution-font,system-ui,sans-serif)')
     logo_url = brand.get('logo_url', '')
     logo = f'<img class="logo" src="{escape(logo_url)}" alt="">' if re.fullmatch(r'/api/v1/institution/assets/[0-9a-f]{64}\.png', logo_url) else ''
     primary_action = design.get('primary_action') or ({'url': site.get('admission_url'), 'label': 'Inscrição e matrícula'} if site.get('admission_url') else {'url': '#contato', 'label': 'Conheça a escola'})
@@ -347,9 +350,9 @@ def render(data):
         # Keep authoritative contact details in the footer instead of duplicating a CTA section.
         contact_section = ''
     heading_style = design.get('heading_style') if composition_v2 else 'inherit'
-    heading_font = 'Georgia,serif' if heading_style == 'editorial' and brand.get('font_family', 'system') == 'system' else font
+    heading_class = ' editorial-titles' if heading_style == 'editorial' else ''
     mobile_actions = f'<nav class="mobile-actions" aria-label="Ações rápidas">{hero_actions}</nav>' if design.get('mobile_actions') else ''
     title = f'{page.get("title", "")} · {name}' if page is not None else name
     css = Path(__file__).with_name('website.css').read_text()
     direction_class = f' direction-{direction}' if direction != 'standard' else ''
-    return f'''<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{escape(title)}</title><meta name="description" content="{escape(site.get('introduction'))}"><meta name="theme-color" content="{primary}"><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/api/v1/institution/icon.png?size=180"><link rel="stylesheet" href="/api/v1/institution/theme.css"><link rel="icon" href="/api/v1/institution/icon.png?size=32"><style>{css}:root{{--brand:{primary};--ink:{secondary};--font:{font};--heading-font:{heading_font}}}</style></head><body class="{theme}{direction_class}{' composition-v2' if composition_v2 else ''}{' is-internal' if composition_v2 and page is not None else ''}{' with-mobile-actions' if mobile_actions else ''}"><a class="skip" href="#conteudo">Ir para o conteúdo</a>{demonstration}{topline}{header}<main id="conteudo">{hero}{notice}{page_contact}{''.join(item[2] for item in visible_sections)}{contact_section}</main>{footer}{mobile_actions}</body></html>'''
+    return f'''<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{escape(title)}</title><meta name="description" content="{escape(site.get('introduction'))}"><meta name="theme-color" content="{primary}"><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/api/v1/institution/icon.png?size=180"><link rel="stylesheet" href="/api/v1/institution/theme.css"><link rel="icon" href="/api/v1/institution/icon.png?size=32"><style>{css}:root{{--brand:{primary};--ink:{secondary};--font:{font};--heading-font:var(--font)}}</style></head><body class="{theme}{direction_class}{heading_class}{' composition-v2' if composition_v2 else ''}{' is-internal' if composition_v2 and page is not None else ''}{' with-mobile-actions' if mobile_actions else ''}"><a class="skip" href="#conteudo">Ir para o conteúdo</a>{demonstration}{topline}{header}<main id="conteudo">{hero}{notice}{page_contact}{''.join(item[2] for item in visible_sections)}{contact_section}</main>{footer}{mobile_actions}</body></html>'''

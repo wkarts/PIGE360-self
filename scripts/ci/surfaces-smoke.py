@@ -38,7 +38,7 @@ for path in ('/health/live','/health/ready'):
 site=httpx.get(website_url+'/',headers={'Host':'school.example.test'},trust_env=False);assert site.is_success,site.text
 assert 'Site integrado no Docker' in site.text and 'Publicação Docker visível' in site.text and 'Publicação privada nunca visível' not in site.text
 unknown=httpx.get(website_url+'/',headers={'Host':'unknown.example.test'},trust_env=False)
-assert unknown.status_code==404 and 'Site em preparação' in unknown.text and 'Site integrado no Docker' not in unknown.text
+assert unknown.status_code==404 and 'Site em manutenção' in unknown.text and 'Site integrado no Docker' not in unknown.text
 assert httpx.get(portal_url+'/',headers=portal_headers,trust_env=False).status_code==200
 assert httpx.get(portal_url+'/api/v1/backups',headers=portal_headers,trust_env=False).status_code==404
 print('PASS: site e portal em imagens próprias, conteúdo interno autenticado e bloqueio administrativo',flush=True)

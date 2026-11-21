@@ -14218,11 +14218,36 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                     rows: "2"
                   }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.website.notice]])]),
                   _createElementVNode("p", { class: "alert" }, "Logo, cores e tipografia vêm da identidade visual configurada no PIGE. Mudar apenas o estilo preserva os blocos. Aplicar uma composição completa é uma ação separada e confirmada."),
+                  (s.website.brand)
+                    ? (_openBlock(), _createElementBlock("label", { key: 1 }, [_createTextVNode("Tipografia da publicação"), _withDirectives(_createElementVNode("select", {
+                        "onUpdate:modelValue": $event => ((s.website.brand.font_family) = $event),
+                        onChange: $event => (s.previewHtml='')
+                      }, [
+                        _createElementVNode("option", { value: "" }, "Herdar dos parâmetros da escola"),
+                        _createElementVNode("option", { value: "system" }, "Padrão do dispositivo"),
+                        _createElementVNode("option", { value: "arial" }, "Arial"),
+                        _createElementVNode("option", { value: "verdana" }, "Verdana"),
+                        _createElementVNode("option", { value: "georgia" }, "Georgia"),
+                        _createElementVNode("option", { value: "times" }, "Times New Roman"),
+                        (s.website.brand.font_family==='serif')
+                          ? (_openBlock(), _createElementBlock("option", {
+                              key: 0,
+                              value: "serif"
+                            }, "Serifada (anterior)"))
+                          : _createCommentVNode("", true),
+                        (s.website.brand.font_family==='sans')
+                          ? (_openBlock(), _createElementBlock("option", {
+                              key: 1,
+                              value: "sans"
+                            }, "Sem serifa (anterior)"))
+                          : _createCommentVNode("", true)
+                      ], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, s.website.brand.font_family]])]))
+                    : _createCommentVNode("", true),
                   (s.website.brand && (s.website.brand.display_name||s.website.brand.primary_color||s.website.brand.secondary_color||s.website.brand.font_family))
                     ? (_openBlock(), _createElementBlock("div", {
-                        key: 1,
+                        key: 2,
                         class: "alert warning"
-                      }, [_createTextVNode("Este site possui uma personalização anterior. "), _createElementVNode("button", {
+                      }, [_createTextVNode("O site usa uma personalização da identidade. "), _createElementVNode("button", {
                         type: "button",
                         class: "btn btn-secondary",
                         onClick: inheritBrand
@@ -14290,7 +14315,7 @@ var _Vue=Vue; var PigeRenders={contractValue:function render(_ctx, _cache) {
                         "onUpdate:modelValue": $event => ((s.website.design.hero_caption) = $event),
                         maxlength: "200"
                       }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.website.design.hero_caption]])]),
-                      _createElementVNode("label", null, [_createTextVNode("Estilo editorial dos títulos"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((s.website.design.heading_style) = $event) }, [_createElementVNode("option", { value: "inherit" }, "Herdar identidade"), _createElementVNode("option", { value: "editorial" }, "Editorial (a fonte personalizada do PIGE tem prioridade)")], 8, ["onUpdate:modelValue"]), [[_vModelSelect, s.website.design.heading_style]])]),
+                      _createElementVNode("label", null, [_createTextVNode("Estilo editorial dos títulos"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((s.website.design.heading_style) = $event) }, [_createElementVNode("option", { value: "inherit" }, "Herdar identidade"), _createElementVNode("option", { value: "editorial" }, "Editorial (preserva a tipografia escolhida)")], 8, ["onUpdate:modelValue"]), [[_vModelSelect, s.website.design.heading_style]])]),
                       _createElementVNode("label", null, [_createTextVNode("Identificador acima do título"), _withDirectives(_createElementVNode("input", {
                         "onUpdate:modelValue": $event => ((s.website.design.eyebrow) = $event),
                         maxlength: "120"

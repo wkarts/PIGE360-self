@@ -39,17 +39,29 @@ def fetch(path,limit=2*1024*1024,host=''):
         return data,response.headers.get('Content-Type','application/octet-stream')
 
 
-def error_page(status,message,request_id):
-    safe=html.escape(message,quote=True)
-    body=('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">'
-          '<meta name="viewport" content="width=device-width,initial-scale=1">'
-          '<title>Site institucional</title><style>'
-          'body{margin:0;padding:24px;background:#f7f8f5;color:#263746;font:16px/1.6 system-ui,sans-serif}'
-          'main{box-sizing:border-box;width:min(100%,680px);margin:12vh auto;padding:clamp(20px,5vw,40px);'
-          'background:#fff;border:1px solid #d9dfd9;border-radius:12px}h1{font-size:clamp(24px,6vw,34px);line-height:1.2}'
-          'p,small{overflow-wrap:anywhere}</style></head><body><main role="alert"><h1>'+('Site em preparação' if status==404 else 'Site institucional indisponível')+'</h1>'
-          f'<p>{safe}</p><small>Código de atendimento: {request_id}</small></main></body></html>').encode()
-    return body
+def error_page(status, message, request_id, category):
+    title = 'Site em manutenção'
+    description = 'Estamos preparando o site da escola. Por favor, volte em breve. Agradecemos a compreensão e pedimos desculpas pelo transtorno.'
+    if category == 'page_not_published':
+        title, description = 'Página indisponível', 'Esta página ainda não foi publicada ou foi retirada do site.'
+    elif category != 'domain_not_published':
+        title = 'Site temporariamente indisponível' if status >= 500 else 'Conteúdo indisponível'
+        description = message
+    # Institution assets are already served by this surface. The notice remains
+    # readable even when the upstream serving the logo and theme is offline.
+    home = '<p><a href="/">Voltar ao início</a></p>' if category == 'page_not_published' else ''
+    return f'''<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<title>{title}</title><link rel="stylesheet" href="/api/v1/institution/theme.css">
+<style>*{{box-sizing:border-box}}body{{min-height:100vh;margin:0;display:grid;place-items:center;padding:1rem;
+background:#f5f6f7;color:#263746;font:1rem/1.6 var(--institution-font,system-ui,sans-serif)}}
+main{{width:min(100%,37rem);padding:clamp(1.5rem,6vw,3rem);background:white;border:1px solid #dce1e4;
+border-top:4px solid var(--primary,#006d77);border-radius:12px}}
+.brand{{display:block;width:6rem;height:6rem;background:url("/api/v1/institution/icon.png?size=192") center/contain no-repeat}}
+h1{{color:var(--ink,#172b3a);line-height:1.15;font-size:clamp(1.6rem,5vw,2.4rem);margin:1rem 0}}
+p{{margin:.8rem 0}}small{{display:block;margin-top:2rem;color:#4a5560;overflow-wrap:anywhere}}a{{color:inherit}}</style>
+</head><body><main><span class="brand" aria-hidden="true"></span><h1>{title}</h1>
+<p>{html.escape(description)}</p>{home}<small>Código de atendimento: {html.escape(request_id)}</small></main></body></html>'''.encode()
 
 
 def render(data):
@@ -97,7 +109,7 @@ class Handler(BaseHTTPRequestHandler):
         route='website' if path=='/' or page_path(path) else 'readiness' if path=='/health/ready' else 'public_asset'
         logger.warning('website_request_failed category=%s status=%s upstream_status=%s route=%s request_id=%s host_fingerprint=%s',
                        category,status,upstream_status,route,request_id,host_fingerprint)
-        self.respond(status,error_page(status,message,request_id),'text/html; charset=utf-8',request_id)
+        self.respond(status,error_page(status,message,request_id,category),'text/html; charset=utf-8',request_id)
 
     def do_GET(self):
         request_id=uuid.uuid4().hex[:12]

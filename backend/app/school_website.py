@@ -237,7 +237,7 @@ class WebsiteBrand(Input):
     display_name:str=Field(default='',max_length=180)
     primary_color:str=Field(default='',pattern=r'^(#[0-9a-fA-F]{6})?$')
     secondary_color:str=Field(default='',pattern=r'^(#[0-9a-fA-F]{6})?$')
-    font_family:Literal['','system','serif','sans']=''
+    font_family:Literal['','system','arial','verdana','georgia','times','serif','sans']=''
 
 
 class WebsiteInput(Input):
@@ -339,6 +339,7 @@ def site_data(db,row,preview=False,page=''):
     payload={'school':{'id':school.id,'name':school.name,'address':school.address,'phone':school.phone,'email':school.email},
         'identity':identity,'website':{key:getattr(row,key) for key in ('theme','headline','introduction','about','public_url','portal_url','notice','admission_url','design')},
         'posts':[post_output(post) for post in sorted(posts,key=lambda p:(p.pinned,p.publish_at),reverse=True)]}
+    payload['website']['font_override'] = (row.brand or {}).get('font_family', '')
     if not preview:payload['website']['design']=public_design(payload['website']['design'])
     payload['page']=None
     if page:

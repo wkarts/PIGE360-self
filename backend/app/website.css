@@ -116,3 +116,5 @@ body.composition-v2>main{flex:1}
   .composition-v2.direction-atelier .section-gallery .content-item:first-child { grid-row: auto; }
   .composition-v2.direction-atelier .section-gallery .content-item:first-child img { aspect-ratio: 4 / 3; }
 }
+
+.composition-v2.editorial-titles :is(h1,h2){letter-spacing:-.035em;text-wrap:balance}

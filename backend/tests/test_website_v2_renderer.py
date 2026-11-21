@@ -275,3 +275,15 @@ def test_reserved_top_anchor_exists_once():
     nodes=Nodes(render(data)).nodes
     assert sum(attrs.get('id')=='topo' for _,attrs in nodes)==1
     assert any(tag=='header' and attrs.get('id')=='topo' for tag,attrs in nodes)
+
+
+def test_editorial_titles_and_pages_respect_institution_or_publication_font():
+    for direction in ['standard', 'atelier', 'rota', 'nucleo']:
+        data = fixture()
+        data['website']['design'].update(composition_version=2, direction=direction, heading_style='editorial')
+        for override, family in [('', 'var(--institution-font,system-ui,sans-serif)'), ('system', 'system-ui,sans-serif'),
+                                 ('verdana', 'Verdana,Geneva,sans-serif'), ('serif', 'Georgia,serif')]:
+            data['website']['font_override'] = override
+            for page in [None, {'title': 'Nossa escola'}]:
+                data['page'] = page
+                assert '--font:' + family + ';--heading-font:var(--font)' in render(data)
