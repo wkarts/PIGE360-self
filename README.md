@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="frontend/public/branding/pige360/symbol.png" width="84" height="84">
+  <img src="frontend/public/branding/pige360/logo-horizontal.png" alt="PIGE360 — School Platform" width="320" height="96">
+</picture>
+
 # PIGE360 Self
 
 O PIGE360 Self é uma aplicação web de gestão escolar instalada na infraestrutura da instituição. A secretaria acompanha o aluno da inscrição à matrícula, o professor registra o trabalho da turma no Diário e a família consulta os resultados publicados. A escola também administra seus documentos, canais de comunicação e site institucional.

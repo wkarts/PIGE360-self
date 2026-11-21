@@ -18,7 +18,10 @@ class DocumentationTests(unittest.TestCase):
     def test_local_links_in_entry_guides_resolve(self):
         for name in ('README.md', 'instalacao.md'):
             guide = ROOT / name
-            for href in re.findall(r'\[[^\]\n]+\]\(([^)\s]+)\)', guide.read_text(encoding='utf-8')):
+            markdown = guide.read_text(encoding='utf-8')
+            links = re.findall(r'\[[^\]\n]+\]\(([^)\s]+)\)', markdown)
+            image_paths = re.findall(r'<(?:img|source)\b[^>]*?\s(?:src|srcset)="([^"\s]+)"', markdown)
+            for href in links + image_paths:
                 url = urlsplit(href)
                 if url.scheme or url.netloc:
                     continue
