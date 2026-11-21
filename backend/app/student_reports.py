@@ -123,7 +123,8 @@ def compose_student_document(db, school, student, person, enrollment_id, kind, i
                  .order_by(m.EnrollmentEvent.created_at, m.EnrollmentEvent.id))
         actions = {'create':'Cadastro', 'created':'Cadastro', 'activate':'Efetivação', 'reactivate':'Reativação',
                    'change_class':'Mudança de turma', 'suspend':'Suspensão', 'cancel':'Cancelamento',
-                   'transfer':'Transferência', 'complete':'Conclusão'}
+                   'transfer':'Transferência', 'complete':'Conclusão', 'reenrolled':'Rematrícula',
+                   'draft_updated':'Atualização da pré-matrícula', 'legacy_import':'Importação do histórico'}
         timeline = [{'date': date_text(event.created_at), 'number': number,
                      'action': actions.get(event.action, event.action),
                      'status': ENROLLMENT_LABELS.get((event.after or {}).get('status'), '—')}

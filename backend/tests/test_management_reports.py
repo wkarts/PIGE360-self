@@ -95,7 +95,7 @@ def test_financial_decimal_totals_and_no_secrets(api):
 def test_csv_formula_guard_and_pdf_headers(api):
     cat = api.catalogs(capacity=100)
     student = api.student('=FORMULA(1)', adult=True)
-    api.enroll(student, cat['group'])
+    enrollment = api.enroll(student, cat['group'])
     response = api.get('/reports/management/enrollments.csv' + PERIOD)
     assert response.content.startswith(b'\xef\xbb\xbf') and "'=FORMULA(1)" in response.text
     assert response.headers['cache-control'] == 'no-store'
@@ -104,6 +104,7 @@ def test_csv_formula_guard_and_pdf_headers(api):
     embedded = [font.get_object().get('/FontDescriptor') for font in fonts]
     assert sum(bool(descriptor and descriptor.get_object().get('/FontFile2')) for descriptor in embedded) >= 2
     text = text_pdf(pdf_response)
+    assert enrollment['number'] in text and date.fromisoformat(enrollment['enrolled_on']).strftime('%d/%m/%Y') in text
     assert 'Consolidação mensal' in text and '07/2026' in text and '09/2026' in text
     assert 'Página 1 de' in text and 'Secretaria / representante' not in text
     assert api.get('/reports/management/enrollments' + PERIOD + '&q=%25')['total'] == 0

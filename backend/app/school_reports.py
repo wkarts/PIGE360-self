@@ -119,15 +119,20 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
         styles['numeric'] = ParagraphStyle('ReportNumeric', parent=styles['body'], alignment=TA_RIGHT)
         def p(value, style='body'):
             return Paragraph(escape(str(value if value is not None and value != '' else '-')).replace('\n', '<br/>'), styles[style])
-        def column_widths(cols):
+        def column_widths(cols, records):
             # Reserva espaço para a palavra mais longa do título e uma data completa.
             # O espaço restante acompanha os pesos definidos por cada módulo.
             minimum = []
             for column in cols:
                 words = column['label'].split() or ['']
-                label_width = max(pdfmetrics.stringWidth(word, bold, 8) for word in words)
+                label_width = max(pdfmetrics.stringWidth(word, bold, styles['thead'].fontSize) for word in words)
                 if column.get('type') == 'date':
-                    label_width = max(label_width, pdfmetrics.stringWidth('00/00/0000', regular, 8))
+                    label_width = max(label_width, pdfmetrics.stringWidth('00/00/0000', regular, styles['body'].fontSize))
+                elif column['key'] in {'number', 'student_number', 'enrollment_number'}:
+                    codes = {str(record.get(column['key']) or '') for record in records}
+                    code_width = max((pdfmetrics.stringWidth(code, regular, styles['body'].fontSize)
+                                      for code in codes if len(code) <= 20), default=0)
+                    label_width = max(label_width, code_width)
                 minimum.append(label_width + 15)
             weights = [column.get('width', 1) for column in cols]
             weighted = [width * weight / sum(weights) for weight in weights]
@@ -171,7 +176,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                 if detail:
                     line.append([p(col['label'] + ': ' + format_value(record.get(col['key']), col.get('type','text'))) for col in detail])
                 values.append(line)
-            return table(values, column_widths(headings))
+            return table(values, column_widths(headings, records))
 
         stream = io.BytesIO()
         doc = SimpleDocTemplate(stream, pagesize=pagesize, leftMargin=margin, rightMargin=margin,
