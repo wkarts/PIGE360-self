@@ -23,6 +23,7 @@ class EmbeddingSettings(Base):
 
 class Company(Record, Base):
     __tablename__ = 'companies'
+    allow_contract_history_removal: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     name: Mapped[str] = mapped_column(String(160))
     document: Mapped[str | None] = mapped_column(String(24))
     trade_name: Mapped[str] = mapped_column(String(180), default='')
@@ -74,7 +75,11 @@ class SchoolSupportSettings(Record, Base):
 
 class School(Record, Base):
     __tablename__ = 'schools'
-    educacenso_training: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    # Colunas das primeiras revisões da instalação, mantidas só para preservar o histórico.
+    educacenso_training: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(),
+                                                       info={'legacy_internal': True})
+    allow_contract_history_removal: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(),
+                                                                 info={'legacy_internal': True})
     company_id: Mapped[str] = mapped_column(ForeignKey('companies.id'))
     name: Mapped[str] = mapped_column(String(160))
     address: Mapped[str] = mapped_column(String(400), default='')
@@ -436,6 +441,8 @@ class IssuedDocument(Record, Scoped, Base):
     template_id: Mapped[str | None] = mapped_column(ForeignKey('document_templates.id'), index=True)
     idempotency_key: Mapped[str | None] = mapped_column(String(120))
     signature_status: Mapped[str] = mapped_column(String(24), default='unsigned')
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    history_removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
         UniqueConstraint('school_id', 'idempotency_key', name='uq_issued_document_idempotency'),
         UniqueConstraint('school_id', 'enrollment_id', 'template_id', 'template_version', name='uq_issued_document_template_enrollment_version'),

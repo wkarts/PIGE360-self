@@ -82,7 +82,7 @@ class CompleteModelRendererTests(unittest.TestCase):
         self.assertIn('&lt;script&gt;x&lt;/script&gt;',doc)
         self.assertIn('<figcaption>&lt;b&gt;Foto&lt;/b&gt;</figcaption>',doc)
         self.assertIn('--brand:#123456',doc)
-        self.assertIn('--heading-font:Georgia,serif',doc)
+        self.assertIn('--heading-font:var(--font)',doc)
         payload=data(composition_version=2,heading_style='editorial')
         payload['identity']['font_family']='custom'
         self.assertNotIn('--heading-font:Georgia,serif',renderer.render(payload))

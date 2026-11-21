@@ -25,7 +25,7 @@ def invite(api,email=None,**values):
     with SessionLocal() as db:
         row=db.scalar(select(UserInvitation).where(UserInvitation.user_id==user['id']))
         job=db.get(m.IntegrationJob,row.job_id);payload=unseal(job.encrypted_payload)
-        token=re.search(r'first-access.html#([A-Za-z0-9_-]+)',payload['text']).group(1)
+        token=re.search(r'first-access#([A-Za-z0-9_-]+)',payload['text']).group(1)
         return user,row.id,job.id,token,payload
 
 

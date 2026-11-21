@@ -53,7 +53,7 @@ checkEnrollmentLaunchers(true);
 finishEnrollment();
 await pendingEnrollment;
 checkEnrollmentLaunchers(false);
-function loginLink(tree){return nodes(tree).filter(n=>n.type==='a' && n.props?.href==='/online.html');}
+function loginLink(tree){return nodes(tree).filter(n=>n.type==='a' && n.props?.href==='/online');}
 function loginText(tree){return nodes(tree).map(n=>typeof n.children==='string'?n.children:'').join(' ');}
 let loginTree=render();
 assert.equal(loginLink(loginTree).length,1,'Atalho visível nas instalações existentes');
@@ -171,10 +171,10 @@ assert.ok(!loginText(portalTree).includes('Não há processo de matrícula abert
 const studentPortalLinks=tree=>nodes(tree).filter(n=>n.type==='a'&&n.children==='Portal do Aluno');
 portalContext.state.catalogFailed=false;
 assert.equal(studentPortalLinks(portal.render.call(portalContext,portalContext,[])).length,0,'No campaign means no publication-specific shortcut');
-portalContext.state.campaign={title:'Matrículas',school_name:'Escola',opens_on:'2026-01-01',closes_on:'2027-12-31',accepting:true,show_student_portal_button:true,student_portal_url:'https://portal.example.test/family.html'};
+portalContext.state.campaign={title:'Matrículas',school_name:'Escola',opens_on:'2026-01-01',closes_on:'2027-12-31',accepting:true,show_student_portal_button:true,student_portal_url:'https://portal.example.test/family'};
 let shortcutTree=portal.render.call(portalContext,portalContext,[]);
 assert.equal(studentPortalLinks(shortcutTree).length,1);
-assert.equal(studentPortalLinks(shortcutTree)[0].props.href,'https://portal.example.test/family.html');
+assert.equal(studentPortalLinks(shortcutTree)[0].props.href,'https://portal.example.test/family');
 assert.doesNotMatch(loginText(shortcutTree),/Área da escola|Portal do aluno e responsável/);
 assert.match(loginText(shortcutTree),/O próximo passo|Cadastro/);
 portalContext.state.campaign.show_student_portal_button=false;

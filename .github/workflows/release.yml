@@ -174,6 +174,8 @@ jobs:
           WEBSITE_DIGEST: ${{ needs.candidate.outputs.website_digest }}
           PORTAL_IMAGE: ghcr.io/wkarts/pige360-self-portal
           PORTAL_DIGEST: ${{ needs.candidate.outputs.portal_digest }}
+          TEACHER_PORTAL_IMAGE: ghcr.io/wkarts/pige360-self-teacher-portal
+          TEACHER_PORTAL_DIGEST: ${{ needs.candidate.outputs.teacher_digest }}
         run: bash scripts/ci/finalize-release.sh
       - uses: actions/upload-artifact@v4
         if: always()

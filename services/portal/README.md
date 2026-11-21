@@ -40,7 +40,7 @@ homologação na instalação. Testes locais/CI usam apenas dados e SMTP sintét
 
 ## Portal do Professor
 
-O mesmo serviço Compose `portal` atende a família na raiz e o professor em `/professor`. O professor usa seu usuário escolar e a autenticação de dois fatores quando exigida. Quem entra pela página inicial com uma conta docente segue para a área do professor. Na instância que serve diretamente os arquivos do gestor, a entrada é `/professor.html`.
+O professor entra pelo domínio do serviço docente e usa seu usuário escolar e autenticação de dois fatores quando exigida. A matrícula online continua indicando o portal familiar.
 
 A Secretaria confere o acesso do professor à instituição e o vínculo com o cadastro da pessoa. A Coordenação atribui turma, ano e disciplina, cadastra o período letivo e vincula a atribuição ao diário do componente. Uma turma pode ter diários de componentes diferentes. Sem atribuição ou sem diário, a programação indica o encaminhamento.
 
@@ -53,13 +53,11 @@ A agenda consulta as datas do Diário e das avaliações. Os horários fixos de 
 
 ### Portal docente em domínio dedicado
 
-O modo padrão mantém a família na raiz e o docente em `/professor`. Para usar um domínio próprio, inclua o serviço de `deploy/compose.teacher.yaml` na mesma stack do gestor. No Dockge, copie a entrada `teacher-portal` para o mapa `services` da stack. Na CLI, a partir de `deploy/dockge`, use o segundo arquivo Compose. O serviço reaproveita a imagem de portal da mesma revisão do backend.
+A família acessa o serviço `portal`. O professor acessa a raiz de `teacher-portal`, com imagem dedicada `ghcr.io/wkarts/pige360-self-teacher-portal`. Cada domínio serve seu próprio login e rejeita as páginas e APIs exclusivas do outro. A matrícula mantém o acesso ao Portal do Aluno.
 
-1. Antes da atualização, faça backup consistente do PostgreSQL e dos arquivos de documentos ou bucket. Registre os digests atuais do gestor e portal. Configure `PORTAL_IMAGE` e a imagem do gestor com as versões candidatas correspondentes quando estiverem publicadas.
-2. Configure `TEACHER_PORTAL_PUBLIC_URL=https://professor.escola.example`, a origem do portal familiar em `PORTAL_PUBLIC_URL` e o segredo compartilhado já usado pela stack em `PORTAL_INTERNAL_TOKEN`. Use HTTPS e `COOKIE_SECURE=true`. O exemplo escuta apenas em `127.0.0.1:58084`. Aponte o proxy TLS do domínio docente para essa porta.
-3. Valide a configuração com `docker compose --env-file .env -f compose.yaml -f ../compose.teacher.yaml --profile portal config --quiet`. Atualize a stack com os mesmos argumentos e `up -d`. Preserve os perfis adicionais da instalação. O gestor aplica as migrações na inicialização. Confira a revisão com `docker compose exec app alembic current`.
-4. Confira `/health/ready` nos dois portais. A raiz docente abre o login do Professor. O link do professor no portal familiar segue para esse domínio. Uma sessão iniciada em um domínio separado exige autenticação própria.
-5. Para voltar ao modo compartilhado mantendo a mesma versão, remova o serviço opcional da stack, esvazie `TEACHER_PORTAL_PUBLIC_URL` e recrie gestor e portal. Para rollback da versão com registros novos, arquive os lançamentos do intervalo, interrompa as gravações e restaure o banco **e os arquivos** do mesmo ponto de backup em cópia isolada. Verifique o vínculo entre protocolos e comprovantes antes de retomar com as imagens anteriores.
+No deployer, abra **Configurar site e portais independentes**, marque **Habilitar Portal do Professor**, informe a URL e a porta e salve.
+
+Nos quatro adaptadores Compose, acrescente `teacher` aos perfis já ativos, configure a origem HTTPS em `TEACHER_PORTAL_PUBLIC_URL` e use a mesma versão de imagem do gestor. Por exemplo, aponte o DNS e o proxy TLS de `portalprofessor.sua-escola.example` para a porta local 58084. A porta do portal familiar continua 58083. Antes de divulgar o endereço docente, confira a raiz, o login e `/health/ready` nos dois domínios. Em instalações que usam o complemento histórico `deploy/compose.teacher.yaml`, consolide a configuração no Compose principal ao atualizar.
 
 ### Rotina da equipe
 

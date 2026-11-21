@@ -27,6 +27,7 @@
     "src/assist.ts",
     "src/diagnostics.ts",
     "src/diary.ts",
+    "src/educacenso.ts",
     "src/contracts.ts",
     "src/signing.ts",
     "src/reports.ts",

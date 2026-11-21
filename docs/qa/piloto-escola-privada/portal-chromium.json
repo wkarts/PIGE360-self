@@ -1,0 +1,137 @@
+{
+  "status": "passed",
+  "mode": "http_e2e",
+  "checks": [
+    "Website e portal separados prontos contra a API interna de teste",
+    "Site separado resolve a escola pelo domínio e renderiza a publicação configurada",
+    "Domínio sem publicação retorna diagnóstico 404, sem mascarar como sobrecarga",
+    "Responsável cria conta no portal, sem usuário administrativo",
+    "Autocadastro do aluno e escolha da oferta persistidos",
+    "Upload documental privado pelo responsável",
+    "Aceites explícitos e envio de pré-matrícula pela interface",
+    "Portal responsivo a 390px, sem rolagem horizontal",
+    "Fila administrativa exibe a inscrição enviada no portal",
+    "Secretaria solicita correção e família reenvia o anexo na mesma inscrição.",
+    "Documento do portal validado pela Secretaria",
+    "Aprovação cria aluno, responsável e matrícula sem duplicação",
+    "Efetivação da matrícula e emissão persistida do comprovante",
+    "Responsável consulta a matrícula efetivada e baixa o documento autorizado",
+    "Secretaria confere o mesmo número ativo na turma e a família vê Matriculada.",
+    "Minhas turmas abre a frequência do diário atribuído pelo atalho do piloto",
+    "Subguias com chamada salva em desktop e celular, recarga e permissões do professor",
+    "Portal orientou o professor sem atribuição e recusou o perfil Secretaria na área docente.",
+    "Portal do Professor separado do gestor: planejamento e programação semanal, sessão restaurada e saída no celular.",
+    "Professor registra duas aulas, chamada, nota 8 corrigida para 8,5 e parecer antes da revisão.",
+    "Responsável autoriza acesso e consulta nota, frequência e PDF do período fechado",
+    "Notícia/evento dirigido a responsáveis aparece no portal da escola",
+    "Conta bancária de homologação configurada pela interface com credencial protegida",
+    "Cobrança de mensalidade criada e enfileirada pela interface, sem simular pagamento",
+    "API bloqueia financeiro para aluno e permite apenas ao responsável com vínculo financeiro ativo",
+    "Aluno autenticado consulta apenas seu boletim no espaço pessoal",
+    "Portal independente autentica aluno, renova sessão, usa menu mobile/teclado e navega pelas views reais e histórico",
+    "Portal familiar sem rolagem horizontal nas seis larguras, paisagem e espaço CSS equivalente a zoom 200%",
+    "Gestor abre subguia por link, filtra turma/componente e restaura o período após recarga",
+    "Secretaria imprime o material do Diário, conclui o protocolo e a família confere a situação.",
+    "Docente publica para a turma e para um aluno. Aluno imprime PDF, responsável acompanha o protocolo e Secretaria recupera o comprovante íntegro.",
+    "Responsável autenticado consulta somente o aluno vinculado e a permissão financeira correspondente",
+    "Quatro composições de site renderizadas em 320, 390, 768 e 1440 px sem overflow",
+    "Catálogo completo: mapa de seis páginas, prévia privada da home curta e das seis páginas sem gravar, aplicação em rascunho, checkpoint durável após reload e restauração sem publicar",
+    "Editor salva página com rota própria, mantém rascunho privado e publica por confirmação; proxy serve /sobre e rejeita página inexistente",
+    "Wizard em lote busca pessoas existentes, simula e cria duas matrículas com resultado persistido",
+    "Financeiro manual registra duas parcelas reais pendentes sem baixa automática",
+    "Assistente manual cria matrícula retomável e abre contratos no contexto da matrícula",
+    "DOCX importado pela interface, campo revisado, PDF real baixado e modelo ativado após conferência",
+    "API: Professor impedido de reabrir; Direção reabre com justificativa registrada.",
+    "Portal independente carrega sem falhas HTTP ou erros de JavaScript",
+    "Nenhum erro de JavaScript nas novas telas exercitadas"
+  ],
+  "responsive": {
+    "login-1440": {
+      "viewport": "1440x950",
+      "document_width": 1440,
+      "horizontal_overflow": false
+    },
+    "login-320": {
+      "viewport": "320x740",
+      "document_width": 320,
+      "horizontal_overflow": false
+    },
+    "family-dashboard-1440": {
+      "viewport": "1440x950",
+      "document_width": 1440,
+      "horizontal_overflow": false
+    },
+    "family-dashboard-390": {
+      "viewport": "390x844",
+      "document_width": 390,
+      "horizontal_overflow": false
+    },
+    "family-menu-390": {
+      "viewport": "390x844",
+      "document_width": 390,
+      "horizontal_overflow": false
+    },
+    "family-320": {
+      "viewport": "320x844",
+      "document_width": 320,
+      "horizontal_overflow": false
+    },
+    "family-360": {
+      "viewport": "360x844",
+      "document_width": 360,
+      "horizontal_overflow": false
+    },
+    "family-390": {
+      "viewport": "390x844",
+      "document_width": 390,
+      "horizontal_overflow": false
+    },
+    "family-768": {
+      "viewport": "768x950",
+      "document_width": 768,
+      "horizontal_overflow": false
+    },
+    "family-1024": {
+      "viewport": "1024x950",
+      "document_width": 1024,
+      "horizontal_overflow": false
+    },
+    "family-1440": {
+      "viewport": "1440x950",
+      "document_width": 1440,
+      "horizontal_overflow": false
+    },
+    "family-landscape-844": {
+      "viewport": "844x390",
+      "document_width": 844,
+      "horizontal_overflow": false
+    },
+    "zoom-200-equivalent-720": {
+      "viewport": "720x900",
+      "document_width": 720,
+      "horizontal_overflow": false
+    },
+    "guardian-320": {
+      "viewport": "320x740",
+      "document_width": 320,
+      "horizontal_overflow": false
+    },
+    "guardian-390": {
+      "viewport": "390x844",
+      "document_width": 390,
+      "horizontal_overflow": false
+    }
+  },
+  "errors": [],
+  "failed_requests": [],
+  "bad_responses": [],
+  "database": "SQLite descartável",
+  "remote_requests_executed": false,
+  "not_validated": [
+    "Provedores reais",
+    "PostgreSQL",
+    "Certificados e assinatura real",
+    "Entrega de código de verificação (contato sintético verificado no banco de teste)"
+  ],
+  "browser": "153.0.8010.0"
+}

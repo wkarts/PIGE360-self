@@ -82,6 +82,9 @@ elif action in ('start','stop','up'):
 elif action=='exec':
     if 'pg_dump' in rest[-1]:sys.stdout.buffer.write(b'pgdump')
     elif 'pg_restore' in rest[-1]:(root/'restored.dump').write_bytes(sys.stdin.buffer.read())
+    elif 'psql' in rest[-1]:
+        (root/'reconcile.sql').write_bytes(sys.stdin.buffer.read())
+        raise SystemExit(int(os.environ.get('FAKE_PSQL_RESULT','0')))
     else:sys.stdin.buffer.read()
 elif action=='run':
     entrypoint=rest[rest.index('--entrypoint')+1]
@@ -137,6 +140,22 @@ class BackupRestoreShellTests(unittest.TestCase):
         self.assertIn('up -d --no-recreate --pull never --wait --wait-timeout 240 app', log)
         self.assertIn('start worker worker-ocr', log)
         self.assertLess(log.rfind('up -d --no-recreate'), log.rfind('start worker worker-ocr'))
+
+    def test_reconciliation_failure_keeps_restored_services_stopped(self):
+        backup_fixture(self.folder, [('documents', 'dir', b'')])
+        self.environment['FAKE_PSQL_RESULT'] = '3'
+        result = self.shell('restore.sh', self.folder, '--confirm-restore')
+        self.assertEqual(result.returncode, 3, result.stderr)
+        sql = (self.storage / 'reconcile.sql').read_text()
+        for table in ('crm_bridge_requests', 'crm_bridge_external_requests',
+                      'connect_message_jobs', 'integration_jobs', 'bank_charges'):
+            with self.subTest(table=table):
+                self.assertIn("IF to_regclass('public." + table + "') IS NOT NULL", sql)
+                self.assertIn('UPDATE ' + table + ' SET', sql)
+        log = self.log.read_text()
+        self.assertIn('stop worker-ocr worker app', log)
+        self.assertNotIn('up -d', log)
+        self.assertNotIn('start worker worker-ocr', log)
 
     def test_s3_backup_and_restore_stop_before_modifying_services(self):
         self.environment['FAKE_BACKEND'] = 's3'
