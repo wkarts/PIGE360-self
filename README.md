@@ -1,128 +1,45 @@
-> **Fluxo GitHub/GHCR:** veja [desenvolvimento, releases, limpeza e implantação self-hosted](docs/ci-cd/FLUXO-GITHUB-GHCR.md). Os deploys ficam em `deploy/`, separados por Docker, Dockge, Portainer e CloudPanel, com ambientes develop e produção. Nenhum deploy externo é executado automaticamente.
+# PIGE360 Self
 
-# PIGE360 Self 0.12.1
-## Gestão escolar, portais e integrações
+O PIGE360 Self é uma aplicação web de gestão escolar instalada na infraestrutura da instituição. A secretaria acompanha o aluno da inscrição à matrícula, o professor registra o trabalho da turma no Diário e a família consulta os resultados publicados. A escola também administra seus documentos, canais de comunicação e site institucional.
 
-Aplicação self-hosted em **FastAPI + Vue 3**, exclusivamente Web/PWA, para a instituição e suas unidades. O pacote contém a aplicação, o frontend compilado, migrations, testes e documentação, preservando a identidade configurada pela escola.
+**[Instalar ou atualizar o PIGE360 Self](instalacao.md)** · [Última versão estável e notas da release](https://github.com/wkarts/PIGE360-self/releases/latest) · [Manual da Secretaria](docs/MANUAL-SECRETARIA.md)
 
-Esta versão amplia os relatórios e as fichas, oferece importação seletiva do legado, melhora cadastros e matrícula online, integra boletins/frequência aos portais, notícias e eventos, provisionamento Mailcow e assinaturas A1. A operação bancária implementada usa Asaas (Pix e boleto). A3 utiliza PDF assinado externamente; o retorno integrado GOV.BR depende das credenciais oficiais.
+## Por onde começar
 
-Veja [escopo, critérios de aceitação e atualização 0.10.0](docs/ENTREGA-0.10.0.md), [Mailcow](docs/MAILCOW.md) e [assinaturas digitais](docs/ASSINATURAS-DIGITAIS.md). Este checkpoint é de código-fonte; a versão 0.10.0 precisa de uma imagem construída deste código ou publicada pelo fluxo de release. O canal `stable` abaixo instala a imagem estável efetivamente publicada.
+| Quero… | Onde começar |
+| --- | --- |
+| Preparar a escola para o ano letivo | Cadastre a instituição e as unidades. Em Estrutura acadêmica, confira ano, séries, turnos e turmas. [Operações escolares](docs/operacoes-escolares-recuperacao.md) |
+| Organizar as pessoas da comunidade escolar | Use o Cadastro único para atribuir vários tipos à mesma pessoa. Gerencie o login e as permissões em Usuários e acessos. [Cadastros](docs/CADASTROS-E-MODAIS.md) · [Perfis e acesso](docs/ACESSO-CADASTRO-2FA.md) |
+| Abrir inscrições | Em Inscrições online, publique um processo com período e ofertas. Use o link gerado pelo gestor. A secretaria confere documentos, vínculos e disponibilidade antes de efetivar a matrícula. [Matrícula online](docs/MATRICULA-ONLINE.md) |
+| Preparar contratos para assinatura | Configure o modelo, confira a via vigente e acompanhe as assinaturas exigidas pela escola. [Contratos e assinaturas](docs/ASSINATURAS-CONTRATOS.md) · [Certificados](docs/CERTIFICADOS-FISCAIS-E-AVISOS.md) |
+| Registrar aulas e consultar o boletim | No Diário, o professor registra aulas, frequência e avaliações das suas turmas. A família consulta no portal os resultados publicados para os alunos vinculados. [Diário Escolar](docs/DIARIO-ESCOLAR-DIGITAL-BAHIA.md) · [Portal da família](docs/portal-familia-layout.md) |
+| Publicar o site ou divulgar uma notícia | Em Publicidade, configure a identidade, escolha o modelo, revise o rascunho na prévia e publique. Em Notícias e eventos, confira o público e o período de exibição. [Site da escola](docs/guias-e-site-escolar.md) |
+| Trazer cadastros de um sistema anterior | A importação seletiva permite revisar a prévia e escolher o que aplicar. [Portabilidade de dados](docs/PORTABILIDADE-DE-DADOS.md) |
 
-## Instalação nova
+## Mensagens, cobranças e declarações
 
-Para validar este código em uma instalação nova antes da release, construa a imagem local e gere um ambiente próprio:
+O sistema oferece e-mail institucional, notificações e conexão com WhatsApp. Para a pré-matrícula que exige verificação de contato, teste o recebimento do código pelo canal configurado antes de divulgar o processo. [E-mail integrado](docs/EMAIL-INTEGRADO.md) · [Mailcow](docs/MAILCOW.md) · [Instâncias Connect API](docs/CONNECT-API-INSTANCIAS.md)
 
-```bash
-docker build --build-arg APP_VERSION=0.10.0 -t pige360-self:0.10.0 .
-python3 scripts/configure.py --channel local --env-file deploy/docker/.env.local --url http://localhost:58080
-docker compose --env-file deploy/docker/.env.local -f deploy/docker/compose.yaml up -d --wait
-```
+O financeiro distingue cobranças manuais das cobranças Asaas por Pix e boleto. Uma solicitação encaminhada à ponte de integração tem acompanhamento próprio. Para confirmar pagamento ou efetivar matrícula, valem os estados e as regras do financeiro. [Integrações](docs/INTEGRACOES.md) · [Capacidades da ponte financeira](docs/INTEGRACAO-CRM.md)
 
-Em uma instalação existente, preserve o `.env`, as chaves e os dados; siga o procedimento em [ENTREGA-0.10.0.md](docs/ENTREGA-0.10.0.md). As instruções a seguir usam o canal estável publicado.
+O Educacenso trabalha com arquivos. A exportação oficial depende de leiaute do Inep validado para o ano e a etapa. Enquanto faltar essa validação, use os recursos de treinamento. Antes de uma declaração, confira o efeito de substituição sobre os dados já declarados. [Implementação dos leiautes](backend/app/educacenso_codec.py)
 
-Pré-requisitos: Docker com Compose, Python 3 para gerar a configuração, armazenamento persistente e acesso aos registries/pacotes na construção da imagem. Não é um instalador air-gapped. Node.js não é necessário no host: o Docker compila a PWA no estágio Node da imagem. O checkpoint também inclui `frontend/dist` para inspeção local.
+## Como a aplicação está organizada
 
-```bash
-cd pige360-self
-python3 scripts/configure.py --channel stable \
-  --env-file deploy/docker/.env.production \
-  --url https://escola.seudominio.com.br
-cd deploy/docker
-docker compose --env-file .env.production -f compose.yaml pull
-docker compose --env-file .env.production -f compose.yaml up -d --wait
-docker compose --env-file .env.production -f compose.yaml ps
-docker compose --env-file .env.production -f compose.yaml logs --tail=100 app worker
-```
+A interface Vue 3 com TypeScript atende ao navegador e à PWA. A API FastAPI usa PostgreSQL. O armazenamento de fotos e anexos pode ser local ou privado em S3/MinIO. Os workers processam documentos e integrações em segundo plano. O gestor, o site público e os portais têm públicos distintos. O guia de instalação mostra quais serviços e domínios configurar para a release escolhida. A especificação da API em execução fica em `/api/v1/openapi.json`. [Arquitetura](docs/ARQUITETURA-MODULAR-UNIFICADA.md) · [Referência de API do repositório](docs/openapi.json) · [Instalação](instalacao.md)
 
-No Windows, o configurador pode ser executado com `py -3 scripts/configure.py`.
+## Guias de consulta
 
-Acesso local: `http://localhost:58080`. No primeiro acesso use `SETUP_TOKEN`, gerado no `.env.production`, para cadastrar o administrador e a instituição. Não há senha padrão. Banco de produção: PostgreSQL. SQLite é exclusivamente uma opção de testes explícita.
+- **Secretaria e direção.** Para conferir documentos, emitir relatórios e preparar o próximo ano, consulte o [manual de operação](docs/MANUAL-SECRETARIA.md) e o [guia de leitura assistida de documentos](docs/OCR-E-CONSULTAS-CADASTRAIS.md).
+- **Administração.** Para configurar ferramentas administrativas, identidade institucional e acesso em duas etapas, consulte [Administração do sistema](docs/ADMINISTRACAO-DO-SISTEMA.md), [identidade visual](docs/IFRAME-WHITELABEL-PERFIL.md) e [contas e 2FA](docs/ACESSO-CADASTRO-2FA.md).
+- **Atendimento.** Se o site ou um portal não abrir, comece pelo domínio afetado, registre o código de atendimento exibido e siga o [roteiro de diagnóstico](docs/site-portal-incident.md).
 
-Para desenvolvimento, use `--channel develop --env-file deploy/docker/.env.develop --url https://dev.escola.seudominio.com.br`; a porta padrão é `58081`. O configurador é somente para instalação nova: preserve o `.env` do adaptador nas atualizações.
+## Qual versão estou consultando?
 
-## Atualização da versão 0.1/0.2
+A [última release estável](https://github.com/wkarts/PIGE360-self/releases/latest) identifica a versão publicada. Na instalação, a rota `/health/live` do gestor informa a versão em execução. Para consultar o manual correspondente, selecione essa tag no GitHub. A documentação de `develop` acompanha o código em validação e pode descrever recursos que ainda aguardam release. [Histórico de releases](https://github.com/wkarts/PIGE360-self/releases) · [Fluxo GitHub e GHCR](docs/ci-cd/FLUXO-GITHUB-GHCR.md)
 
-Leia `docs/ATUALIZACAO-0.3.0.md`. Faça backup do banco, dos documentos e da configuração antes de substituir o código. Mantenha o diretório de implantação, o projeto Compose e os volumes existentes.
+## Primeiro dia de homologação
 
-```bash
-python3 scripts/prepare-upgrade.py --env-file deploy/docker/.env.production
-docker compose --env-file deploy/docker/.env.production -f deploy/docker/compose.yaml up -d --wait
-docker compose --env-file deploy/docker/.env.production -f deploy/docker/compose.yaml logs --tail=100 app worker
-```
+Uma sugestão de aceite é percorrer a escola com três contas fictícias. A secretaria prepara uma turma e efetiva uma matrícula. O professor registra e publica um resultado. O responsável entra no portal e confere se vê o aluno vinculado e o mesmo período publicado. Esse percurso verifica configuração, permissões e publicação antes de convidar as famílias. [Roteiro de treinamento](docs/TREINAMENTO-NAVEGANTES.md)
 
-O preparador preserva as credenciais anteriores, cria cópia protegida de `.env`, acrescenta opções ausentes e gera a chave de criptografia das integrações somente quando ela não existe. Imagens de registry personalizado exigem revisão manual da tag. Nunca use `docker compose down -v` para atualizar.
-
-## Serviços
-
-| Serviço | Função | Porta pública |
-|---|---|---|
-| app | FastAPI + frontend compilado | `APP_BIND:APP_PORT`, padrão `127.0.0.1:58080` |
-| db | PostgreSQL persistente | Nenhuma |
-| worker | Fila persistente de mensagens, códigos e cobranças; conciliação | Nenhuma |
-| storage | Bind mount relativo ou bucket S3/MinIO privado para fotos e anexos | Nenhuma (quando externo, endpoint interno) |
-
-Não há Nginx, Traefik, Redis ou RabbitMQ internos. O worker compartilha a imagem da aplicação e usa fila persistente no PostgreSQL. O proxy HTTPS externo deve encaminhar para a porta da aplicação e preservar o hostname. `TRUSTED_PROXY_IPS` permite confiar somente em IP/CIDR conhecido do proxy, quando necessário. Não aceite qualquer remetente como proxy confiável.
-
-## Primeiro fluxo operacional
-
-Configure escola/unidade, ano letivo ativo, série, turno, turma e tipos de documento. Em **Inscrições online → Processos e link público**, crie e publique um processo com período de inscrição, ofertas e aviso de privacidade revisado pela instituição.
-
-O link é `/online.html?campaign=SLUG`. O responsável cria uma conta própria, cadastra um ou mais alunos, anexa documentos, aceita os termos e envia. A Secretaria recebe a inscrição, analisa, solicita correções, aprova e efetiva a matrícula. O comprovante passa a estar disponível na conta do responsável.
-
-**A pré-matrícula não garante nem reserva vaga.** A efetivação exige conferência de identidade/vínculo, disponibilidade e documentação segundo as políticas configuradas. Cobrança obrigatória, quando definida, precisa estar recebida; `CONFIRMED` não basta.
-
-A verificação de contato vem habilitada por padrão no processo. Configure SMTP ou Connect API antes de publicar um processo que a exija. Não desative a verificação apenas para contornar uma integração mal configurada em produção.
-
-## Secretaria: cadastro único e arquivos
-
-A Secretaria opera uma tela de **Cadastro único** para uma Pessoa e seus tipos funcionais: Aluno, Professor, Responsável, Pai, Mãe, Colaborador, Funcionário e outros. Uma mesma Pessoa pode acumular vários tipos sem duplicação. Login, usuário e perfil de acesso pertencem ao domínio de autenticação e são administrados separadamente. A ficha inclui dados civis, documentos, filiação, contatos, endereço, saúde escolar, matrícula, histórico e foto.
-
-Arquivos e fotos ficam privados. Por padrão, cada stack usa o bind mount relativo `data-documents/`; para um bucket S3/MinIO, configure `STORAGE_BACKEND=s3`, `STORAGE_BUCKET`, endpoint, região e credenciais no arquivo do adaptador. A API não publica URL direta e verifica integridade SHA-256 no download.
-
-## Perfis e módulos
-
-A instalação continua sendo um único PIGE360 Self. O acesso é separado por permissões e perfis (\`Administrador\`, \`Direção\`, \`Coordenação\`, \`Secretaria\`, \`Professor\`, \`Aluno\`, \`Responsável\` e \`Consulta\`). Professor, Aluno e Responsável recebem somente o contexto vinculado ao próprio usuário; os endpoints administrativos não ficam disponíveis para esses perfis.
-
-A arquitetura e o estado dos módulos está em [docs/ARQUITETURA-MODULAR-UNIFICADA.md](docs/ARQUITETURA-MODULAR-UNIFICADA.md). Os comandos completos dos ambientes estão em [deploy/README.md](deploy/README.md), com modelos de ambiente separados por adaptador.
-
-## Documentação
-
-- `docs/MATRICULA-ONLINE.md`: operação do portal e atendimento.
-- `docs/INTEGRACOES.md`: ASAAS, Connect API, SMTP, webhooks e recuperação.
-- `docs/ATUALIZACAO-0.3.0.md`: instalação existente, backup e atualização.
-- `docs/ESCOPO-0.3.0.md`: recursos entregues e limites.
-- `docs/RELATORIO-ENTREGA.md`: evidências e pendências de homologação.
-- `docs/MANUAL-SECRETARIA.md`: cadastros e operação interna preexistente.
-- `docs/openapi.json`: contrato da API desta versão; também em `/api/v1/openapi.json`.
-
-## Desenvolvimento e testes
-
-Foi preservado o backend SQLAlchemy síncrono e o frontend Vue/TypeScript com templates pré-compilados da entrega anterior. Não houve migração para Vite, Pinia ou Vue Router.
-
-```bash
-python3 -m pip install -r backend/requirements-dev.txt
-npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
-node frontend/build.mjs
-cd backend
-python3 -m pytest -q
-cd ..
-python3 scripts/validate_local.py
-python3 -m playwright install chromium
-python3 scripts/e2e.py
-python3 scripts/e2e-online.py
-```
-
-Os dois últimos comandos tentam navegação HTTP real. `PIGE_UI_BRIDGE=1` ativa explicitamente um mecanismo de testes em ambientes que bloqueiam navegação; ele encaminha para a API real com HTTPX, mas não valida cookies nativos, CSP de navegação ou instalação PWA. Não o use para declarar esses itens homologados.
-
-## Segurança e operação
-
-Os usuários do portal não recebem token administrativo. Anexos exigem acesso à inscrição correta. Senhas têm hash; credenciais de integrações e conteúdo de jobs usam criptografia autenticada com chave fora do banco. Dados privados não entram no cache offline da PWA. HTTPS é obrigatório para publicação do portal; armazenamento de dados de alunos não é oferecido offline.
-
-A instituição deve definir aviso de privacidade, retenção, pessoas autorizadas e procedimentos de conferência. Os controles técnicos entregues não são certificação jurídica de conformidade. Backups contêm dados pessoais e devem ser protegidos, cifrados e testados no destino.
-
-**ASAAS e Connect API não foram homologados com credenciais reais nesta entrega. Docker/PostgreSQL e instalação PWA precisam ser conferidos na infraestrutura de destino.**
-
-### Continuidade operacional da PR 57
-
-[Portal privado, convites, importação persistente e recuperação de backups/restauração](docs/implementation/2026-10-19-pr57-continuity.md). Site e portal têm imagens, portas e perfis Compose próprios; a matrícula e suas regras continuam no núcleo. A documentação distingue testes sintéticos, Docker/CI e homologações externas.
+Para quem desenvolve ou mantém a instalação, os testes da API ficam em [backend/tests](backend/tests), as regressões da interface em [frontend/tests](frontend/tests) e a sequência executada nas PRs em [validação contínua](.github/workflows/ci.yml).

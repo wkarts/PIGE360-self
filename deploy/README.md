@@ -2,6 +2,8 @@
 
 Todos os artefatos de execução ficam neste diretório. Não há `compose.yaml` nem ambiente de deploy solto na raiz do repositório.
 
+Para instalar pela primeira vez ou atualizar uma escola, consulte o [guia de instalação](../instalacao.md). Aqui ficam os detalhes de cada adaptador.
+
 ## Matriz de stacks
 
 Cada adaptador possui o mesmo contrato, com `compose.yaml`, `.env.develop.example` e `.env.production.example` próprios:
@@ -82,8 +84,8 @@ Em um `.env` já criado, troque o antigo `MINIO_IMAGE=quay.io/minio/minio:RELEAS
 
 ## Atualização, backup e rollback
 
-Antes de atualizar, registre a imagem atual por digest e faça um backup verificado do PostgreSQL e do volume `data-documents/` (inclusive `trust-roots/`) com `PIGE_STACK_DIR=deploy/ADAPTADOR sh scripts/backup.sh`. Guarde uma cópia segura do `.env` e das chaves com o mesmo ponto de recuperação. Para S3/MinIO, obtenha também um snapshot coerente do bucket; o script local não copia o bucket. Não execute `down -v` e não troque `COMPOSE_PROJECT_NAME` ou os bind mounts.
+Antes de atualizar, registre a imagem atual por digest. Em stacks com armazenamento local, use `PIGE_STACK_DIR=deploy/ADAPTADOR sh scripts/backup.sh` para copiar o PostgreSQL e os arquivos locais no layout suportado, incluindo as raízes de confiança quando presentes. Com S3/MinIO, o script recusa a execução. Providencie uma cópia coordenada do banco, do bucket e dos arquivos locais. Guarde uma cópia protegida do `.env` e das chaves do mesmo ponto de recuperação. Não execute `down -v` e não troque `COMPOSE_PROJECT_NAME` ou os bind mounts.
 
 Revise as migrations da imagem nova, atualize as opções do `.env` com `python3 scripts/prepare-upgrade.py --env-file deploy/ADAPTADOR/.env.production`, ajuste `APP_IMAGE` para uma referência imutável e execute `docker compose --env-file deploy/ADAPTADOR/.env.production -f deploy/ADAPTADOR/compose.yaml config --quiet`, `pull` e `up -d --wait`. Confira `ps`, `logs`, `/health/ready`, login, importação, contratos e downloads. O app aplica migrations ao iniciar; voltar apenas a imagem anterior pode deixá-la incompatível com o banco atualizado. Se for necessário retornar, preserve o estado com falha, restaure **juntos** banco, arquivos, `.env`/chaves e a imagem anterior a partir do mesmo ponto de recuperação, em manutenção planejada. O `restore.sh` exige `--confirm-restore` e substitui dados.
 
-Os serviços publicados são somente `app`; PostgreSQL e workers permanecem na rede interna. Confira também a saúde do `worker-ocr` após cada atualização.
+O gestor e as superfícies públicas habilitadas possuem portas de acesso próprias. Confira o [mapa de serviços e domínios](../instalacao.md#site-público-e-portais). PostgreSQL e workers permanecem na rede interna. Confira também a saúde do `worker-ocr` após cada atualização.
