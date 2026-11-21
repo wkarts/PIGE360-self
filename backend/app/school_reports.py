@@ -94,7 +94,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
         identity = identity_data(db) if db is not None else {
             'display_name': school_name, 'short_name': school_name[:30], 'primary_color': '#205D79',
             'secondary_color': '#172b3a', 'font_family': 'system', 'logo_asset_id': ''}
-        name = identity['display_name']
+        name = school_name if kit else identity['display_name']
         font_choice = (school.report_preferences or {}).get('font_family', 'inherit') if school and kit else 'inherit'
         if font_choice != 'inherit':
             identity = {**identity, 'font_family': font_choice}
@@ -344,7 +344,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                 box = KeepInFrame(side-10*mm, top-67*mm, facts, mode='shrink')
                 _, h = box.wrapOn(canvas,side-10*mm,top-67*mm)
                 box.drawOn(canvas,left,top-29*mm-h)
-            canvas.setCreator(school_name if kit else name)
+            canvas.setCreator(name)
             canvas._doc.info.producer = name
             top = page_height - 8 * mm
             emblem = 22 * mm
