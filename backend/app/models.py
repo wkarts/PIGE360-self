@@ -74,6 +74,8 @@ class SchoolSupportSettings(Record, Base):
 
 
 class School(Record, Base):
+    report_logo: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True, info={'legacy_internal': True})
+    report_preferences: Mapped[dict] = mapped_column(JSON, default=dict, server_default='{}')
     __tablename__ = 'schools'
     # Colunas das primeiras revisões da instalação, mantidas só para preservar o histórico.
     educacenso_training: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(),
@@ -171,6 +173,7 @@ class Shift(Record, Scoped, Base):
     __table_args__ = (UniqueConstraint('school_id', 'name'),)
 
 class ClassGroup(Record, Scoped, Base):
+    academic_period_ids: Mapped[list] = mapped_column(JSON, default=list, server_default='[]')
     __tablename__ = 'class_groups'
     name: Mapped[str] = mapped_column(String(120))
     unit_id: Mapped[str] = mapped_column(ForeignKey('units.id'))

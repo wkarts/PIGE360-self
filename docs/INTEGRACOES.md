@@ -143,3 +143,11 @@ Documentação consultada em 22/09/2026; não houve acesso autenticado à conta 
 - QR Code Pix: https://docs.asaas.com/reference/obter-qr-code-para-pagamentos-via-pix
 - Webhooks/autenticação: https://docs.asaas.com/docs/sobre-os-webhooks
 - Eventos: https://docs.asaas.com/docs/webhook-para-cobrancas
+
+## Atendimento pelo Hub
+
+Em **Instituição → Atendimento → Configurar atendimento**, selecione a escola e as áreas que devem exibir o botão. Em **Endereço do serviço**, use a URL base da instalação do Hub. Em **Chave do canal de atendimento**, informe o `websiteToken` do canal de site. Ao editar, deixar a chave em branco conserva a já cadastrada. A posição, o formato compacto ou com texto e o título são configuráveis por escola.
+
+O navegador carrega `/packs/js/sdk.js` a partir da base cadastrada e entrega o identificador público ao SDK. Esse identificador pode ser visto nas ferramentas do navegador. Guarde as credenciais administrativas do Hub exclusivamente no servidor.
+
+Se o Hub devolver HTTP 429 ao abrir o widget, consulte o horário, o caminho da requisição e o limite aplicado no Hub ou no proxy. Ao compartilhar evidências, remova a query string. As áreas habilitadas da mesma escola e conta reutilizam a conversa. Uma área desabilitada, uma troca de instituição ou uma troca de conta encerram o contexto anterior.

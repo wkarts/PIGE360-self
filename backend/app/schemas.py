@@ -317,6 +317,7 @@ class WaiverInput(Input):
     reason: str = Field(min_length=5, max_length=2000)
 
 class IssueInput(Input):
+    orientation: Literal["portrait", "landscape"] | None = None
     kind: Literal['student_record','enrollment_receipt','enrollment_declaration','enrollment_form']
     enrollment_id: str | None = None
 

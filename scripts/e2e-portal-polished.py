@@ -124,6 +124,34 @@ try:
     with sync_playwright() as pw, capture_browser_failure():
         binary=os.getenv('CHROMIUM_PATH') or (None if Path(pw.chromium.executable_path).exists() else shutil.which('chromium'))
         browser=pw.chromium.launch(headless=True,**({'executable_path':binary} if binary else {}),args=['--no-sandbox'])
+        hub='https://atendimento.example.test'
+        config={'enabled':True,'base_url':hub,'token':'canal-ficticio-portal','position':'right',
+                'widget_type':'standard','launcher_title':'Secretaria','enabled_areas':['login','teacher_portal']}
+        enabled=client.put(base+'/support-hub',headers=headers,json=config)
+        assert enabled.status_code==200, enabled.text
+        sdk="""window.hubSDK={run(options){
+            if(options.websiteToken!=='canal-ficticio-portal'||options.baseUrl!=='https://atendimento.example.test')return;
+            const button=document.createElement('button');button.textContent=window.hubSettings.launcherTitle;
+            document.body.append(button);
+        }};"""
+        for origin in (PORTAL_URL,TEACHER_URL):
+            probe=browser.new_page()
+            probe.route(hub+'/packs/js/sdk.js',lambda route:route.fulfill(content_type='application/javascript',body=sdk))
+            probe.goto(origin)
+            widget=probe.frame_locator('[data-pige-support-frame]').get_by_role('button',name='Secretaria')
+            expect(widget).to_be_visible()
+            if origin==TEACHER_URL:
+                probe.get_by_label('E-mail',exact=True).fill(teacher['email'])
+                probe.get_by_label('Senha',exact=True).fill(password)
+                with probe.expect_response(lambda r:'/support-widget?area=teacher_portal' in r.url and r.ok):
+                    probe.get_by_role('button',name='Entrar como professor').click()
+                expect(widget).to_be_visible()
+            probe.close()
+        assert httpx.get(PORTAL_URL+base+'/support-widget?area=teacher_portal').status_code==404
+        assert httpx.get(TEACHER_URL+base+'/support-widget?area=guardian_portal').status_code==404
+        config.update(enabled=False,version=enabled.json()['version'],token='')
+        assert client.put(base+'/support-hub',headers=headers,json=config).status_code==200
+        record('Hub parametrizado nos dois serviços de portal, com CSP real e permissões de área')
         parentContext=browser.new_context(viewport={'width':1366,'height':950},locale='pt-BR',accept_downloads=True)
         parent=parentContext.new_page();parent.set_default_timeout(8000);parent.on('pageerror',lambda e:errors.append('portal: '+str(e)));page=parent
         if bridge:
@@ -370,13 +398,44 @@ try:
         parent.get_by_role('button',name='Ativar acesso',exact=True).click()
         expect(parent.get_by_role('button',name='Revogar acesso',exact=True)).to_be_visible()
         parent.get_by_role('button',name=re.compile('^Boletim')).click()
-        expect(parent.locator('.learning-workspace table')).to_contain_text('Matemática')
-        expect(parent.locator('.learning-workspace table')).to_contain_text('8,5')
-        expect(parent.locator('.learning-workspace table')).to_contain_text('100%')
+        expect(parent.get_by_role('table', name=re.compile('^Rendimento e frequência'))).to_contain_text('Matemática')
+        expect(parent.get_by_role('table', name=re.compile('^Rendimento e frequência'))).to_contain_text('8,5')
+        expect(parent.locator('.learning-workspace td[data-label="Frequência"]')).to_contain_text('100%')
         with parent.expect_download() as down:parent.get_by_role('button',name='Baixar boletim PDF',exact=True).click()
         down.value.save_as(str(OUT/'boletim-escolar.pdf'))
         parent.screenshot(path=str(OUT/'05-portal-boletim.png'),full_page=True)
         record('Responsável autoriza acesso e consulta nota, frequência e PDF do período fechado')
+        kit_context=browser.new_context(accept_downloads=True)
+        kit_page=kit_context.new_page()
+        kit_page.set_default_timeout(10000)
+        kit_page.goto(URL)
+        kit_page.get_by_label('E-mail',exact=True).fill('secretaria@example.com')
+        kit_page.get_by_label('Senha',exact=True).fill(password)
+        kit_page.get_by_role('button',name='Entrar na aplicação').click()
+        expect(kit_page.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible()
+        page=kit_page
+        kit_page.goto(URL+'/#/reports')
+        kit_page.get_by_text('Boletins e fichas escolares',exact=True).click()
+        kit=kit_page.locator('details',has=kit_page.get_by_text('Boletins e fichas escolares',exact=True))
+        kit.get_by_label('Modelo de boletim da escola').select_option('panel')
+        kit.get_by_role('combobox',name=re.compile('^Ano letivo')).select_option(year['id'])
+        kit.get_by_role('button',name='Listar matrículas').click()
+        expect(kit.get_by_text('Lucas Almeida — Teste',exact=False)).to_be_visible()
+        with kit_page.expect_download() as down:
+            kit.get_by_role('button',name='Visualizar prévia em PDF').first.click()
+        down.value.save_as(str(OUT/'previa-painel.pdf'))
+        assert client.get(base+'/report-preferences',headers=headers).json()['bulletin']=='integrated'
+        kit.get_by_role('button',name='Salvar padrões da escola').click()
+        expect(kit.get_by_text('Preferências salvas para as próximas emissões.')).to_be_visible()
+        kit.locator('article input[type=checkbox]').first.check()
+        kit.get_by_role('button',name='Emitir e assinar selecionados com A1').click()
+        expect(kit.get_by_role('alert')).to_contain_text('certificado A1')
+        kit.get_by_label('Modelo de boletim da escola').select_option('integrated')
+        with kit_page.expect_response(lambda r: '/report-preferences' in r.url and r.request.method=='PUT' and r.ok):
+            kit.get_by_role('button',name='Salvar padrões da escola').click()
+        record('Secretaria seleciona matrícula, baixa prévia em outro modelo antes de salvar e vê a pendência A1 na emissão.')
+        kit_context.close()
+        page=admin
         post('/community-posts',{'title':'Reunião de famílias — Teste','content':'Encontro sintético para acompanhamento escolar dos estudantes.','kind':'event','audience':'guardians','status':'published','event_start':'2027-02-10T14:00:00-03:00','location':'Auditório da escola'})
         parent.get_by_role('button',name=re.compile('^Notícias')).click()
         expect(parent.get_by_text('Reunião de famílias — Teste',exact=True)).to_be_visible()
@@ -431,9 +490,9 @@ try:
         studentContext=browser.new_context(viewport={'width':1366,'height':950},locale='pt-BR',accept_downloads=True)
         studentPage=studentContext.new_page();studentPage.on('pageerror',lambda e:errors.append('aluno: '+str(e)));page=studentPage
         studentPage.goto(URL);studentPage.get_by_label('E-mail',exact=True).fill('aluno@example.com');studentPage.get_by_label('Senha',exact=True).fill(password);studentPage.get_by_role('button',name='Entrar na aplicação').click()
-        expect(studentPage.locator('.learning-workspace table')).to_contain_text('Matemática')
-        expect(studentPage.locator('.learning-workspace table')).to_contain_text('8,5')
-        expect(studentPage.locator('.learning-workspace table')).to_contain_text('100%')
+        expect(studentPage.get_by_role('table', name=re.compile('^Rendimento e frequência'))).to_contain_text('Matemática')
+        expect(studentPage.get_by_role('table', name=re.compile('^Rendimento e frequência'))).to_contain_text('8,5')
+        expect(studentPage.locator('.learning-workspace td[data-label="Frequência"]')).to_contain_text('100%')
         studentPage.screenshot(path=str(OUT/'07-portal-aluno-boletim.png'),full_page=True)
         record('Aluno autenticado consulta apenas seu boletim no espaço pessoal')
         familyContext=browser.new_context(viewport={'width':320,'height':740},locale='pt-BR')
@@ -514,7 +573,7 @@ try:
         familyPage.keyboard.press('Escape')
         expect(familyPage.get_by_role('button',name='Abrir menu',exact=True)).to_be_focused()
         expect(familyPage.get_by_role('button',name='Abrir menu',exact=True)).to_have_attribute('aria-expanded','false')
-        family_nav('Vida acadêmica');expect(familyPage.locator('.learning-workspace table')).to_contain_text('Matemática')
+        family_nav('Vida acadêmica');expect(familyPage.get_by_role('table', name=re.compile('^Rendimento e frequência'))).to_contain_text('Matemática')
         family_nav('Documentos');expect(familyPage.get_by_role('heading',name='Documentos de Lucas Almeida — Teste')).to_be_visible()
         family_nav('Financeiro');expect(familyPage.get_by_role('heading',name='Financeiro de Lucas Almeida — Teste')).to_be_visible()
         expect(familyPage.get_by_text('Seu vínculo não autoriza a consulta financeira.',exact=False)).to_be_visible()
@@ -522,7 +581,7 @@ try:
         familyPage.go_forward();expect(familyPage.locator('#family-title')).to_have_text('Financeiro')
         family_nav('Comunicados');expect(familyPage.get_by_text('Nenhuma publicação disponível.',exact=True)).to_be_visible()
         family_nav('Agenda escolar');expect(familyPage.get_by_text('Nenhuma publicação disponível.',exact=True)).to_be_visible()
-        family_nav('Vida acadêmica');expect(familyPage.locator('.learning-workspace table')).to_contain_text('Matemática')
+        family_nav('Vida acadêmica');expect(familyPage.get_by_role('table', name=re.compile('^Rendimento e frequência'))).to_contain_text('Matemática')
         record('Portal independente autentica aluno, renova sessão, usa menu mobile/teclado e navega pelas views reais e histórico')
         for width in (320,360,390,768,1024,1440):
             check_family_viewport(width,844 if width<650 else 950,f'family-{width}')

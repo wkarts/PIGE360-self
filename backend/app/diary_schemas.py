@@ -6,7 +6,13 @@ from pydantic import Field, model_validator
 from .schemas import Input
 
 
+class CalendarInput(Input):
+    period_ids: list[str] = Field(min_length=1, max_length=200)
+    version: int = Field(ge=1)
+
+
 class AcademicPeriodInput(Input):
+    class_group_id: str = Field(default="", max_length=36)
     academic_year_id: str
     name: str = Field(min_length=2,max_length=80)
     starts_on: date

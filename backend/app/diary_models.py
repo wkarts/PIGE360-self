@@ -3,7 +3,7 @@
 Estrutura aditiva: reutiliza escola, turma, matrícula, pessoa e atribuição docente.
 """
 from datetime import date, datetime
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import false, Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base, Record
@@ -11,6 +11,7 @@ from .models import Scoped
 
 
 class AcademicPeriod(Record, Scoped, Base):
+    class_calendar_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     __tablename__ = "academic_periods"
     academic_year_id: Mapped[str] = mapped_column(ForeignKey("academic_years.id"), index=True)
     name: Mapped[str] = mapped_column(String(80))
