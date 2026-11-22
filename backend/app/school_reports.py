@@ -168,10 +168,10 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
             item.setStyle(TableStyle(commands))
             return item
         def section_heading(label):
-            band = Table([[p(label, 'section')]], colWidths=[width], hAlign='LEFT')
+            band = Table([[p(label, 'card_title' if compact else 'section')]], colWidths=[width], hAlign='LEFT')
             band.setStyle(TableStyle([('LINEBEFORE',(0,0),(0,0),2,accent),
                                       ('BACKGROUND',(0,0),(0,0),pale), ('LEFTPADDING',(0,0),(0,0),7),
-                                      ('TOPPADDING',(0,0),(0,0),3), ('BOTTOMPADDING',(0,0),(0,0),3)]))
+                                      ('TOPPADDING',(0,0),(0,0),2 if compact else 3), ('BOTTOMPADDING',(0,0),(0,0),2 if compact else 3)]))
             return band
 
         def record_table(cols, records):
@@ -211,7 +211,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
             banner_widths = [width]
             if photo:
                 picture = ReportImage(io.BytesIO(photo))
-                picture._restrictSize(19 * mm, 22 * mm) if compact else picture._restrictSize(24 * mm, 28 * mm)
+                picture._restrictSize(18 * mm, 19 * mm) if compact else picture._restrictSize(24 * mm, 28 * mm)
                 banner_cells.append(picture)
                 banner_widths = [width - 31 * mm, 31 * mm]
             elif reserve_photo:
@@ -309,7 +309,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
             card.setStyle(TableStyle(spans + [
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'), ('BOX', (0, 0), (-1, -1), .5, border),
                 ('BACKGROUND', (0, 0), (-1, 0), pale), ('LINEBELOW', (0, 0), (-1, 0), .6, border),
-                ('TOPPADDING', (0, 0), (-1, -1), 2), ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+                ('TOPPADDING', (0, 0), (-1, -1), 1.5), ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
             ]))
             return card
 
@@ -334,7 +334,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                 row.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP')] + [
                     (side, (0, 0), (-1, -1), 0) for side in
                     ('LEFTPADDING', 'RIGHTPADDING', 'TOPPADDING', 'BOTTOMPADDING')]))
-                parts.extend([row, Spacer(1, 6)])
+                parts.extend([row, Spacer(1, 4)])
                 group.clear()
 
             for section in sections or []:
@@ -349,7 +349,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                 if section.get('fields'):
                     # Caso longo: largura integral, com cabeçalho repetido se
                     # houver continuação; sem encolher ou suprimir campos.
-                    parts.extend([compact_data(section, width, full=True), Spacer(1, 6)])
+                    parts.extend([compact_data(section, width, full=True), Spacer(1, 4)])
                 else:
                     heading = section_heading(section['title'])
                     heading.keepWithNext = True
@@ -358,7 +358,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                         parts.append(p(section['text']))
                     if section.get('columns'):
                         parts.append(record_table(section['columns'], section['rows']))
-                    parts.append(Spacer(1, 6))
+                    parts.append(Spacer(1, 4))
             flush()
 
         if compact:
