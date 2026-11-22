@@ -107,6 +107,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
         muted, border, pale = colors.HexColor('#475569'), colors.HexColor('#cbd5df'), colors.HexColor('#f4f7fa')
         pagesize = landscape(A4) if orientation == 'landscape' else A4
         page_width, page_height = pagesize
+        compact = layout == 'compact_record'
         margin = 13 * mm
         # Platypus mantém seis pontos de respiro em cada lado do frame.
         side = 59 * mm if layout == 'panel' else 0
@@ -122,6 +123,12 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
         }
         styles['caption'] = ParagraphStyle('ReportCaption', parent=styles['small'], alignment=TA_CENTER)
         styles['field'] = ParagraphStyle('ReportField', fontName=bold, fontSize=7.4, leading=9.6, textColor=muted)
+        if compact:
+            styles['card_title'] = ParagraphStyle('RecordCard', fontName=bold, fontSize=9.6, leading=12, textColor=accent)
+            banner_ink = colors.HexColor(foreground(color))
+            styles['profile_name'] = ParagraphStyle('RecordName', fontName=bold, fontSize=15, leading=18, textColor=banner_ink, splitLongWords=True)
+            styles['profile_detail'] = ParagraphStyle('RecordDetail', parent=styles['small'], textColor=banner_ink)
+            styles['profile_caption'] = ParagraphStyle('RecordCaption', parent=styles['caption'], textColor=banner_ink)
         styles['numeric'] = ParagraphStyle('ReportNumeric', parent=styles['body'], alignment=TA_RIGHT)
         def p(value, style='body'):
             return Paragraph(escape(str(value if value is not None and value != '' else '-')).replace('\n', '<br/>'), styles[style])
@@ -154,8 +161,8 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
         def table(values, widths, header=True):
             item = LongTable(values, colWidths=widths, repeatRows=1 if header else 0, hAlign='LEFT', splitInRow=1)
             commands = [('VALIGN', (0, 0), (-1, -1), 'TOP'), ('LEFTPADDING', (0, 0), (-1, -1), 7),
-                        ('RIGHTPADDING', (0, 0), (-1, -1), 7), ('TOPPADDING', (0, 0), (-1, -1), 4),
-                        ('BOTTOMPADDING', (0, 0), (-1, -1), 4), ('LINEBELOW', (0, 0), (-1, -1), .35, border)]
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 7), ('TOPPADDING', (0, 0), (-1, -1), 3 if compact else 4),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 3 if compact else 4), ('LINEBELOW', (0, 0), (-1, -1), .35, border)]
             if header:
                 commands += [('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e6ebef')), ('LINEBELOW',(0,0),(-1,0),.8,accent), ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, pale])]
             item.setStyle(TableStyle(commands))
@@ -187,7 +194,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
 
         stream = io.BytesIO()
         doc = SimpleDocTemplate(stream, pagesize=pagesize, leftMargin=margin+side, rightMargin=margin,
-                                topMargin=43 * mm, bottomMargin=(37 if kit else 23) * mm, title=title, author=name)
+                                topMargin=(38 if compact else 43) * mm, bottomMargin=(44 if compact else 37 if kit else 23) * mm, title=title, author=name)
         parts = []
         if period:
             parts.append(p('Período: ' + period, 'small'))
@@ -199,16 +206,16 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
         if parts:
             parts.append(Spacer(1, 3 * mm))
         if profile and layout != 'panel':
-            content = [p(profile.get('name', ''), 'section'), p(profile.get('detail', ''), 'small')]
+            content = [p(profile.get('name', ''), 'profile_name' if compact else 'section'), p(profile.get('detail', ''), 'profile_detail' if compact else 'small')]
             banner_cells = [content]
             banner_widths = [width]
             if photo:
                 picture = ReportImage(io.BytesIO(photo))
-                picture._restrictSize(24 * mm, 28 * mm)
+                picture._restrictSize(19 * mm, 22 * mm) if compact else picture._restrictSize(24 * mm, 28 * mm)
                 banner_cells.append(picture)
                 banner_widths = [width - 31 * mm, 31 * mm]
             elif reserve_photo:
-                banner_cells.append(p('Foto não cadastrada', 'caption'))
+                banner_cells.append(p('Foto não cadastrada', 'profile_caption' if compact else 'caption'))
                 banner_widths = [width - 31 * mm, 31 * mm]
             if kit and len(banner_cells) == 2:
                 banner_cells.reverse()
@@ -223,7 +230,9 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                 ('TOPPADDING', (0, 0), (-1, -1), 5), ('BOTTOMPADDING', (0, 0), (-1, -1), 5)]))
             if layout == 'journey':
                 banner.setStyle(TableStyle([('LINEABOVE', (0, 0), (-1, 0), 1.6, accent)]))
-            parts.extend([banner, Spacer(1, 3 * mm)])
+            if compact:
+                banner.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, -1), primary)]))
+            parts.extend([banner, Spacer(1, (2 if compact else 3) * mm)])
         if summary:
             # Índices em uma faixa tabular compacta, com rótulos acima das medidas.
             count = min(4, len(summary))
@@ -270,8 +279,92 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                                       ('INNERGRID',(0,0),(len(group)-1,0),.4,border), ('LINEABOVE',(0,0),(len(group)-1,0),1,accent)]))
             return card
 
+        def compact_data(section, available, *, full=False):
+            # Cada campo mantém rótulo e valor na mesma célula. Campos maiores
+            # usam a largura inteira, sem reduzir fonte ou cortar o conteúdo.
+            slots = (3 if orientation == 'landscape' else 2) if full else 2
+            values, spans = [], []
+            title = p(section['title'], 'card_title')
+            values.append([title] + [''] * (slots - 1))
+            spans.append(('SPAN', (0, 0), (slots - 1, 0)))
+            pending = []
+            for key, value in section.get('fields', []):
+                value = value if value not in (None, '') else 'Não informado'
+                field = [p(key, 'field'), p(value)]
+                if field[1].wrap(available / slots - 12, 1000)[1] > 2 * styles['body'].leading:
+                    if pending:
+                        values.append(pending + [''] * (slots - len(pending)))
+                        pending = []
+                    spans.append(('SPAN', (0, len(values)), (slots - 1, len(values))))
+                    values.append([field] + [''] * (slots - 1))
+                else:
+                    pending.append(field)
+                    if len(pending) == slots:
+                        values.append(pending)
+                        pending = []
+            if pending:
+                values.append(pending + [''] * (slots - len(pending)))
+            card = Table(values, colWidths=[available / slots] * slots, hAlign='LEFT',
+                         repeatRows=1, splitByRow=1, splitInRow=1)
+            card.setStyle(TableStyle(spans + [
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'), ('BOX', (0, 0), (-1, -1), .5, border),
+                ('BACKGROUND', (0, 0), (-1, 0), pale), ('LINEBELOW', (0, 0), (-1, 0), .6, border),
+                ('TOPPADDING', (0, 0), (-1, -1), 2), ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+            ]))
+            return card
+
+        def compact_sections():
+            maximum = 3 if orientation == 'landscape' else 2
+            gap = 6
+            nominal_width = (width - (maximum - 1) * gap) / maximum
+            group = []
+
+            def flush():
+                if not group:
+                    return
+                # A fileira é indivisível. Pode mudar de página, nunca corta um
+                # cartão de responsável nem estica cartões vizinhos no vazio.
+                size = (width - (len(group)-1)*gap) / len(group)
+                cells = []
+                for section in group:
+                    if cells:
+                        cells.append('')
+                    cells.append(compact_data(section, size))
+                row = Table([cells], colWidths=([size, gap] * len(group))[:-1], hAlign='LEFT')
+                row.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP')] + [
+                    (side, (0, 0), (-1, -1), 0) for side in
+                    ('LEFTPADDING', 'RIGHTPADDING', 'TOPPADDING', 'BOTTOMPADDING')]))
+                parts.extend([row, Spacer(1, 6)])
+                group.clear()
+
+            for section in sections or []:
+                if section.get('fields'):
+                    trial = compact_data(section, nominal_width)
+                    if trial.wrap(nominal_width, 1000)[1] <= 122:
+                        group.append(section)
+                        if len(group) == maximum:
+                            flush()
+                        continue
+                flush()
+                if section.get('fields'):
+                    # Caso longo: largura integral, com cabeçalho repetido se
+                    # houver continuação; sem encolher ou suprimir campos.
+                    parts.extend([compact_data(section, width, full=True), Spacer(1, 6)])
+                else:
+                    heading = section_heading(section['title'])
+                    heading.keepWithNext = True
+                    parts.append(heading)
+                    if section.get('text'):
+                        parts.append(p(section['text']))
+                    if section.get('columns'):
+                        parts.append(record_table(section['columns'], section['rows']))
+                    parts.append(Spacer(1, 6))
+            flush()
+
+        if compact:
+            compact_sections()
         cards = []
-        for index, section in enumerate(sections or []):
+        for index, section in enumerate((sections or []) if not compact else []):
             if layout == 'record' and section.get('fields') and not section.get('columns'):
                 cards.append(section)
                 if len(cards) == (3 if orientation == 'landscape' else 2) or index == len(sections)-1 or not sections[index+1].get('fields') or sections[index+1].get('columns'):
@@ -294,7 +387,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                 cols = section['columns']
                 parts.append(record_table(cols, section['rows']))
             parts.append(Spacer(1, 3 * mm))
-        if signatures:
+        if signatures and not compact:
             cell_width = width / len(signatures)
             blocks = []
             for caption in signatures:
@@ -304,9 +397,9 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                 blocks.append(signature)
             signature_table = Table([blocks], colWidths=[cell_width] * len(blocks))
             parts.append(KeepTogether([Spacer(1, 8 * mm), signature_table, Spacer(1, 2 * mm)]))
-        if electronic_notice:
+        if electronic_notice and not compact:
             parts.append(p('Documento gerado eletronicamente. Não contém assinatura digital.', 'small'))
-        if notes:
+        if notes and not compact:
             parts.append(Spacer(1, 3 * mm))
             if notes_title: parts.append(p(notes_title, 'section'))
             for note in notes:
@@ -347,7 +440,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
             canvas.setCreator(name)
             canvas._doc.info.producer = name
             top = page_height - 8 * mm
-            emblem = 22 * mm
+            emblem = (18 if compact else 22) * mm
             if logo_image:
                 canvas.drawImage(logo_image, margin, top-emblem, width=emblem, height=emblem,
                                  preserveAspectRatio=True, anchor='c', mask='auto')
@@ -384,7 +477,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
             # O título é repetido na capa e nas continuações; cabe em títulos longos.
             title_block=KeepInFrame(page_width-2*margin,9*mm,[p(title,'heading')],mode='shrink')
             title_block.wrapOn(canvas,page_width-2*margin,9*mm)
-            title_block.drawOn(canvas,margin,page_height-42*mm)
+            title_block.drawOn(canvas,margin,page_height-(37 if compact else 42)*mm)
             canvas.restoreState()
         class NumberedCanvas(Canvas):
             def __init__(self, *args, **kwargs):
@@ -404,9 +497,29 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                         label = KeepInFrame(57*mm, 11*mm, [p(school_name,'field'),p('Carimbo de identificação institucional','small')], mode='shrink')
                         label.wrapOn(self,57*mm,11*mm)
                         label.drawOn(self,margin+2*mm,22*mm)
-                        self.line(page_width-margin-63*mm,23*mm,page_width-margin,23*mm)
-                        self.setFont(regular, 7)
-                        self.drawRightString(page_width-margin,20*mm,'Assinatura da instituição')
+                        if compact:
+                            captions = signatures or ['Assinatura da instituição']
+                            captions = [*captions[:-1], 'Assinatura da instituição / Secretaria'] if captions[-1] == 'Secretaria / instituição' else captions
+                            left = margin + 68*mm
+                            slot = (page_width-margin-left)/len(captions)
+                            for index, caption in enumerate(captions):
+                                start, end = left+index*slot, left+(index+1)*slot-4*mm
+                                self.line(start, 25*mm, end, 25*mm)
+                                line = KeepInFrame(end-start, 5*mm, [p(caption, 'caption')], mode='shrink')
+                                _, caption_height = line.wrapOn(self, end-start, 5*mm)
+                                line.drawOn(self, start, 24*mm - caption_height)
+                            notices = list(notes or [])
+                            if electronic_notice:
+                                notices.append('Documento gerado eletronicamente. Não contém assinatura digital.')
+                            if notices:
+                                avail = page_width-2*margin
+                                block = KeepInFrame(avail, 9*mm, [p(note,'small') for note in notices], mode='shrink')
+                                block.wrapOn(self,avail,11*mm)
+                                block.drawOn(self,margin,34*mm)
+                        else:
+                            self.line(page_width-margin-63*mm,23*mm,page_width-margin,23*mm)
+                            self.setFont(regular, 7)
+                            self.drawRightString(page_width-margin,20*mm,'Assinatura da instituição')
                     self.setStrokeColor(border)
                     self.line(margin, 19 * mm, page_width - margin, 19 * mm)
                     self.setFillColor(muted)

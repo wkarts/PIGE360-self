@@ -58,9 +58,9 @@ def compose_student_document(db, school, student, person, enrollment_id, kind, i
         if kind != 'enrollment_form' and enrollment.status != 'active':
             fail(409, 'Comprovantes e declarações exigem matrícula ativa.')
     identity = public_identity(db)
-    snapshot = {'school': output(school), 'person': output(person), 'student': output(student), 'issuer': issuer,
-                'template_version': '3', 'orientation': orientation, 'layout_version': '8', 'institution_identity': identity, 'brand': identity['display_name']}
     detailed = kind in {'student_record', 'enrollment_form'}
+    snapshot = {'school': output(school), 'person': output(person), 'student': output(student), 'issuer': issuer,
+                'template_version': '3', 'orientation': orientation, 'layout_version': '9' if detailed else '8', 'institution_identity': identity, 'brand': identity['display_name']}
     sections = []
     basic = [('Nome completo', person.name), ('Data de nascimento', date_text(person.birth_date))]
     if detailed:
@@ -166,11 +166,25 @@ def compose_student_document(db, school, student, person, enrollment_id, kind, i
     notes = ['Documento gerado eletronicamente a partir dos dados cadastrados. Não contém assinatura digital.']
     if kind == 'enrollment_form':
         notes.insert(0, 'Ficha administrativa. A situação acima deve ser observada; este documento não substitui a declaração de matrícula ativa.')
-    content = render_table(school, title, [], [], sections=sections, module='Cadastro e matrícula',
+    visible_sections = [section for section in sections
+                        if section['title'] != 'Informações escolares complementares']
+    extras = next((section for section in sections
+                   if section['title'] == 'Informações escolares complementares'), None)
+    if extras and any(value for _, value in extras['fields']):
+        # O pequeno quadro complementar acompanha os demais dados; não deve
+        # ocupar uma última página isolada após as tabelas de histórico.
+        first_table = next((i for i, section in enumerate(visible_sections) if section.get('columns')),
+                           len(visible_sections))
+        visible_sections.insert(first_table, extras)
+    if kind == 'enrollment_form':
+        linked = next(section for section in visible_sections if section['title'] == 'Dados da matrícula')
+        visible_sections.remove(linked)
+        visible_sections.insert(1, linked)
+    content = render_table(school, title, [], [], sections=visible_sections, module='Cadastro e matrícula',
         profile={'name': person.name, 'detail': f'Aluno {student.number} | Situação cadastral: ' + ('Ativo' if student.status == 'active' else 'Inativo')},
         photo=student_photo(db, school.id, person) if detailed else None,
         signatures=['Responsável / aluno maior de idade', 'Secretaria / instituição'] if detailed else ['Secretaria / representante da instituição'],
-        notes=notes, notes_title='', issuer=issuer, db=db, kit=detailed, layout='record' if detailed else '',
+        notes=notes, notes_title='', issuer=issuer, db=db, kit=detailed, layout='compact_record' if detailed else '',
         orientation=orientation if detailed else 'portrait', reserve_photo=detailed)
     snapshot['report_sections'] = sections
     return content, snapshot
