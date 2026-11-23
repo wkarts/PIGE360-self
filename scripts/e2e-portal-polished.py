@@ -132,14 +132,20 @@ try:
         sdk="""window.hubSDK={run(options){
             if(options.websiteToken!=='canal-ficticio-portal'||options.baseUrl!=='https://atendimento.example.test')return;
             const button=document.createElement('button');button.textContent=window.hubSettings.launcherTitle;
+            button.id='hub-bubble-holder';window.$hub={hasLoaded:true};
             document.body.append(button);
+            window.dispatchEvent(new CustomEvent('hub:ready'));
+        },destroy(){
+            document.getElementById('hub-bubble-holder')?.remove();delete window.$hub;
         }};"""
         for origin in (PORTAL_URL,TEACHER_URL):
             probe=browser.new_page()
             probe.route(hub+'/packs/js/sdk.js',lambda route:route.fulfill(content_type='application/javascript',body=sdk))
             probe.goto(origin)
-            widget=probe.frame_locator('[data-pige-support-frame]').get_by_role('button',name='Secretaria')
+            widget=probe.get_by_role('button',name='Secretaria',exact=True)
             expect(widget).to_be_visible()
+            expect(probe.locator('[data-pige-support-frame]')).to_have_count(0)
+            assert widget.evaluate('element=>element.parentElement===document.body')
             if origin==TEACHER_URL:
                 probe.get_by_label('E-mail',exact=True).fill(teacher['email'])
                 probe.get_by_label('Senha',exact=True).fill(password)
