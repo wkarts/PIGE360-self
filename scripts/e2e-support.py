@@ -113,7 +113,7 @@ try:
         checks.append('Painel do atendimento abre e recebe digitação')
         page.evaluate("Promise.all([PigeSupport.load('a','guardian_portal'),PigeSupport.load('a','guardian_portal')])")
         assert page.evaluate("window.hubStarts") == 1
-        assert page.evaluate("window.lastHubConfig") == dict(baseUrl=URL,position='left',type='standard',launcherTitle='Atendimento')
+        assert page.evaluate("window.lastHubConfig") == dict(baseUrl=URL,position='left',type='standard',launcherTitle='Atendimento',launcherTooltip='Abrir Conversa')
         assert frame.frame_locator('iframe').get_by_role('textbox').input_value()=='Teste sintético'
         checks.append('Áreas habilitadas da mesma conta conservam a conversa e os parâmetros do botão')
         page.evaluate("PigeSupport.load('b', 'online_enrollment')")
@@ -177,7 +177,7 @@ try:
         expect(page.get_by_role('button',name='Atendimento cached')).to_be_visible()
         cached_requests=[request for request in SDK_REQUESTS if request.startswith('/cached/')]
         assert len(cached_requests)==2, cached_requests
-        assert 'pige_sdk=lifecycle-1' in cached_requests[0] and 'pige_reload=' not in cached_requests[0]
+        assert 'pige_sdk=launcher-tooltip-1' in cached_requests[0] and 'pige_reload=' not in cached_requests[0]
         assert 'pige_reload=' in cached_requests[1]
         expect(page.locator('[data-pige-support-recovery]')).to_have_count(0)
         expect(page.locator('iframe[data-pige-support-frame]')).to_have_count(0)

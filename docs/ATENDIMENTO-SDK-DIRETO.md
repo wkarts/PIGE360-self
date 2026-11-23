@@ -17,7 +17,7 @@ Se o HUB ainda não oferecer o descarte, o portal apresenta a falha de inicializ
 
 ### Cache do SDK após atualização
 
-O carregador usa `/packs/js/sdk.js?pige_sdk=lifecycle-1` para não reutilizar a URL sem versão, que pode ter sido armazenada pelo navegador com validade de um ano. Após o download, verifica `run` e `destroy`. Se faltar um desses métodos, baixa uma única cópia adicional com `pige_reload` exclusivo. Ao receber um SDK compatível, reutiliza-o nas áreas da mesma sessão, sem novos downloads.
+O carregador usa `/packs/js/sdk.js?pige_sdk=launcher-tooltip-1` para não reutilizar a URL sem versão, que pode ter sido armazenada pelo navegador com validade de um ano. Após o download, verifica `run` e `destroy`. Se faltar um desses métodos, baixa uma única cópia adicional com `pige_reload` exclusivo. Ao receber um SDK compatível, reutiliza-o nas áreas da mesma sessão, sem novos downloads.
 
 Se o servidor continuar entregando um SDK antigo, informa essa causa no botão de recuperação; falhas de download e ausência do SDK têm mensagens próprias. A atualização automática não usa polling, não remove proteções e não monta o widget sem descarte seguro. O botão de nova tentativa permite repetir a busca após corrigir a publicação.
 
@@ -26,3 +26,10 @@ Rollback: restaurar a imagem anterior do portal. A API adicional do SDK pode per
 ## Validação
 
 `npm run build --prefix frontend` inclui smoke tests da montagem direta, reutilização, recuperação e descarte. `python scripts/e2e-support.py` cobre o fluxo visual com SDK sintético e somente dados de teste. Homologação contra a versão publicada do HUB continua necessária após implantar os dois componentes.
+
+
+### Título da bolha
+
+O campo **Título do botão ao passar o mouse**, no atendimento da escola, usa `Abrir Conversa` por padrão. É independente do **Texto do botão** (`launcher_title`), que continua controlando o texto do botão expandido. O novo campo `launcher_tooltip` aceita até 120 caracteres; vazio restaura o padrão, e clientes antigos que omitem o campo preservam o valor salvo.
+
+A configuração pública entrega `launcherTooltip`, encaminhado a `window.hubSettings.launcherTooltip`. O SDK do HUB deve estar atualizado com suporte a essa opção. Publique primeiro o HUB com sua migração e depois o PIGE com a migração `0065_support_launcher_tooltip`. A revisão da URL do SDK foi incrementada para evitar reutilizar o script anterior em cache. O chat continua usando o SDK direto, sem iframe envolvendo a bolha.

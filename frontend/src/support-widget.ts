@@ -2,14 +2,14 @@ namespace PigeSupport {
   export type Area='online_enrollment'|'student_portal'|'teacher_portal'|'guardian_portal'|'internal'|'login'|'news';
   interface WidgetConfig {
     enabled:boolean; base_url:string; website_token:string;
-    position:string; type:string; launcherTitle:string;
+    position:string; type:string; launcherTitle:string; launcherTooltip?:string;
   }
   interface HubSDK {
     run:(options:{websiteToken:string;baseUrl:string})=>void;
     destroy?:(options?:{clearSession?:boolean})=>void;
   }
   interface HubWindow extends Window {
-    hubSettings?: {position:string;type:string;launcherTitle:string};
+    hubSettings?: {position:string;type:string;launcherTitle:string;launcherTooltip:string};
     hubSDK?:HubSDK;
     $hub?:{hasLoaded?:boolean};
   }
@@ -18,7 +18,7 @@ namespace PigeSupport {
   const busyMessage='O atendimento recebeu muitas solicitações. Aguarde antes de tentar novamente.';
   const roots='#hub-widget-holder,#hub-bubble-holder';
   // A URL sem versão pode continuar em cache por um ano após atualizar o HUB.
-  const sdkRevision='lifecycle-1';
+  const sdkRevision='launcher-tooltip-1';
   let sdkRefresh=0;
   let loadedSource='',activeScope='',sdkSource='',sessionSource='';
   let pending:{context:string;promise:Promise<void>}|null=null;
@@ -139,7 +139,7 @@ namespace PigeSupport {
       if(!['https:','http:'].includes(url.protocol)||url.username||url.password||url.search||url.hash)throw new Error('URL inválida');
       baseUrl=url.href.replace(/\/+$/,'');
     }catch{release();setChecking(false);status.error='Revise o endereço configurado para o atendimento.';return;}
-    const sourceKey=JSON.stringify([scope,baseUrl,config.website_token,config.position,config.type,config.launcherTitle]);
+    const sourceKey=JSON.stringify([scope,baseUrl,config.website_token,config.position,config.type,config.launcherTitle,config.launcherTooltip]);
     const sessionKey=JSON.stringify([scope,baseUrl,config.website_token]);
     if(sourceKey===loadedSource&&activeSDK){setChecking(false);if(recovery)status.error=recovery.title;return;}
     release(sessionSource!==''&&sessionKey!==sessionSource);
@@ -149,7 +149,7 @@ namespace PigeSupport {
       const sdk=runtime.hubSDK;
       // O descarte é necessário para trocar escola/conta sem manter a conversa anterior.
       if(!sdk?.run||!sdk.destroy){sdkSource='';throw new Error('hub-sdk-lifecycle');}
-      runtime.hubSettings={position:config.position||'left',type:config.type||'expanded_bubble',launcherTitle:config.launcherTitle||'Suporte'};
+      runtime.hubSettings={position:config.position||'left',type:config.type||'expanded_bubble',launcherTitle:config.launcherTitle||'Suporte',launcherTooltip:config.launcherTooltip?.trim()||'Abrir Conversa'};
       activeSDK=sdk;lastSDK=sdk;loadedSource=sourceKey;sessionSource=sessionKey;
       window.addEventListener('hub:ready',onReady);
       listeningReady=true;
