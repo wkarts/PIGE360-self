@@ -428,7 +428,7 @@ console.log('Assist smoke: render, campos permitidos e proteção de edição co
 
 // Atendimento carrega o SDK no documento da página, sem iframe externo.
 const supportScripts=[],supportLinks=[],supportTimers=new Map(),supportEvents=new Map(),destroyCalls=[];
-let timeoutId=0,ran=0,mode='throw',scriptFailure=false;
+let timeoutId=0,ran=0,mode='throw',scriptFailure=false,sdkMode='current';
 const originalAddEvent=sandbox.addEventListener,originalRemoveEvent=sandbox.removeEventListener;
 sandbox.addEventListener=(type,handler)=>supportEvents.set(type,handler);
 sandbox.removeEventListener=(type,handler)=>{if(supportEvents.get(type)===handler)supportEvents.delete(type);};
@@ -439,7 +439,12 @@ document.createElement=tag=>{
   assert.notEqual(tag,'iframe','O portal não cria mais um iframe ao redor do SDK');
   return {tag,dataset:{},style:{},addEventListener(_,handler){this.click=handler;},remove(){const i=supportLinks.indexOf(this);if(i>=0)supportLinks.splice(i,1);}};
 };
-document.head={appendChild(element){if(element.tag==='script'){supportScripts.push(element);queueMicrotask(()=>{if(scriptFailure)element.onerror();else{sandbox.hubSDK=sdk;element.onload();}});}}};
+document.head={appendChild(element){if(element.tag==='script'){supportScripts.push(element);queueMicrotask(()=>{
+  if(scriptFailure){element.onerror();return;}
+  if(sdkMode==='missing')delete sandbox.hubSDK;
+  else sandbox.hubSDK=sdkMode==='legacy'||(sdkMode==='stale-once'&&!element.src.includes('pige_reload='))?{run:sdk.run}:sdk;
+  element.onload();
+});}}};
 document.body={appendChild:element=>supportLinks.push(element)};
 let config={enabled:true,base_url:'https://support.example.test',website_token:'test-public-token',position:'left',type:'standard',launcherTitle:'Atendimento'};
 const supportRequests=[];
@@ -463,16 +468,40 @@ assert.equal(destroyCalls.at(-1).clearSession,true,'Troca de escola descarta ses
 assert.match(supportRequests.at(-1),/schools\/school-b\/support-widget\?area=online_enrollment/);
 config={...config,base_url:'https://offline.example.test'};scriptFailure=true;
 await sandbox.PigeSupport.load('school-b','internal');assert.equal(supportLinks.length,1);
+assert.match(sandbox.PigeSupport.status.error,/baixar o SDK/);
 const priorScript=supportScripts.at(-1);scriptFailure=false;supportLinks[0].click();
 await new Promise(resolve=>setImmediate(resolve));assert.notEqual(supportScripts.at(-1),priorScript);
 assert.equal(supportLinks.length,0);
 config={...config,enabled:false};await sandbox.PigeSupport.load('school-b','internal');
 assert.equal(supportLinks.length,0);assert.equal(sandbox.$hub,undefined);
 sandbox.PigeSupport.dispose();
+const beforeStaleScripts=supportScripts.length,beforeStaleRuns=ran;
+config={...config,enabled:true,base_url:'https://cached.example.test'};sdkMode='stale-once';
+await sandbox.PigeSupport.load('school-cache','guardian_portal');
+assert.equal(supportScripts.length,beforeStaleScripts+2,'SDK antigo causa somente uma atualização automática');
+assert.match(supportScripts[beforeStaleScripts].src,/sdk\.js\?pige_sdk=lifecycle-1$/,'URL versionada não reutiliza a cópia antiga sem versão');
+assert.match(supportScripts.at(-1).src,/&pige_reload=/);
+assert.equal(ran,beforeStaleRuns+1,'Somente o SDK compatível inicia o atendimento');
+assert.equal(supportLinks.length,0);
+await sandbox.PigeSupport.load('school-cache','student_portal');
+assert.equal(supportScripts.length,beforeStaleScripts+2,'SDK atualizado é reutilizado entre áreas');
+sandbox.PigeSupport.dispose();
+sdkMode='legacy';config={...config,base_url:'https://legacy.example.test'};
+const beforeLegacyScripts=supportScripts.length,beforeLegacyRuns=ran;
+await sandbox.PigeSupport.load('school-legacy','guardian_portal');
+assert.equal(supportScripts.length,beforeLegacyScripts+2,'Servidor ainda antigo não provoca repetição infinita');
+assert.equal(ran,beforeLegacyRuns,'Não monta sessão sem descarte seguro');
+assert.match(sandbox.PigeSupport.status.error,/SDK antigo após atualizar o cache/);
+assert.equal(supportLinks.length,1);
+sandbox.PigeSupport.dispose();
+sdkMode='missing';config={...config,base_url:'https://missing.example.test'};
+await sandbox.PigeSupport.load('school-missing','guardian_portal');
+assert.match(sandbox.PigeSupport.status.error,/não disponibilizou o SDK/);
+sandbox.PigeSupport.dispose();sdkMode='current';
 sandbox.addEventListener=originalAddEvent;sandbox.removeEventListener=originalRemoveEvent;
 sandbox.setTimeout=setTimeout;sandbox.clearTimeout=clearTimeout;
 assert.equal(context.state.modal.kind,'');
-console.log('Support smoke: SDK direto, carga idempotente, nova tentativa e descarte por escola/conta OK.');
+console.log('Support smoke: SDK direto, cache antigo recuperado, erros diferenciados e descarte por escola/conta OK.');
 
 // Consultar a fila não exige permissões financeiras nem leitura de contratos.
 const admissionReader=sandbox.PigeExpansion.component.setup({schoolId:'school-test',page:'online',permissions:['admissions.read']});

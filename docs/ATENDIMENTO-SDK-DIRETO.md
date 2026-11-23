@@ -15,6 +15,12 @@ O SDK deve oferecer `hubSDK.destroy({ clearSession })`. A desmontagem em uma ár
 
 Se o HUB ainda não oferecer o descarte, o portal apresenta a falha de inicialização com nova tentativa. Não monta um contexto que não possa encerrar na troca de conta. Nenhuma migration, alteração de configuração de caixa ou variável de ambiente é necessária.
 
+### Cache do SDK após atualização
+
+O carregador usa `/packs/js/sdk.js?pige_sdk=lifecycle-1` para não reutilizar a URL sem versão, que pode ter sido armazenada pelo navegador com validade de um ano. Após o download, verifica `run` e `destroy`. Se faltar um desses métodos, baixa uma única cópia adicional com `pige_reload` exclusivo. Ao receber um SDK compatível, reutiliza-o nas áreas da mesma sessão, sem novos downloads.
+
+Se o servidor continuar entregando um SDK antigo, informa essa causa no botão de recuperação; falhas de download e ausência do SDK têm mensagens próprias. A atualização automática não usa polling, não remove proteções e não monta o widget sem descarte seguro. O botão de nova tentativa permite repetir a busca após corrigir a publicação.
+
 Rollback: restaurar a imagem anterior do portal. A API adicional do SDK pode permanecer publicada; se também for revertida, reverter o portal primeiro.
 
 ## Validação

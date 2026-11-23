@@ -17,6 +17,9 @@ namespace PigeSupport {
   export const status=Vue.reactive({error:''});
   const busyMessage='O atendimento recebeu muitas solicitações. Aguarde antes de tentar novamente.';
   const roots='#hub-widget-holder,#hub-bubble-holder';
+  // A URL sem versão pode continuar em cache por um ano após atualizar o HUB.
+  const sdkRevision='lifecycle-1';
+  let sdkRefresh=0;
   let loadedSource='',activeScope='',sdkSource='',sessionSource='';
   let pending:{context:string;promise:Promise<void>}|null=null;
   let sdkQueue:Promise<void>=Promise.resolve();
@@ -74,17 +77,27 @@ namespace PigeSupport {
   }
   function loadSDK(baseUrl:string):Promise<void> {
     // Serializa downloads: um script antigo não pode sobrescrever o SDK novo.
-    const task=sdkQueue.catch(()=>{}).then(()=>{
-      if(sdkSource===baseUrl&&runtime.hubSDK)return;
-      return new Promise<void>((resolve,reject)=>{
+    const task=sdkQueue.catch(()=>{}).then(async()=>{
+      const compatible=()=>typeof runtime.hubSDK?.run==='function'&&typeof runtime.hubSDK?.destroy==='function';
+      if(sdkSource===baseUrl&&compatible())return;
+      sdkSource='';
+      const download=(refresh=false)=>new Promise<void>((resolve,reject)=>{
         script?.remove();
         const element=document.createElement('script');script=element;
         element.dataset.pigeSupportHub='true';
-        element.src=baseUrl+'/packs/js/sdk.js';element.defer=true;element.async=true;
-        element.onload=()=>{sdkSource=baseUrl;resolve();};
-        element.onerror=()=>{sdkSource='';element.remove();reject(new Error('SDK indisponível'));};
+        element.src=baseUrl+'/packs/js/sdk.js?pige_sdk='+sdkRevision+
+          (refresh?'&pige_reload='+Date.now()+'-'+(++sdkRefresh):'');
+        element.defer=true;element.async=true;
+        element.onload=()=>resolve();
+        element.onerror=()=>{element.remove();reject(new Error('hub-sdk-download'));};
         document.head.appendChild(element);
       });
+      await download();
+      // Uma única revalidação recupera uma cópia antiga sem gerar polling/retries infinitos.
+      if(!compatible())await download(true);
+      if(typeof runtime.hubSDK?.run!=='function')throw new Error('hub-sdk-missing');
+      if(typeof runtime.hubSDK.destroy!=='function')throw new Error('hub-sdk-lifecycle');
+      sdkSource=baseUrl;
     });
     sdkQueue=task;
     return task;
@@ -135,7 +148,7 @@ namespace PigeSupport {
       if(request!==generation)return;
       const sdk=runtime.hubSDK;
       // O descarte é necessário para trocar escola/conta sem manter a conversa anterior.
-      if(!sdk?.run||!sdk.destroy){sdkSource='';throw new Error('SDK sem descarte');}
+      if(!sdk?.run||!sdk.destroy){sdkSource='';throw new Error('hub-sdk-lifecycle');}
       runtime.hubSettings={position:config.position||'left',type:config.type||'expanded_bubble',launcherTitle:config.launcherTitle||'Suporte'};
       activeSDK=sdk;lastSDK=sdk;loadedSource=sourceKey;sessionSource=sessionKey;
       window.addEventListener('hub:ready',onReady);
@@ -145,10 +158,15 @@ namespace PigeSupport {
       sdk.run({websiteToken:config.website_token,baseUrl});
       setChecking(false);
       if(runtime.$hub?.hasLoaded)onReady();
-    }catch{
+    }catch(error){
       if(request!==generation)return;
       release();setChecking(false);
-      offerRecovery(config,'O atendimento não iniciou. Confira se o SDK do HUB está atualizado e tente novamente.');
+      const reason=error instanceof Error?error.message:'';
+      const message=reason==='hub-sdk-download'?'Não foi possível baixar o SDK do atendimento. Verifique a conexão e tente novamente.':
+        reason==='hub-sdk-missing'?'O script do atendimento não disponibilizou o SDK. Verifique a publicação do HUB.':
+        reason==='hub-sdk-lifecycle'?'O HUB ainda entregou um SDK antigo após atualizar o cache. Publique o SDK atualizado e tente novamente.':
+        'O atendimento não iniciou. Tente novamente; se persistir, revise a integração do suporte.';
+      offerRecovery(config,message);
     }
   }
   window.addEventListener('pagehide',()=>{++generation;release();setChecking(false);});
