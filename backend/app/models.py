@@ -69,6 +69,7 @@ class SchoolSupportSettings(Record, Base):
     position: Mapped[str] = mapped_column(String(16), default='left')
     widget_type: Mapped[str] = mapped_column(String(40), default='expanded_bubble')
     launcher_title: Mapped[str] = mapped_column(String(80), default='Suporte')
+    launcher_tooltip: Mapped[str] = mapped_column(String(120), default='Abrir Conversa', server_default='Abrir Conversa')
     encrypted_token: Mapped[str] = mapped_column(Text, default='')
     __table_args__ = (CheckConstraint("position IN ('left','right')", name='school_support_position'),)
 

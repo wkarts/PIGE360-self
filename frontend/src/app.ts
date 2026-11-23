@@ -24,7 +24,7 @@ namespace PigeUI {
   const documentPages=['documents','contracts','pending-signatures','signature-review'];
   const configurationPages=['certificate'];
   const supportAreas=[{value:'online_enrollment',label:'Matrícula online'},{value:'student_portal',label:'Portal do aluno'},{value:'teacher_portal',label:'Portal do professor'},{value:'guardian_portal',label:'Portal dos responsáveis'},{value:'news',label:'Notícias e eventos'},{value:'login',label:'Tela de login'},{value:'internal',label:'Aplicação interna'}];
-  const blankSupport=():Row=>({id:'',school_id:'',enabled:false,enabled_areas:['online_enrollment'],base_url:'',position:'left',widget_type:'expanded_bubble',launcher_title:'Atendimento',token_configured:false,version:1});
+  const blankSupport=():Row=>({id:'',school_id:'',enabled:false,enabled_areas:['online_enrollment'],base_url:'',position:'left',widget_type:'expanded_bubble',launcher_title:'Atendimento',launcher_tooltip:'Abrir Conversa',token_configured:false,version:1});
   const institutionTabs=[{id:'general',label:'Dados da escola'},{id:'identity',label:'Identidade visual'},{id:'security',label:'Segurança'},{id:'support',label:'Atendimento'}];
   const catalogDescriptions:Record<string,string>={'units':'Locais de atendimento da escola','academic-years':'Calendário e períodos de matrícula','grades':'Etapas e séries oferecidas','shifts':'Horários de funcionamento','class-groups':'Turmas, capacidade e ocupação','document-types':'Documentos exigidos dos alunos'};
   const blankModal = (): Modal => ({kind:'',title:'',fields:[],form:{},target:null,action:'',error:''});
@@ -1101,7 +1101,7 @@ namespace PigeUI {
       field('token','Chave do canal de atendimento','password',false,undefined,true),
       field('position','Posição do botão','select',true,[{value:'left',label:'Esquerda'},{value:'right',label:'Direita'}]),
       field('widget_type','Tipo do botão','select',true,[{value:'expanded_bubble',label:'Com texto'},{value:'standard',label:'Compacto'}]),
-      field('launcher_title','Texto do botão','text',true)];
+      field('launcher_title','Texto do botão','text',true),field('launcher_tooltip','Título do botão ao passar o mouse')];
     openModal('support-hub','Atendimento da escola',fields,{...state.supportHub,token:'',enabled_areas:[...(state.supportHub.enabled_areas as string[]||[])]},{...state.supportHub,school_id:state.schoolId});
     state.modal.form.enabled_areas=[...(state.supportHub.enabled_areas as string[]||[])];
     state.modalInitial=JSON.stringify(state.modal.form);
@@ -1244,7 +1244,7 @@ namespace PigeUI {
            token:text(form.token),
            position:text(form.position)||'left',
            widget_type:text(form.widget_type)||'expanded_bubble',
-           launcher_title:text(form.launcher_title)||'Suporte',
+           launcher_title:text(form.launcher_title)||'Suporte',launcher_tooltip:text(form.launcher_tooltip)||'Abrir Conversa',
          })});
          state.supportHub=saved;
          refreshSupport();void loadPersonalTools();
