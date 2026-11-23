@@ -15,9 +15,16 @@ namespace PigeSupport {
   const busyMessage='O atendimento recebeu muitas solicitações. Aguarde antes de tentar novamente.';
   let frame:HTMLIFrameElement|null=null;
   let observer:MutationObserver|null=null;
-  let viewportTimer:number|undefined;
+  let viewportTimer:number|undefined,startupTimer:number|undefined;
+  let recovery:HTMLButtonElement|null=null,checkingArea=false,retryArea:(()=>void)|null=null;
+  const startupTimeout=8000;
+  function cancelStartup():void {
+    if(startupTimer!==undefined)window.clearTimeout(startupTimer);
+    startupTimer=undefined;
+  }
   let generation=0;
   function release():void {
+    cancelStartup();recovery?.remove();recovery=null;
     observer?.disconnect();observer=null;
     if(viewportTimer!==undefined)window.clearInterval(viewportTimer);
     viewportTimer=undefined;
@@ -27,7 +34,25 @@ namespace PigeSupport {
     try{(previous?.contentWindow as HubWindow|null)?.hubSDK?.destroy?.();}catch{/* Atendimento não bloqueia a aplicação. */}
     previous?.remove();
   }
-  export function dispose():void {++generation;activeScope='';pending=null;retryAt=0;release();status.error='';}
+  export function dispose():void {++generation;activeScope='';pending=null;retryAt=0;checkingArea=false;retryArea=null;release();status.error='';}
+  function offerRecovery(element:HTMLIFrameElement,config:WidgetConfig,message:string):void {
+    if(frame!==element||recovery)return;
+    cancelStartup();
+    status.error=message;
+    const button=document.createElement('button');
+    button.dataset.pigeSupportRecovery='true';
+    button.type='button';
+    button.textContent=(config.launcherTitle||'Suporte')+': tentar novamente';
+    button.title=message;
+    const side=config.position==='right'?'right':'left';
+    button.style.cssText=`position:fixed;${side}:max(1rem,env(safe-area-inset-${side}));bottom:max(1rem,env(safe-area-inset-bottom));z-index:2147483000;max-width:calc(100vw - 2rem);padding:.7rem 1rem;border:0;border-radius:999px;background:#174576;color:#fff;font:600 1rem/1.35 system-ui;cursor:pointer;`;
+    button.hidden=checkingArea;
+    button.addEventListener('click',()=>{
+      if(frame!==element||checkingArea||recovery!==button)return;
+      const retry=retryArea;release();retry?.(); // Busca a configuração vigente e respeita Retry-After.
+    });
+    recovery=button;document.body.appendChild(button);
+  }
   function clipWidget(element:HTMLIFrameElement):void {
     if(frame!==element)return;
     const doc=element.contentDocument,win=element.contentWindow;
@@ -49,6 +74,10 @@ namespace PigeSupport {
     }
     element.style.clipPath=right>left&&bottom>top?`inset(${top}px ${Math.max(0,win.innerWidth-right)}px ${Math.max(0,win.innerHeight-bottom)}px ${left}px)`:'inset(100%)';
     element.style.visibility=right>left&&bottom>top?'visible':'hidden';
+    if(element.style.visibility==='visible'&&!checkingArea){
+      cancelStartup();
+      if(recovery){recovery.remove();recovery=null;status.error='';}
+    }
   }
   export async function load(schoolId='',area:Area='login',sessionKey='public'):Promise<void> {
     const scope=JSON.stringify([schoolId,sessionKey]);
@@ -57,15 +86,17 @@ namespace PigeSupport {
     if(pending?.context===context)return pending.promise;
     pending=null;
     const request=++generation;
+    checkingArea=true;
     if(frame)frame.style.display='none';
+    if(recovery)recovery.hidden=true;
     if(!schoolId&&area!=='login'){release();return;}
     if(Date.now()<retryAt){release();status.error=busyMessage;return;}
     status.error='';
-    const promise=loadArea(schoolId,area,scope,request);
+    const promise=loadArea(schoolId,area,scope,request,()=>{void load(schoolId,area,sessionKey);});
     pending={context,promise};
     try{await promise;}finally{if(pending?.promise===promise)pending=null;}
   }
-  async function loadArea(schoolId:string,area:Area,scope:string,request:number):Promise<void> {
+  async function loadArea(schoolId:string,area:Area,scope:string,request:number,retry:()=>void):Promise<void> {
     let config:WidgetConfig|null=null;
     try{
       const path=schoolId?'/api/v1/schools/'+encodeURIComponent(schoolId)+'/support-widget?area='+encodeURIComponent(area):'/api/v1/support-widget';
@@ -80,6 +111,8 @@ namespace PigeSupport {
       if(response.ok)config=await response.json() as WidgetConfig;
     }catch{/* Indisponibilidade do atendimento não bloqueia o formulário. */}
     if(request!==generation)return;
+    checkingArea=false;
+    retryArea=retry;
     if(!config?.enabled||!config.base_url||!config.website_token){release();return;}
     let baseUrl:string;
     try{
@@ -88,7 +121,12 @@ namespace PigeSupport {
       baseUrl=url.href.replace(/\/+$/,'');
     }catch{release();status.error='Revise o endereço configurado para o atendimento.';return;}
     const sourceKey=JSON.stringify([scope,baseUrl,config.website_token,config.position,config.type,config.launcherTitle]);
-    if(sourceKey===loadedSource&&frame){frame.style.display='';return;}
+    if(sourceKey===loadedSource&&frame){
+      frame.style.display='';
+      if(recovery){recovery.hidden=false;status.error=recovery.title;}
+      clipWidget(frame);
+      return;
+    }
     release();
     const element=document.createElement('iframe');
     element.dataset.pigeSupportFrame='true';element.title='Atendimento da instituição';
@@ -112,7 +150,9 @@ namespace PigeSupport {
         clipWidget(element);
       }catch{status.error='O atendimento não iniciou. Confira a configuração com o administrador.';release();}
     };
-    sdk.onerror=()=>{if(frame!==element)return;status.error='O atendimento está indisponível. Tente novamente mais tarde.';release();};
+    sdk.onerror=()=>offerRecovery(element,config,'O atendimento não carregou nesta página. Tente novamente.');
+    startupTimer=window.setTimeout(()=>offerRecovery(element,config,
+      'O atendimento não ficou pronto nesta página. Tente novamente.'),startupTimeout);
     doc.head.appendChild(sdk);
   }
   window.addEventListener('pagehide',dispose);
