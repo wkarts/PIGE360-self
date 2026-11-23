@@ -47,6 +47,7 @@ def _settings_output(obj, school_id: str) -> dict:
         'position': obj.position if obj else 'left',
         'widget_type': obj.widget_type if obj else 'expanded_bubble',
         'launcher_title': obj.launcher_title if obj else 'Suporte',
+        'launcher_tooltip': obj.launcher_tooltip if obj else 'Abrir Conversa',
         'token_configured': bool(obj and obj.encrypted_token),
         'version': obj.version if obj else 1,
     }
@@ -56,6 +57,7 @@ def _public_output(obj, area: str) -> dict:
     disabled = {
         'enabled': False, 'base_url': '', 'website_token': '',
         'position': 'left', 'type': 'expanded_bubble', 'launcherTitle': 'Suporte',
+        'launcherTooltip': 'Abrir Conversa',
     }
     if (obj is None or not obj.enabled or area not in (obj.enabled_areas or [])
             or not obj.base_url or not obj.encrypted_token):
@@ -69,6 +71,7 @@ def _public_output(obj, area: str) -> dict:
     return {
         'enabled': True, 'base_url': obj.base_url, 'website_token': token,
         'position': obj.position, 'type': obj.widget_type, 'launcherTitle': obj.launcher_title,
+        'launcherTooltip': obj.launcher_tooltip,
     }
 
 
@@ -136,6 +139,8 @@ def save_support_hub(data: s.SupportHubInput, db: DB, user: Actor, school: Scope
     obj.position = data.position
     obj.widget_type = data.widget_type
     obj.launcher_title = data.launcher_title
+    if 'launcher_tooltip' in data.model_fields_set or not obj.launcher_tooltip:
+        obj.launcher_tooltip = data.launcher_tooltip or 'Abrir Conversa'
     obj.encrypted_token = encrypted_token
     db.flush()
     audit(db, request, user, 'school.support.updated', obj, school.id, details={

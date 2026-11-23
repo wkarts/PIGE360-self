@@ -370,6 +370,7 @@ class SupportHubInput(Input):
     position: Literal['left', 'right'] = 'left'
     widget_type: Literal['expanded_bubble', 'standard'] = 'expanded_bubble'
     launcher_title: str = Field(default='Suporte', min_length=1, max_length=80)
+    launcher_tooltip: str = Field(default='Abrir Conversa', max_length=120)
     token: str = Field(default='', max_length=512)
 
 

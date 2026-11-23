@@ -195,3 +195,39 @@ def test_support_requires_https_in_production(monkeypatch):
         support._validate_base_url('http://support.example.test', True)
     assert error.value.status_code == 422
     assert support._validate_base_url('https://support.example.test', True) == 'https://support.example.test'
+
+
+def test_launcher_tooltip_default_custom_blank_and_old_client(client, admin, school):
+    saved = configure(client, admin, school)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()['launcher_tooltip'] == 'Abrir Conversa'
+    assert public(client, school, 'online_enrollment')['launcherTooltip'] == 'Abrir Conversa'
+    saved = configure(client, admin, school, launcher_tooltip='  Falar com a escola  ')
+    assert saved.status_code == 200, saved.text
+    assert saved.json()['launcher_tooltip'] == 'Falar com a escola'
+    assert public(client, school, 'online_enrollment')['launcherTooltip'] == 'Falar com a escola'
+    assert public(client, school, 'online_enrollment')['launcherTitle'] == 'Atendimento'
+    # Older clients omitting the new field must not overwrite a saved tooltip.
+    assert configure(client, admin, school).json()['launcher_tooltip'] == 'Falar com a escola'
+    assert configure(client, admin, school, launcher_tooltip=' ').json()['launcher_tooltip'] == 'Abrir Conversa'
+    assert configure(client, admin, school, launcher_tooltip='x' * 121).status_code == 422
+
+
+def test_tooltip_migration_preserves_existing_settings():
+    import importlib.util
+    from pathlib import Path
+    from sqlalchemy import create_engine, text
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    path = Path(__file__).resolve().parents[1] / 'migrations/versions/0065_support_launcher_tooltip.py'
+    spec = importlib.util.spec_from_file_location('tooltip_migration', path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = create_engine('sqlite://')
+    with engine.begin() as connection:
+        connection.execute(text('CREATE TABLE school_support_settings (id TEXT PRIMARY KEY, launcher_title TEXT)'))
+        connection.execute(text("INSERT INTO school_support_settings VALUES ('school', 'Suporte')"))
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+        row = connection.execute(text('SELECT launcher_title, launcher_tooltip FROM school_support_settings')).one()
+        assert tuple(row) == ('Suporte', 'Abrir Conversa')
