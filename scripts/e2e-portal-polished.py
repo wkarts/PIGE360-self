@@ -140,7 +140,7 @@ try:
         }};"""
         for origin in (PORTAL_URL,TEACHER_URL):
             probe=browser.new_page()
-            probe.route(hub+'/packs/js/sdk.js',lambda route:route.fulfill(content_type='application/javascript',body=sdk))
+            probe.route(hub+'/packs/js/sdk.js?*',lambda route:route.fulfill(content_type='application/javascript',body=sdk))
             probe.goto(origin)
             widget=probe.get_by_role('button',name='Secretaria',exact=True)
             expect(widget).to_be_visible()

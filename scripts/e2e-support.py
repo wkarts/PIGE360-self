@@ -45,6 +45,7 @@ SDK = b'''(() => {
     delete window.$hub;
   }};
 })();'''
+SDK_REQUESTS = []
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -56,12 +57,17 @@ class Handler(BaseHTTPRequestHandler):
         content_type = 'text/html'
         if parsed.path == '/widget.js':
             body, content_type = WIDGET, 'application/javascript'
-        elif parsed.path == '/packs/js/sdk.js':
+        elif parsed.path in ('/packs/js/sdk.js', '/cached/packs/js/sdk.js', '/legacy/packs/js/sdk.js'):
             body, content_type = SDK, 'application/javascript'
+            SDK_REQUESTS.append(self.path)
+            query = parse_qs(parsed.query)
+            if parsed.path.startswith('/legacy/') or (parsed.path.startswith('/cached/') and 'pige_reload' not in query):
+                body = b'window.hubSDK={run(){throw new Error("SDK antigo nao deve iniciar")}};'
         elif parsed.path.endswith('/support-widget'):
             school = parsed.path.split('/')[4] if '/schools/' in parsed.path else ''
             area = parse_qs(parsed.query).get('area', [''])[0]
-            body = json.dumps({'enabled': bool(school) and area in ('online_enrollment','guardian_portal'), 'base_url': URL,
+            base_url = URL + ('/' + school if school in ('cached', 'legacy') else '')
+            body = json.dumps({'enabled': bool(school) and area in ('online_enrollment','guardian_portal'), 'base_url': base_url,
                                'website_token': school, 'position': 'left', 'type': 'standard',
                                'launcherTitle': 'Atendimento'}).encode()
             content_type = 'application/json'
@@ -167,6 +173,27 @@ try:
         page.set_viewport_size({'width':390,'height':844})
         assert not errors
         checks.append('Desktop preserva sombra original e descarte não deixa erros de resize')
+        page.evaluate("PigeSupport.load('cached','guardian_portal')")
+        expect(page.get_by_role('button',name='Atendimento cached')).to_be_visible()
+        cached_requests=[request for request in SDK_REQUESTS if request.startswith('/cached/')]
+        assert len(cached_requests)==2, cached_requests
+        assert 'pige_sdk=lifecycle-1' in cached_requests[0] and 'pige_reload=' not in cached_requests[0]
+        assert 'pige_reload=' in cached_requests[1]
+        expect(page.locator('[data-pige-support-recovery]')).to_have_count(0)
+        expect(page.locator('iframe[data-pige-support-frame]')).to_have_count(0)
+        page.evaluate("PigeSupport.load('cached','online_enrollment')")
+        assert len([request for request in SDK_REQUESTS if request.startswith('/cached/')])==2
+        page.get_by_role('button',name='Atendimento cached').click()
+        expect(page.frame_locator('iframe').get_by_role('textbox')).to_be_visible()
+        page.frame_locator('iframe').get_by_role('textbox').fill('Cache atualizado')
+        checks.append('SDK antigo recuperado automaticamente por URL versionada, sem iframe externo nem downloads repetidos')
+        page.evaluate("PigeSupport.load('legacy','guardian_portal')")
+        expect(page.locator('[data-pige-support-recovery]')).to_be_visible()
+        assert 'SDK antigo após atualizar o cache' in page.locator('[data-pige-support-recovery]').get_attribute('title')
+        assert len([request for request in SDK_REQUESTS if request.startswith('/legacy/')])==2
+        expect(page.locator('#hub-bubble-holder')).to_have_count(0)
+        assert not errors
+        checks.append('HUB ainda antigo informa causa específica e limita atualização automática a uma tentativa')
         browser.close()
 finally:
     server.shutdown()
