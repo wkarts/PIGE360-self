@@ -426,29 +426,53 @@ assisted.s.rows=[{field:'name',targetField:'name',value:'Leitura atrasada',check
 assisted.s.confirmed=true;assisted.apply();assert.equal(target.name,'Nome preservado');assert.ok(assisted.s.error);
 console.log('Assist smoke: render, campos permitidos e proteção de edição concorrente OK.');
 
-// Atendimento pertence à instituição/área selecionada e tem contexto descartável.
-const supportFrames=[],supportScripts=[];
-let supportRun=()=>{throw new Error('Falha sintética do atendimento');};
-sandbox.setInterval=setInterval;sandbox.clearInterval=clearInterval;
-sandbox.MutationObserver=class{observe(){}disconnect(){}};
-document.createElement=()=>({dataset:{},style:{},contentWindow:{innerWidth:390,innerHeight:844,hubSDK:{run:()=>supportRun()}},contentDocument:{documentElement:{style:{}},body:{style:{}},createElement:()=>({}),head:{appendChild:element=>supportScripts.push(element)},querySelectorAll:()=>[]},remove(){const i=supportFrames.indexOf(this);if(i>=0)supportFrames.splice(i,1);}});
-document.body={appendChild:element=>supportFrames.push(element)};
+// Atendimento carrega o SDK no documento da página, sem iframe externo.
+const supportScripts=[],supportLinks=[],supportTimers=new Map(),supportEvents=new Map(),destroyCalls=[];
+let timeoutId=0,ran=0,mode='throw',scriptFailure=false;
+const originalAddEvent=sandbox.addEventListener,originalRemoveEvent=sandbox.removeEventListener;
+sandbox.addEventListener=(type,handler)=>supportEvents.set(type,handler);
+sandbox.removeEventListener=(type,handler)=>{if(supportEvents.get(type)===handler)supportEvents.delete(type);};
+sandbox.setTimeout=run=>{supportTimers.set(++timeoutId,run);return timeoutId;};
+sandbox.clearTimeout=id=>supportTimers.delete(id);
+const sdk={run(){if(mode==='throw')throw new Error('Falha sintética');ran++;sandbox.$hub={hasLoaded:false};},destroy(options){destroyCalls.push(options);delete sandbox.$hub;}};
+document.createElement=tag=>{
+  assert.notEqual(tag,'iframe','O portal não cria mais um iframe ao redor do SDK');
+  return {tag,dataset:{},style:{},addEventListener(_,handler){this.click=handler;},remove(){const i=supportLinks.indexOf(this);if(i>=0)supportLinks.splice(i,1);}};
+};
+document.head={appendChild(element){if(element.tag==='script'){supportScripts.push(element);queueMicrotask(()=>{if(scriptFailure)element.onerror();else{sandbox.hubSDK=sdk;element.onload();}});}}};
+document.body={appendChild:element=>supportLinks.push(element)};
 let config={enabled:true,base_url:'https://support.example.test',website_token:'test-public-token',position:'left',type:'standard',launcherTitle:'Atendimento'};
 const supportRequests=[];
 sandbox.fetch=async path=>{supportRequests.push(path);return{ok:true,json:async()=>path==='/api/v1/support-widget'?{...config,enabled:false}:config};};
-await sandbox.PigeSupport.load();assert.equal(supportFrames.length,0);assert.deepEqual(supportRequests,['/api/v1/support-widget']);
+await sandbox.PigeSupport.load();assert.equal(supportScripts.length,0);assert.deepEqual(supportRequests,['/api/v1/support-widget']);
 await sandbox.PigeSupport.load('school-a','online_enrollment');
-assert.equal(supportFrames.length,1);supportScripts.at(-1).onload();
-assert.match(sandbox.PigeSupport.status.error,/não iniciou/);assert.equal(supportFrames.length,0);
-let ran=0;supportRun=()=>{ran++;};
-await sandbox.PigeSupport.load('school-a','online_enrollment');await sandbox.PigeSupport.load('school-a','online_enrollment');supportScripts.at(-1).onload();
-assert.equal(ran,1);assert.equal(supportFrames.length,1);
-const formerFrame=supportFrames[0];
-await sandbox.PigeSupport.load('school-b','online_enrollment');
-assert.equal(supportFrames.includes(formerFrame),false);assert.match(supportRequests.at(-1),/schools\/school-b\/support-widget\?area=online_enrollment/);
-config={...config,enabled:false};await sandbox.PigeSupport.load('school-b','internal');assert.equal(supportFrames.length,0);
-sandbox.PigeSupport.dispose();assert.equal(context.state.modal.kind,'');
-console.log('Support smoke: entidade e área explícitas, falha isolada, carga idempotente e descarte do contexto OK.');
+assert.match(sandbox.PigeSupport.status.error,/não iniciou/);assert.equal(supportLinks.length,1);
+mode='ready';
+await sandbox.PigeSupport.load('school-a','online_enrollment');
+await sandbox.PigeSupport.load('school-a','online_enrollment');
+assert.equal(ran,1);assert.equal(supportScripts.length,1,'SDK é reutilizado sem downloads duplicados');
+supportTimers.values().next().value();assert.equal(supportTimers.size,0);
+assert.equal(supportLinks[0].type,'button');assert.match(supportLinks[0].textContent,/Atendimento/);
+supportLinks[0].click();await new Promise(resolve=>setImmediate(resolve));
+assert.equal(ran,2);assert.equal(supportLinks.length,0);
+sandbox.$hub.hasLoaded=true;supportEvents.get('hub:ready')();
+assert.equal(supportTimers.size,0);assert.equal(supportLinks.length,0);
+await sandbox.PigeSupport.load('school-a','guardian_portal');assert.equal(ran,2,'Mesma conta preserva a conversa');
+await sandbox.PigeSupport.load('school-b','online_enrollment');assert.equal(ran,3);
+assert.equal(destroyCalls.at(-1).clearSession,true,'Troca de escola descarta sessão anterior');
+assert.match(supportRequests.at(-1),/schools\/school-b\/support-widget\?area=online_enrollment/);
+config={...config,base_url:'https://offline.example.test'};scriptFailure=true;
+await sandbox.PigeSupport.load('school-b','internal');assert.equal(supportLinks.length,1);
+const priorScript=supportScripts.at(-1);scriptFailure=false;supportLinks[0].click();
+await new Promise(resolve=>setImmediate(resolve));assert.notEqual(supportScripts.at(-1),priorScript);
+assert.equal(supportLinks.length,0);
+config={...config,enabled:false};await sandbox.PigeSupport.load('school-b','internal');
+assert.equal(supportLinks.length,0);assert.equal(sandbox.$hub,undefined);
+sandbox.PigeSupport.dispose();
+sandbox.addEventListener=originalAddEvent;sandbox.removeEventListener=originalRemoveEvent;
+sandbox.setTimeout=setTimeout;sandbox.clearTimeout=clearTimeout;
+assert.equal(context.state.modal.kind,'');
+console.log('Support smoke: SDK direto, carga idempotente, nova tentativa e descarte por escola/conta OK.');
 
 // Consultar a fila não exige permissões financeiras nem leitura de contratos.
 const admissionReader=sandbox.PigeExpansion.component.setup({schoolId:'school-test',page:'online',permissions:['admissions.read']});

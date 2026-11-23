@@ -852,9 +852,19 @@ var PigeSupport;
     const busyMessage = 'O atendimento recebeu muitas solicitações. Aguarde antes de tentar novamente.';
     let frame = null;
     let observer = null;
-    let viewportTimer;
+    let viewportTimer, startupTimer;
+    let recovery = null, checkingArea = false, retryArea = null;
+    const startupTimeout = 8000;
+    function cancelStartup() {
+        if (startupTimer !== undefined)
+            window.clearTimeout(startupTimer);
+        startupTimer = undefined;
+    }
     let generation = 0;
     function release() {
+        cancelStartup();
+        recovery?.remove();
+        recovery = null;
         observer?.disconnect();
         observer = null;
         if (viewportTimer !== undefined)
@@ -871,8 +881,31 @@ var PigeSupport;
         catch { /* Atendimento não bloqueia a aplicação. */ }
         previous?.remove();
     }
-    function dispose() { ++generation; activeScope = ''; pending = null; retryAt = 0; release(); PigeSupport.status.error = ''; }
+    function dispose() { ++generation; activeScope = ''; pending = null; retryAt = 0; checkingArea = false; retryArea = null; release(); PigeSupport.status.error = ''; }
     PigeSupport.dispose = dispose;
+    function offerRecovery(element, config, message) {
+        if (frame !== element || recovery)
+            return;
+        cancelStartup();
+        PigeSupport.status.error = message;
+        const button = document.createElement('button');
+        button.dataset.pigeSupportRecovery = 'true';
+        button.type = 'button';
+        button.textContent = (config.launcherTitle || 'Suporte') + ': tentar novamente';
+        button.title = message;
+        const side = config.position === 'right' ? 'right' : 'left';
+        button.style.cssText = `position:fixed;${side}:max(1rem,env(safe-area-inset-${side}));bottom:max(1rem,env(safe-area-inset-bottom));z-index:2147483000;max-width:calc(100vw - 2rem);padding:.7rem 1rem;border:0;border-radius:999px;background:#174576;color:#fff;font:600 1rem/1.35 system-ui;cursor:pointer;`;
+        button.hidden = checkingArea;
+        button.addEventListener('click', () => {
+            if (frame !== element || checkingArea || recovery !== button)
+                return;
+            const retry = retryArea;
+            release();
+            retry?.(); // Busca a configuração vigente e respeita Retry-After.
+        });
+        recovery = button;
+        document.body.appendChild(button);
+    }
     function clipWidget(element) {
         if (frame !== element)
             return;
@@ -903,6 +936,14 @@ var PigeSupport;
         }
         element.style.clipPath = right > left && bottom > top ? `inset(${top}px ${Math.max(0, win.innerWidth - right)}px ${Math.max(0, win.innerHeight - bottom)}px ${left}px)` : 'inset(100%)';
         element.style.visibility = right > left && bottom > top ? 'visible' : 'hidden';
+        if (element.style.visibility === 'visible' && !checkingArea) {
+            cancelStartup();
+            if (recovery) {
+                recovery.remove();
+                recovery = null;
+                PigeSupport.status.error = '';
+            }
+        }
     }
     async function load(schoolId = '', area = 'login', sessionKey = 'public') {
         const scope = JSON.stringify([schoolId, sessionKey]);
@@ -915,8 +956,11 @@ var PigeSupport;
             return pending.promise;
         pending = null;
         const request = ++generation;
+        checkingArea = true;
         if (frame)
             frame.style.display = 'none';
+        if (recovery)
+            recovery.hidden = true;
         if (!schoolId && area !== 'login') {
             release();
             return;
@@ -927,7 +971,7 @@ var PigeSupport;
             return;
         }
         PigeSupport.status.error = '';
-        const promise = loadArea(schoolId, area, scope, request);
+        const promise = loadArea(schoolId, area, scope, request, () => { void load(schoolId, area, sessionKey); });
         pending = { context, promise };
         try {
             await promise;
@@ -938,7 +982,7 @@ var PigeSupport;
         }
     }
     PigeSupport.load = load;
-    async function loadArea(schoolId, area, scope, request) {
+    async function loadArea(schoolId, area, scope, request, retry) {
         let config = null;
         try {
             const path = schoolId ? '/api/v1/schools/' + encodeURIComponent(schoolId) + '/support-widget?area=' + encodeURIComponent(area) : '/api/v1/support-widget';
@@ -959,6 +1003,8 @@ var PigeSupport;
         catch { /* Indisponibilidade do atendimento não bloqueia o formulário. */ }
         if (request !== generation)
             return;
+        checkingArea = false;
+        retryArea = retry;
         if (!config?.enabled || !config.base_url || !config.website_token) {
             release();
             return;
@@ -978,6 +1024,11 @@ var PigeSupport;
         const sourceKey = JSON.stringify([scope, baseUrl, config.website_token, config.position, config.type, config.launcherTitle]);
         if (sourceKey === loadedSource && frame) {
             frame.style.display = '';
+            if (recovery) {
+                recovery.hidden = false;
+                PigeSupport.status.error = recovery.title;
+            }
+            clipWidget(frame);
             return;
         }
         release();
@@ -1021,8 +1072,8 @@ var PigeSupport;
                 release();
             }
         };
-        sdk.onerror = () => { if (frame !== element)
-            return; PigeSupport.status.error = 'O atendimento está indisponível. Tente novamente mais tarde.'; release(); };
+        sdk.onerror = () => offerRecovery(element, config, 'O atendimento não carregou nesta página. Tente novamente.');
+        startupTimer = window.setTimeout(() => offerRecovery(element, config, 'O atendimento não ficou pronto nesta página. Tente novamente.'), startupTimeout);
         doc.head.appendChild(sdk);
     }
     window.addEventListener('pagehide', dispose);
