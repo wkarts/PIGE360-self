@@ -80,7 +80,7 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == '/vue-stub.js':
                 body, content_type = b'window.Vue={reactive:x=>x};', 'application/javascript'
         self.send_response(200)
-        self.send_header('Content-Type', content_type)
+        self.send_header('Content-Type', content_type+'; charset=utf-8')
         self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-src 'self'")
         self.end_headers()
         self.wfile.write(body)
@@ -189,7 +189,8 @@ try:
         checks.append('SDK antigo recuperado automaticamente por URL versionada, sem iframe externo nem downloads repetidos')
         page.evaluate("PigeSupport.load('legacy','guardian_portal')")
         expect(page.locator('[data-pige-support-recovery]')).to_be_visible()
-        assert 'SDK antigo após atualizar o cache' in page.locator('[data-pige-support-recovery]').get_attribute('title')
+        recovery_title=page.locator('[data-pige-support-recovery]').get_attribute('title')
+        assert 'SDK antigo após atualizar o cache' in recovery_title, recovery_title
         assert len([request for request in SDK_REQUESTS if request.startswith('/legacy/')])==2
         expect(page.locator('#hub-bubble-holder')).to_have_count(0)
         assert not errors
