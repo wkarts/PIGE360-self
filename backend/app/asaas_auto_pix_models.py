@@ -30,7 +30,8 @@ class PixAuthorization(Record, Scoped, Base):
     scan_offset: Mapped[int] = mapped_column(default=0)
     terminal_scan_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    __table_args__ = (UniqueConstraint('connection_id','remote_id'), UniqueConstraint('connection_id','conciliation'))
+    __table_args__ = (UniqueConstraint('connection_id','remote_id',name='uq_asaas_pix_auth_remote'),
+                      UniqueConstraint('connection_id','conciliation',name='uq_asaas_pix_auth_conciliation'))
 
 
 class PixCycle(Record, Scoped, Base):

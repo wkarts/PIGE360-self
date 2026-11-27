@@ -242,7 +242,9 @@ def run_asaas_operation(db, school, user, connection, *, client_key, kind, finge
         # Apenas falha local conhecida ou rejeição inequívoca libera o canal para uma nova tentativa.
         rejected = isinstance(exc, IntegrationFailure) and not exc.uncertain and (code in {
             'API_KEY_MISSING', 'CREDENTIAL_DECRYPT_FAILED', 'INVALID_PROVIDER_METHOD', 'INVALID_PROVIDER_PATH',
-            'BANK_NOT_CONFIGURED', 'UNTRUSTED_BANK_HOST'} or re.fullmatch(r'PROVIDER_HTTP_(400|401|402|403|404|405|410|422|429)', code))
+            'BANK_NOT_CONFIGURED', 'UNTRUSTED_BANK_HOST', 'CARD_CONSENT_UNAVAILABLE',
+            'CARD_CONSENT_SCOPE_CHANGED', 'CARD_INVOICE_CHANGED', 'CARD_ACCOUNT_CHANGED',
+            'CARD_INVOICE_INELIGIBLE'} or re.fullmatch(r'PROVIDER_HTTP_(400|401|402|403|404|405|410|422|429)', code))
         row.status = 'failed' if rejected else 'uncertain'
         row.error_code = code
         row.version += 1
