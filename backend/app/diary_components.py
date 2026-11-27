@@ -54,7 +54,7 @@ def lifecycle(db, component):
 def available_on(db, component, on_date: date | None = None):
     lock_school(db, component.school_id)
     status, archive = lifecycle(db, component)
-    if status == 'draft' or (archive and (on_date is None or on_date >= archive.created_at.date())):
+    if status == 'draft' or (not component.active and not archive) or (archive and (on_date is None or on_date >= archive.created_at.date())):
         fail(409, 'O componente está fora de vigência para este lançamento.')
     return component
 

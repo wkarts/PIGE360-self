@@ -108,3 +108,41 @@ ctx.editPlan(ctx.state.plans[0]);ctx.state.planForm.status='published';ctx.state
 await ctx.createPlan();assert.equal(ctx.state.error,'');assert.equal(planUpdate.version,3);
 assert.equal(planUpdate.status,'published');assert.deepEqual(planUpdate.field_values,{'field-plan':'Revisada'});
 console.log('Diário: chamada parcial, preservação de faltas, edição versionada de aulas/planejamento e campos históricos OK.');
+
+// O portal separado carrega apenas teacher.js e teacher-renders.js.
+const mockRequest=sandbox.PigeAPI.request;
+let teacherApp;
+sandbox.Vue.createApp=options=>{teacherApp=options;return{mount(){}};};
+for(const file of ['teacher-renders.js','teacher.js']){
+  vm.runInContext(fs.readFileSync(path.join(root,'dist',file),'utf8'),sandbox);
+}
+sandbox.PigeSupport.load=async()=>{};sandbox.PigeSupport.dispose=()=>{};
+const teacherContext=teacherApp.setup();
+Object.assign(teacherContext.s,{ready:true,user:{name:'Professora de Teste',role:'teacher',permissions},schoolId:'school-one',
+  schools:[{id:'school-one',name:'Escola de Teste'}],section:'overview',agenda:{
+    starts_on:'2026-09-21',ends_on:'2026-09-27',assignments:[{id:'assignment-one',class_name:'Turma A',subject_name:'Matemática'}],
+    diaries:[{id:'diary-one',component:'Matemática',teacher_assignment_id:'assignment-one'}],events:[]}});
+const renderTeacher=()=>teacherApp.render.call(teacherContext,teacherContext,[]);
+function buttons(tree){
+  if(!tree || typeof tree!=='object')return [];
+  return [...(tree.type==='button'?[tree]:[]),...(Array.isArray(tree.children)?tree.children.flatMap(buttons):[])];
+}
+for(const [caption,target,expectedTab] of [['Fazer chamada','attendance','diaries'],['Planejar aula','planning','planning']]){
+  teacherContext.s.section='overview';
+  const button=buttons(renderTeacher()).find(node=>typeof node.children==='string' && node.children.includes(caption));
+  assert.ok(button,caption+' visível fora do piloto no portal independente');
+  button.props.onClick();
+  assert.deepEqual(JSON.parse(JSON.stringify(teacherContext.s.requestedDiary)),{id:'diary-one',tab:target});
+  let mounted;
+  sandbox.Vue.onMounted=callback=>{mounted=callback;};
+  sandbox.PigeAPI.request=async(url,options)=>{
+    assert.ok(url.startsWith('/teacher/schools/school-one/'),'Portal usa a API de professor');
+    return mockRequest(url.replace('/teacher',''),options);
+  };
+  const workspace=teacherApp.components['school-diary'].setup({schoolId:'school-one',permissions,teacherPortal:true,requestedDiary:teacherContext.s.requestedDiary});
+  await mounted();await new Promise(resolve=>setTimeout(resolve,0));
+  assert.equal(workspace.state.error,'');
+  assert.equal(workspace.state.selected.id,'diary-one');
+  assert.equal(workspace.state.tab,expectedTab);
+}
+console.log('Portal independente do professor: botões de chamada e planejamento fora do piloto acionam o diário e usam a API docente.');

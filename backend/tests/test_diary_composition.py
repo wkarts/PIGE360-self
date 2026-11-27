@@ -22,7 +22,7 @@ def test_versioned_composition_preserves_history_and_print_labels(api):
     lesson_data = {'lesson_date': '2026-09-22', 'content': 'Análise de sementes', 'skills': 'Observar'}
     lesson = api.post(url, {**lesson_data, 'field_values': {first['id']: 'Feijão'}})
     assert {row['label'] for row in lesson['extra_fields']} == {'Experimento', 'Competências'}
-    plan_data = {**diary_data, 'objectives': 'Comparar amostras'}
+    plan_data = {**diary_data}
     plan = api.post('/curriculum-plans', {**plan_data, 'field_values': {second['id']: 'Coleta'}})
     api.post(url, {**lesson_data, 'lesson_date': '2026-09-23', 'field_values': {second['id']: 'Inválido'}}, 409)
     renamed = {**second, 'label': 'Etapa do plano'}
@@ -58,6 +58,10 @@ def test_curricular_component_removal_and_attendance_conflicts(api):
     lesson_path = '/diaries/' + diary['id'] + '/lessons'
     data = {'lesson_date': '2026-09-25', 'content': 'Experimento em sala'}
     lesson = api.post(lesson_path, data)
+    unused = api.post(lesson_path, {**data, 'lesson_date': '2026-09-24'})
+    removal = lesson_path + '/' + unused['id'] + '/remove'
+    api.post(removal, {'version': unused['version'] + 1, 'reason': 'Digitação em duplicidade'}, 409)
+    assert api.post(removal, {'version': unused['version'], 'reason': 'Digitação em duplicidade'}, 200)['removed']
     enrollment = api.enroll(api.student(), catalog['group'])
     with SessionLocal() as db:
         db.get(m.Enrollment, enrollment['id']).status = 'active'
@@ -68,6 +72,7 @@ def test_curricular_component_removal_and_attendance_conflicts(api):
     api.call('PUT', url, {'items': [mark]})
     api.call('PUT', url, {'items': [{**mark, 'status': 'present'}]}, 409)
     assert api.get(url)['roster'][0]['attendance']['status'] == 'absent'
+    api.post(lesson_path + '/' + lesson['id'] + '/remove', {'version': lesson['version'], 'reason': 'Retirar aula'}, 409)
     api.patch(lesson_path + '/' + lesson['id'], {**data, 'lesson_date': '2026-09-26', 'version': lesson['version']}, 409)
     api.patch(lesson_path + '/' + lesson['id'], {**data, 'lesson_date': '2027-01-01', 'version': lesson['version']}, 422)
     result = api.post(path + '/remove', {'version': changed['version'], 'reason': 'Encerramento do componente'}, 200)

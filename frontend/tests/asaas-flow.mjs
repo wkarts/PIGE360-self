@@ -116,6 +116,11 @@ await refund.ctx.refundCard();
 assert.equal(writes.at(-1).url,base+'/cards/checkouts/card_1/refund');
 assert.equal(writes.at(-1).payload.amount,'200.20');
 assert.equal(writes.at(-1).payload.payment_id,'pay_1');
+await refund.ctx.cardReceipt(plan,payments[1]);
+assert.equal(downloads.length,2,'Confirmação inicial do cartão não libera comprovante de recebimento.');
+await refund.ctx.cardReceipt(plan,payments[0]);
+assert.equal(downloads.at(-1).url,base+'/cards/checkouts/card_1/payments/pay_1/receipt.pdf');
+
 const settings=view('settings',['integrations.manage']);
 api.request=async(url,opts)=>{
   if(url.endsWith('/pix-automatic/settings'))return {enabled:false,version:4,additional_holidays:[]};

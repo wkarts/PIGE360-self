@@ -12,8 +12,10 @@ DO $$ BEGIN
       WHERE status='active';
   END IF;
   IF to_regclass('public.asaas_pix_authorizations') IS NOT NULL THEN
-    UPDATE asaas_pix_authorizations SET status='RESTORE_REVIEW',encrypted_qr='',updated_at=CURRENT_TIMESTAMP,version=version+1
-      WHERE status IN ('PREPARING','CREATED','ACTIVE','CANCELLING');
+    UPDATE asaas_pix_authorizations SET
+      status=CASE WHEN status IN ('PREPARING','CREATED','ACTIVE','CANCELLING') THEN 'RESTORE_REVIEW' ELSE status END,
+      encrypted_qr='',scan_offset=0,terminal_scan_at=NULL,updated_at=CURRENT_TIMESTAMP,version=version+1
+      WHERE status IN ('PREPARING','CREATED','ACTIVE','CANCELLING') OR encrypted_qr<>'' OR scan_offset<>0 OR terminal_scan_at IS NOT NULL;
   END IF;
   IF to_regclass('public.asaas_pix_cycles') IS NOT NULL THEN
     UPDATE asaas_pix_cycles SET status='UNCERTAIN',updated_at=CURRENT_TIMESTAMP,version=version+1

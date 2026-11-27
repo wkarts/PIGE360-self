@@ -92,4 +92,22 @@ def entry_values(school, scope, submitted, previous=None, *, standard_values=Non
             saved[field_id] = {"id": field_id, "label": label, "column": column}
         else:
             saved.pop(field_id, None)
-    return list(saved.values())
+    ordered_ids = dict.fromkeys([*current, *saved])
+    return [saved[field_id] for field_id in ordered_ids if field_id in saved]
+
+
+def entry_payload(db, school, scope, data, obj=None):
+    db.refresh(school, ["diary_entry_settings"])
+    values = data.model_dump(exclude={"field_values", "version"})
+    active = {field["id"] for field in public_settings(school)["fields"]}
+    for field_id, definition in STANDARD_BY_ID.items():
+        if definition["scope"] != scope or field_id in active:
+            continue
+        column = definition["column"]
+        old = getattr(obj, column) if obj is not None else ([] if column == "bncc_references" else "")
+        if column in data.model_fields_set and values[column] != old:
+            fail(409, "Um campo padrão da ficha foi retirado. Recarregue a composição antes de alterar o valor.")
+        values[column] = old
+    values["extra_fields"] = entry_values(school, scope, data.field_values,
+                                           obj.extra_fields if obj else None, standard_values=values)
+    return values

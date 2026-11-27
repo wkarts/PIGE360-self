@@ -7,7 +7,7 @@ import re
 from typing import Literal
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from pydantic import Field, model_validator
 from sqlalchemy import func, select
 from . import models as m
@@ -38,14 +38,14 @@ class Command(Input):
 class CreateCheckout(Command):
     charge_id: str = Field(min_length=1,max_length=36)
     mode: Literal['detached','installment','recurrent']
-    max_installments: int = Field(default=1,ge=1,le=12)
+    max_installments: int = Field(default=1,ge=1,le=21)
     cycle: CYCLES | None = None
     ends_on: date | None = None
 
     @model_validator(mode='after')
     def terms(self):
         if (self.mode=='installment') != (self.max_installments>1):
-            raise ValueError('Informe de 2 a 12 parcelas somente no checkout parcelado.')
+            raise ValueError('Informe de 2 a 21 parcelas somente no checkout parcelado.')
         if (self.mode=='recurrent') != bool(self.cycle and self.ends_on) or (self.mode!='recurrent' and (self.cycle or self.ends_on)):
             raise ValueError('A assinatura hospedada exige periodicidade e data final.')
         return self
@@ -112,7 +112,7 @@ def open_payload(row,charge,payer,conn):
         'minutesToExpire':60,'callback':{'cancelUrl':callback,'successUrl':callback,'expiredUrl':callback},
         'items':[{'name':charge.description[:100], 'description':charge.description[:500],'quantity':1,'value':float(gross)}]}
     if row.mode=='installment':data['installment']={'maxInstallmentCount':row.max_installments}
-    if row.mode=='recurrent':data['subscription']={'cycle':row.cycle,'nextDueDate':row.first_due.isoformat()+' 12:00:00','endDate':row.ends_on.isoformat()+' 23:59:59'}
+    if row.mode=='recurrent':data['subscription']={'cycle':row.cycle,'nextDueDate':row.first_due.isoformat(),'endDate':row.ends_on.isoformat()}
     if row.mode=='detached':data['chargeTypes']=['DETACHED']
     clients=asaas_read(conn,'/customers',params={'cpfCnpj':payer.cpf,'limit':2})
     found=[item for item in clients.get('data',[]) if re.sub(r'\D','',str(item.get('cpfCnpj','')))==payer.cpf and payment_id(item.get('id'))]
@@ -202,6 +202,7 @@ def sync_row(db,conn,row):
     if not payment_id(row.remote_id):return summary(row)
     base=base_payments(conn,row)
     if not base:
+        row.transactions=[]
         if row.status in ('expired','cancelled') and row.mode!='invoice':
             from .asaas_native import release_issuance
             release_issuance(db,row.school_id,row.charge_id,'card',row.remote_id)
@@ -225,7 +226,12 @@ def sync_row(db,conn,row):
         base=list({p['id']:p for p in base+extra}.values())
     if row.mode=='installment':
         ids={p.get('installment') for p in base}
-        if len(ids)==1 and payment_id(next(iter(ids))):row.installment_id=next(iter(ids))
+        if len(ids)!=1:
+            fail(409,'As cobranças retornadas pertencem a parcelamentos diferentes.')
+        group=next(iter(ids))
+        if group and not payment_id(group) or row.installment_id and group!=row.installment_id:
+            fail(409,'O identificador do parcelamento diverge da conciliação anterior.')
+        row.installment_id=group
     transactions=[{k:p.get(k) for k in ('id','status','dueDate','value','paymentDate','installmentNumber')} for p in base]
     if any(not isinstance(p['value'],(str,float,int)) or not p['dueDate'] for p in transactions):
         fail(502,'Cobrança sem valor ou vencimento confirmado.')
@@ -346,6 +352,47 @@ def family_checkout(db,user,student_id,charge_id):
     return charge,payer,row
 
 
+def receipt(db,school,row,remote,user,request):
+    from .documents import render_pdf
+    from .school_reports import format_value
+    if not row or not payment_id(remote):
+        fail(404,'Pagamento indisponível.')
+    lock_school(db,school.id)
+    db.refresh(row)
+    conn=asaas_connection(db,school,row.connection_id)
+    sync_row(db,conn,row)
+    transaction=next((item for item in row.transactions if item['id']==remote),None)
+    if not transaction:
+        fail(404,'Pagamento indisponível.')
+    if transaction['status']!='RECEIVED':
+        fail(409,'O comprovante exige recebimento confirmado pelo Asaas.')
+    if refund_history(conn,remote)>0:
+        fail(409,'Existe estorno vinculado ao pagamento. Consulte o histórico financeiro.')
+    charge=scoped(db,m.BankCharge,row.charge_id,school.id)
+    fields=[('Pagador',charge.payer_snapshot.get('name','')),('Cobrança',charge.description),
+            ('Referência do pagamento',remote),('Valor recebido',format_value(transaction['value'],'currency')),
+            ('Vencimento',format_value(transaction['dueDate'],'date'))]
+    if transaction.get('paymentDate'):
+        fields.append(('Data do pagamento',format_value(transaction['paymentDate'],'date')))
+    pdf=render_pdf(school,'Comprovante de pagamento com cartão',fields,
+                   note='Recebimento conciliado no Asaas para a transação indicada.',db=db,module='Financeiro')
+    audit(db,request,user,'asaas.card.receipt',row,school.id,{'payment':remote})
+    return Response(pdf,media_type='application/pdf',headers={'Cache-Control':'no-store',
+        'X-Content-Type-Options':'nosniff','Content-Disposition':'attachment; filename="comprovante-cartao.pdf"'})
+
+
+@router.get('/cards/checkouts/{id}/payments/{payment_id}/receipt.pdf')
+def management_receipt(id:str,payment_id:str,db:DB,user:Actor,school:Scope,request:Request):
+    require(user,'banking.read')
+    return receipt(db,school,scoped(db,CardCheckout,id,school.id),payment_id,user,request)
+
+
+@family_router.get('/receipts/{payment_id}.pdf')
+def family_receipt(student_id:str,charge_id:str,payment_id:str,db:DB,user:Actor,request:Request):
+    charge,_,row=family_checkout(db,user,student_id,charge_id)
+    return receipt(db,db.get(m.School,charge.school_id),row,payment_id,user,request)
+
+
 @family_router.get('')
 def family_cards(student_id:str,charge_id:str,db:DB,user:Actor,response:Response):
     response.headers['Cache-Control']='no-store'
@@ -443,30 +490,38 @@ def execute_job(db,job,payload):
     if row.mode!='invoice':raise IntegrationFailure('CARD_INVOICE_MISMATCH')
     user=db.get(m.User,payload['actor_id'])
     charge=scoped(db,m.BankCharge,row.charge_id,school.id)
-    def dispatch():
+    def invoice_payload():
         from .asaas_auto_pix import identity
-        auth=db.scalar(select(CardMandate).where(CardMandate.id==row.quote['mandate_id'],CardMandate.school_id==school.id).with_for_update())
+        auth=db.scalar(select(CardMandate).where(CardMandate.id==row.quote['mandate_id'],CardMandate.school_id==school.id).with_for_update().execution_options(populate_existing=True))
         if (not auth or auth.status!='active' or auth.ends_on<today() or auth.version!=row.quote['mandate_version']
             or row.quote['charged_cents']>auth.limit_cents):
             raise IntegrationFailure('CARD_CONSENT_UNAVAILABLE')
         source=db.get(CardCheckout,auth.checkout_id)
         if not source or (source.payer_id,source.enrollment_id,source.connection_id)!=(row.payer_id,row.enrollment_id,row.connection_id):
             raise IntegrationFailure('CARD_CONSENT_SCOPE_CHANGED')
-        payer=payer_for(db,school,charge)
-        quote=card_quote(policy_for(conn),charge.amount,1,recurring=True)
+        db.refresh(charge)
+        if charge.status not in ('pending','overdue') or charge.collection_mode!='manual':
+            raise IntegrationFailure('CARD_INVOICE_INELIGIBLE')
+        try:
+            payer=payer_for(db,school,charge)
+            quote=card_quote(policy_for(conn),charge.amount,1,recurring=True)
+        except HTTPException:
+            raise IntegrationFailure('CARD_INVOICE_INELIGIBLE') from None
         if payer.id!=row.payer_id or charge.due_on!=row.first_due or quote['charged_cents']!=row.quote['charged_cents']:
             raise IntegrationFailure('CARD_INVOICE_CHANGED')
         info=unseal(auth.sealed_token)
         if info.get('scope')!=identity(conn):raise IntegrationFailure('CARD_ACCOUNT_CHANGED')
-        body={'billingType':'CREDIT_CARD','customer':auth.customer_id,'dueDate':max(today(),charge.due_on).isoformat(),
+        return {'billingType':'CREDIT_CARD','customer':auth.customer_id,'dueDate':max(today(),charge.due_on).isoformat(),
               'description':charge.description[:500],'externalReference':'pige-card:'+row.id,
               'value':float(Decimal(quote['charged_cents'])/100),'creditCardToken':info['token'],'remoteIp':info['ip']}
+    def dispatch():
+        body=invoice_payload()
         response=asaas_request(conn,'POST','/payments',payload=body)
-        if response.get('externalReference')!=body['externalReference'] or response.get('customer')!=auth.customer_id or not payment_id(response.get('id')):
+        if response.get('externalReference')!=body['externalReference'] or response.get('customer')!=body['customer'] or not payment_id(response.get('id')):
             raise IntegrationFailure('CARD_PAYMENT_UNCONFIRMED',uncertain=True)
         return {'id':response['id']}
     op=run_asaas_operation(db,school,user,conn,client_key=row.client_key,kind='card_invoice',charge_id=charge.id,
-        issuance_channel='card',fingerprint_data={'checkout_id':row.id,'quote':row.quote},execute=dispatch)
+        issuance_channel='card',fingerprint_data={'checkout_id':row.id,'quote':row.quote},preflight=invoice_payload,execute=dispatch)
     row.remote_id=op.remote_id;row.status='processing';db.flush();sync_row(db,conn,row)
     return row.remote_id
 
@@ -475,23 +530,6 @@ class CardRefund(Command):
     payment_id: str = Field(pattern=r'^[A-Za-z0-9_-]{1,160}$')
     amount: Decimal = Field(gt=0,decimal_places=2,max_digits=12)
     description: str = Field(min_length=3,max_length=255)
-
-
-def refund_history(conn,remote):
-    data=asaas_read(conn,'/payments/'+remote+'/refunds')
-    refunds=data.get('data')
-    if not isinstance(refunds,list) or data.get('hasMore') is not False or data.get('totalCount',len(refunds))!=len(refunds):
-        fail(409,'Aguarde um histórico completo de estornos antes de prosseguir.')
-    reserved=Decimal(0)
-    for refund in refunds:
-        if refund.get('status')=='CANCELLED':continue
-        if refund.get('status') not in ('DONE','PENDING','AWAITING_CRITICAL_ACTION_AUTHORIZATION','AWAITING_CUSTOMER_EXTERNAL_AUTHORIZATION'):
-            fail(409,'Um estorno anterior precisa de conferência.')
-        try:value=Decimal(str(refund['value']))
-        except (KeyError,ArithmeticError,ValueError):fail(409,'O Asaas ainda não informou o valor do estorno.')
-        if not value.is_finite() or value<=0:fail(409,'Valor de estorno anterior inválido.')
-        reserved+=value
-    return reserved
 
 
 @router.post('/cards/checkouts/{id}/refund')
@@ -509,16 +547,19 @@ def refund_card(id:str,data:CardRefund,db:DB,user:Actor,school:Scope,request:Req
             fail(409,'Confira o recebimento antes de solicitar este estorno.')
         if plan and not payment_id(row.installment_id):fail(409,'O parcelamento não foi confirmado pelo Asaas.')
         total=sum((Decimal(str(p['value'])) for p in selected_rows),Decimal(0))
-        reserved=sum((refund_history(conn,p['id']) for p in selected_rows),Decimal(0))
+        from .asaas_native import refund_totals
+        histories=[refund_totals(asaas_read(conn,'/payments/'+p['id']+'/refunds')) for p in selected_rows]
+        reserved=sum(held for held, _ in histories)
+        historical=sum(seen for _, seen in histories)
         if data.amount>total-reserved or (plan and (reserved!=0 or data.amount!=total or total*100!=row.quote['charged_cents'])):
             fail(409,'Valor indisponível para estorno. O parcelamento exige o total integral confirmado.')
         target=row.installment_id if plan else data.payment_id
         previous=(row.refunds or {}).get(target)
         if previous:
             op=db.scalar(select(m.AsaasNativeOperation).where(m.AsaasNativeOperation.school_id==row.school_id,m.AsaasNativeOperation.client_key==previous['key']))
-            if op and op.status!='failed' and int(reserved*100)<previous['expected_cents']:
+            if op and op.status!='failed' and int(historical*100)<previous['expected_cents']:
                 fail(409,'O estorno anterior ainda não foi conciliado no Asaas.')
-        row.refunds={**(row.refunds or {}),target:{'key':data.client_key,'expected_cents':int((reserved+data.amount)*100)}}
+        row.refunds={**(row.refunds or {}),target:{'key':data.client_key,'expected_cents':int((historical+data.amount)*100)}}
     def dispatch():
         target=row.installment_id if plan else data.payment_id
         path=('/installments/' if plan else '/payments/')+target+'/refund'
@@ -527,7 +568,7 @@ def refund_card(id:str,data:CardRefund,db:DB,user:Actor,school:Scope,request:Req
         return {'id':target}
     from .asaas_native import operation_output
     op=run_asaas_operation(db,school,user,conn,client_key=data.client_key,kind='card_refund',charge_id=row.charge_id,
-        fingerprint_data={'checkout':row.id,'payment':data.payment_id,'amount':str(data.amount),'description':data.description},preflight=preflight,execute=dispatch)
+        fingerprint_data={'checkout':row.id,'payment':data.payment_id,'amount':format(data.amount,'.2f'),'description':data.description.strip()},preflight=preflight,execute=dispatch)
     enqueue(db,row.school_id,'asaas_card_sync',{'checkout_id':row.id},'card-refund-sync:'+op.id,conn.id)
     audit(db,request,user,'asaas.card.refund',row,row.school_id,{'payment':data.payment_id,'amount':str(data.amount),'reason':data.description})
     return operation_output(op)

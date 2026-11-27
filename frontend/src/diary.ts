@@ -51,9 +51,9 @@ namespace PigeDiary {
       busy:false,error:'',notice:'',tab:'diaries',page:'diaries',diaryFilter:'',lessonPeriod:'',dirty:false,
       diaries:[] as Diary[],selected:null as Diary|null,academicYears:[] as Row[],periods:[] as Row[],components:[] as Row[],groups:[] as Row[],assignments:[] as Row[],plans:[] as Row[],
       calendarIds:[] as string[],periodForm:{academic_year_id:'',class_group_id:'',name:'',starts_on:'',ends_on:'',order_index:1,active:true},
-      fields:{version:0,fields:[],standard_columns:{}} as EntrySettings,configFields:[] as EntryField[],newFieldLabel:'',restoreFieldId:'',newFieldScope:'lesson' as EntryScope,
+      fields:{version:0,fields:[],standard_columns:{}} as EntrySettings,configFields:[] as EntryField[],configVersion:0,newFieldLabel:'',restoreFieldId:'',newFieldScope:'lesson' as EntryScope,
       componentEditing:null as Row|null,removalTarget:null as Row|null,removalReason:'',
-      lessonEditing:null as Row|null,planEditing:null as Row|null,lessonValues:{} as Record<string,string>,planValues:{} as Record<string,string>,
+      lessonRemoval:false,lessonRemovalReason:'',lessonEditing:null as Row|null,planEditing:null as Row|null,lessonValues:{} as Record<string,string>,planValues:{} as Record<string,string>,
       attendanceBase:{} as Record<string,{status:string;note:string}>,
       componentForm:{name:'',code:'',workload_hours:0,active:true},
       diaryForm:{class_group_id:'',component_id:'',teacher_assignment_id:'',notes:''},
@@ -185,7 +185,8 @@ namespace PigeDiary {
       PigeAPI.request<any>(base()+'/diary-dashboard'),
       PigeAPI.request<EntrySettings>(base()+'/diary-entry-fields')
     ]);state.diaries=results[0] as Diary[];state.periods=results[1] as Row[];state.components=results[2] as Row[];state.academicYears=results[3] as Row[];state.groups=results[4] as Row[];state.assignments=results[5] as Row[];state.dashboard=results[6] as {items:Row[];totals:Row};
-      setComposition(results[7] as EntrySettings);
+      const current=results[7] as EntrySettings;
+      if(compositionDirty.value)state.fields=current;else setComposition(current);
       if(!state.periodForm.academic_year_id&&state.academicYears.length){const year=state.academicYears.find(x=>x.status==='active'||x.active)||state.academicYears[0];state.periodForm.academic_year_id=str(year.id);}
     }
     async function load(){await run(loadBase);}
@@ -242,8 +243,9 @@ namespace PigeDiary {
       if(!group)return;await PigeAPI.request(base()+'/class-groups/'+group.id+'/calendar',{method:'PUT',body:JSON.stringify({period_ids:state.calendarIds,version:group.version})});
       await loadBase();loadCalendar();state.notice='Calendário da turma atualizado.';});}
     async function createPeriod(){await run(async()=>{await PigeAPI.post(base()+'/academic-periods',state.periodForm);state.periodForm={class_group_id:state.periodForm.class_group_id,academic_year_id:state.periodForm.academic_year_id,name:'',starts_on:'',ends_on:'',order_index:state.periodForm.order_index+1,active:true};await loadBase();loadCalendar();state.notice='Período letivo criado.';});}
+    const compositionDirty=Vue.computed(()=>JSON.stringify(state.configFields)!==JSON.stringify(state.fields.fields));
     function setComposition(settings:EntrySettings){
-      state.fields=settings;
+      state.fields=settings;state.configVersion=settings.version;
       state.configFields=settings.fields.map(field=>({...field}));
     }
     const restorableFields=Vue.computed(()=>Object.keys(state.fields.standard_columns).filter(
@@ -268,7 +270,7 @@ namespace PigeDiary {
     }
     async function saveFields(){await run(async()=>{
       const result=await PigeAPI.request<EntrySettings>(base()+'/diary-entry-fields',{method:'PUT',
-        body:JSON.stringify({version:state.fields.version,fields:state.configFields})});
+        body:JSON.stringify({version:state.configVersion,fields:state.configFields})});
       setComposition(result);state.notice='Composição atualizada para esta escola.';
     });}
     function resetComponent(){
@@ -334,10 +336,10 @@ namespace PigeDiary {
       state.plans=await PigeAPI.request<Row[]>(endpoint+'?class_group_id='+encodeURIComponent(f.class_group_id)+'&component_id='+encodeURIComponent(f.component_id));
       resetPlan();state.notice=editing?'Planejamento atualizado.':'Planejamento registrado.';
     });}
-    function resetLesson(){state.lessonEditing=null;state.lessonValues={};state.lessonForm=emptyLesson();}
+    function resetLesson(){state.lessonRemoval=false;state.lessonRemovalReason='';state.lessonEditing=null;state.lessonValues={};state.lessonForm=emptyLesson();}
     function editLesson(row:Lesson){
       if(pilot && state.page!=='diaries' && !navigatePage('diaries'))return;
-      syncLink();state.lessonEditing=row;state.lessonValues=editableValues(row,'lesson');
+      syncLink();state.lessonRemoval=false;state.lessonRemovalReason='';state.lessonEditing=row;state.lessonValues=editableValues(row,'lesson');
       const {academic_period_id,lesson_date,lesson_count,content,skills,methodology,activities,homework,notes}=row;
       state.lessonForm={academic_period_id:academic_period_id||'',lesson_date,lesson_count,content,skills,methodology,activities,homework,notes};
       focusHeading('diary-lesson-heading');
@@ -350,6 +352,15 @@ namespace PigeDiary {
       const period=state.lessonForm.academic_period_id;resetLesson();state.lessonForm.academic_period_id=period;
       await loadDiary(state.selected!);state.notice=editing?'Aula atualizada.':'Aula registrada.';
     });}
+    async function removeLesson(){
+      const diary=state.selected,lesson=state.lessonEditing;
+      if(!diary || !lesson || !state.lessonRemoval || state.lessonRemovalReason.trim().length<3)return;
+      await run(async()=>{
+        await PigeAPI.post(base()+'/diaries/'+diary.id+'/lessons/'+lesson.id+'/remove',
+          {version:lesson.version,reason:state.lessonRemovalReason});
+        resetLesson();await loadDiary(diary);state.notice='Aula removida do diário.';
+      });
+    }
     function attendancePath(lesson:Lesson){return base()+'/diaries/'+state.selected!.id+'/lessons/'+lesson.id+'/attendance';}
     async function fetchAttendance(lesson:Lesson){
       const result=await PigeAPI.request<{lesson:Lesson;roster:Roster[]}>(attendancePath(lesson));
@@ -477,6 +488,6 @@ namespace PigeDiary {
       }
     });
     Vue.onUnmounted(()=>{if(pilot)window.removeEventListener('beforeunload',beforeUnload);});
-    return{props,state,restorableFields,restoreField,addField,moveField,saveFields,editComponent,resetComponent,removeComponent,editLesson,resetLesson,editPlan,resetPlan,storedFields,markPendingPresent,pendingAttendance,changedAttendance,closeAttendance,periodsFor,loadCalendar,saveCalendar,pilot,catalog,catalogImpact,suggest,decide,lessons,filterPeriod,save,navigation,activeGroup,filteredDiaries,pageLink,go,show,chooseAnother,markDraft,publishMaterial,printMaterial,can,str,date,label,load,selectDiary,loadCommunicationRecipients,communicationOccurrenceChanged,sendCommunication,createPeriod,createComponent,createDiary,createPlan,createLesson,openAttendance,saveAttendance,createAssessment,editAssessment,cancelAssessmentEdit,openAssessment,saveAssessmentResults,saveOpinion,createPedagogicalRecord,submitDiary,reviewDiary,closeDiary,resumeDiary,reopenDiary,report,selectRulePeriod,saveAssessmentRule,loadPeriodResults,consolidatePeriod,saveOccurrence};
+    return{props,state,compositionDirty,setComposition,restorableFields,restoreField,addField,moveField,saveFields,editComponent,resetComponent,removeComponent,editLesson,resetLesson,removeLesson,editPlan,resetPlan,storedFields,markPendingPresent,pendingAttendance,changedAttendance,closeAttendance,periodsFor,loadCalendar,saveCalendar,pilot,catalog,catalogImpact,suggest,decide,lessons,filterPeriod,save,navigation,activeGroup,filteredDiaries,pageLink,go,show,chooseAnother,markDraft,publishMaterial,printMaterial,can,str,date,label,load,selectDiary,loadCommunicationRecipients,communicationOccurrenceChanged,sendCommunication,createPeriod,createComponent,createDiary,createPlan,createLesson,openAttendance,saveAttendance,createAssessment,editAssessment,cancelAssessmentEdit,openAssessment,saveAssessmentResults,saveOpinion,createPedagogicalRecord,submitDiary,reviewDiary,closeDiary,resumeDiary,reopenDiary,report,selectRulePeriod,saveAssessmentRule,loadPeriodResults,consolidatePeriod,saveOccurrence};
   }};
 }

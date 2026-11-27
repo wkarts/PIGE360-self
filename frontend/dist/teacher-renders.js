@@ -750,7 +750,17 @@ var _Vue=Vue; var PigeRenders={teacherPortal:function render(_ctx, _cache) {
                       onClick: $event => (state.configFields.splice(index,1)),
                       "aria-label": 'Retirar campo '+field.label
                     }, "Retirar campo", 8, ["onClick", "aria-label"])])]))
-                  }), 128)), _createElementVNode("button", { class: "btn btn-primary" }, "Salvar composição")], 40, ["onSubmit"])
+                  }), 128)), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                    class: "btn btn-primary",
+                    disabled: !compositionDirty
+                  }, "Salvar composição", 8, ["disabled"]), compositionDirty
+                    ? (_openBlock(), _createElementBlock("button", {
+                        key: 0,
+                        type: "button",
+                        class: "btn btn-secondary",
+                        onClick: $event => (setComposition(state.fields))
+                      }, "Descartar alterações na composição", 8, ["onClick"]))
+                    : _createCommentVNode("", true)])], 40, ["onSubmit"])
                 ]))
               : _createCommentVNode("", true),
             (pilot && props.catalogEnabled && state.page==='catalog')
@@ -1095,8 +1105,35 @@ var _Vue=Vue; var PigeRenders={teacherPortal:function render(_ctx, _cache) {
                             class: "btn btn-secondary",
                             onClick: resetLesson
                           }, "Cancelar edição", 8, ["onClick"]))
+                        : _createCommentVNode("", true), (state.lessonEditing)
+                        ? (_openBlock(), _createElementBlock("button", {
+                            key: 1,
+                            type: "button",
+                            class: "btn btn-secondary",
+                            onClick: $event => (state.lessonRemoval=true)
+                          }, "Remover aula", 8, ["onClick"]))
                         : _createCommentVNode("", true)])
-                    ], 40, ["onSubmit"])]))
+                    ], 40, ["onSubmit"]), (state.lessonRemoval && state.lessonEditing)
+                      ? (_openBlock(), _createElementBlock("form", {
+                          key: 0,
+                          class: "x-form",
+                          onSubmit: _withModifiers($event => (save(removeLesson)), ["prevent"])
+                        }, [
+                          _createElementVNode("h3", null, "Remover aula de " + _toDisplayString(date(state.lessonEditing.lesson_date)), 1),
+                          _createElementVNode("p", null, "Somente aulas sem chamada e sem fechamento anterior podem ser removidas."),
+                          _createElementVNode("label", null, [_createTextVNode("Justificativa"), _withDirectives(_createElementVNode("textarea", {
+                            "onUpdate:modelValue": $event => ((state.lessonRemovalReason) = $event),
+                            required: "",
+                            minlength: "3",
+                            maxlength: "1000"
+                          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.lessonRemovalReason]])]),
+                          _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", { class: "btn btn-primary" }, "Confirmar remoção da aula"), _createElementVNode("button", {
+                            type: "button",
+                            class: "btn btn-secondary",
+                            onClick: $event => {state.lessonRemoval=false;state.lessonRemovalReason=''}
+                          }, "Cancelar remoção", 8, ["onClick"])])
+                        ], 40, ["onSubmit"]))
+                      : _createCommentVNode("", true)]))
                   : _createCommentVNode("", true),
                 (show('diaries','attendance'))
                   ? (_openBlock(), _createElementBlock("section", {
@@ -1299,7 +1336,21 @@ var _Vue=Vue; var PigeRenders={teacherPortal:function render(_ctx, _cache) {
             ? (_openBlock(), _createElementBlock("section", {
                 key: 0,
                 class: "panel x-card"
-              }, [_createElementVNode("p", null, [_createTextVNode("Selecione um diário na aba "), _createElementVNode("strong", null, "Diários"), _createTextVNode(" para registrar ou consultar o planejamento correspondente.")])]))
+              }, [_createElementVNode("h2", null, "Planejamento curricular"), _createElementVNode("label", null, [_createTextVNode("Escolha o diário"), _createElementVNode("select", {
+                onChange: $event => (selectDiary(state.diaries.find(d=>d.id===$event.target.value))),
+                disabled: !state.diaries.length
+              }, [_createElementVNode("option", {
+                value: "",
+                selected: "",
+                disabled: ""
+              }, "Selecione"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.diaries, (d) => {
+                return (_openBlock(), _createElementBlock("option", {
+                  key: d.id,
+                  value: d.id
+                }, _toDisplayString(d.class_name) + " · " + _toDisplayString(d.component_name) + " · " + _toDisplayString(d.year_name), 9, ["value"]))
+              }), 128))], 40, ["onChange", "disabled"])]), (!state.diaries.length)
+                ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Nenhum diário disponível nesta escola."))
+                : _createCommentVNode("", true)]))
             : (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [(can('diary.write') && state.selected.status==='open')
                 ? (_openBlock(), _createElementBlock("section", {
                     key: 0,

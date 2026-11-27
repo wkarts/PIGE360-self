@@ -1,6 +1,6 @@
 namespace PigeAsaas {
   type Mode = 'reports'|'monitor'|'cards'|'pix'|'charge'|'settings';
-  type Props = {schoolId:string;mode:Mode;permissions:string[];charge?:PigeOnline.Charge & {collection_mode:string}};
+  type Props = {schoolId:string;mode:Mode;permissions:string[];charge?:PigeOnline.Charge & {collection_mode:string;manual_paid_amount?:string|null}};
   type Row = Record<string,unknown>;
   type Column = {key:string;label:string;type:string;visible?:boolean};
   type Filter = {key:string;label:string;type:string;required?:boolean;options?:Record<string,string>};
@@ -20,7 +20,7 @@ namespace PigeAsaas {
     creating:'Em criação',processing:'Em processamento',completed:'Concluída',failed:'Falhou',uncertain:'Confirmação pendente',
     subscription_cancelled:'Assinatura cancelada',cancellation_requested:'Cancelamento solicitado',invoice:'Débito autorizado',
     pix_auto_authorize:'Autorização de Pix Automático',pix_auto_cancel:'Cancelamento do Pix Automático',pix_auto_cycle:'Ciclo de Pix Automático',
-    card_checkout:'Emissão de checkout',card_cancel:'Cancelamento de cartão',card_invoice:'Débito em cartão autorizado',refund:'Estorno',
+    card_checkout:'Emissão de checkout',card_cancel:'Cancelamento de cartão',card_refund:'Estorno de cartão',card_invoice:'Débito em cartão autorizado',refund:'Estorno',
     adjust:'Ajuste de cobrança',reactivate:'Reativação de cobrança',cash_receipt:'Recebimento externo',queued:'Na fila',retry:'Nova tentativa agendada',
     open:'Aberto',paid:'Pago',expired:'Expirado',created:'Criado',sent:'Enviado',authorized:'Autorizado',awaiting_authorization:'Aguardando autorização',scheduled:'Agendado',done:'Concluído',denied:'Negado',blocked:'Bloqueado',error:'Erro',success:'Concluído',succeeded:'Concluído',bank_slip:'Boleto',boleto:'Boleto',credit_card:'Cartão de crédito',pix:'Pix',payment_received:'Pagamento recebido',payment_confirmed:'Pagamento confirmado',payment_overdue:'Pagamento vencido',payment_deleted:'Pagamento excluído',payment_created:'Pagamento criado',refund_requested:'Estorno solicitado'};
   function label(value:unknown):string {
@@ -54,6 +54,7 @@ namespace PigeAsaas {
       const can=(permission:string)=>props.permissions.includes(permission);
       const write=()=>can('banking.write');
       const manage=()=>props.permissions.includes('integrations.manage');
+      const unpaid=()=>Math.max(0,Math.round(Number(props.charge?.amount||0)*100)-Math.round(Number(props.charge?.manual_paid_amount||0)*100))/100;
       const s=Vue.reactive({
         busy:false,error:'',warning:'',notice:'',loaded:false,reportId:'',catalog:[] as Report[],canExport:false,filters:{} as Record<string,string>,perPage:25,result:null as Output|null,extraColumns:false,
         section:'charges',q:'',status:'',start:'',end:'',dateBasis:'paymentDate',page:1,hasMore:false,total:null as number|null,monitorRows:[] as Monitored[],marked:[] as string[],comparison:null as Comparison|null,comparedCharge:'',op:null as Operation|null,operations:[] as Operation[],operationOffset:0,operationTotal:0,
@@ -61,7 +62,7 @@ namespace PigeAsaas {
         cardRefund:null as null|{checkoutId:string;paymentId:string;amount:string;limit:string;reason:string;full:boolean},cardPage:1,cardTotal:0,cards:[] as Checkout[],cardMode:'detached',maxInstallments:2,cycle:'MONTHLY',endsOn:'',
         mandates:[] as Mandate[],pixPage:1,pixMore:false,refundAmount:'',refundReason:'',
         settings:null as Settings|null,holidays:'',chargeTab:'cards',policy:null as Policy|null,
-        adjustAmount:props.charge?.amount||'',adjustDate:props.charge?.due_on||'',adjustDescription:props.charge?.description||'',adjustReason:'',cashAmount:props.charge?.amount||'',cashDate:'',cashReference:'',cashReason:'',reactivateReason:'',
+        adjustAmount:props.charge?.amount||'',adjustDate:props.charge?.due_on||'',adjustDescription:props.charge?.description||'',adjustReason:'',cashAmount:props.charge?unpaid().toFixed(2):'',cashDate:'',cashReference:'',cashReason:'',reactivateReason:'',
         brand:'',quoteRecurring:false,quoteCount:1,quote:null as null|{principal_cents:number;charged_cents:number;surcharge_cents:number;estimated_fee_cents:number;installment_count:number},
       });
       let live=true,appliedFilters='';
@@ -176,6 +177,10 @@ namespace PigeAsaas {
         const out=await PigeAPI.post<Checkout>(cardBase+'/'+enc(item.id)+'/'+action,body);
         await loadCards(s.cardPage);feedback(out.status,'Checkout');if(live)ctx.emit('changed');
       });}
+      function cardReceipt(item:Checkout,payment:Transaction){return run(async()=>{
+        if(!can('banking.read')||payment.status!=='RECEIVED')return;
+        await PigeAPI.download(cardBase+'/'+enc(item.id)+'/payments/'+enc(payment.id)+'/receipt.pdf','comprovante-cartao.pdf');
+      });}
       function cardRefundLimit(item:Checkout,payment:Transaction):number{
         if(!can('asaas.refund')||!can('asaas.monitor.read')||!['RECEIVED','CONFIRMED','PARTIALLY_REFUNDED'].includes(payment.status))return 0;
         if(item.mode!=='installment')return Math.round(Number(payment.value)*100);
@@ -222,7 +227,7 @@ namespace PigeAsaas {
         s.settings=saved;s.holidays=saved.additional_holidays.join('\n');if(s.policy)s.policy.version=saved.version;s.notice='Configuração do Pix Automático salva.';
       });}
       const policyGroups=[
-        {title:'Meios de pagamento',fields:[['pix_enabled','Pix','checkbox'],['boleto_enabled','Boleto','checkbox'],['card_enabled','Cartão','checkbox'],['card_recurring_enabled','Autorizações de cartão recorrente','checkbox'],['interest_percent','Juros (%)','percent'],['fine_percent','Multa (%)','percent'],['discount_type','Tipo de desconto','discount'],['discount_value','Desconto','decimal'],['discount_days','Dias de antecedência do desconto','integer']]},
+        {title:'Meios de pagamento',fields:[['pix_enabled','Pix','checkbox'],['boleto_enabled','Boleto','checkbox'],['card_enabled','Cartão','checkbox'],['card_recurring_enabled','Autorizações de cartão recorrente','checkbox'],['interest_percent','Juros (%)','percent'],['fine_percent','Multa (%)','percent'],['discount_type','Tipo de desconto','discount'],['discount_value','Desconto','decimal'],['single_minimum_after_discount','Mínimo líquido da escola para Pix ou boleto avulso em reais (0 desativa)','decimal'],['discount_days','Dias de antecedência do desconto','integer']]},
         {title:'Cartão e parcelamento',fields:[['max_installments','Máximo de parcelas','integer'],['card_fee_mode','Custo das taxas','payer'],['card_free_installments','Parcelas sem repasse','integer'],['card_min_installment','Parcela mínima (R$)','decimal'],['card_fee_fixed','Tarifa fixa (R$)','decimal'],['card_fee_fixed_mode','Aplicar tarifa fixa por','fixed'],['card_fee_percent_1','Taxa à vista (%)','percent'],['card_fee_percent_2_6','Taxa em 2–6 parcelas (%)','percent'],['card_fee_percent_7_12','Taxa em 7–12 parcelas (%)','percent'],['card_fee_percent_13_21','Taxa em 13–21 parcelas (%)','percent']]},
         {title:'Ciclo da cobrança',fields:[['sync_lifecycle','Sincronizar ciclo da cobrança','checkbox'],['sync_manual_settlement','Sincronizar recebimento externo','checkbox'],['cash_settlement_method','Quitação integral em dinheiro','cash']]},
         {title:'Antecipação',fields:[['card_anticipation_mode','Modalidade','anticipation'],['card_anticipation_manual_rate_1','Manual à vista (%)','percent'],['card_anticipation_manual_rate_installments','Manual parcelada (%)','percent'],['card_anticipation_automatic_rate_1','Automática à vista (%)','percent'],['card_anticipation_automatic_rate_installments','Automática parcelada (%)','percent'],['card_anticipation_first_days','Prazo inicial (dias)','integer']]},
@@ -275,7 +280,7 @@ namespace PigeAsaas {
         s.refundAmount=props.charge?.amount||'';s.chargeTab=props.charge?.collection_mode==='manual'?'cards':'review';
       }
       Vue.onMounted(()=>{void run(initialize);});
-      return {props,s,can,loadOperations,verifyOp,cardRefundLimit,openCardRefund,refundCard,policyGroups,choices,savePolicy,adjust,settlement,simulate,write,manage,report,groups,initialize,resetReport,consult,exportReport,display,label,checkoutLink,run,loadMonitor,inspectOp,compare,reconcile,diagnostics,cardModes,frequencies,loadCards,createCard,updateCard,loadMandates,pixAction,saveSettings,chargeTab,refundable};
+      return {props,s,can,unpaid,loadOperations,verifyOp,cardReceipt,cardRefundLimit,openCardRefund,refundCard,policyGroups,choices,savePolicy,adjust,settlement,simulate,write,manage,report,groups,initialize,resetReport,consult,exportReport,display,label,checkoutLink,run,loadMonitor,inspectOp,compare,reconcile,diagnostics,cardModes,frequencies,loadCards,createCard,updateCard,loadMandates,pixAction,saveSettings,chargeTab,refundable};
     }
   };
 }

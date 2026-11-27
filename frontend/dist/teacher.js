@@ -414,9 +414,9 @@ var PigeDiary;
                 busy: false, error: '', notice: '', tab: 'diaries', page: 'diaries', diaryFilter: '', lessonPeriod: '', dirty: false,
                 diaries: [], selected: null, academicYears: [], periods: [], components: [], groups: [], assignments: [], plans: [],
                 calendarIds: [], periodForm: { academic_year_id: '', class_group_id: '', name: '', starts_on: '', ends_on: '', order_index: 1, active: true },
-                fields: { version: 0, fields: [], standard_columns: {} }, configFields: [], newFieldLabel: '', restoreFieldId: '', newFieldScope: 'lesson',
+                fields: { version: 0, fields: [], standard_columns: {} }, configFields: [], configVersion: 0, newFieldLabel: '', restoreFieldId: '', newFieldScope: 'lesson',
                 componentEditing: null, removalTarget: null, removalReason: '',
-                lessonEditing: null, planEditing: null, lessonValues: {}, planValues: {},
+                lessonRemoval: false, lessonRemovalReason: '', lessonEditing: null, planEditing: null, lessonValues: {}, planValues: {},
                 attendanceBase: {},
                 componentForm: { name: '', code: '', workload_hours: 0, active: true },
                 diaryForm: { class_group_id: '', component_id: '', teacher_assignment_id: '', notes: '' },
@@ -603,7 +603,11 @@ var PigeDiary;
                 state.groups = results[4];
                 state.assignments = results[5];
                 state.dashboard = results[6];
-                setComposition(results[7]);
+                const current = results[7];
+                if (compositionDirty.value)
+                    state.fields = current;
+                else
+                    setComposition(current);
                 if (!state.periodForm.academic_year_id && state.academicYears.length) {
                     const year = state.academicYears.find(x => x.status === 'active' || x.active) || state.academicYears[0];
                     state.periodForm.academic_year_id = str(year.id);
@@ -707,8 +711,10 @@ var PigeDiary;
                 });
             }
             async function createPeriod() { await run(async () => { await PigeAPI.post(base() + '/academic-periods', state.periodForm); state.periodForm = { class_group_id: state.periodForm.class_group_id, academic_year_id: state.periodForm.academic_year_id, name: '', starts_on: '', ends_on: '', order_index: state.periodForm.order_index + 1, active: true }; await loadBase(); loadCalendar(); state.notice = 'Período letivo criado.'; }); }
+            const compositionDirty = Vue.computed(() => JSON.stringify(state.configFields) !== JSON.stringify(state.fields.fields));
             function setComposition(settings) {
                 state.fields = settings;
+                state.configVersion = settings.version;
                 state.configFields = settings.fields.map(field => ({ ...field }));
             }
             const restorableFields = Vue.computed(() => Object.keys(state.fields.standard_columns).filter(id => !state.configFields.some(field => field.id === id)));
@@ -736,7 +742,7 @@ var PigeDiary;
             async function saveFields() {
                 await run(async () => {
                     const result = await PigeAPI.request(base() + '/diary-entry-fields', { method: 'PUT',
-                        body: JSON.stringify({ version: state.fields.version, fields: state.configFields }) });
+                        body: JSON.stringify({ version: state.configVersion, fields: state.configFields }) });
                     setComposition(result);
                     state.notice = 'Composição atualizada para esta escola.';
                 });
@@ -838,11 +844,13 @@ var PigeDiary;
                     state.notice = editing ? 'Planejamento atualizado.' : 'Planejamento registrado.';
                 });
             }
-            function resetLesson() { state.lessonEditing = null; state.lessonValues = {}; state.lessonForm = emptyLesson(); }
+            function resetLesson() { state.lessonRemoval = false; state.lessonRemovalReason = ''; state.lessonEditing = null; state.lessonValues = {}; state.lessonForm = emptyLesson(); }
             function editLesson(row) {
                 if (pilot && state.page !== 'diaries' && !navigatePage('diaries'))
                     return;
                 syncLink();
+                state.lessonRemoval = false;
+                state.lessonRemovalReason = '';
                 state.lessonEditing = row;
                 state.lessonValues = editableValues(row, 'lesson');
                 const { academic_period_id, lesson_date, lesson_count, content, skills, methodology, activities, homework, notes } = row;
@@ -864,6 +872,17 @@ var PigeDiary;
                     state.lessonForm.academic_period_id = period;
                     await loadDiary(state.selected);
                     state.notice = editing ? 'Aula atualizada.' : 'Aula registrada.';
+                });
+            }
+            async function removeLesson() {
+                const diary = state.selected, lesson = state.lessonEditing;
+                if (!diary || !lesson || !state.lessonRemoval || state.lessonRemovalReason.trim().length < 3)
+                    return;
+                await run(async () => {
+                    await PigeAPI.post(base() + '/diaries/' + diary.id + '/lessons/' + lesson.id + '/remove', { version: lesson.version, reason: state.lessonRemovalReason });
+                    resetLesson();
+                    await loadDiary(diary);
+                    state.notice = 'Aula removida do diário.';
                 });
             }
             function attendancePath(lesson) { return base() + '/diaries/' + state.selected.id + '/lessons/' + lesson.id + '/attendance'; }
@@ -1045,7 +1064,7 @@ var PigeDiary;
             });
             Vue.onUnmounted(() => { if (pilot)
                 window.removeEventListener('beforeunload', beforeUnload); });
-            return { props, state, restorableFields, restoreField, addField, moveField, saveFields, editComponent, resetComponent, removeComponent, editLesson, resetLesson, editPlan, resetPlan, storedFields, markPendingPresent, pendingAttendance, changedAttendance, closeAttendance, periodsFor, loadCalendar, saveCalendar, pilot, catalog, catalogImpact, suggest, decide, lessons, filterPeriod, save, navigation, activeGroup, filteredDiaries, pageLink, go, show, chooseAnother, markDraft, publishMaterial, printMaterial, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, editAssessment, cancelAssessmentEdit, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, resumeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
+            return { props, state, compositionDirty, setComposition, restorableFields, restoreField, addField, moveField, saveFields, editComponent, resetComponent, removeComponent, editLesson, resetLesson, removeLesson, editPlan, resetPlan, storedFields, markPendingPresent, pendingAttendance, changedAttendance, closeAttendance, periodsFor, loadCalendar, saveCalendar, pilot, catalog, catalogImpact, suggest, decide, lessons, filterPeriod, save, navigation, activeGroup, filteredDiaries, pageLink, go, show, chooseAnother, markDraft, publishMaterial, printMaterial, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, editAssessment, cancelAssessmentEdit, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, resumeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
         } };
 })(PigeDiary || (PigeDiary = {}));
 var PigeSupport;

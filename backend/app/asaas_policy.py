@@ -33,6 +33,7 @@ class Policy(BaseModel):
     discount_type: Literal['FIXED', 'PERCENTAGE'] = 'PERCENTAGE'
     discount_value: Money = Decimal('0')
     discount_days: int = Field(default=0, ge=0, le=365)
+    single_minimum_after_discount: Money = Decimal('0.00')
     max_installments: int = Field(default=1, ge=1, le=21)
     card_free_installments: int = Field(default=0, ge=0, le=21)
     card_min_installment: Money = Field(default=Decimal('5.00'), ge=5)
@@ -117,6 +118,19 @@ def check_discounted_minimum(policy, gross, count, minimum):
         valid = gross * (10000 - cents(policy.discount_value)) >= minimum * count * 10000
     if not valid:
         fail(422, f'O valor por parcela após o desconto deve ser de pelo menos R$ {minimum // 100},{minimum % 100:02d}.')
+
+
+def check_single_charge(policy, amount):
+    gross = cents(amount)
+    if gross < 500:
+        fail(422, 'O valor nominal de uma cobrança Asaas deve ser de pelo menos R$ 5,00.')
+    if policy.single_minimum_after_discount:
+        check_discounted_minimum(policy, gross, 1, cents(policy.single_minimum_after_discount))
+
+
+def single_terms_snapshot(policy):
+    return {'asaas_terms': terms_payload(policy),
+            'asaas_single_minimum_after_discount': str(policy.single_minimum_after_discount)}
 
 
 def card_quote(policy, amount, installments, brand=None, *, recurring=False):
@@ -257,8 +271,9 @@ def financial_action(db, school, user, request, charge_id, data, kind):
                 fail(409, 'Há recebimentos externos registrados. Concilie a cobrança antes de alterar seus dados.')
             # O desconto da via já emitida permanece inalterado.
             frozen = (charge.payer_snapshot or {}).get('asaas_terms', {}).get('discount') or {}
-            existing_terms = Policy(discount_type=frozen.get('type', 'PERCENTAGE'), discount_value=frozen.get('value', 0))
-            check_discounted_minimum(existing_terms, cents(data.amount), 1, 500)
+            existing_terms = Policy(discount_type=frozen.get('type', 'PERCENTAGE'), discount_value=frozen.get('value', 0),
+                                    single_minimum_after_discount=(charge.payer_snapshot or {}).get('asaas_single_minimum_after_discount', 0))
+            check_single_charge(existing_terms, data.amount)
         if kind == 'cash_receipt':
             if data.paid_on > today():
                 fail(422, 'A data do recebimento não pode estar no futuro.')

@@ -225,3 +225,73 @@ console.log('Family drawer: immediate visibility, deferred focus and rapid open/
  assert.equal(downloaded[0],'/profile/learning/aluno/report.pdf?enrollment_id=atual&school_id=escola');
  assert.ok(requested.every(r=>r==='/profile/learning?school_id=escola'));
 }
+
+{
+ const {ctx,sandbox,render}=fixture();
+ ctx.s.ready=true;ctx.s.account=account;ctx.s.schoolId='school-a';ctx.s.studentId='s1';
+ ctx.s.students=[{...student('s1'),academic_authorized:false,enrollments:[],documents:[]}];
+ ctx.section('academic');
+ assert.equal(ctx.s.section,'finance');
+ const consent={checkout:{id:'ch-1',mode:'detached',status:'paid',quote:{charged_cents:15000},payments:[]},
+                authorization:null,can_authorize:true,terms_version:'v1',terms:'Autorizo débitos futuros.'};
+ const calls=[];
+ sandbox.fetch=async(url,opts)=>{calls.push([url,opts]);return new Response(JSON.stringify(consent));};
+ ctx.s.charges=[{id:'charge-1',description:'Mensalidade',status:'received',amount:'150.00',due_on:'2026-11-10',has_card_checkout:true}];
+ await ctx.cards.load('charge-1');assert.match(text(render()),/Autorizar débitos por título/);
+ assert.equal(calls.length,1);await ctx.cards.submit();assert.equal(calls.length,1);
+ ctx.cards.state.agreed=true;ctx.cards.state.until='2027-10-05';ctx.cards.state.limit='160.50';await ctx.cards.submit();
+ assert.equal(calls[1][0],'/api/v1/family/students/s1/charges/charge-1/cards/authorize');
+ assert.deepEqual(JSON.parse(calls[1][1].body),{terms_version:'v1',accepted:true,ends_on:'2027-10-05',limit_cents:16050});
+ assert.equal(ctx.cards.link('https://outra.example/checkoutSession/show?id=ch-1'),'');
+ assert.doesNotMatch(text(render()),/Justificativas de ausência/);
+}
+console.log('Financeiro familiar: pagador exclusivo, consentimento explícito, teto em centavos e checkout restrito ao Asaas OK.');
+
+for(const academic of [false,true]){
+ const {ctx,sandbox,events,render,history}=fixture('/family','?view=academic&student=s1');
+ const calls=[],button=caption=>nodes(render()).find(n=>n.type==='button'&&text(n).trim()===caption);
+ const selected={...student('s1'),academic_authorized:academic};
+ const charge={id:'fatura',description:'Mensalidade',status:'received',amount:'150.00',due_on:'2026-11-10',has_card_checkout:true};
+ const checkout={id:'checkout',mode:'detached',status:'paid',quote:{charged_cents:15000},payments:[]};
+ let active=false;
+ sandbox.PigeInstitution.load=async()=>{};
+ sandbox.PigeMFA.init=()=>{};
+ sandbox.fetch=async(url,opts={})=>{
+   calls.push([url,opts.method||'GET']);
+   let result;
+   if(url.endsWith('/auth/refresh'))result={access_token:'synthetic',user:account};
+   else if(url.endsWith('/family/context'))result={students:[selected],schools:[]};
+   else if(url.includes('/charges?'))result={items:[charge],page:1,page_size:30,total:1,overdue_count:0};
+   else if(url.endsWith('/cards/authorize')){active=true;result={active};}
+   else if(url.endsWith('/cards/revoke')){active=false;result={active};}
+   else if(url.endsWith('/cards'))result={checkout,can_authorize:!active,terms:'Aceito o limite e a validade.',terms_version:'v1',authorization:active?{active,ends_on:'2027-11-05',limit_cents:15000}:null};
+   else if(url.includes('/community-feed?'))result={items:[],total:0};
+   else throw new Error('Requisição inesperada '+url);
+   return new Response(JSON.stringify(result));
+ };
+ events.mounted();
+ for(let t=0;t<12&&!ctx.s.ready;t++)await tick();
+ assert.equal(ctx.s.ready,true);assert.equal(ctx.s.error,'');
+ if(academic){assert.equal(ctx.s.section,'academic');button('Financeiro').props.onClick();}
+ else{
+   assert.equal(ctx.s.section,'finance');
+   for(const name of ['academic','materials','absences','documents','news','agenda','students']){
+     sandbox.location.search='?view='+name+'&student=s1';await events.popstate();
+     assert.equal(ctx.s.section,'finance',name);assert.match(history.at(-1),/view=finance/);
+   }
+   assert.ok(!nodes(render()).some(n=>n.props?.['aria-label']==='Acompanhamento escolar'));
+   assert.ok(calls.every(([url])=>!/learning|materials|absences|documents|community-feed/.test(url)));
+   sandbox.location.search='?view=support&student=s1';await events.popstate();assert.equal(ctx.s.section,'support');
+   button('Financeiro').props.onClick();
+ }
+ await button('Consultar cartão desta cobrança').props.onClick();
+ assert.ok(button('Autorizar débitos por título').props.disabled);
+ ctx.cards.state.agreed=true;ctx.cards.state.until='2027-11-05';ctx.cards.state.limit='150.00';
+ const form=nodes(render()).find(n=>n.type==='form'&&text(n).includes('Autorizar débitos por título'));
+ await form.props.onSubmit({preventDefault(){}});
+ assert.ok(button('Revogar autorização').props.disabled);
+ ctx.cards.state.revoke=true;await button('Revogar autorização').props.onClick();
+ assert.ok(button('Autorizar débitos por título'));assert.ok(!button('Revogar autorização'));
+ assert.deepEqual(calls.filter(([,method])=>method==='POST').map(([url])=>url.split('/').at(-1)),['refresh','authorize','revoke']);
+}
+console.log('Portal da família: navegação e histórico por vínculo, adesão e revogação do cartão pela fatura.');

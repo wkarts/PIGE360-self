@@ -10,7 +10,7 @@ from pydantic import Field
 from sqlalchemy import func, or_, select
 
 from . import models as m
-from .asaas_native import (asaas_connection, asaas_read, asaas_request, operation_output,
+from .asaas_native import (asaas_connection, asaas_read, asaas_request, operation_output, refund_totals,
                            router, run_asaas_operation)
 from .banking import STATUS, effective_status, queue_charge_sync
 from .common import audit
@@ -75,11 +75,11 @@ def monitor(db: DB, user: Actor, school: Scope, section: Literal['charges','webh
             status: str=Query('', max_length=65), start: date|None=None, end: date|None=None,
             date_basis: Literal['paymentDate','dueDate','dateCreated']='paymentDate'):
     require(user,'asaas.monitor.read')
+    if (start is None) != (end is None) or (start and start > end):
+        fail(422,'Informe um intervalo de datas válido.')
     conn = asaas_connection(db, school) if section == 'remote' else connection(db, school.id, 'asaas', False)
     if not conn:
         return {'section':section,'items':[],'total':0,'page':page,'has_more':False}
-    if (start is None) != (end is None) or (start and start > end):
-        fail(422,'Informe um intervalo de datas válido.')
     q=q.strip()
     if section != 'remote':
         return local_query(db, school.id, conn, section, q, status, start, end, page, page_size)
@@ -169,7 +169,10 @@ def diagnostics(db: DB,user: Actor,school: Scope):
 @router.post('/monitor/charges/{charge_id}/refund')
 def refund(charge_id: UUID,data: Refund,db: DB,user: Actor,school: Scope):
     require(user,'asaas.monitor.read');require(user,'asaas.refund');charge,conn=charge_and_connection(db,school,charge_id)
+    expected_history_cents = 0
+
     def preflight():
+        nonlocal expected_history_cents
         payment=remote_payment(conn,charge)
         if not payment_matches(charge,payment) or not charge.remote_payment_id:
             fail(409,'Confira a referência, o pagador, o meio e o valor antes de estornar.')
@@ -179,22 +182,14 @@ def refund(charge_id: UUID,data: Refund,db: DB,user: Actor,school: Scope):
         if charge.billing_type not in {'PIX','CREDIT_CARD'} or payment.get('deleted') or payment.get('status') not in allowed:
             fail(409,'Este pagamento não admite estorno nesta situação.')
         history = asaas_read(conn, '/payments/'+quote(charge.remote_payment_id,safe='')+'/refunds')
-        rows = history.get('data')
-        if (not isinstance(rows,list) or history.get('hasMore') is not False
-                or history.get('totalCount',len(rows)) != len(rows)):
-            fail(409,'O Asaas ainda não confirmou o histórico completo de estornos.')
-        reserved = Decimal('0')
-        for row in rows:
-            if not isinstance(row,dict) or row.get('status') not in {
-                    'DONE','PENDING','CANCELLED','AWAITING_CRITICAL_ACTION_AUTHORIZATION','AWAITING_CUSTOMER_EXTERNAL_AUTHORIZATION'}:
-                fail(409,'O histórico de estornos contém uma situação pendente de conferência.')
-            if row['status'] != 'CANCELLED':
-                try:
-                    value = Decimal(str(row['value']))
-                    if not value.is_finite() or value <= 0: raise ValueError
-                except (KeyError,ValueError,InvalidOperation):
-                    fail(409,'O Asaas não confirmou o valor dos estornos anteriores.')
-                reserved += value
+        reserved, historical = refund_totals(history)
+        previous = db.scalar(select(m.BankEvent).where(m.BankEvent.charge_id==charge.id,
+            m.BankEvent.school_id==school.id,m.BankEvent.source=='asaas_refund_requested')
+            .order_by(m.BankEvent.created_at.desc(),m.BankEvent.id.desc()).limit(1))
+        historical_cents = int(historical*100)
+        if previous and historical_cents < previous.details['expected_history_cents']:
+            fail(409,'O estorno anterior ainda não consta no histórico do Asaas.')
+        expected_history_cents = historical_cents + int(data.amount*100)
         if data.amount > charge.amount - reserved:
             fail(409,'O valor excede o saldo disponível para estorno desta cobrança.')
 
@@ -203,6 +198,9 @@ def refund(charge_id: UUID,data: Refund,db: DB,user: Actor,school: Scope):
                              payload={'value':float(data.amount),'description':data.description.strip()})
         if not payment_matches(charge,result):
             raise IntegrationFailure('BANK_REFUND_RESULT_MISMATCH',uncertain=True)
+        db.add(m.BankEvent(school_id=school.id,charge_id=charge.id,source='asaas_refund_requested',
+            previous_status=charge.status,status=charge.status,details={'amount':format(data.amount,'.2f'),
+            'expected_history_cents':expected_history_cents}))
         return result
 
     entry=run_asaas_operation(db,school,user,conn,client_key=str(data.client_key),kind='refund',charge_id=charge.id,

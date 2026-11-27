@@ -141,4 +141,9 @@ def test_separate_payer_receives_new_charges_and_signer_keeps_authority(online):
         assert response.status_code == expected, response.text
         if expected == 200:
             assert [row['id'] for row in response.json()['items']] == [a['id']]
+            headers={'Authorization':'Bearer '+token}
+            summary=api.client.get('/api/v1/family/context',headers=headers).json()['students']
+            assert len(summary)==1 and summary[0]['academic_authorized'] is False
+            assert summary[0]['documents']==[] and summary[0]['enrollments']==[]
+            assert api.client.get('/api/v1/family/students/'+data['existing_student_id']+'/materials',headers=headers).status_code==404
     assert api.post(path+'/finalize',{'version':approved['version'],'reason':'Conferência concluída.'},200)['status']=='enrolled'

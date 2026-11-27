@@ -19,7 +19,7 @@ from .asaas_native import router, asaas_connection, asaas_request, run_asaas_ope
 from .asaas_pix_calendar import business_days, cycle_number
 from .common import audit
 from .db import now
-from .family_portal import own_student, may_finance
+from .family_portal import own_finance_student
 from .integration_core import IntegrationFailure, enqueue, seal, unseal
 from .schemas import Input
 from .security import Actor, DB, Scope, check_version, fail, lock_school, require, scoped, utc
@@ -156,9 +156,7 @@ def quote_for(charge,payer,conn):
 
 
 def family_charge(db,user,student_id,charge_id):
-    student = own_student(db,user,student_id)
-    if not may_finance(db,user,student):
-        fail(403,'Esta operação exige vínculo de responsável financeiro.')
+    student = own_finance_student(db,user,student_id)
     enrollment = m.Enrollment
     charge = db.scalar(select(m.BankCharge).join(enrollment,m.BankCharge.enrollment_id==enrollment.id).where(
         m.BankCharge.id==charge_id,m.BankCharge.school_id==student.school_id,
@@ -179,14 +177,15 @@ def auth_for(db,charge,payer,conn):
         PixAuthorization.payer_id==payer.id).order_by(PixAuthorization.created_at.desc(),PixAuthorization.id.desc()).limit(1))
 
 
-def payable(charge,conn):
-    return bool(available(conn) and charge.collection_mode=='provider' and charge.billing_type=='PIX'
+def payable(charge,conn,db):
+    enrollment=db.get(m.Enrollment,charge.enrollment_id) if charge.enrollment_id else None
+    return bool(enrollment and enrollment.status=='active' and available(conn) and charge.collection_mode=='provider' and charge.billing_type=='PIX'
                 and charge.status=='pending' and charge.remote_customer_id and charge.remote_payment_id)
 
 
 def family_view(db,charge,payer,conn):
     auth = auth_for(db,charge,payer,conn)
-    return {'can_enroll':payable(charge,conn) and not local_cycle(db,charge.id)
+    return {'can_enroll':payable(charge,conn,db) and not local_cycle(db,charge.id)
                          and (auth is None or auth.status in TERMINAL),
             'quote':quote_for(charge,payer,conn) if conn else '', 'amount':format(charge.amount,'.2f'),
             'terms_version':TERM_VERSION,'terms':TERMS,
@@ -303,7 +302,7 @@ def enroll(student_id:str,charge_id:str,data:Consent,db:DB,user:Actor,response:R
     if (existing and existing.charge_id==charge.id and existing.consent_user_id==user.id and
             existing.quote==data.quote and existing.frequency==data.frequency and data.terms_version==TERM_VERSION):
         return family_view(db,charge,payer,conn)
-    if (data.terms_version!=TERM_VERSION or not payable(charge,conn) or
+    if (data.terms_version!=TERM_VERSION or not payable(charge,conn,db) or
             not hmac.compare_digest(quote_for(charge,payer,conn),data.quote) or local_cycle(db,charge.id)
             or existing and existing.status not in TERMINAL):
         fail(409,'Atualize a cobrança e confira o valor e a autorização antes de prosseguir.')
@@ -342,7 +341,7 @@ def with_scope(db,auth):
     return conn
 
 
-def receipt(db,auth,cycle,charge,payment):
+def receipt(db,auth,cycle,charge,payment,transaction=None):
     from .banking import apply_remote
     ident=token(payment.get('id'),'pay_')
     conn=with_scope(db,auth)
@@ -351,11 +350,12 @@ def receipt(db,auth,cycle,charge,payment):
             or payment.get('installment') or payment.get('subscription') or money(payment.get('value'))!=charge.amount
             or (cycle.payment_id and cycle.payment_id!=ident)):
         raise IntegrationFailure('PIX_AUTO_PAYMENT_MISMATCH',uncertain=True)
+    instruction_failure=''
     if cycle.cycle==0:
         if not auth.conciliation or payment.get('externalReference') not in (None,'',charge.external_reference):
             return False
         if not payment.get('pixTransaction'): return False
-        tx=remote('GET',conn,'/pix/transactions/'+token(payment['pixTransaction']))
+        tx=transaction or remote('GET',conn,'/pix/transactions/'+token(payment['pixTransaction']))
         if tx.get('conciliationIdentifier')!=auth.conciliation: return False
         if tx.get('payment')!=ident or tx.get('id')!=payment['pixTransaction'] or tx.get('type')!='CREDIT':
             raise IntegrationFailure('PIX_AUTO_TRANSACTION_MISMATCH',uncertain=True)
@@ -375,6 +375,8 @@ def receipt(db,auth,cycle,charge,payment):
             if not states <= {'AWAITING_REQUEST','SCHEDULED','DONE','REFUSED','CANCELLED'}:
                 raise IntegrationFailure('PIX_AUTO_INSTRUCTION_UNKNOWN',uncertain=True)
             cycle.instruction_status=next(s for s in ('DONE','SCHEDULED','AWAITING_REQUEST','REFUSED','CANCELLED') if s in states)
+            if states <= {'REFUSED','CANCELLED'}:
+                instruction_failure='INSTRUCTION_'+cycle.instruction_status
     if charge.remote_payment_id and charge.remote_payment_id!=ident:
         raise IntegrationFailure('PIX_AUTO_PAYMENT_ALREADY_LINKED',uncertain=True)
     # A autorização inicial não informa externalReference. Somente após comprovar a transação
@@ -382,6 +384,8 @@ def receipt(db,auth,cycle,charge,payment):
     apply_remote(db,charge,{**payment,'externalReference':charge.external_reference},'pix_auto')
     cycle.payment_id=ident
     cycle.status='RECEIVED' if charge.status in {'confirmed','received'} else 'WAITING'
+    if instruction_failure and charge.status in {'pending','overdue'}:
+        cycle.status=instruction_failure
     if charge.status in {'cancelled','refunded','disputed','partially_refunded','refund_requested'}:
         cycle.status=charge.status.upper()
     return True
@@ -398,10 +402,15 @@ def scan_initial(db,conn,auth,cycle,charge):
     if page.get('offset',auth.scan_offset)!=auth.scan_offset or (page['hasMore'] and not rows):
         raise IntegrationFailure('PIX_AUTO_PAGE_MISMATCH',uncertain=True)
     for p in rows:
-        if (p.get('customer')==auth.customer_id and p.get('pixTransaction') and not p.get('deleted') and
-                money(p.get('value'))==cycle.amount and not p.get('installment') and not p.get('subscription')):
-            full=remote('GET',conn,'/payments/'+token(p.get('id'),'pay_'))
-            if receipt(db,auth,cycle,charge,full): return
+        if not isinstance(p,dict):
+            raise IntegrationFailure('PIX_AUTO_INVALID_PAGE',uncertain=True)
+        if not p.get('pixTransaction') or p.get('deleted'):continue
+        txn=remote('GET',conn,'/pix/transactions/'+token(p['pixTransaction']))
+        if txn.get('conciliationIdentifier')!=auth.conciliation:continue
+        full=remote('GET',conn,'/payments/'+token(p.get('id'),'pay_'))
+        if full.get('id')!=p.get('id') or full.get('deleted') or not receipt(db,auth,cycle,charge,full,txn):
+            raise IntegrationFailure('PIX_AUTO_RECEIPT_REQUIRES_REVIEW',uncertain=True)
+        return
     auth.scan_offset=auth.scan_offset+len(rows) if page['hasMore'] else 0
     if terminal_ready and not auth.scan_offset and cycle.previous_payment_id:
         # O QR expirou e uma varredura inteira posterior não encontrou crédito. Devolva o
@@ -640,8 +649,7 @@ def issue_cycle(db,conn,auth,cycle,charge):
     db.commit()
     try:
         remove_previous(db,conn,charge,cycle,auth.customer_id)
-        from .asaas_policy import policy_for,terms_payload
-        terms=terms_payload(policy_for(conn))
+        terms=(charge.payer_snapshot or {}).get('asaas_terms',{})
         payment=remote('POST',conn,'/payments',payload={**terms,'customer':auth.customer_id,
             'billingType':'PIX','value':float(charge.amount),'dueDate':charge.due_on.isoformat(),
             'externalReference':charge.external_reference,'description':charge.description,

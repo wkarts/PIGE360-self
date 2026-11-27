@@ -11,12 +11,12 @@ from app.portal_access import today
 from test_online import online, bank, draft, submit, pc, provider_mock, run_issue  # noqa: F401
 
 
-def update_fee(o,**fields):
+def update_fee(o,expected=200,**fields):
     campaign=o['campaign']
     payload={k:campaign[k] for k in ('slug','title','privacy_notice','class_group_ids','opens_on','closes_on',
                                       'active','version','require_verified_contact')}
-    current=o['api'].patch('/admission-campaigns/'+campaign['id'],{**payload,**fields})
-    o['campaign']=current
+    current=o['api'].patch('/admission-campaigns/'+campaign['id'],{**payload,**fields},expected)
+    if expected==200:o['campaign']=current
     return current
 
 
@@ -88,3 +88,20 @@ def test_missing_cpf_allows_submission_and_another_account_cannot_request_fee(on
        'email':uuid4().hex+'@example.com','password':PASSWORD,'accept_privacy':True,'terms_version':'1'},201)
     pc(o,'GET',path,status=404)
     pc(o,'POST',path,{'quote':own['quote']},404)
+
+
+def test_optional_fee_checks_nominal_minimum_without_forcing_a_net_minimum(online):
+    o=online
+    conn=bank(o)
+    with SessionLocal.begin() as db:
+        linked=db.get(m.IntegrationConnection,conn['id'])
+        linked.config={**(linked.config or {}),'payment_policy':{'pix_enabled':True,'discount_type':'FIXED','discount_value':'0.50'}}
+    update_fee(o,expected=422,fee_enabled=True,fee_amount='4.99',fee_billing_type='PIX',fee_connection_id=conn['id'])
+    configured=update_fee(o,fee_enabled=True,fee_amount='5.00',fee_billing_type='PIX',fee_connection_id=conn['id'])
+    assert configured['fee_amount']=='5.00'
+    sent=submit(o,draft(o))
+    path='/admissions/'+sent['id']+'/fee'
+    quote=pc(o,'GET',path)
+    assert quote['can_issue'] and quote['amount']=='5.00'
+    charge=pc(o,'POST',path,{'quote':quote['quote']})['charge']
+    assert charge['amount']=='5.00' and not charge['required_for_enrollment']

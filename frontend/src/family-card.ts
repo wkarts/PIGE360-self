@@ -1,5 +1,5 @@
 namespace PigeFamilyCard {
-  type Checkout = {id:string;status:string;mode:string;checkout_url:string;cycle:string;ends_on:string|null;first_due:string;quote:{charged_cents:number}};
+  type Checkout = {id:string;status:string;mode:string;checkout_url:string;cycle:string;ends_on:string|null;first_due:string;payments:{id:string;status:string;value:string|number}[];quote:{charged_cents:number}};
   type Authorization = {status:string;active:boolean;ends_on:string;limit_cents:number};
   type View = {checkout:Checkout|null;can_authorize:boolean;terms_version:string;terms:string;authorization:Authorization|null};
   export function use(request:<T>(path:string,options?:RequestInit)=>Promise<T>,student:()=>string){

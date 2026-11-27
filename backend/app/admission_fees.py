@@ -3,7 +3,9 @@ import hashlib
 import hmac
 import json
 from datetime import timedelta
+from fastapi import HTTPException
 from sqlalchemy import select
+from .asaas_policy import check_single_charge, enabled_for, policy_for, single_terms_snapshot
 from . import models as m
 from .banking import charge_output
 from .db import uid
@@ -26,9 +28,10 @@ def configure(db,school,campaign,user):
     conn=db.get(m.IntegrationConnection,campaign.fee_connection_id)
     if not conn or conn.school_id!=school.id or conn.provider!='asaas' or not conn.enabled:
         fail(422,'Selecione uma conexão Asaas habilitada desta instituição.')
-    from .asaas_policy import enabled_for,policy_for
-    if not enabled_for(policy_for(conn),campaign.fee_billing_type):
+    policy=policy_for(conn)
+    if not enabled_for(policy,campaign.fee_billing_type):
         fail(422,'A forma de pagamento da taxa está desabilitada na conta da escola.')
+    check_single_charge(policy, campaign.fee_amount)
     # A escola autoriza a emissão. O solicitante da taxa é auditado separadamente com a conta do portal.
     campaign.fee_authorized_by=user.id
 
@@ -49,16 +52,23 @@ def context(db,obj,account):
     except (TypeError,ValueError):cpf=None
     payer['cpf']=cpf
     conn=db.get(m.IntegrationConnection,campaign.fee_connection_id) if campaign.fee_connection_id else None
-    from .asaas_policy import enabled_for,policy_for
     valid=bool(conn and conn.school_id==obj.school_id and conn.provider=='asaas' and conn.enabled and
                enabled_for(policy_for(conn),campaign.fee_billing_type))
+    if valid:
+        policy=policy_for(conn)
+        payer.update(single_terms_snapshot(policy))
+        if campaign.fee_amount:
+            try:
+                check_single_charge(policy, campaign.fee_amount)
+            except HTTPException:
+                valid=False
     message=''
     if not campaign.fee_enabled:message='Este processo não oferece taxa de inscrição.'
     elif obj.status not in ELIGIBLE:message='A taxa está disponível para solicitação após o envio da inscrição, enquanto o protocolo estiver em andamento.'
     elif not cpf:message='Para solicitar a cobrança opcional, complete o CPF do responsável no cadastro.'
     elif not valid or not campaign.fee_authorized_by:message='A conta bancária deste processo está indisponível. Consulte a Secretaria.'
     basis=[obj.id,account.id,obj.number,fmt(campaign.fee_amount),campaign.fee_billing_type,campaign.fee_due_days,
-           campaign.fee_connection_id,conn.environment if conn else '',payer.get('cpf'),TERM]
+           campaign.fee_connection_id,conn.environment if conn else '',payer.get('cpf'),payer.get('asaas_terms',{}),TERM]
     quote=hashlib.sha256(json.dumps(basis,separators=(',',':')).encode()).hexdigest()
     return campaign,charge,payer,quote,message
 

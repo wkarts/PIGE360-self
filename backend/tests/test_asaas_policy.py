@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
-from app.asaas_policy import Policy, card_quote, terms_payload
+from app.asaas_policy import Policy, card_quote, check_single_charge, single_terms_snapshot, terms_payload
 from app.portal_access import today
 from test_online import online, bank, charge, draft, submit, run_issue, provider_mock
 
@@ -33,6 +33,19 @@ def test_minimum_discount_fee_absorption_and_brand():
         Policy(card_anticipation_mode='manual', card_anticipation_manual_rate_1='99', card_anticipation_first_days=365)
 
 
+def test_single_charge_nominal_and_optional_discounted_minimum():
+    regular = Policy(discount_type='FIXED', discount_value='2.00')
+    check_single_charge(regular, Decimal('5.00'))
+    with pytest.raises(HTTPException):
+        check_single_charge(regular, Decimal('4.99'))
+    selected = regular.model_copy(update={'single_minimum_after_discount': Decimal('5.00')})
+    with pytest.raises(HTTPException):
+        check_single_charge(selected, Decimal('6.99'))
+    check_single_charge(selected, Decimal('7.00'))
+    assert single_terms_snapshot(selected)['asaas_single_minimum_after_discount'] == '5.00'
+    assert 'single_minimum_after_discount' not in single_terms_snapshot(selected)['asaas_terms']
+
+
 def test_lifecycle_partial_then_total_and_replay(online, monkeypatch):
     o = online
     conn = bank(o)
@@ -45,7 +58,10 @@ def test_lifecycle_partial_then_total_and_replay(online, monkeypatch):
     api.post('/integrations/asaas', {'version': saved['version'], 'environment': conn['environment'], 'enabled': True,
              'api_key': 'replacement-example-for-test-only'}, 200)
     assert api.get(root + '/settings')['settings']['fine_percent'] == '2.00'
-    entry = charge(o, submit(o, draft(o)))
+    application = submit(o, draft(o))
+    api.post('/bank-charges', {'admission_id': application['id'], 'amount': '4.99', 'due_on': str(today()),
+             'description': 'Taxa abaixo do mínimo', 'billing_type': 'PIX', 'client_key': str(uuid4())}, 422)
+    entry = charge(o, application)
     calls, store = provider_mock(monkeypatch)
     remote, job = run_issue(entry)
     assert job.status == 'completed'

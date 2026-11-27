@@ -14,7 +14,7 @@ namespace PigeAutoPix {
   }
   const frequencies:Record<string,string> = {WEEKLY:'Semanal',MONTHLY:'Mensal',QUARTERLY:'Trimestral',SEMIANNUALLY:'Semestral',ANNUALLY:'Anual'};
   const labels:Record<string,string> = {PREPARING:'Em preparação',CREATED:'Aguardando o banco',ACTIVE:'Ativa',
-    CANCELLING:'Cancelamento solicitado',CANCELLED:'Cancelada',REFUSED:'Recusada',EXPIRED:'Expirada',
+    INSTRUCTION_REFUSED:'Instrução recusada',INSTRUCTION_CANCELLED:'Instrução cancelada',CANCELLING:'Cancelamento solicitado',CANCELLED:'Cancelada',REFUSED:'Recusada',EXPIRED:'Expirada',
     QUEUED:'Na fila',CREATING:'Em emissão',WAITING:'Aguardando confirmação',RECEIVED:'Recebimento confirmado',
     RELEASED:'Via anterior disponível para reativação pela Secretaria',PREVIOUS_RECEIVED:'Pagamento confirmado na via anterior',
     RESTORE_REVIEW:'Conferência bancária após restauração',SKIPPED:'Pagamento pontual',AWAITING_REQUEST:'Aguardando envio',SCHEDULED:'Agendada',DONE:'Processada'};

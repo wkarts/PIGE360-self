@@ -40,10 +40,15 @@ def offered(online,monkeypatch):
         if path=='/payments':return {'data':state['payments'],'hasMore':False}
         if path.endswith('/refunds'):return {'data':state['history'],'hasMore':False}
         if path=='/payments/pay_1':return state['payments'][0]
+        if path=='/payments/pay_token':return state['token_payment']
         raise AssertionError(path)
     def send(conn,method,path,params=None,payload=None):
         state['posts'].append((method,path,payload))
-        if path=='/checkouts':return {'id':'ch_1'}
+        if path=='/checkouts':return {'id':'ch_'+str(len(state['posts']))}
+        if path=='/payments':
+            state['token_payment']={key:payload[key] for key in ('customer','dueDate','externalReference','value','billingType')}
+            state['token_payment'].update(id='pay_token',status='RECEIVED')
+            return state['token_payment']
         if path.endswith('/refund'):return {'id':'pay_1'}
         raise AssertionError(path)
     monkeypatch.setattr(cards,'asaas_read',read);monkeypatch.setattr(cards,'asaas_request',send)
@@ -75,6 +80,9 @@ def test_checkout_has_an_exclusive_channel_and_settles_only_after_readback(offer
     assert synced['status']=='paid' and synced['payments'][0]['id']=='pay_1'
     assert api.get('/bank-charges/'+title['id'])['status']=='received'
     assert family.get(root).json()['authorization'] is None
+    assert family.get(root+'/receipts/pay_unknown.pdf').status_code==404
+    pdf=family.get(root+'/receipts/pay_1.pdf')
+    assert pdf.status_code==200 and pdf.content.startswith(b'%PDF') and pdf.headers['Cache-Control']=='no-store'
 
 
 def test_refund_prevents_duplicates_pending_and_respects_confirmed_balance(offered):
@@ -108,9 +116,39 @@ def test_invoice_token_requires_consent_and_scoped_supported_token(offered):
         assert auth.status=='active' and 'tok_synthetic' not in auth.sealed_token
     new=api.post('/bank-charges',payload(enrollment,use_recurring_card=True,due_on=str(today()+timedelta(days=2))))['items'][0]
     assert len(state['posts'])==1
+    current=api.post('/bank-charges',payload(enrollment,use_recurring_card=True))['items'][0]
+    with SessionLocal() as db:
+        from app.integration_core import unseal
+        job=db.scalar(select(m.IntegrationJob).where(m.IntegrationJob.dedupe_key=='card-invoice:'+current['id']))
+        body=unseal(job.encrypted_payload)
+        assert cards.execute_job(db,job,body)=='pay_token'
+        db.commit()
+        assert cards.execute_job(db,job,body)=='pay_token'
+        db.commit()
+        assert db.get(m.BankCharge,current['id']).status=='received'
+    assert sum(path=='/payments' for _,path,_ in state['posts'])==1
     assert family.post(root+'/revoke',json={}).status_code==200
     with SessionLocal() as db:
         auth=db.scalar(select(CardMandate).where(CardMandate.checkout_id==row['id']))
         assert auth.status=='revoked' and not auth.sealed_token
         assert db.scalar(select(CardCheckout).where(CardCheckout.charge_id==new['id'])).status=='scheduled'
     api.post('/bank-charges',payload(enrollment,use_recurring_card=True),409)
+
+
+def test_hosted_installments_and_subscription_follow_checkout_contract(offered):
+    api,admission,_,_,connection,_,_,state,_,_=offered
+    with SessionLocal.begin() as db:
+        conn=db.get(m.IntegrationConnection,connection['id'])
+        conn.config={**conn.config,'payment_policy':{**conn.config['payment_policy'],'max_installments':21}}
+    base='/banking/asaas/cards/checkouts'
+    fees=charge({'api':api},admission,collection_mode='manual')
+    args={'charge_id':fees['id'],'mode':'installment','client_key':uuid4().hex,'max_installments':21}
+    api.post(base,{**args,'max_installments':22},422)
+    api.post(base,args)
+    assert state['posts'][-1][2]['installment']=={'maxInstallmentCount':21}
+    subscription=charge({'api':api},admission,collection_mode='manual')
+    until=str(today()+timedelta(days=120))
+    api.post(base,{'charge_id':subscription['id'],'mode':'recurrent','client_key':uuid4().hex,'cycle':'MONTHLY','ends_on':until})
+    data=state['posts'][-1][2]
+    assert data['chargeTypes']==['RECURRENT']
+    assert data['subscription']=={'cycle':'MONTHLY','nextDueDate':subscription['due_on'],'endDate':until}

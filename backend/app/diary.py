@@ -514,7 +514,7 @@ def edit_component(component_id: str, data: s.ComponentEdit, db: DB, user: Actor
 
 
 @router.post("/curriculum-components/{component_id}/remove")
-def remove_component(component_id: str, data: s.ComponentRemoval, db: DB, user: Actor, school: DiaryScope, request: Request):
+def remove_component(component_id: str, data: s.DiaryRemoval, db: DB, user: Actor, school: DiaryScope, request: Request):
     from .lifecycle_models import RecordArchive
     from .record_lifecycle import reference_counts
 
@@ -539,12 +539,23 @@ def remove_component(component_id: str, data: s.ComponentRemoval, db: DB, user: 
     return {"action": action, "references": references}
 
 
-def _guard_plan_scope(db, user, school_id, group_id, component_id, period_id, assignment_id):
+def _guard_plan_scope(db, user, school_id, group_id, component_id, period_id, assignment_id, *, existing=False):
     diary = db.scalar(select(m.SchoolDiary).where(
         m.SchoolDiary.school_id == school_id, m.SchoolDiary.class_group_id == group_id,
         m.SchoolDiary.component_id == component_id).with_for_update())
-    if user.role == "teacher" and (not diary or diary.teacher_assignment_id != assignment_id):
-        fail(403, "O planejamento deve pertencer a um diário da sua atribuição.")
+    if user.role == "teacher":
+        if not assignment_id:
+            fail(422, "Professor deve informar sua atribuição docente.")
+        assignment = _scoped(db, m.TeacherAssignment, assignment_id, school_id)
+        if assignment.class_group_id != group_id:
+            fail(422, "A atribuição docente pertence a outra turma.")
+        if diary and diary.teacher_assignment_id != assignment_id:
+            fail(403, "O planejamento deve pertencer a um diário da sua atribuição.")
+        if not diary and not existing:
+            # A coordenação pode atribuir o planejamento antes de abrir o diário.
+            component = _scoped(db, m.CurriculumComponent, component_id, school_id)
+            if (assignment.subject_name or "").strip().casefold() != component.name.strip().casefold():
+                fail(403, "O componente do planejamento deve corresponder à disciplina atribuída.")
     if diary:
         _require_diary(db, user, diary, "diary.write")
         _require_open_diary(diary)
@@ -600,9 +611,7 @@ def create_plan(data: s.CurriculumPlanInput, db: DB, user: Actor, school: DiaryS
     )
     if db.scalar(duplicate_stmt):
         fail(409, "Já existe planejamento para esta turma, componente e período.")
-    db.refresh(school, ["diary_entry_settings"])
-    obj = m.CurriculumPlan(school_id=school.id, **data.model_dump(exclude={"field_values"}),
-                           extra_fields=fields.entry_values(school, "plan", data.field_values, standard_values=data.model_dump()))
+    obj = m.CurriculumPlan(school_id=school.id, **fields.entry_payload(db, school, "plan", data))
     db.add(obj); db.flush()
     audit(db, request, user, "diary.plan.created", obj, school.id)
     return output(obj)
@@ -612,7 +621,7 @@ def create_plan(data: s.CurriculumPlanInput, db: DB, user: Actor, school: DiaryS
 def edit_plan(plan_id: str, data: s.PlanEdit, db: DB, user: Actor, school: DiaryScope, request: Request):
     require(user, "diary.write")
     obj = _scoped(db, m.CurriculumPlan, plan_id, school.id)
-    _guard_plan_scope(db, user, school.id, obj.class_group_id, obj.component_id, obj.academic_period_id, obj.teacher_assignment_id)
+    _guard_plan_scope(db, user, school.id, obj.class_group_id, obj.component_id, obj.academic_period_id, obj.teacher_assignment_id, existing=True)
     if (obj.class_group_id, obj.component_id, obj.academic_period_id, obj.teacher_assignment_id) != (
             data.class_group_id, data.component_id, data.academic_period_id, data.teacher_assignment_id):
         _guard_plan_scope(db, user, school.id, data.class_group_id, data.component_id, data.academic_period_id, data.teacher_assignment_id)
@@ -622,9 +631,7 @@ def edit_plan(plan_id: str, data: s.PlanEdit, db: DB, user: Actor, school: Diary
     assignment = db.get(m.TeacherAssignment, obj.teacher_assignment_id) if obj.teacher_assignment_id else None
     if user.role == "teacher" and (not assignment or not assignment.active or not (assignment.teacher_user_id == user.id or (user.person_id and assignment.teacher_person_id == user.person_id))):
         fail(403, "O planejamento não pertence a uma atribuição docente do usuário.")
-    values = data.model_dump(exclude={"version", "field_values"})
-    db.refresh(school, ["diary_entry_settings"])
-    values["extra_fields"] = fields.entry_values(school, "plan", data.field_values, obj.extra_fields, standard_values=data.model_dump())
+    values = fields.entry_payload(db, school, "plan", data, obj)
     duplicate = select(m.CurriculumPlan.id).where(m.CurriculumPlan.school_id == school.id,
         m.CurriculumPlan.class_group_id == data.class_group_id, m.CurriculumPlan.component_id == data.component_id,
         m.CurriculumPlan.academic_period_id == data.academic_period_id, m.CurriculumPlan.id != obj.id)
@@ -758,9 +765,8 @@ def create_lesson(diary_id: str, data: s.LessonInput, db: DB, user: Actor, schoo
             fail(422, "A data da aula está fora do período informado.")
     if db.scalar(select(m.DiaryLesson.id).where(m.DiaryLesson.diary_id == diary.id, m.DiaryLesson.lesson_date == data.lesson_date)):
         fail(409, "Já existe registro de aula nesta data. Edite a quantidade de aulas.")
-    db.refresh(school, ["diary_entry_settings"])
     obj = m.DiaryLesson(school_id=school.id, diary_id=diary.id, recorded_by=user.id,
-                        **data.model_dump(exclude={"field_values"}), extra_fields=fields.entry_values(school, "lesson", data.field_values, standard_values=data.model_dump()))
+                        **fields.entry_payload(db, school, "lesson", data))
     db.add(obj); db.flush()
     audit(db,request,user,"diary.lesson.created",obj,school.id,{"diary_id":diary.id})
     return output(obj)
@@ -785,9 +791,7 @@ def edit_lesson(diary_id: str, lesson_id: str, data: s.LessonEdit, db: DB, user:
             fail(409, "Esta aula já tem chamada registrada e precisa manter sua data.")
         if db.scalar(select(m.DiaryLesson.id).where(m.DiaryLesson.diary_id == diary.id, m.DiaryLesson.lesson_date == data.lesson_date)):
             fail(409, "Já existe registro de aula nesta data.")
-    values = data.model_dump(exclude={"version", "field_values"})
-    db.refresh(school, ["diary_entry_settings"])
-    values["extra_fields"] = fields.entry_values(school, "lesson", data.field_values, obj.extra_fields, standard_values=data.model_dump())
+    values = fields.entry_payload(db, school, "lesson", data, obj)
     if values.get("academic_period_id"):
         period=_period(db,school.id,values["academic_period_id"],diary.academic_year_id, diary.class_group_id)
         if values["lesson_date"] < period.starts_on or values["lesson_date"] > period.ends_on:
@@ -796,6 +800,27 @@ def edit_lesson(diary_id: str, lesson_id: str, data: s.LessonEdit, db: DB, user:
     obj.version += 1
     audit(db,request,user,"diary.lesson.updated",obj,school.id,{"diary_id":diary.id})
     return output(obj)
+
+
+@router.post("/diaries/{diary_id}/lessons/{lesson_id}/remove")
+def remove_lesson(diary_id: str, lesson_id: str, data: s.DiaryRemoval, db: DB, user: Actor, school: DiaryScope, request: Request):
+    diary = _locked_diary(db, school.id, diary_id)
+    _require_diary(db, user, diary, "diary.write")
+    _require_open_diary(diary)
+    lesson = _scoped(db, m.DiaryLesson, lesson_id, school.id)
+    if lesson.diary_id != diary.id:
+        fail(404, "Aula não encontrada neste diário.")
+    check_version(lesson, data.version)
+    _require_unclosed_period(db, diary, lesson.academic_period_id, lesson.lesson_date)
+    if db.scalar(select(m.DiaryAttendance.id).where(m.DiaryAttendance.lesson_id == lesson.id).limit(1)):
+        fail(409, "Esta aula possui chamada registrada e deve ser preservada.")
+    snapshots = select(m.DiaryClosure.snapshot).where(m.DiaryClosure.diary_id == diary.id).execution_options(yield_per=1)
+    if any(entry.get("id") == lesson.id for snapshot in db.scalars(snapshots) for entry in (snapshot or {}).get("lessons", [])):
+        fail(409, "Esta aula já consta de um fechamento histórico e deve ser preservada.")
+    audit(db, request, user, "diary.lesson.removed", lesson, school.id,
+          {"diary_id": diary.id, "before": output(lesson), "reason": data.reason})
+    db.delete(lesson)
+    return {"id": lesson.id, "removed": True}
 
 
 @router.get("/diaries/{diary_id}/lessons/{lesson_id}/attendance")
@@ -817,10 +842,13 @@ def save_attendance(diary_id: str, lesson_id: str, data: s.AttendanceInput, db: 
     allowed={row["enrollment_id"]:row for row in _attendance_roster(db,diary,lesson.lesson_date)}
     if len({item.enrollment_id for item in data.items}) != len(data.items):
         fail(422,"Matrícula duplicada na chamada.")
+    existing = {mark.enrollment_id: mark for mark in db.scalars(select(m.DiaryAttendance).where(
+        m.DiaryAttendance.lesson_id == lesson.id,
+        m.DiaryAttendance.enrollment_id.in_([item.enrollment_id for item in data.items])))}
     for item in data.items:
         row=allowed.get(item.enrollment_id)
         if not row: fail(422,"A chamada contém matrícula fora desta turma.")
-        obj=db.scalar(select(m.DiaryAttendance).where(m.DiaryAttendance.lesson_id==lesson.id,m.DiaryAttendance.enrollment_id==item.enrollment_id))
+        obj=existing.get(item.enrollment_id)
         if obj:
             if item.expected_empty:
                 fail(409, "Esta presença foi registrada por outro usuário. Recarregue a chamada.")

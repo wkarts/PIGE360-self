@@ -442,7 +442,7 @@ var PigeAutoPix;
 (function (PigeAutoPix) {
     const frequencies = { WEEKLY: 'Semanal', MONTHLY: 'Mensal', QUARTERLY: 'Trimestral', SEMIANNUALLY: 'Semestral', ANNUALLY: 'Anual' };
     const labels = { PREPARING: 'Em preparação', CREATED: 'Aguardando o banco', ACTIVE: 'Ativa',
-        CANCELLING: 'Cancelamento solicitado', CANCELLED: 'Cancelada', REFUSED: 'Recusada', EXPIRED: 'Expirada',
+        INSTRUCTION_REFUSED: 'Instrução recusada', INSTRUCTION_CANCELLED: 'Instrução cancelada', CANCELLING: 'Cancelamento solicitado', CANCELLED: 'Cancelada', REFUSED: 'Recusada', EXPIRED: 'Expirada',
         QUEUED: 'Na fila', CREATING: 'Em emissão', WAITING: 'Aguardando confirmação', RECEIVED: 'Recebimento confirmado',
         RELEASED: 'Via anterior disponível para reativação pela Secretaria', PREVIOUS_RECEIVED: 'Pagamento confirmado na via anterior',
         RESTORE_REVIEW: 'Conferência bancária após restauração', SKIPPED: 'Pagamento pontual', AWAITING_REQUEST: 'Aguardando envio', SCHEDULED: 'Agendada', DONE: 'Processada' };
@@ -578,7 +578,7 @@ var PigeFamily;
         const sequence = ++schoolworkSequence, id = s.studentId, section = s.section;
         schoolwork.error = '';
         schoolwork.loading = false;
-        if (!id || !['materials', 'absences'].includes(section) || (section === 'absences' && s.account?.role !== 'guardian'))
+        if (!id || student()?.academic_authorized === false || !['materials', 'absences'].includes(section) || (section === 'absences' && s.account?.role !== 'guardian'))
             return;
         schoolwork.loading = true;
         const path = '/family/students/' + id + '/' + section;
@@ -727,6 +727,11 @@ var PigeFamily;
         s.students = data.students;
         if (!s.students.some(x => x.id === s.studentId))
             s.studentId = s.students[0]?.id || '';
+        const allowed = allowedSection(s.section);
+        if (allowed !== s.section) {
+            s.section = allowed;
+            updateLocation();
+        }
         await Promise.all([finance(), overviewFeed(), loadSchoolwork()]);
         if (current === generation && ['news', 'agenda'].includes(s.section))
             await loadFeed();
@@ -775,7 +780,7 @@ var PigeFamily;
         }
     }
     function feedPath(kind, page = 1, size = 12, upcoming = false) { return '/schools/' + encodeURIComponent(s.schoolId) + '/community-feed?' + new URLSearchParams({ kind, page: String(page), page_size: String(size), upcoming: String(upcoming) }); }
-    async function overviewFeed() { if (!s.schoolId)
+    async function overviewFeed() { if (!s.schoolId || student()?.academic_authorized === false)
         return; const current = generation; try {
         const [news, events] = await Promise.all([request(feedPath('news', 1, 3)), request(feedPath('event', 1, 3, true))]);
         if (current !== generation)
@@ -787,7 +792,7 @@ var PigeFamily;
         if (current === generation)
             s.overviewFeedError = e instanceof Error ? e.message : 'Não foi possível carregar os comunicados e a agenda.';
     } }
-    async function loadFeed(page = 1) { if (!s.schoolId || s.contextError)
+    async function loadFeed(page = 1) { if (!s.schoolId || s.contextError || student()?.academic_authorized === false)
         return; const current = generation, id = ++feedGeneration, kind = s.section === 'agenda' ? 'event' : 'news'; s.feedBusy = true; s.feedError = ''; s.feedItems = []; s.selectedPost = null; try {
         const data = await request(feedPath(kind, page));
         if (current !== generation || id !== feedGeneration)
@@ -807,7 +812,7 @@ var PigeFamily;
     function updateLocation(push = false) { const params = new URLSearchParams({ view: s.section }); if (s.studentId)
         params.set('student', s.studentId); history[push ? 'pushState' : 'replaceState']({}, '', '/family?' + params); }
     async function changeStudent() { if (s.busy)
-        return; autoPix.clear(); cards.clear(); clearSchoolwork(); s.selectedPost = null; updateLocation(); await run(async () => { await Promise.all([finance(), loadSchoolwork()]); }); }
+        return; s.section = allowedSection(s.section); autoPix.clear(); cards.clear(); clearSchoolwork(); s.selectedPost = null; updateLocation(); await run(async () => { await Promise.all([finance(), loadSchoolwork()]); }); }
     async function chooseStudent(id) { if (s.busy)
         return; s.studentId = id; await changeStudent(); section('academic'); }
     async function changeSchool() { if (s.busy)
@@ -855,19 +860,32 @@ var PigeFamily;
             first?.focus();
         }
     } }
+    function allowedSection(name) { return student()?.academic_authorized === false && name !== 'support' ? 'finance' : name; }
     function section(name) { if (!titles[name])
-        return; const changed = s.section !== name; s.section = name; s.selectedPost = null; closeMenu(false); if (changed)
+        return; name = allowedSection(name); const changed = s.section !== name; s.section = name; s.selectedPost = null; closeMenu(false); if (changed)
         updateLocation(true); if (['materials', 'absences'].includes(name))
         void loadSchoolwork(); if (['news', 'agenda'].includes(name))
         void loadFeed(); void Vue.nextTick(() => window.document.getElementById('family-title')?.focus()); }
-    async function popstate() { s.section = routeSection(); s.selectedPost = null; closeMenu(false); const id = new URLSearchParams(location.search).get('student'); if (id && s.students.some(x => x.id === id) && id !== s.studentId) {
-        autoPix.clear();
-        cards.clear();
-        clearSchoolwork();
-        s.studentId = id;
-        await finance();
-    } await run(loadSchoolwork); if (['news', 'agenda'].includes(s.section))
-        await loadFeed(); }
+    async function popstate() {
+        const requested = routeSection(), id = new URLSearchParams(location.search).get('student');
+        const changed = Boolean(id && s.students.some(item => item.id === id) && id !== s.studentId);
+        s.selectedPost = null;
+        closeMenu(false);
+        if (changed && id) {
+            autoPix.clear();
+            cards.clear();
+            clearSchoolwork();
+            s.studentId = id;
+        }
+        s.section = allowedSection(requested);
+        if (s.section !== requested)
+            updateLocation();
+        if (changed)
+            await finance();
+        await run(loadSchoolwork);
+        if (['news', 'agenda'].includes(s.section))
+            await loadFeed();
+    }
     Vue.createApp({ components: { 'learning-portal': PigeLearning.component }, render: PigeRenders.familyPortal, setup() {
             Vue.watch(() => [s.ready, s.account?.id, s.account?.role, s.schoolId].join('|'), () => {
                 if (s.account && s.schoolId)

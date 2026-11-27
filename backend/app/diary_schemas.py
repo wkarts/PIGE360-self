@@ -38,7 +38,7 @@ class ComponentEdit(CurriculumComponentInput):
     version: int = Field(ge=1)
 
 
-class ComponentRemoval(Input):
+class DiaryRemoval(Input):
     version: int = Field(ge=1)
     reason: str = Field(min_length=3, max_length=1000)
 
@@ -89,7 +89,7 @@ class AttendanceItem(Input):
 
 
 class AttendanceInput(Input):
-    items: list[AttendanceItem] = Field(min_length=1,max_length=300)
+    items: list[AttendanceItem] = Field(min_length=1,max_length=2000)
 
 
 class DiaryTransitionInput(Input):

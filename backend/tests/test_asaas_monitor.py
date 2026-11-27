@@ -53,6 +53,8 @@ def test_refund_accounts_for_pending_and_replays_confirmed_command(online, monke
     assert api.post(endpoint, {**task, 'amount':'25.0'}, 200)['id'] == first['id']
     assert len(sent) == 1
     api.post(endpoint, {**task, 'amount':'10.00'}, 409)
+    api.post(endpoint, {**task, 'client_key':str(uuid4()), 'amount':'10.00'}, 409)
+    assert len(sent) == 1
 
 
 def test_native_webhook_validates_and_deduplicates(online):

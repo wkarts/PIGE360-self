@@ -184,22 +184,32 @@ var _Vue=Vue; var PigeRenders={familyPortal:function render(_ctx, _cache) {
                 alt: identity.display_name
               }, null, 8, ["src", "alt"]))
             : (_openBlock(), _createElementBlock("strong", { key: 1 }, _toDisplayString(identity.display_name), 1)), _createElementVNode("small", null, _toDisplayString(portalName()), 1)], 8, ["onClick"])]), _createElementVNode("div", { class: "family-sidebar-scroll" }, [
-            _createElementVNode("p", { class: "family-nav-label" }, "ACOMPANHAMENTO ESCOLAR"),
-            _createElementVNode("nav", { "aria-label": "Acompanhamento escolar" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList([{id:'overview',label:'Visão geral',icon:'dashboard'},{id:'students',label:title('students'),icon:'students'},{id:'materials',label:'Atividades',icon:'documents'},{id:'academic',label:title('academic'),icon:'academic'},{id:'agenda',label:'Agenda escolar',icon:'clock'},{id:'news',label:'Comunicados',icon:'bell'}], (item) => {
-              return (_openBlock(), _createElementBlock("button", {
-                key: item.id,
-                type: "button",
-                "aria-current": s.section===item.id?'page':undefined,
-                onClick: $event => (section(item.id))
-              }, [(_openBlock(), _createElementBlock("svg", {
-                class: "ui-icon",
-                "aria-hidden": "true"
-              }, [_createElementVNode("use", { href: '/ui-icons.svg#'+item.icon }, null, 8, ["href"])])), _createElementVNode("span", null, _toDisplayString(item.label), 1), (item.id==='students'&&s.students.length)
-                ? (_openBlock(), _createElementBlock("small", { key: 0 }, _toDisplayString(s.students.length), 1))
-                : _createCommentVNode("", true)], 8, ["aria-current", "onClick"]))
-            }), 128))]),
+            (student()?.academic_authorized!==false)
+              ? (_openBlock(), _createElementBlock("p", {
+                  key: 0,
+                  class: "family-nav-label"
+                }, "ACOMPANHAMENTO ESCOLAR"))
+              : _createCommentVNode("", true),
+            (student()?.academic_authorized!==false)
+              ? (_openBlock(), _createElementBlock("nav", {
+                  key: 1,
+                  "aria-label": "Acompanhamento escolar"
+                }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList([{id:'overview',label:'Visão geral',icon:'dashboard'},{id:'students',label:title('students'),icon:'students'},{id:'materials',label:'Atividades',icon:'documents'},{id:'academic',label:title('academic'),icon:'academic'},{id:'agenda',label:'Agenda escolar',icon:'clock'},{id:'news',label:'Comunicados',icon:'bell'}], (item) => {
+                  return (_openBlock(), _createElementBlock("button", {
+                    key: item.id,
+                    type: "button",
+                    "aria-current": s.section===item.id?'page':undefined,
+                    onClick: $event => (section(item.id))
+                  }, [(_openBlock(), _createElementBlock("svg", {
+                    class: "ui-icon",
+                    "aria-hidden": "true"
+                  }, [_createElementVNode("use", { href: '/ui-icons.svg#'+item.icon }, null, 8, ["href"])])), _createElementVNode("span", null, _toDisplayString(item.label), 1), (item.id==='students'&&s.students.length)
+                    ? (_openBlock(), _createElementBlock("small", { key: 0 }, _toDisplayString(s.students.length), 1))
+                    : _createCommentVNode("", true)], 8, ["aria-current", "onClick"]))
+                }), 128))]))
+              : _createCommentVNode("", true),
             _createElementVNode("p", { class: "family-nav-label" }, "Serviços escolares"),
-            _createElementVNode("nav", { "aria-label": "Serviços escolares" }, [(s.account.role==='guardian')
+            _createElementVNode("nav", { "aria-label": "Serviços escolares" }, [(s.account.role==='guardian'&&student()?.academic_authorized!==false)
               ? (_openBlock(), _createElementBlock("button", {
                   key: 0,
                   type: "button",
@@ -209,7 +219,7 @@ var _Vue=Vue; var PigeRenders={familyPortal:function render(_ctx, _cache) {
                   class: "ui-icon",
                   "aria-hidden": "true"
                 }, [_createElementVNode("use", { href: "/ui-icons.svg#documents" })])), _createTextVNode("Justificativas de ausência")], 8, ["aria-current", "onClick"]))
-              : _createCommentVNode("", true), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList([{id:'finance',label:'Financeiro',icon:'billing'},{id:'documents',label:'Documentos',icon:'documents'},{id:'support',label:'Atendimento',icon:'school'}], (item) => {
+              : _createCommentVNode("", true), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList([{id:'finance',label:'Financeiro',icon:'billing'},{id:'documents',label:'Documentos',icon:'documents'},{id:'support',label:'Atendimento',icon:'school'}].filter(x=>x.id!=='documents'||student()?.academic_authorized!==false), (item) => {
               return (_openBlock(), _createElementBlock("button", {
                 key: item.id,
                 type: "button",
@@ -821,6 +831,16 @@ var _Vue=Vue; var PigeRenders={familyPortal:function render(_ctx, _cache) {
                                                           rel: "noopener noreferrer"
                                                         }, "Abrir checkout seguro do Asaas", 8, ["href"]))
                                                       : _createCommentVNode("", true),
+                                                    (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(cards.state.view.checkout.payments, (payment) => {
+                                                      return (_openBlock(), _createElementBlock("div", { key: payment.id }, [(payment.status==='RECEIVED')
+                                                        ? (_openBlock(), _createElementBlock("button", {
+                                                            key: 0,
+                                                            type: "button",
+                                                            class: "link-button",
+                                                            onClick: $event => (run(()=>download('/family/students/'+s.studentId+'/charges/'+charge.id+'/cards/receipts/'+payment.id+'.pdf','comprovante-cartao.pdf')))
+                                                          }, "Comprovante de " + _toDisplayString(money(String(payment.value))), 9, ["onClick"]))
+                                                        : _createCommentVNode("", true)]))
+                                                    }), 128)),
                                                     (cards.state.view.can_authorize)
                                                       ? (_openBlock(), _createElementBlock("form", {
                                                           key: 2,

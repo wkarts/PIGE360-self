@@ -175,13 +175,12 @@ def create_charges(data:s.ChargeInput,db:DB,user:Actor,school:Scope,request:Requ
             if (previous.amount,previous.due_on,previous.billing_type,previous.admission_id,previous.enrollment_id,previous.description,previous.required_for_enrollment,previous.collection_mode)!=(data.amount,due,data.billing_type,admission_id,enrollment_id,description,data.required_for_enrollment,data.collection_mode):fail(409,'Chave de operação já utilizada com outros dados.')
             results.append(previous);continue
         if conn:
-            from .asaas_policy import policy_for, enabled_for, terms_payload, check_discounted_minimum, cents
+            from .asaas_policy import policy_for, enabled_for, check_single_charge, single_terms_snapshot
             policy = policy_for(conn)
             if not enabled_for(policy, data.billing_type):
                 fail(409, 'O meio selecionado está desabilitado na configuração Asaas da escola.')
-            if (conn.config or {}).get('payment_policy'):
-                check_discounted_minimum(policy, cents(data.amount), 1, 500)
-            payer = {**payer, 'asaas_terms': terms_payload(policy)}
+            check_single_charge(policy, data.amount)
+            payer = {**payer, **single_terms_snapshot(policy)}
         ident=uid()
         obj=m.BankCharge(id=ident,school_id=school.id,connection_id=conn.id if conn else None,collection_mode=data.collection_mode,admission_id=admission_id,enrollment_id=enrollment_id,account_id=account_id,payer_snapshot=payer,
             description=description,amount=data.amount,due_on=due,billing_type=data.billing_type,

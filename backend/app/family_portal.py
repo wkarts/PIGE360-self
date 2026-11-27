@@ -29,6 +29,16 @@ def own_student(db,user,ident):
     return row
 
 
+def own_finance_student(db,user,student_id):
+    if user.role == 'guardian':
+        financial = own_profile_students(db,user,financial=True)
+        student = next((item for item in financial if item.id == student_id),None)
+        if student:
+            return student
+    own_student(db,user,student_id)
+    fail(403,'Vínculo financeiro não autorizado.')
+
+
 def may_finance(db,user,student):
     # Dados financeiros seguem o vínculo financeiro explícito. Aluno menor não os herda.
     if user.role!='guardian':return False
@@ -50,6 +60,14 @@ def context(db:DB,user:Actor):
         item['document_pendencies'] = pending_by_student.get(student.id, [])
         item['financial_authorized']=may_finance(db,user,student)
         result.append(item)
+    if user.role == 'guardian':
+        academic_ids = {student.id for student in linked}
+        for student in own_profile_students(db,user,financial=True):
+            if student.id in academic_ids:
+                continue
+            person = db.get(m.Person,student.person_id)
+            result.append({'id':student.id,'name':person.name,'number':'','enrollments':[],'documents':[],
+                           'academic_authorized':False,'financial_authorized':True})
     schools=db.execute(select(m.School.id,m.School.name).join(m.SchoolAccess,m.SchoolAccess.school_id==m.School.id).where(m.SchoolAccess.user_id==user.id,m.SchoolAccess.active.is_(True),m.SchoolAccess.archived_at.is_(None),m.School.active.is_(True)).order_by(m.School.name)).all()
     return {'schools':[{'id':ident,'name':name} for ident,name in schools],'role':user.role,'name':user.name,'students':result,'note':'Inscrição online utiliza a conta de inscrição já existente. Não compartilha automaticamente sua senha de acesso escolar.'}
 
@@ -57,14 +75,16 @@ def context(db:DB,user:Actor):
 @router.get('/students/{student_id}/charges')
 def charges(student_id: str, db: DB, user: Actor, page: int = Query(1, ge=1), page_size: int = Query(200, ge=1, le=200)):
     from .banking import effective_status_expression
-    student = own_student(db, user, student_id)
-    if not may_finance(db, user, student):
-        fail(403, 'Vínculo financeiro não autorizado.')
+    student = own_finance_student(db, user, student_id)
     charge = m.BankCharge
     ids = select(m.Enrollment.id).where(m.Enrollment.student_id == student.id, m.Enrollment.school_id == student.school_id)
     scope = (charge.school_id == student.school_id, charge.enrollment_id.in_(ids),
              or_(charge.payer_snapshot['private_payer'].as_boolean().is_not(True),
                  charge.payer_snapshot['person_id'].as_string() == user.person_id))
+    if not any(item.id == student.id for item in students(db,user)):
+        person = db.get(m.Person,user.person_id)
+        owner = charge.payer_snapshot['person_id'].as_string()
+        scope += (or_(owner == user.person_id, (owner.is_(None) & (charge.payer_snapshot['cpf'].as_string() == person.cpf))) if person.cpf else owner == user.person_id,)
     status = effective_status_expression()
     total, overdue_count = db.execute(select(func.count(charge.id), func.count(charge.id).filter(status == 'overdue')).where(*scope)).one()
     from .asaas_card_models import CardCheckout

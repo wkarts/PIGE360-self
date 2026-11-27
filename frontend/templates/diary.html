@@ -113,7 +113,8 @@
               <button type="button" class="btn btn-secondary" @click="moveField(index,1)" :disabled="index===state.configFields.length-1" :aria-label="'Mover '+field.label+' para baixo'">Descer</button>
               <button type="button" class="btn btn-secondary" @click="state.configFields.splice(index,1)" :aria-label="'Retirar campo '+field.label">Retirar campo</button></div>
           </div>
-          <button class="btn btn-primary">Salvar composição</button>
+          <div class="actions"><button class="btn btn-primary" :disabled="!compositionDirty">Salvar composição</button>
+            <button type="button" class="btn btn-secondary" v-if="compositionDirty" @click="setComposition(state.fields)">Descartar alterações na composição</button></div>
         </form>
       </section>
 
@@ -209,7 +210,14 @@
               <textarea v-if="state.fields.standard_columns[field.id]" v-model="state.lessonForm[state.fields.standard_columns[field.id]]" :maxlength="state.fields.standard_columns[field.id]==='homework'?4000:6000" rows="2"></textarea>
               <textarea v-else v-model="state.lessonValues[field.id]" maxlength="4000" rows="2"></textarea></label>
             <div class="actions"><button class="btn btn-primary">{{state.lessonEditing?'Salvar alterações da aula':'Registrar aula'}}</button>
-              <button v-if="state.lessonEditing" type="button" class="btn btn-secondary" @click="resetLesson">Cancelar edição</button></div>
+              <button v-if="state.lessonEditing" type="button" class="btn btn-secondary" @click="resetLesson">Cancelar edição</button>
+              <button v-if="state.lessonEditing" type="button" class="btn btn-secondary" @click="state.lessonRemoval=true">Remover aula</button></div>
+          </form>
+          <form v-if="state.lessonRemoval && state.lessonEditing" class="x-form" @submit.prevent="save(removeLesson)">
+            <h3>Remover aula de {{date(state.lessonEditing.lesson_date)}}</h3><p>Somente aulas sem chamada e sem fechamento anterior podem ser removidas.</p>
+            <label>Justificativa<textarea v-model="state.lessonRemovalReason" required minlength="3" maxlength="1000"></textarea></label>
+            <div class="actions"><button class="btn btn-primary">Confirmar remoção da aula</button>
+              <button type="button" class="btn btn-secondary" @click="state.lessonRemoval=false;state.lessonRemovalReason=''">Cancelar remoção</button></div>
           </form>
         </section>
 
@@ -269,7 +277,10 @@
     </template>
 
     <template v-if="state.tab==='planning'">
-      <section v-if="!state.selected" class="panel x-card"><p>Selecione um diário na aba <strong>Diários</strong> para registrar ou consultar o planejamento correspondente.</p></section>
+      <section v-if="!state.selected" class="panel x-card"><h2>Planejamento curricular</h2>
+        <label>Escolha o diário<select @change="selectDiary(state.diaries.find(d=>d.id===$event.target.value))" :disabled="!state.diaries.length">
+          <option value="" selected disabled>Selecione</option><option v-for="d in state.diaries" :key="d.id" :value="d.id">{{d.class_name}} · {{d.component_name}} · {{d.year_name}}</option></select></label>
+        <p v-if="!state.diaries.length">Nenhum diário disponível nesta escola.</p></section>
       <template v-else>
         <section v-if="can('diary.write') && state.selected.status==='open'" class="panel x-card">
           <h2 id="diary-plan-heading" tabindex="-1">{{state.planEditing?'Editar planejamento':'Planejamento curricular'}} · {{state.selected.class_name}} · {{state.selected.component_name}}</h2>

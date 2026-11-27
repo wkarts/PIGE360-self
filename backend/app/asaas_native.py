@@ -1,6 +1,6 @@
 """Transporte e registro de efeitos remotos do Asaas no contexto da escola."""
 from datetime import date, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import hashlib
 import hmac
 import json
@@ -60,6 +60,29 @@ def asaas_read(connection, path, *, params=None):
         if exc.code == 'PROVIDER_HTTP_404':
             fail(404, 'O Asaas não encontrou o registro solicitado.')
         fail(502, 'O Asaas não concluiu a consulta. Confira a conexão da escola.')
+
+
+def refund_totals(history):
+    """Soma o valor reservado e o histórico bruto, incluindo pedidos cancelados já observados."""
+    rows = history.get('data')
+    if (not isinstance(rows,list) or history.get('hasMore') is not False
+            or history.get('totalCount',len(rows)) != len(rows)):
+        fail(409,'O Asaas ainda não confirmou o histórico completo de estornos.')
+    reserved = Decimal('0')
+    historical = Decimal('0')
+    for row in rows:
+        if not isinstance(row,dict) or row.get('status') not in {
+                'DONE','PENDING','CANCELLED','AWAITING_CRITICAL_ACTION_AUTHORIZATION','AWAITING_CUSTOMER_EXTERNAL_AUTHORIZATION'}:
+            fail(409,'O histórico de estornos contém uma situação pendente de conferência.')
+        try:
+            value = Decimal(str(row['value']))
+            if not value.is_finite() or value <= 0: raise ValueError
+        except (KeyError,ValueError,InvalidOperation):
+            fail(409,'O Asaas não confirmou o valor dos estornos anteriores.')
+        historical += value
+        if row['status'] != 'CANCELLED':
+            reserved += value
+    return reserved, historical
 
 
 def lock_issuance_channel(db, school_id, charge_id, channel):

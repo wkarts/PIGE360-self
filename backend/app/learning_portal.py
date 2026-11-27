@@ -1,5 +1,6 @@
 """Boletins publicados: leitura própria a partir de fechamentos imutáveis do Diário."""
 from collections import defaultdict
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response
@@ -21,7 +22,7 @@ RESULT_LABELS = {
 }
 
 
-def own_profile_students(db, user, school_id=''):
+def own_profile_students(db, user, school_id='', *, financial=False):
     """Exige vínculo explícito: igualdade de e-mail nunca autoriza acesso pedagógico."""
     if user.role not in ('student', 'guardian'):
         fail(403, 'Este espaço é destinado a estudantes e responsáveis vinculados.')
@@ -51,7 +52,7 @@ def own_profile_students(db, user, school_id=''):
         m.GuardianLink, m.GuardianLink.student_id == m.Student.id,
     ).where(
         m.GuardianLink.person_id == person.id, m.GuardianLink.school_id == person.school_id,
-        m.GuardianLink.active.is_(True), m.GuardianLink.legal.is_(True),
+        m.GuardianLink.active.is_(True), (m.GuardianLink.financial if financial else m.GuardianLink.legal).is_(True),
         m.Student.school_id == person.school_id,
     )).unique())
 
@@ -203,7 +204,6 @@ def learning_data(db, students):
             def enrolled_for_lesson(lesson, diary):
                 if 'expected_enrollment_ids' in lesson:
                     return enrollment.id in lesson['expected_enrollment_ids']
-                from datetime import date
                 from .diary import _enrollment_state_on
                 state = _enrollment_state_on(db, enrollment, date.fromisoformat(lesson['lesson_date']), events)
                 return bool(state and state[0] in ('active', 'suspended') and state[1] == diary.class_group_id)
@@ -223,7 +223,6 @@ def learning_data(db, students):
                 m.SchoolDiary.id.in_([d.id for d in diaries]), m.DiaryClosure.active.is_(False))).all())
             intervals = defaultdict(list)
             last_group, last_day = enrollment.class_group_id, year.ends_on
-            from datetime import timedelta
             for stamp, before, _ in moves:
                 day = stamp.date()
                 intervals[last_group].append((max(day, enrollment.enrolled_on), last_day))
@@ -254,12 +253,17 @@ def learning_data(db, students):
                     if not closure:
                         continue
                     snapshot = closure.snapshot or {}
+                    linked = any(r.get('enrollment_id') == enrollment.id and r.get('student_id') == student.id
+                                 for key in ('roster', 'attendance', 'period_results', 'opinions') for r in snapshot.get(key, []))
+                    if not linked and not any(enrollment.id in r.get('expected_enrollment_ids', [])
+                                              for r in snapshot.get('lessons', []) if r.get('academic_period_id') == period.id):
+                        continue
                     eligible = {r['id'] for r in snapshot.get('lessons', []) if r.get('academic_period_id') == period.id
                                 and str(r.get('lesson_date', '')) >= enrollment.enrolled_on.isoformat()
                                 and enrolled_for_lesson(r, diary)}
                     personal = any(r.get('enrollment_id') == enrollment.id and r.get('student_id') == student.id
-                                   and r.get('academic_period_id') == period.id for key in ('period_results', 'opinions')
-                                   for r in snapshot.get(key, []))
+                                   and r.get('academic_period_id') == period.id and (key != 'opinions' or r.get('status') == 'final')
+                                   for key in ('period_results', 'opinions') for r in snapshot.get(key, []))
                     if not eligible and not personal:
                         continue
                     active_publications[enrollment.id].add(closure.id)

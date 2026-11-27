@@ -428,14 +428,14 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                           type: "number",
                           "onUpdate:modelValue": $event => ((s.maxInstallments) = $event),
                           min: "2",
-                          max: "12",
+                          max: "21",
                           required: ""
                         }, null, 8, ["onUpdate:modelValue"]), [[
                           _vModelText,
                           s.maxInstallments,
                           void 0,
                           { number: true }
-                        ]])]))
+                        ]]), _createElementVNode("small", null, "De 13 a 21, o checkout confere a bandeira e a política da escola.")]))
                       : _createCommentVNode("", true),
                     (s.cardMode==='recurrent')
                       ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [_createElementVNode("label", null, [_createTextVNode("Frequência"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((s.cycle) = $event) }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(['WEEKLY','BIWEEKLY','MONTHLY','BIMONTHLY','QUARTERLY','SEMIANNUALLY','YEARLY'], (key) => {
@@ -535,14 +535,26 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                     : _createCommentVNode("", true)]),
                   (item.payments?.length)
                     ? (_openBlock(), _createElementBlock("details", { key: 0 }, [_createElementVNode("summary", null, "Transações vinculadas (" + _toDisplayString(item.payments.length) + ")", 1), _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(item.payments, (payment) => {
-                        return (_openBlock(), _createElementBlock("li", { key: payment.id }, [_createTextVNode(_toDisplayString(display(payment.dueDate,'date')) + " · " + _toDisplayString(display(payment.value,'money')) + " · " + _toDisplayString(label(payment.status)) + " · " + _toDisplayString(payment.id) + " ", 1), (cardRefundLimit(item,payment)>0)
-                          ? (_openBlock(), _createElementBlock("button", {
-                              key: 0,
-                              class: "link-button",
-                              type: "button",
-                              onClick: $event => (openCardRefund(item,payment))
-                            }, _toDisplayString(item.mode==='installment'?'Estornar parcelamento integral':'Estornar transação'), 9, ["onClick"]))
-                          : _createCommentVNode("", true)]))
+                        return (_openBlock(), _createElementBlock("li", { key: payment.id }, [
+                          _createTextVNode(_toDisplayString(display(payment.dueDate,'date')) + " · " + _toDisplayString(display(payment.value,'money')) + " · " + _toDisplayString(label(payment.status)) + " · " + _toDisplayString(payment.id) + " ", 1),
+                          (payment.status==='RECEIVED'&&can('banking.read'))
+                            ? (_openBlock(), _createElementBlock("button", {
+                                key: 0,
+                                class: "link-button",
+                                type: "button",
+                                onClick: $event => (cardReceipt(item,payment))
+                              }, "Baixar comprovante PDF", 8, ["onClick"]))
+                            : _createCommentVNode("", true),
+                          _createTextVNode(),
+                          (cardRefundLimit(item,payment)>0)
+                            ? (_openBlock(), _createElementBlock("button", {
+                                key: 1,
+                                class: "link-button",
+                                type: "button",
+                                onClick: $event => (openCardRefund(item,payment))
+                              }, _toDisplayString(item.mode==='installment'?'Estornar parcelamento integral':'Estornar transação'), 9, ["onClick"]))
+                            : _createCommentVNode("", true)
+                        ]))
                       }), 128))])]))
                     : _createCommentVNode("", true),
                   (s.cardRefund?.checkoutId===item.id)
@@ -685,7 +697,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                     onClick: $event => (compare(props.charge.id))
                   }, "Comparar com o Asaas", 8, ["onClick"]))
                 : _createCommentVNode("", true),
-              (write()&&props.charge.remote_payment_id&&['pending','overdue'].includes(props.charge.status)&&['PIX','BOLETO'].includes(props.charge.billing_type))
+              (write()&&props.charge.remote_payment_id&&['pending','overdue'].includes(props.charge.status)&&['PIX','BOLETO'].includes(props.charge.billing_type)&&!Number(props.charge.manual_paid_amount))
                 ? (_openBlock(), _createElementBlock("details", { key: 1 }, [_createElementVNode("summary", null, "Ajustar cobrança no Asaas"), _createElementVNode("form", {
                     class: "asaas-fields",
                     onSubmit: _withModifiers(adjust, ["prevent"])
@@ -728,7 +740,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                   ], 40, ["onSubmit"])]))
                 : _createCommentVNode("", true),
               (write()&&props.charge.remote_payment_id&&['pending','overdue'].includes(props.charge.status)&&['PIX','BOLETO'].includes(props.charge.billing_type))
-                ? (_openBlock(), _createElementBlock("details", { key: 2 }, [_createElementVNode("summary", null, "Registrar recebimento externo"), _createElementVNode("form", {
+                ? (_openBlock(), _createElementBlock("details", { key: 2 }, [_createElementVNode("summary", null, "Registrar recebimento externo"), _createElementVNode("p", null, "Saldo da escola " + _toDisplayString(display(unpaid(),'money')) + ". Recebimentos parciais permanecem no histórico até a quitação.", 1), _createElementVNode("form", {
                     class: "asaas-fields",
                     onSubmit: _withModifiers($event => (settlement('cash-receipt')), ["prevent"])
                   }, [
@@ -737,7 +749,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                       "onUpdate:modelValue": $event => ((s.cashAmount) = $event),
                       min: "0.01",
                       step: "0.01",
-                      max: props.charge.amount,
+                      max: unpaid(),
                       required: ""
                     }, null, 8, ["onUpdate:modelValue", "max"]), [[_vModelText, s.cashAmount]])]),
                     _createElementVNode("label", null, [_createTextVNode("Recebido em"), _withDirectives(_createElementVNode("input", {
@@ -770,7 +782,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                     _createElementVNode("button", { class: "btn btn-primary" }, "Registrar recebimento")
                   ], 40, ["onSubmit"])]))
                 : _createCommentVNode("", true),
-              (write()&&props.charge.remote_payment_id&&props.charge.status==='cancelled'&&['PIX','BOLETO'].includes(props.charge.billing_type))
+              (write()&&props.charge.remote_payment_id&&props.charge.status==='cancelled'&&['PIX','BOLETO'].includes(props.charge.billing_type)&&!Number(props.charge.manual_paid_amount))
                 ? (_openBlock(), _createElementBlock("details", { key: 3 }, [_createElementVNode("summary", null, "Reativar cobrança"), _createElementVNode("form", {
                     class: "asaas-fields",
                     onSubmit: _withModifiers($event => (settlement('reactivate')), ["prevent"])
@@ -919,7 +931,12 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                             step: field[2]==='integer'?'1':'0.01',
                             required: ""
                           }, null, 8, ["onUpdate:modelValue", "step"])), [[_vModelText, s.policy.settings[field[0]]]])], 2))
-                  }), 128))])]))
+                  }), 128))]), (group.title==='Ciclo da cobrança'&&s.policy.settings.sync_manual_settlement===false)
+                    ? (_openBlock(), _createElementBlock("p", {
+                        key: 0,
+                        class: "alert warning"
+                      }, "O recebimento será registrado na escola. Confira no monitor a via que continuará disponível no banco."))
+                    : _createCommentVNode("", true)]))
                 }), 128)), _createElementVNode("div", null, [_createElementVNode("button", {
                   type: "submit",
                   class: "btn btn-primary",
@@ -8044,22 +8061,32 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                 alt: identity.display_name
               }, null, 8, ["src", "alt"]))
             : (_openBlock(), _createElementBlock("strong", { key: 1 }, _toDisplayString(identity.display_name), 1)), _createElementVNode("small", null, _toDisplayString(portalName()), 1)], 8, ["onClick"])]), _createElementVNode("div", { class: "family-sidebar-scroll" }, [
-            _createElementVNode("p", { class: "family-nav-label" }, "ACOMPANHAMENTO ESCOLAR"),
-            _createElementVNode("nav", { "aria-label": "Acompanhamento escolar" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList([{id:'overview',label:'Visão geral',icon:'dashboard'},{id:'students',label:title('students'),icon:'students'},{id:'materials',label:'Atividades',icon:'documents'},{id:'academic',label:title('academic'),icon:'academic'},{id:'agenda',label:'Agenda escolar',icon:'clock'},{id:'news',label:'Comunicados',icon:'bell'}], (item) => {
-              return (_openBlock(), _createElementBlock("button", {
-                key: item.id,
-                type: "button",
-                "aria-current": s.section===item.id?'page':undefined,
-                onClick: $event => (section(item.id))
-              }, [(_openBlock(), _createElementBlock("svg", {
-                class: "ui-icon",
-                "aria-hidden": "true"
-              }, [_createElementVNode("use", { href: '/ui-icons.svg#'+item.icon }, null, 8, ["href"])])), _createElementVNode("span", null, _toDisplayString(item.label), 1), (item.id==='students'&&s.students.length)
-                ? (_openBlock(), _createElementBlock("small", { key: 0 }, _toDisplayString(s.students.length), 1))
-                : _createCommentVNode("", true)], 8, ["aria-current", "onClick"]))
-            }), 128))]),
+            (student()?.academic_authorized!==false)
+              ? (_openBlock(), _createElementBlock("p", {
+                  key: 0,
+                  class: "family-nav-label"
+                }, "ACOMPANHAMENTO ESCOLAR"))
+              : _createCommentVNode("", true),
+            (student()?.academic_authorized!==false)
+              ? (_openBlock(), _createElementBlock("nav", {
+                  key: 1,
+                  "aria-label": "Acompanhamento escolar"
+                }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList([{id:'overview',label:'Visão geral',icon:'dashboard'},{id:'students',label:title('students'),icon:'students'},{id:'materials',label:'Atividades',icon:'documents'},{id:'academic',label:title('academic'),icon:'academic'},{id:'agenda',label:'Agenda escolar',icon:'clock'},{id:'news',label:'Comunicados',icon:'bell'}], (item) => {
+                  return (_openBlock(), _createElementBlock("button", {
+                    key: item.id,
+                    type: "button",
+                    "aria-current": s.section===item.id?'page':undefined,
+                    onClick: $event => (section(item.id))
+                  }, [(_openBlock(), _createElementBlock("svg", {
+                    class: "ui-icon",
+                    "aria-hidden": "true"
+                  }, [_createElementVNode("use", { href: '/ui-icons.svg#'+item.icon }, null, 8, ["href"])])), _createElementVNode("span", null, _toDisplayString(item.label), 1), (item.id==='students'&&s.students.length)
+                    ? (_openBlock(), _createElementBlock("small", { key: 0 }, _toDisplayString(s.students.length), 1))
+                    : _createCommentVNode("", true)], 8, ["aria-current", "onClick"]))
+                }), 128))]))
+              : _createCommentVNode("", true),
             _createElementVNode("p", { class: "family-nav-label" }, "Serviços escolares"),
-            _createElementVNode("nav", { "aria-label": "Serviços escolares" }, [(s.account.role==='guardian')
+            _createElementVNode("nav", { "aria-label": "Serviços escolares" }, [(s.account.role==='guardian'&&student()?.academic_authorized!==false)
               ? (_openBlock(), _createElementBlock("button", {
                   key: 0,
                   type: "button",
@@ -8069,7 +8096,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                   class: "ui-icon",
                   "aria-hidden": "true"
                 }, [_createElementVNode("use", { href: "/ui-icons.svg#documents" })])), _createTextVNode("Justificativas de ausência")], 8, ["aria-current", "onClick"]))
-              : _createCommentVNode("", true), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList([{id:'finance',label:'Financeiro',icon:'billing'},{id:'documents',label:'Documentos',icon:'documents'},{id:'support',label:'Atendimento',icon:'school'}], (item) => {
+              : _createCommentVNode("", true), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList([{id:'finance',label:'Financeiro',icon:'billing'},{id:'documents',label:'Documentos',icon:'documents'},{id:'support',label:'Atendimento',icon:'school'}].filter(x=>x.id!=='documents'||student()?.academic_authorized!==false), (item) => {
               return (_openBlock(), _createElementBlock("button", {
                 key: item.id,
                 type: "button",
@@ -8681,6 +8708,16 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                                                           rel: "noopener noreferrer"
                                                         }, "Abrir checkout seguro do Asaas", 8, ["href"]))
                                                       : _createCommentVNode("", true),
+                                                    (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(cards.state.view.checkout.payments, (payment) => {
+                                                      return (_openBlock(), _createElementBlock("div", { key: payment.id }, [(payment.status==='RECEIVED')
+                                                        ? (_openBlock(), _createElementBlock("button", {
+                                                            key: 0,
+                                                            type: "button",
+                                                            class: "link-button",
+                                                            onClick: $event => (run(()=>download('/family/students/'+s.studentId+'/charges/'+charge.id+'/cards/receipts/'+payment.id+'.pdf','comprovante-cartao.pdf')))
+                                                          }, "Comprovante de " + _toDisplayString(money(String(payment.value))), 9, ["onClick"]))
+                                                        : _createCommentVNode("", true)]))
+                                                    }), 128)),
                                                     (cards.state.view.can_authorize)
                                                       ? (_openBlock(), _createElementBlock("form", {
                                                           key: 2,
@@ -9466,7 +9503,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                                 type: "number",
                                 inputmode: "decimal",
                                 step: "0.01",
-                                min: "0.01",
+                                min: "5",
                                 "onUpdate:modelValue": $event => ((s.campaignForm.fee_amount) = $event),
                                 required: ""
                               }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.campaignForm.fee_amount]])]),
@@ -9493,12 +9530,17 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                                 void 0,
                                 { number: true }
                               ]])]),
-                              (!s.feeAccounts.length)
+                              (s.feeAccountsError)
                                 ? (_openBlock(), _createElementBlock("p", {
                                     key: 0,
-                                    class: "muted"
-                                  }, "Habilite uma conta Asaas para esta escola em Integrações."))
-                                : _createCommentVNode("", true)
+                                    role: "alert"
+                                  }, "Não foi possível consultar as contas da escola. Reabra a edição para tentar novamente."))
+                                : (!s.feeAccounts.length)
+                                  ? (_openBlock(), _createElementBlock("p", {
+                                      key: 1,
+                                      class: "muted"
+                                    }, "Habilite uma conta Asaas para esta escola em Integrações."))
+                                  : _createCommentVNode("", true)
                             ]))
                           : _createCommentVNode("", true)]),
                         _createElementVNode("label", { class: "x-check" }, [_withDirectives(_createElementVNode("input", {
@@ -13011,7 +13053,17 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                       onClick: $event => (state.configFields.splice(index,1)),
                       "aria-label": 'Retirar campo '+field.label
                     }, "Retirar campo", 8, ["onClick", "aria-label"])])]))
-                  }), 128)), _createElementVNode("button", { class: "btn btn-primary" }, "Salvar composição")], 40, ["onSubmit"])
+                  }), 128)), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
+                    class: "btn btn-primary",
+                    disabled: !compositionDirty
+                  }, "Salvar composição", 8, ["disabled"]), compositionDirty
+                    ? (_openBlock(), _createElementBlock("button", {
+                        key: 0,
+                        type: "button",
+                        class: "btn btn-secondary",
+                        onClick: $event => (setComposition(state.fields))
+                      }, "Descartar alterações na composição", 8, ["onClick"]))
+                    : _createCommentVNode("", true)])], 40, ["onSubmit"])
                 ]))
               : _createCommentVNode("", true),
             (pilot && props.catalogEnabled && state.page==='catalog')
@@ -13356,8 +13408,35 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                             class: "btn btn-secondary",
                             onClick: resetLesson
                           }, "Cancelar edição", 8, ["onClick"]))
+                        : _createCommentVNode("", true), (state.lessonEditing)
+                        ? (_openBlock(), _createElementBlock("button", {
+                            key: 1,
+                            type: "button",
+                            class: "btn btn-secondary",
+                            onClick: $event => (state.lessonRemoval=true)
+                          }, "Remover aula", 8, ["onClick"]))
                         : _createCommentVNode("", true)])
-                    ], 40, ["onSubmit"])]))
+                    ], 40, ["onSubmit"]), (state.lessonRemoval && state.lessonEditing)
+                      ? (_openBlock(), _createElementBlock("form", {
+                          key: 0,
+                          class: "x-form",
+                          onSubmit: _withModifiers($event => (save(removeLesson)), ["prevent"])
+                        }, [
+                          _createElementVNode("h3", null, "Remover aula de " + _toDisplayString(date(state.lessonEditing.lesson_date)), 1),
+                          _createElementVNode("p", null, "Somente aulas sem chamada e sem fechamento anterior podem ser removidas."),
+                          _createElementVNode("label", null, [_createTextVNode("Justificativa"), _withDirectives(_createElementVNode("textarea", {
+                            "onUpdate:modelValue": $event => ((state.lessonRemovalReason) = $event),
+                            required: "",
+                            minlength: "3",
+                            maxlength: "1000"
+                          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.lessonRemovalReason]])]),
+                          _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", { class: "btn btn-primary" }, "Confirmar remoção da aula"), _createElementVNode("button", {
+                            type: "button",
+                            class: "btn btn-secondary",
+                            onClick: $event => {state.lessonRemoval=false;state.lessonRemovalReason=''}
+                          }, "Cancelar remoção", 8, ["onClick"])])
+                        ], 40, ["onSubmit"]))
+                      : _createCommentVNode("", true)]))
                   : _createCommentVNode("", true),
                 (show('diaries','attendance'))
                   ? (_openBlock(), _createElementBlock("section", {
@@ -13560,7 +13639,21 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
             ? (_openBlock(), _createElementBlock("section", {
                 key: 0,
                 class: "panel x-card"
-              }, [_createElementVNode("p", null, [_createTextVNode("Selecione um diário na aba "), _createElementVNode("strong", null, "Diários"), _createTextVNode(" para registrar ou consultar o planejamento correspondente.")])]))
+              }, [_createElementVNode("h2", null, "Planejamento curricular"), _createElementVNode("label", null, [_createTextVNode("Escolha o diário"), _createElementVNode("select", {
+                onChange: $event => (selectDiary(state.diaries.find(d=>d.id===$event.target.value))),
+                disabled: !state.diaries.length
+              }, [_createElementVNode("option", {
+                value: "",
+                selected: "",
+                disabled: ""
+              }, "Selecione"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.diaries, (d) => {
+                return (_openBlock(), _createElementBlock("option", {
+                  key: d.id,
+                  value: d.id
+                }, _toDisplayString(d.class_name) + " · " + _toDisplayString(d.component_name) + " · " + _toDisplayString(d.year_name), 9, ["value"]))
+              }), 128))], 40, ["onChange", "disabled"])]), (!state.diaries.length)
+                ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Nenhum diário disponível nesta escola."))
+                : _createCommentVNode("", true)]))
             : (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [(can('diary.write') && state.selected.status==='open')
                 ? (_openBlock(), _createElementBlock("section", {
                     key: 0,
