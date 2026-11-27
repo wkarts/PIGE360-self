@@ -1,4 +1,24 @@
 DO $$ BEGIN
+  IF to_regclass('public.asaas_native_operations') IS NOT NULL THEN
+    UPDATE asaas_native_operations SET status='uncertain',error_code='RESTORE_REQUIRES_RECONCILIATION',
+      updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE status='processing';
+  END IF;
+  IF to_regclass('public.asaas_card_checkouts') IS NOT NULL THEN
+    UPDATE asaas_card_checkouts SET status='uncertain',updated_at=CURRENT_TIMESTAMP,version=version+1
+      WHERE status IN ('creating','scheduled','processing');
+  END IF;
+  IF to_regclass('public.asaas_card_mandates') IS NOT NULL THEN
+    UPDATE asaas_card_mandates SET status='revoked',sealed_token='',updated_at=CURRENT_TIMESTAMP,version=version+1
+      WHERE status='active';
+  END IF;
+  IF to_regclass('public.asaas_pix_authorizations') IS NOT NULL THEN
+    UPDATE asaas_pix_authorizations SET status='RESTORE_REVIEW',encrypted_qr='',updated_at=CURRENT_TIMESTAMP,version=version+1
+      WHERE status IN ('PREPARING','CREATED','ACTIVE','CANCELLING');
+  END IF;
+  IF to_regclass('public.asaas_pix_cycles') IS NOT NULL THEN
+    UPDATE asaas_pix_cycles SET status='UNCERTAIN',updated_at=CURRENT_TIMESTAMP,version=version+1
+      WHERE status IN ('QUEUED','PREPARING','CREATING');
+  END IF;
   IF to_regclass('public.integration_jobs') IS NOT NULL THEN
     UPDATE integration_jobs SET status='uncertain',error_code='RESTORE_REQUIRES_RECONCILIATION',lease_until=NULL
       WHERE status IN ('pending','retry','processing');

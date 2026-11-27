@@ -135,11 +135,11 @@ var PigeMFA;
 var PigeLearning;
 (function (PigeLearning) {
     PigeLearning.component = { props: ['request', 'download', 'rootPath', 'schoolId', 'studentId', 'identity'], render: PigeRenders.learning, setup(props) {
-            const state = Vue.reactive({ busy: false, error: '', students: [], studentId: '', enrollmentId: '', note: '' });
+            const state = Vue.reactive({ busy: false, error: '', students: [], studentId: '', enrollmentId: '', groupId: '', note: '' });
             const base = () => (props.rootPath || '/profile') + '/learning';
             const student = () => state.students.find(s => s.student_id === state.studentId);
             const enrollment = () => student()?.enrollments.find(e => e.enrollment_id === state.enrollmentId);
-            function selectStudent() { state.enrollmentId = student()?.enrollments[0]?.enrollment_id || ''; }
+            function selectStudent() { state.enrollmentId = student()?.enrollments[0]?.enrollment_id || ''; state.groupId = ''; }
             async function run(action) { if (state.busy)
                 return; state.busy = true; state.error = ''; try {
                 await action();
@@ -150,8 +150,22 @@ var PigeLearning;
             finally {
                 state.busy = false;
             } }
-            async function load() { await run(async () => { const data = await props.request(base() + (props.schoolId ? '?school_id=' + encodeURIComponent(props.schoolId) : '')); state.students = props.studentId ? data.students.filter(item => item.student_id === props.studentId) : data.students; state.note = data.note; if (!student())
-                state.studentId = state.students[0]?.student_id || ''; selectStudent(); }); }
+            async function load() {
+                await run(async () => {
+                    const data = await props.request(base() + (props.schoolId ? '?school_id=' + encodeURIComponent(props.schoolId) : ''));
+                    state.students = props.studentId ? data.students.filter(item => item.student_id === props.studentId) : data.students;
+                    state.note = data.note;
+                    if (!student()) {
+                        state.studentId = state.students[0]?.student_id || '';
+                        selectStudent();
+                    }
+                    else if (!enrollment()) {
+                        selectStudent();
+                    }
+                    if (!periodGroups.value.some(group => group.id === state.groupId))
+                        state.groupId = '';
+                });
+            }
             const rows = () => (enrollment()?.subjects || []).flatMap(subject => subject.periods.map(period => ({ ...period, component_name: period.component_name || subject.component_name, diary_id: subject.diary_id })));
             const periodGroups = Vue.computed(() => {
                 const groups = new Map();
@@ -167,11 +181,12 @@ var PigeLearning;
                     return (a.order_index ?? 0) - (b.order_index ?? 0) || (a.starts_on || '').localeCompare(b.starts_on || '') || left.className.localeCompare(right.className, 'pt-BR');
                 });
             });
+            const visibleGroups = Vue.computed(() => periodGroups.value.filter(group => !state.groupId || group.id === state.groupId));
             const percent = (value) => value === null || value === undefined ? 'Não apurada' : Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%';
             async function download(documentId = '') { await run(async () => { if (!student() || !enrollment())
-                return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId) + (documentId ? '&document_id=' + encodeURIComponent(documentId) : ''), 'boletim-' + student().student_number + '.pdf'); }); }
+                return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId) + (documentId ? '&document_id=' + encodeURIComponent(documentId) : '') + (props.schoolId ? '&school_id=' + encodeURIComponent(props.schoolId) : ''), 'boletim-' + student().student_number + '.pdf'); }); }
             Vue.onMounted(() => { void load(); });
-            return { props, state, student, enrollment, selectStudent, rows, periodGroups, percent, load, download };
+            return { props, state, student, enrollment, selectStudent, rows, periodGroups, visibleGroups, percent, load, download };
         } };
 })(PigeLearning || (PigeLearning = {}));
 var PigeSupport;
@@ -423,6 +438,132 @@ var PigeSupport;
     }
     window.addEventListener('pagehide', () => { ++generation; release(); setChecking(false); });
 })(PigeSupport || (PigeSupport = {}));
+var PigeAutoPix;
+(function (PigeAutoPix) {
+    const frequencies = { WEEKLY: 'Semanal', MONTHLY: 'Mensal', QUARTERLY: 'Trimestral', SEMIANNUALLY: 'Semestral', ANNUALLY: 'Anual' };
+    const labels = { PREPARING: 'Em preparação', CREATED: 'Aguardando o banco', ACTIVE: 'Ativa',
+        CANCELLING: 'Cancelamento solicitado', CANCELLED: 'Cancelada', REFUSED: 'Recusada', EXPIRED: 'Expirada',
+        QUEUED: 'Na fila', CREATING: 'Em emissão', WAITING: 'Aguardando confirmação', RECEIVED: 'Recebimento confirmado',
+        RELEASED: 'Via anterior disponível para reativação pela Secretaria', PREVIOUS_RECEIVED: 'Pagamento confirmado na via anterior',
+        RESTORE_REVIEW: 'Conferência bancária após restauração', SKIPPED: 'Pagamento pontual', AWAITING_REQUEST: 'Aguardando envio', SCHEDULED: 'Agendada', DONE: 'Processada' };
+    function use(request, student) {
+        let epoch = 0;
+        const state = Vue.reactive({ id: '', busy: false, error: '', view: null, accepted: false, frequency: 'MONTHLY', confirmCancel: false });
+        function clear() {
+            epoch++;
+            Object.assign(state, { id: '', busy: false, error: '', view: null, accepted: false, frequency: 'MONTHLY', confirmCancel: false });
+        }
+        async function send(id, action = '', body) {
+            if (!id || !student() || (state.busy && state.id === id))
+                return;
+            const sid = student(), current = ++epoch;
+            state.id = id;
+            state.busy = true;
+            state.error = '';
+            try {
+                const path = '/family/students/' + encodeURIComponent(sid) + '/charges/' + encodeURIComponent(id) + '/pix-automatic';
+                const view = await request(path + (action ? '/' + action : ''), action ? { method: 'POST', body: JSON.stringify(body || {}) } : {});
+                if (epoch !== current || student() !== sid)
+                    return;
+                state.view = view;
+                state.accepted = false;
+                state.confirmCancel = false;
+            }
+            catch (error) {
+                if (epoch === current && student() === sid)
+                    state.error = error instanceof Error ? error.message : 'Não foi possível consultar a cobrança.';
+            }
+            finally {
+                if (epoch === current)
+                    state.busy = false;
+            }
+        }
+        function open(id) {
+            if (state.id === id) {
+                clear();
+                return;
+            }
+            clear();
+            void send(id);
+        }
+        function enroll() {
+            const v = state.view;
+            if (!v?.can_enroll || !state.accepted)
+                return;
+            return send(state.id, 'enroll', { quote: v.quote, terms_version: v.terms_version, frequency: state.frequency, accepted: true });
+        }
+        function cancel() {
+            if (!state.confirmCancel || !state.view?.authorization)
+                return;
+            return send(state.id, 'cancel', { version: state.view.authorization.version });
+        }
+        const label = (value) => labels[value] || value;
+        const money = (value) => Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        return { state, clear, open, enroll, cancel, refresh: () => send(state.id, 'refresh'), reload: () => send(state.id), frequencies, label, money };
+    }
+    PigeAutoPix.use = use;
+})(PigeAutoPix || (PigeAutoPix = {}));
+var PigeFamilyCard;
+(function (PigeFamilyCard) {
+    function use(request, student) {
+        const state = Vue.reactive({ charge: '', view: null, loading: false, error: '', agreed: false, until: '', limit: '', revoke: false });
+        let epoch = 0;
+        function clear() { epoch++; state.view = null; state.charge = ''; state.loading = false; state.error = ''; state.agreed = false; state.revoke = false; state.until = ''; state.limit = ''; }
+        async function load(id) {
+            clear();
+            const current = epoch, sid = student();
+            state.charge = id;
+            state.loading = true;
+            try {
+                const view = await request('/family/students/' + sid + '/charges/' + id + '/cards');
+                if (current === epoch && student() === sid) {
+                    state.view = view;
+                    state.limit = String((view.checkout?.quote.charged_cents || 0) / 100);
+                }
+            }
+            catch (e) {
+                if (current === epoch)
+                    state.error = e instanceof Error ? e.message : String(e);
+            }
+            finally {
+                if (current === epoch)
+                    state.loading = false;
+            }
+        }
+        async function submit(revoke = false) {
+            if (state.loading || !state.view || (!revoke && !state.agreed) || (revoke && !state.revoke))
+                return;
+            const current = epoch, sid = student(), id = state.charge;
+            state.loading = true;
+            state.error = '';
+            const body = revoke ? {} : { terms_version: state.view.terms_version, accepted: state.agreed, ends_on: state.until, limit_cents: Math.round(Number(state.limit.replace(',', '.')) * 100) };
+            try {
+                await request('/family/students/' + sid + '/charges/' + id + '/cards/' + (revoke ? 'revoke' : 'authorize'), { method: 'POST', body: JSON.stringify(body) });
+                if (current === epoch && student() === sid)
+                    await load(id);
+            }
+            catch (e) {
+                if (current === epoch)
+                    state.error = e instanceof Error ? e.message : String(e);
+            }
+            finally {
+                if (current === epoch)
+                    state.loading = false;
+            }
+        }
+        function link(value) {
+            try {
+                const url = new URL(value);
+                return url.protocol === 'https:' && ['asaas.com', 'sandbox.asaas.com'].includes(url.hostname) && url.pathname === '/checkoutSession/show' && !url.username && !url.password && !url.port && /^[A-Za-z0-9_-]+$/.test(url.searchParams.get('id') || '') ? url.href : '';
+            }
+            catch {
+                return '';
+            }
+        }
+        return { state, clear, load, submit, link };
+    }
+    PigeFamilyCard.use = use;
+})(PigeFamilyCard || (PigeFamilyCard = {}));
 /** Portal privado: shell da aplicação, transporte e autorizações escolares preservados. */
 var PigeFamily;
 (function (PigeFamily) {
@@ -490,7 +631,7 @@ var PigeFamily;
     function checkAuth(epoch) { if (epoch !== authEpoch)
         throw new SessionChanged(); }
     function invalidateAuth() { authEpoch++; refreshing = null; }
-    function clearPrivate() { generation++; feedGeneration++; clearSchoolwork(); s.students = []; s.charges = []; s.financeTotal = 0; s.financePage = 1; s.financeOverdue = 0; s.financeNote = ''; s.financeError = ''; s.financeLoaded = false; s.news = []; s.events = []; s.feedItems = []; s.feedTotal = 0; s.feedPage = 1; s.feedBusy = false; s.selectedPost = null; s.feedError = ''; s.overviewFeedError = ''; s.menuOpen = false; }
+    function clearPrivate() { generation++; autoPix.clear(); cards.clear(); feedGeneration++; clearSchoolwork(); s.students = []; s.charges = []; s.financeTotal = 0; s.financePage = 1; s.financeOverdue = 0; s.financeNote = ''; s.financeError = ''; s.financeLoaded = false; s.news = []; s.events = []; s.feedItems = []; s.feedTotal = 0; s.feedPage = 1; s.feedBusy = false; s.selectedPost = null; s.feedError = ''; s.overviewFeedError = ''; s.menuOpen = false; }
     async function raw(path, options = {}) { const headers = new Headers(options.headers); headers.set('X-CSRF-Protection', '1'); if (token)
         headers.set('Authorization', 'Bearer ' + token); if (s.schoolId)
         headers.set('X-School-Id', s.schoolId); if (typeof options.body === 'string')
@@ -605,6 +746,8 @@ var PigeFamily;
     const date = (value) => { if (!value)
         return 'Data não informada'; const d = new Date(value.length === 10 ? value + 'T12:00:00' : value); return Number.isNaN(d.getTime()) ? 'Data não informada' : new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: 'short', year: 'numeric', ...(value.length > 10 ? { hour: '2-digit', minute: '2-digit' } : {}) }).format(d); };
     const money = (value) => Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const autoPix = PigeAutoPix.use(request, () => s.studentId);
+    const cards = PigeFamilyCard.use(request, () => s.studentId);
     async function finance(page = 1) {
         s.charges = [];
         s.financeLoaded = false;
@@ -664,7 +807,7 @@ var PigeFamily;
     function updateLocation(push = false) { const params = new URLSearchParams({ view: s.section }); if (s.studentId)
         params.set('student', s.studentId); history[push ? 'pushState' : 'replaceState']({}, '', '/family?' + params); }
     async function changeStudent() { if (s.busy)
-        return; clearSchoolwork(); s.selectedPost = null; updateLocation(); await run(async () => { await Promise.all([finance(), loadSchoolwork()]); }); }
+        return; autoPix.clear(); cards.clear(); clearSchoolwork(); s.selectedPost = null; updateLocation(); await run(async () => { await Promise.all([finance(), loadSchoolwork()]); }); }
     async function chooseStudent(id) { if (s.busy)
         return; s.studentId = id; await changeStudent(); section('academic'); }
     async function changeSchool() { if (s.busy)
@@ -718,6 +861,8 @@ var PigeFamily;
         void loadSchoolwork(); if (['news', 'agenda'].includes(name))
         void loadFeed(); void Vue.nextTick(() => window.document.getElementById('family-title')?.focus()); }
     async function popstate() { s.section = routeSection(); s.selectedPost = null; closeMenu(false); const id = new URLSearchParams(location.search).get('student'); if (id && s.students.some(x => x.id === id) && id !== s.studentId) {
+        autoPix.clear();
+        cards.clear();
         clearSchoolwork();
         s.studentId = id;
         await finance();
@@ -735,6 +880,6 @@ var PigeFamily;
             Vue.onUnmounted(PigeSupport.dispose);
             Vue.onMounted(() => { window.addEventListener('popstate', popstate); window.addEventListener('keydown', menuKeys); window.addEventListener('resize', resized); PigeMFA.init(request, authenticated, logout); void start(); });
             Vue.onUnmounted(() => { window.removeEventListener('popstate', popstate); window.removeEventListener('keydown', menuKeys); window.removeEventListener('resize', resized); });
-            return { s, schoolwork, loadSchoolwork, studentView, portalName, pickEvidence, submitAbsence, label, student, title, initials, date, money, pendingDocuments, finance, login, logout, changeSchool, changeStudent, chooseStudent, document, request, download, section, run, load, loadFeed, openPost, closePost, openMenu, closeMenu, mfa: PigeMFA, identity: PigeInstitution.state };
+            return { s, autoPix, cards, schoolwork, loadSchoolwork, studentView, portalName, pickEvidence, submitAbsence, label, student, title, initials, date, money, pendingDocuments, finance, login, logout, changeSchool, changeStudent, chooseStudent, document, request, download, section, run, load, loadFeed, openPost, closePost, openMenu, closeMenu, mfa: PigeMFA, identity: PigeInstitution.state };
         } }).mount('#family');
 })(PigeFamily || (PigeFamily = {}));

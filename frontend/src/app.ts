@@ -197,7 +197,7 @@ namespace PigeUI {
     if(page==='dashboard')return can('dashboard.read');
     if(page==='diary')return can('diary.read');
     if(page==='online')return can('admissions.read');
-    if(page==='banking')return can('banking.read');
+    if(page==='banking')return can('banking.read')||can('asaas.reports.read')||can('asaas.monitor.read');
     if(page==='contracts'||page==='pending-signatures')return can('documents.read');
     if(page==='signature-review')return can('documents.validate');
     if(page==='certificate'||page==='settings')return can('schools.manage');
@@ -354,7 +354,7 @@ namespace PigeUI {
   function currentSupportArea():PigeSupport.Area{return state.user?.role==='teacher'?'teacher_portal':state.user?.role==='student'?'student_portal':state.user?.role==='guardian'?'guardian_portal':'internal';}
   function refreshSupport():void{if(state.user&&state.schoolId)void PigeSupport.load(state.schoolId,currentSupportArea(),state.user.id);else void PigeSupport.load(undefined,'login');}
   function supportAreaLabels():string{return supportAreas.filter(area=>Array.isArray(state.supportHub.enabled_areas)&&state.supportHub.enabled_areas.includes(area.value)).map(area=>area.label).join(', ')||'Nenhuma área selecionada';}
-  function landingPage():string{if(state.user?.role==='finance'&&pageAllowed('banking'))return 'banking';return ['dashboard','people','enrollments','diary','documents','reports','users','help'].find(pageAllowed)||'help';}
+  function landingPage():string{if(state.user?.role==='finance'&&pageAllowed('banking'))return 'banking';return ['dashboard','people','enrollments','diary','documents','reports','users','banking','help'].find(pageAllowed)||'help';}
   async function academicPrepared():Promise<void>{await safe(async()=>{await loadCatalogs();await loadPage();});}
   async function importedDataChanged():Promise<void>{await safe(async()=>{await loadCatalogs();state.success='Importação concluída. Cadastros atualizados para consulta.';});}
   async function refreshAccess():Promise<void>{const sid=state.schoolId;const user=await PigeAPI.request<PigeAPI.User>('/auth/me');if(sid!==state.schoolId)return;state.user=user;

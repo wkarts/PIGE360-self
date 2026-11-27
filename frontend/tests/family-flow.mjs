@@ -195,3 +195,33 @@ console.log('Family drawer: immediate visibility, deferred focus and rapid open/
  assert.equal(ctx.s.menuOpen,false);
  assert.equal(focused.at(-1),'teacher-title','Selecionar seção no menu docente leva o foco ao título');
 }
+{
+ const {sandbox}=fixture(), requested=[], downloaded=[];
+ const term=(id,index)=>({period_id:id,period_name:index+'º Bimestre',order_index:index,starts_on:'2026-03-01',
+  class_group_id:'turma',class_label:'Turma A · Unidade Centro',grade_display:'0',result_label:'Consolidado',
+  attendance:{total:4,absent:1,justified_absence:0,unrecorded:0,percentage:75}});
+ const enrollment=(id,periods)=>({enrollment_id:id,number:id,class_name:'Turma A',year_name:'2026',bulletin_model:'panel',
+  subjects:[{diary_id:'diario',component_name:'Planejamento estratégico',periods}],official_editions:[],display_sections:[]});
+ const pupil={student_id:'aluno',student_name:'Aluno de teste',student_number:'001',school_name:'Escola A',
+  enrollments:[enrollment('anterior',[term('p1',1)]),enrollment('atual',[term('p1',1),term('p2',2)])]};
+ const component=sandbox.PigeLearning.component;
+ const ctx=component.setup({schoolId:'escola',request:async path=>{requested.push(path);return {students:[pupil],note:'Resultados publicados'};},
+  download:async path=>{downloaded.push(path);}});
+ await ctx.load();
+ ctx.state.enrollmentId='atual';
+ ctx.state.groupId=ctx.periodGroups.value[1].id;
+ await ctx.load();
+ assert.equal(ctx.state.enrollmentId,'atual');
+ assert.equal(ctx.visibleGroups.value.length,1);
+ const view=sandbox.Vue.proxyRefs(ctx);
+ const html=component.render.call(view,view,[]);
+ const vnodes=nodes(html);
+ const cells=label=>vnodes.filter(v=>v.type==='td'&&v.props?.['data-label']===label).map(text);
+ assert.equal(cells('Nota / conceito')[0].trim(),'0');
+ assert.equal(cells('Frequência')[0].trim(),'75%');
+ assert.ok(vnodes.some(v=>v.type==='caption'&&text(v).includes('2º Bimestre')));
+ assert.ok(!vnodes.some(v=>v.type==='caption'&&text(v).includes('1º Bimestre')));
+ await ctx.download();
+ assert.equal(downloaded[0],'/profile/learning/aluno/report.pdf?enrollment_id=atual&school_id=escola');
+ assert.ok(requested.every(r=>r==='/profile/learning?school_id=escola'));
+}

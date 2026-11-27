@@ -312,6 +312,11 @@ def lifecycle(user_id: str, data: AccessAction, db: DB, user: Actor, scope: Scop
 
 
 PERMISSION_GROUPS = {
+    'asaas.reports.read': ('Asaas', 'Consultar extrato, saldo e relatórios da conta'),
+    'asaas.reports.export': ('Asaas', 'Exportar relatórios da conta'),
+    'asaas.monitor.read': ('Asaas', 'Consultar histórico e comparar recebimentos'),
+    'asaas.reconcile': ('Asaas', 'Conciliar cobranças e recebimentos'),
+    'asaas.refund': ('Asaas', 'Solicitar estorno bancário'),
     'read': ('Geral', 'Acessar o sistema'), 'dashboard.read': ('Geral', 'Visualizar painel'),
     'users.manage': ('Administração', 'Gerenciar usuários e acessos'), 'schools.manage': ('Administração', 'Gerenciar instituição'),
     'integrations.manage': ('Administração', 'Configurar integrações'), 'connect.manage': ('Administração', 'Gerenciar WhatsApp'),

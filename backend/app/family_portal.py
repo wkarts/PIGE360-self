@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile
 from fastapi.responses import Response
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from . import class_materials, models as m
 from .common import audit, number
@@ -62,10 +62,14 @@ def charges(student_id: str, db: DB, user: Actor, page: int = Query(1, ge=1), pa
         fail(403, 'Vínculo financeiro não autorizado.')
     charge = m.BankCharge
     ids = select(m.Enrollment.id).where(m.Enrollment.student_id == student.id, m.Enrollment.school_id == student.school_id)
-    scope = (charge.school_id == student.school_id, charge.enrollment_id.in_(ids))
+    scope = (charge.school_id == student.school_id, charge.enrollment_id.in_(ids),
+             or_(charge.payer_snapshot['private_payer'].as_boolean().is_not(True),
+                 charge.payer_snapshot['person_id'].as_string() == user.person_id))
     status = effective_status_expression()
     total, overdue_count = db.execute(select(func.count(charge.id), func.count(charge.id).filter(status == 'overdue')).where(*scope)).one()
-    rows = db.execute(select(charge.id, charge.description, charge.amount, charge.due_on, status.label('status'), charge.collection_mode)
+    from .asaas_card_models import CardCheckout
+    has_checkout=select(CardCheckout.id).where(CardCheckout.school_id==student.school_id,CardCheckout.charge_id==charge.id,CardCheckout.payer_id==user.person_id).exists()
+    rows = db.execute(select(charge.id, has_checkout.label('has_card_checkout'), charge.billing_type, charge.description, charge.amount, charge.due_on, status.label('status'), charge.collection_mode)
                       .where(*scope).order_by(charge.due_on.desc(), charge.id.desc())
                       .offset((page - 1) * page_size).limit(page_size))
     return {'items': [dict(row._mapping, amount=format(row.amount, '.2f')) for row in rows],

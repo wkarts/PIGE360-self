@@ -18,11 +18,30 @@ const permissions=['diary.read','diary.write','diary.attendance','diary.assessme
 const ctx=sandbox.PigeDiary.component.setup({schoolId:'school-one',permissions});
 const calls=[];
 let diary={id:'diary-one',academic_year_id:'year-one',class_group_id:'class-one',component_id:'component-one',teacher_assignment_id:'assignment-one',year_name:'2026',class_name:'Turma A',component_name:'Matemática',teacher_name:'Professor de Teste',status:'open',version:1,lessons:[],roster:[]};
-let gradePayload;
+let gradePayload,attendancePayload,lessonUpdate,planUpdate;
+const composition={version:2,fields:[{id:'field-lesson',scope:'lesson',label:'Laboratório'},{id:'field-plan',scope:'plan',label:'Sequência'}],standard_columns:{}};
+const lessonPlan={id:'plan-one',version:3,class_group_id:'class-one',component_id:'component-one',teacher_assignment_id:'assignment-one',academic_period_id:'period-one',status:'draft',objectives:'Analisar',bncc_references:['EF01'],extra_fields:[{id:'field-plan',label:'Sequência',value:'Inicial'}]};
+const students=[
+  {enrollment_id:'e1',name:'Ana',attendance:{version:4,status:'absent',note:'Ausência confirmada'}},
+  {enrollment_id:'e2',name:'Bruno',attendance:null},
+  {enrollment_id:'e3',name:'Caio',attendance:null}
+];
 const base='/schools/school-one';
 sandbox.PigeAPI.request=async(url,options={})=>{
   calls.push({url,method:options.method||'GET'});
   if([base+'/academic-years',base+'/class-groups',base+'/teacher-assignments'].includes(url))throw new Error('403: recurso administrativo');
+  if(url===base+'/diary-entry-fields')return structuredClone(composition);
+  if(url.endsWith('/attendance')){
+    if(options.method==='PUT'){
+      attendancePayload=JSON.parse(options.body);
+      for(const mark of attendancePayload.items)students.find(row=>row.enrollment_id===mark.enrollment_id).attendance={...mark,version:(mark.version||0)+1};
+      return {saved:attendancePayload.items.length};
+    }
+    return {lesson:structuredClone(diary.lessons[0]),roster:structuredClone(students)};
+  }
+  if(url.endsWith('/lessons/lesson-one')&&options.method==='PATCH'){lessonUpdate=JSON.parse(options.body);return {...lessonUpdate,id:'lesson-one'};}
+  if(url.endsWith('/curriculum-plans/plan-one')&&options.method==='PATCH'){planUpdate=JSON.parse(options.body);return {...planUpdate,id:'plan-one'};}
+  if(url.includes('/curriculum-plans?'))return [structuredClone(lessonPlan)];
   if(url===base+'/diaries')return[{...diary}];
   if(url===base+'/academic-periods')return[{id:'period-one',academic_year_id:'year-one',name:'3º período'}];
   if(url===base+'/curriculum-components')return[{id:'component-one',name:'Matemática'}];
@@ -36,7 +55,7 @@ sandbox.PigeAPI.request=async(url,options={})=>{
 };
 sandbox.PigeAPI.post=async(url,payload)=>{
   calls.push({url,method:'POST'});
-  if(url.endsWith('/lessons')){diary.lessons.push({id:'lesson-one',lesson_date:payload.lesson_date,lesson_count:1,content:payload.content});return diary.lessons[0];}
+  if(url.endsWith('/lessons')){diary.lessons.push({...JSON.parse(JSON.stringify(payload)),id:'lesson-one',version:1,extra_fields:[{id:'field-lesson',label:'Laboratório',value:'Anexo A'},{id:'retired-id',label:'Campo retirado',value:'Histórico'}]});return diary.lessons[0];}
   if(url.endsWith('/submit')){assert.equal(payload.version,1);diary={...diary,status:'submitted',version:2};return diary;}
   throw new Error('POST inesperado '+url);
 };
@@ -70,3 +89,22 @@ assert.equal(ctx.state.error,'');
 assert.equal(ctx.state.assessmentEditing,null,'A edição termina depois de publicar');
 assert.ok(calls.some(call=>call.method==='PATCH'&&call.url.endsWith('/assessments/assessment-one')));
 console.log('Diário: professor, refresh de aulas/transições, nota zero/parcial e publicação de avaliação OK.');
+
+await ctx.openAttendance(ctx.state.selected.lessons[0]);
+assert.equal(ctx.state.attendance[1].attendance.status,'','Sem chamada não significa presente');
+ctx.state.attendance[1].attendance.status='justified_absence';
+await ctx.saveAttendance();
+assert.deepEqual(attendancePayload.items,[{enrollment_id:'e2',status:'justified_absence',note:'',version:null,expected_empty:true}]);
+ctx.markPendingPresent();
+assert.equal(ctx.state.attendance[0].attendance.status,'absent');
+assert.equal(ctx.state.attendance[1].attendance.status,'justified_absence');
+assert.equal(ctx.state.attendance[2].attendance.status,'present');
+await ctx.saveAttendance();
+assert.equal(attendancePayload.items[0].enrollment_id,'e3');
+ctx.editLesson(ctx.state.selected.lessons[0]);ctx.state.lessonValues['field-lesson']='Anexo B';
+await ctx.createLesson();assert.equal(ctx.state.error,'');
+assert.equal(lessonUpdate.version,1);assert.deepEqual(lessonUpdate.field_values,{'field-lesson':'Anexo B'});
+ctx.editPlan(ctx.state.plans[0]);ctx.state.planForm.status='published';ctx.state.planValues['field-plan']='Revisada';
+await ctx.createPlan();assert.equal(ctx.state.error,'');assert.equal(planUpdate.version,3);
+assert.equal(planUpdate.status,'published');assert.deepEqual(planUpdate.field_values,{'field-plan':'Revisada'});
+console.log('Diário: chamada parcial, preservação de faltas, edição versionada de aulas/planejamento e campos históricos OK.');

@@ -31,7 +31,9 @@ ROLE_LABELS = {
 
 # Catálogo único de capacidades. Os endpoints continuam autorizando por capacidade,
 # nunca por texto apresentado no perfil.
-ALL_PERMISSIONS = {
+ASAAS_ACCOUNT_PERMISSIONS = {'asaas.reports.read', 'asaas.reports.export', 'asaas.monitor.read', 'asaas.reconcile', 'asaas.refund'}
+
+ALL_PERMISSIONS = ASAAS_ACCOUNT_PERMISSIONS | {
     'educacenso.manage', 'read', 'dashboard.read',
     'people.read', 'people.write', 'students.read', 'students.write',
     'guardians.read', 'guardians.write',
@@ -62,7 +64,7 @@ PERMISSIONS = {
         'communications.send', 'profile.read', 'staff.assignments.read', 'staff.assignments.write',
         'diary.read', 'diary.write', 'diary.attendance', 'diary.assessments', 'diary.review', 'diary.close', 'diary.reopen', 'diary.reports', 'diary.configure',
     },
-    'finance': {'profile.read', 'banking.read', 'banking.write', 'enrollments.read'},
+    'finance': ASAAS_ACCOUNT_PERMISSIONS | {'profile.read', 'banking.read', 'banking.write', 'enrollments.read'},
     'secretary': {
         'read', 'dashboard.read', 'people.read', 'people.write', 'students.read', 'students.write',
         'guardians.read', 'guardians.write', 'academic.read', 'academic.write',

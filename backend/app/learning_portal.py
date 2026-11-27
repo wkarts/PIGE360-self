@@ -104,7 +104,7 @@ def _period_data(snapshot, enrollment, period, closure, lessons_in_scope=None):
                   if counts['total'] and not counts['unrecorded'] and rule
                   and rule.get('justified_absence_counts_as_present') is not None else None)
     calculation = (result or {}).get('calculation') or {}
-    if calculation.get('attendance_percent') is not None:
+    if counts['total'] and not counts['unrecorded'] and calculation.get('attendance_percent') is not None:
         percentage = float(Decimal(str(calculation['attendance_percent'])).quantize(Decimal('.01'), rounding=ROUND_HALF_UP))
     recovery = (calculation.get('aggregation') or {}).get('recovery') or []
     opinions = [r['text'] for r in snapshot.get('opinions', []) if r.get('status') == 'final'
@@ -183,6 +183,7 @@ def learning_data(db, students):
             m.Enrollment.status != 'draft',
         ).order_by(m.Enrollment.enrolled_on.desc(), m.Enrollment.created_at.desc())))
         items = []
+        active_publications = {}
         for enrollment in enrollments:
             group = db.get(m.ClassGroup, enrollment.class_group_id)
             year = db.get(m.AcademicYear, enrollment.academic_year_id)
@@ -191,10 +192,10 @@ def learning_data(db, students):
                 m.AcademicPeriod.academic_year_id == enrollment.academic_year_id,
             ).order_by(m.AcademicPeriod.order_index, m.AcademicPeriod.starts_on)))
             class_ids = {enrollment.class_group_id}
-            moves = db.execute(select(m.EnrollmentEvent.created_at, m.EnrollmentEvent.before, m.EnrollmentEvent.after).where(
-                m.EnrollmentEvent.school_id == student.school_id,
-                m.EnrollmentEvent.enrollment_id == enrollment.id,
-                m.EnrollmentEvent.action == 'change_class').order_by(m.EnrollmentEvent.created_at.desc(), m.EnrollmentEvent.id.desc())).all()
+            events = list(db.scalars(select(m.EnrollmentEvent).where(
+                m.EnrollmentEvent.school_id == student.school_id, m.EnrollmentEvent.enrollment_id == enrollment.id)
+                .order_by(m.EnrollmentEvent.created_at.desc(), m.EnrollmentEvent.id.desc())))
+            moves = [(e.created_at, e.before, e.after) for e in events if e.action == 'change_class']
             for _, before, after in moves:
                 for state in (before, after):
                     if isinstance(state, dict) and state.get('class_group_id'):
@@ -202,12 +203,10 @@ def learning_data(db, students):
             def enrolled_for_lesson(lesson, diary):
                 if 'expected_enrollment_ids' in lesson:
                     return enrollment.id in lesson['expected_enrollment_ids']
-                origin = enrollment.class_group_id
-                for stamp, before, _ in moves:
-                    if stamp.date().isoformat() <= lesson['lesson_date']:
-                        break
-                    origin = (before or {}).get('class_group_id', origin)
-                return origin == diary.class_group_id
+                from datetime import date
+                from .diary import _enrollment_state_on
+                state = _enrollment_state_on(db, enrollment, date.fromisoformat(lesson['lesson_date']), events)
+                return bool(state and state[0] in ('active', 'suspended') and state[1] == diary.class_group_id)
 
             diaries = list(db.scalars(select(m.SchoolDiary).where(
                 m.SchoolDiary.school_id == student.school_id,
@@ -244,17 +243,17 @@ def learning_data(db, students):
             component_names = dict(db.execute(select(m.CurriculumComponent.id, m.CurriculumComponent.name).where(
                 m.CurriculumComponent.school_id == student.school_id, m.CurriculumComponent.id.in_([d.component_id for d in diaries]))).all())
             subjects = []
+            active_publications[enrollment.id] = set()
             for diary in diaries:
                 closures = by_diary[diary.id]
                 published = []
+                annual = next((r for r in closures if r.academic_period_id is None), None)
+                period_sources = {r.academic_period_id: r for r in reversed(closures) if r.academic_period_id}
                 for period in periods:
-                    closure = next((row for row in closures
-                                    if row.academic_period_id in (None, period.id)), None)
+                    closure = period_sources.get(period.id) or annual
                     if not closure:
                         continue
                     snapshot = closure.snapshot or {}
-                    if not any(row.get('enrollment_id') == enrollment.id and row.get('student_id') == student.id for key in ('roster', 'attendance', 'period_results') for row in snapshot.get(key, [])):
-                        continue
                     eligible = {r['id'] for r in snapshot.get('lessons', []) if r.get('academic_period_id') == period.id
                                 and str(r.get('lesson_date', '')) >= enrollment.enrolled_on.isoformat()
                                 and enrolled_for_lesson(r, diary)}
@@ -263,6 +262,10 @@ def learning_data(db, students):
                                    for r in snapshot.get(key, []))
                     if not eligible and not personal:
                         continue
+                    active_publications[enrollment.id].add(closure.id)
+                    if annual:
+                        # Uma via oficial anterior pode referenciar o fechamento anual ainda vigente.
+                        active_publications[enrollment.id].add(annual.id)
                     # Nenhum resultado de outro estudante, anotação interna ou rascunho é serializado.
                     item = _period_data(snapshot, enrollment, period, closure, eligible)
                     origin = snapshot.get('diary') or {}
@@ -291,7 +294,7 @@ def learning_data(db, students):
                           'status': enrollment.status, 'class_calendars': calendars, 'grade_tables': grade_tables(subjects, group.name, calendars=calendars),
                           'subjects': sorted(subjects, key=lambda item: item['component_name'])})
         from .report_bulletins import published_editions, bulletin_sections
-        editions = published_editions(db, student, items)
+        editions = published_editions(db, student, items, active_publications)
         for item in items:
             item['display_sections'] = bulletin_sections([item], item['bulletin_model'])
             item['official_editions'] = editions[item['enrollment_id']]

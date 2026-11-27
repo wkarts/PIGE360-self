@@ -39,7 +39,7 @@ def required_charges(db, admission):
 
 def received(charge):
     return bool(charge.status == 'received' or (
-        charge.collection_mode == 'manual' and charge.status == 'received_external'
+        charge.status == 'received_external'
         and charge.manual_paid_on and charge.manual_paid_amount == charge.amount
         and charge.manual_received_by))
 

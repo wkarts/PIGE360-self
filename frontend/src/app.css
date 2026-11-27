@@ -588,3 +588,25 @@ td .link-button { text-align: left; }
 .report-watermark-options input[type=checkbox]{width:1rem;min-height:auto}
 @page school-bulletin{size:A4 landscape;margin:13mm}
 @media print{.report-result,.bulletin-sheet{page:school-report;border:0;padding:0}.bulletin-sheet{page:school-bulletin}.report-records thead{display:table-header-group}.report-records tr{break-inside:avoid}.bulletin-period h3{break-after:avoid}}
+
+/* Operações Asaas no financeiro e no detalhe da cobrança. */
+.asaas-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.asaas-tabs button[aria-pressed=true]{box-shadow:inset 0 -3px var(--primary-readable,#005b63)}
+.asaas-panel{min-width:0}.asaas-panel .x-card{min-width:0}
+.asaas-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:12px;align-items:end;margin:12px 0}
+.asaas-fields label{min-width:0;display:grid;gap:4px}.asaas-fields :is(input:not([type=checkbox]),select,textarea){width:100%;min-width:0}
+.asaas-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:12px;padding:12px 0}
+.asaas-summary dt,.asaas-entry small{color:var(--muted)}.asaas-summary dd{font-weight:650;margin:4px 0;overflow-wrap:anywhere}
+.asaas-table{max-width:100%;overflow:auto}.asaas-table th{white-space:nowrap}.asaas-table td{overflow-wrap:anywhere;max-width:32rem}
+.asaas-entry{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--border);overflow-wrap:anywhere}
+.asaas-entry>div:first-child{flex:1 1 210px}.asaas-entry>details,.asaas-entry>.asaas-refund{flex:1 1 100%}.asaas-panel details>summary{cursor:pointer}
+@media(max-width:600px){.asaas-tabs>.btn,.asaas-fields>.btn,.asaas-entry .btn{min-height:44px}.asaas-entry .actions,.asaas-panel .pagination{flex-wrap:wrap}}
+
+.learning-workspace .bulletin-filter{display:grid;gap:.3rem;width:min(100%,32rem);margin-block:1.25rem .5rem;font-weight:600}
+.learning-workspace .bulletin-period td{white-space:pre-line}
+@media screen and (max-width:650px){
+  .learning-workspace .report-masthead{flex-wrap:wrap;gap:.65rem;align-items:center}
+  .learning-workspace .report-masthead>div{flex:1 1 10rem;min-width:0}
+  .learning-workspace .report-masthead .btn,.learning-workspace .bulletin-filter select{width:100%;min-width:0}
+  .learning-workspace .bulletin-period{min-width:0}
+}

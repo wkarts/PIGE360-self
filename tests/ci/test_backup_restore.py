@@ -148,7 +148,8 @@ class BackupRestoreShellTests(unittest.TestCase):
         self.assertEqual(result.returncode, 3, result.stderr)
         sql = (self.storage / 'reconcile.sql').read_text()
         self.assertEqual(sql, (ROOT / 'backend/app/restore_reconciliation.sql').read_text())
-        for table in ('crm_bridge_requests', 'crm_bridge_external_requests', 'backup_runs', 'ocr_jobs',
+        for table in ('asaas_native_operations', 'asaas_pix_cycles', 'asaas_pix_authorizations',
+                      'asaas_card_checkouts', 'asaas_card_mandates', 'crm_bridge_requests', 'crm_bridge_external_requests', 'backup_runs', 'ocr_jobs',
                       'auth_sessions', 'portal_sessions', 'user_invitations', 'connect_message_jobs',
                       'integration_jobs', 'bank_charges'):
             with self.subTest(table=table):

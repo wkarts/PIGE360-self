@@ -565,15 +565,461 @@ var PigeContractFields;
             return { props, states, change, moneyBlur, nativeType, mode, display };
         } };
 })(PigeContractFields || (PigeContractFields = {}));
+var PigeAsaas;
+(function (PigeAsaas) {
+    const frequencies = { WEEKLY: 'Semanal', BIWEEKLY: 'Quinzenal', MONTHLY: 'Mensal', BIMONTHLY: 'Bimestral', QUARTERLY: 'Trimestral', SEMIANNUALLY: 'Semestral', YEARLY: 'Anual', ANNUALLY: 'Anual' };
+    const cardModes = { detached: 'À vista', installment: 'Parcelado', recurrent: 'Recorrente' };
+    const statuses = {
+        creating: 'Em criação', processing: 'Em processamento', completed: 'Concluída', failed: 'Falhou', uncertain: 'Confirmação pendente',
+        subscription_cancelled: 'Assinatura cancelada', cancellation_requested: 'Cancelamento solicitado', invoice: 'Débito autorizado',
+        pix_auto_authorize: 'Autorização de Pix Automático', pix_auto_cancel: 'Cancelamento do Pix Automático', pix_auto_cycle: 'Ciclo de Pix Automático',
+        card_checkout: 'Emissão de checkout', card_cancel: 'Cancelamento de cartão', card_invoice: 'Débito em cartão autorizado', refund: 'Estorno',
+        adjust: 'Ajuste de cobrança', reactivate: 'Reativação de cobrança', cash_receipt: 'Recebimento externo', queued: 'Na fila', retry: 'Nova tentativa agendada',
+        open: 'Aberto', paid: 'Pago', expired: 'Expirado', created: 'Criado', sent: 'Enviado', authorized: 'Autorizado', awaiting_authorization: 'Aguardando autorização', scheduled: 'Agendado', done: 'Concluído', denied: 'Negado', blocked: 'Bloqueado', error: 'Erro', success: 'Concluído', succeeded: 'Concluído', bank_slip: 'Boleto', boleto: 'Boleto', credit_card: 'Cartão de crédito', pix: 'Pix', payment_received: 'Pagamento recebido', payment_confirmed: 'Pagamento confirmado', payment_overdue: 'Pagamento vencido', payment_deleted: 'Pagamento excluído', payment_created: 'Pagamento criado', refund_requested: 'Estorno solicitado'
+    };
+    function label(value) {
+        if (value == null || value === '')
+            return '—';
+        const key = String(value);
+        return frequencies[key] || cardModes[key] || statuses[key.toLowerCase()] || PigeOnline.statuses[key.toLowerCase()] || key;
+    }
+    function display(value, type = 'text') {
+        if (value == null || value === '')
+            return '—';
+        if (type === 'money' && Number.isFinite(Number(value)))
+            return PigeOnline.money(String(value));
+        if (typeof value === 'boolean')
+            return value ? 'Sim' : 'Não';
+        if (type === 'status')
+            return label(value);
+        if (type === 'date' && /^\d{4}-\d{2}-\d{2}/.test(String(value)))
+            return PigeOnline.date(String(value).slice(0, 10));
+        if (type === 'datetime' && /^\d{4}-\d{2}-\d{2}/.test(String(value)))
+            return PigeOnline.dateTime(String(value));
+        return typeof value === 'object' ? '—' : String(value);
+    }
+    function checkoutLink(raw) {
+        try {
+            const url = new URL(raw || '');
+            const id = url.searchParams.get('id') || '';
+            if (url.protocol === 'https:' && !url.username && !url.password && !url.port && !url.hash &&
+                ['asaas.com', 'www.asaas.com', 'sandbox.asaas.com'].includes(url.hostname) && url.pathname === '/checkoutSession/show' &&
+                /^[A-Za-z0-9_-]{1,160}$/.test(id) && url.search === '?id=' + id)
+                return url.href;
+        }
+        catch { /* Link ausente ou inválido. */ }
+        return '';
+    }
+    const enc = encodeURIComponent;
+    PigeAsaas.component = { props: ['schoolId', 'mode', 'permissions', 'charge'], emits: ['changed'], render: PigeRenders.asaas,
+        setup(props, ctx) {
+            const root = '/schools/' + enc(props.schoolId), base = root + '/banking/asaas', cardBase = base + '/cards/checkouts';
+            const can = (permission) => props.permissions.includes(permission);
+            const write = () => can('banking.write');
+            const manage = () => props.permissions.includes('integrations.manage');
+            const s = Vue.reactive({
+                busy: false, error: '', warning: '', notice: '', loaded: false, reportId: '', catalog: [], canExport: false, filters: {}, perPage: 25, result: null, extraColumns: false,
+                section: 'charges', q: '', status: '', start: '', end: '', dateBasis: 'paymentDate', page: 1, hasMore: false, total: null, monitorRows: [], marked: [], comparison: null, comparedCharge: '', op: null, operations: [], operationOffset: 0, operationTotal: 0,
+                diag: null,
+                cardRefund: null, cardPage: 1, cardTotal: 0, cards: [], cardMode: 'detached', maxInstallments: 2, cycle: 'MONTHLY', endsOn: '',
+                mandates: [], pixPage: 1, pixMore: false, refundAmount: '', refundReason: '',
+                settings: null, holidays: '', chargeTab: 'cards', policy: null,
+                adjustAmount: props.charge?.amount || '', adjustDate: props.charge?.due_on || '', adjustDescription: props.charge?.description || '', adjustReason: '', cashAmount: props.charge?.amount || '', cashDate: '', cashReference: '', cashReason: '', reactivateReason: '',
+                brand: '', quoteRecurring: false, quoteCount: 1, quote: null,
+            });
+            let live = true, appliedFilters = '';
+            const intentKeys = new Map();
+            Vue.onUnmounted(() => { live = false; });
+            const report = () => s.catalog.find(item => item.id === s.reportId);
+            function resetReport() {
+                const def = report();
+                s.filters = { ...(def?.defaults || {}) };
+                s.result = null;
+                s.extraColumns = false;
+                appliedFilters = '';
+                const dateKey = Object.keys(def?.dates || {})[0];
+                if (dateKey && !s.filters.date_field)
+                    s.filters.date_field = dateKey;
+            }
+            const groups = () => [...new Set(s.catalog.map(item => item.group))];
+            function reportQuery() {
+                const qs = new URLSearchParams();
+                for (const [key, val] of Object.entries(s.filters))
+                    if (val !== '')
+                        qs.set(key, String(val));
+                qs.set('per_page', String(s.perPage));
+                return qs.toString();
+            }
+            async function run(action) {
+                if (!live || s.busy)
+                    return;
+                s.busy = true;
+                s.error = '';
+                s.warning = '';
+                s.notice = '';
+                try {
+                    await action();
+                }
+                catch (error) {
+                    if (live && error?.name !== 'AbortError')
+                        s.error = error instanceof Error ? error.message : 'Não foi possível concluir a operação.';
+                }
+                finally {
+                    if (live)
+                        s.busy = false;
+                }
+            }
+            function consult(offset = 0, newFilters = true) {
+                return run(async () => {
+                    const def = report();
+                    if (!def || !can('asaas.reports.read'))
+                        return;
+                    if (newFilters) {
+                        appliedFilters = reportQuery();
+                        s.result = null;
+                    }
+                    const result = await PigeAPI.request(base + '/reports/' + enc(def.id) + '?' + appliedFilters + '&offset=' + offset);
+                    if (live)
+                        s.result = result;
+                });
+            }
+            function exportReport(ext) {
+                return run(async () => {
+                    if (!s.result || !s.canExport || !can('asaas.reports.read') || !can('asaas.reports.export'))
+                        return;
+                    const offset = ext === 'pdf' ? s.result.offset : 0;
+                    await PigeAPI.download(base + '/reports/' + enc(s.result.id) + '.' + ext + '?' + appliedFilters + '&offset=' + offset, 'asaas-' + s.result.id + '.' + ext);
+                });
+            }
+            let monitorQuery = '';
+            async function loadMonitor(page = 1, newFilters = false) {
+                if (!can('asaas.monitor.read'))
+                    return;
+                if (newFilters) {
+                    const query = new URLSearchParams({ section: s.section, q: s.q, status: s.status });
+                    if (s.start)
+                        query.set('start', s.start);
+                    if (s.end)
+                        query.set('end', s.end);
+                    if (s.section === 'remote')
+                        query.set('date_basis', s.dateBasis);
+                    monitorQuery = query.toString();
+                    s.monitorRows = [];
+                    s.marked = [];
+                    s.comparison = null;
+                    s.op = null;
+                }
+                const result = await PigeAPI.request(base + '/monitor?' + monitorQuery + '&page=' + page + '&page_size=30');
+                if (!live)
+                    return;
+                s.monitorRows = result.items;
+                s.page = result.page;
+                s.hasMore = result.has_more;
+                s.total = result.total;
+                s.marked = [];
+            }
+            async function loadOperations(offset = 0) {
+                if (!can('asaas.monitor.read') || !props.charge)
+                    return;
+                const query = new URLSearchParams({ charge_id: props.charge.id, offset: String(offset), limit: '20' });
+                const data = await PigeAPI.request(base + '/operations?' + query);
+                if (live) {
+                    s.operations = data.items;
+                    s.operationOffset = data.offset;
+                    s.operationTotal = data.total;
+                    s.op = null;
+                }
+            }
+            function inspectOp(id) {
+                return run(async () => {
+                    if (can('asaas.monitor.read'))
+                        s.op = await PigeAPI.request(base + '/operations/' + enc(id));
+                });
+            }
+            function verifyOp() {
+                return run(async () => {
+                    if (!s.op || s.op.status !== 'uncertain' || !can('asaas.monitor.read') || !can('asaas.reconcile'))
+                        return;
+                    const op = await PigeAPI.post(base + '/operations/' + enc(s.op.id) + '/reconcile', {});
+                    if (props.mode === 'charge')
+                        await loadOperations(s.operationOffset);
+                    else
+                        await loadMonitor(s.page);
+                    s.op = op;
+                    feedback(op.status, 'Conferência no Asaas');
+                });
+            }
+            function feedback(status, text) {
+                const code = (status || '').toLowerCase();
+                if (['uncertain', 'creating', 'processing', 'cancellation_requested'].includes(code)) {
+                    s.warning = text + ' · ' + label(code) + '. Consulte a situação antes de iniciar outra operação.';
+                }
+                else if (code === 'failed')
+                    s.error = text + ' · ' + label(code) + '. Consulte os detalhes da operação.';
+                else
+                    s.notice = text + (code ? ' · ' + label(code) : '') + '.';
+            }
+            function compare(id) { return run(async () => { if (!can('asaas.monitor.read'))
+                return; s.comparison = null; s.comparedCharge = id; s.comparison = await PigeAPI.request(base + '/monitor/charges/' + enc(id) + '/compare'); }); }
+            function reconcile() {
+                return run(async () => {
+                    if (!can('asaas.monitor.read') || !can('asaas.reconcile') || !s.marked.length)
+                        return;
+                    const out = await PigeAPI.post(base + '/monitor/reconcile', { charge_ids: [...s.marked] });
+                    await loadMonitor(s.page);
+                    s.notice = out.queued + ' cobrança(s) enviada(s) para conciliação.';
+                });
+            }
+            function diagnostics() { return run(async () => { if (can('asaas.monitor.read'))
+                s.diag = await PigeAPI.request(base + '/monitor/diagnostics'); }); }
+            function intent(key) {
+                if (!intentKeys.has(key))
+                    intentKeys.set(key, PigeOnline.newId());
+                return intentKeys.get(key);
+            }
+            function refund() {
+                return run(async () => {
+                    if (!can('asaas.monitor.read') || !can('asaas.refund') || !refundable() || !props.charge)
+                        return;
+                    const charge = props.charge, amount = s.refundAmount, description = s.refundReason.trim();
+                    if (!window.confirm('Solicitar estorno de ' + display(amount, 'money') + ' para esta cobrança?'))
+                        return;
+                    const key = 'refund:' + charge.id + ':' + amount + ':' + description;
+                    const result = await PigeAPI.post(base + '/monitor/charges/' + enc(charge.id) + '/refund', { client_key: intent(key), amount, description });
+                    feedback(result.status, 'Solicitação de estorno');
+                    if (live)
+                        ctx.emit('changed');
+                });
+            }
+            async function loadCards(page = 1) {
+                const query = new URLSearchParams({ page: String(page), page_size: '25' });
+                if (props.charge)
+                    query.set('charge_id', props.charge.id);
+                const data = await PigeAPI.request(cardBase + '?' + query);
+                if (live) {
+                    s.cards = data.items;
+                    s.cardPage = data.page;
+                    s.cardTotal = data.total;
+                }
+            }
+            function createCard() {
+                return run(async () => {
+                    if (!write() || !props.charge || props.charge.collection_mode !== 'manual' || !['pending', 'overdue'].includes(props.charge.status))
+                        return;
+                    const body = { charge_id: props.charge.id, mode: s.cardMode };
+                    if (s.cardMode === 'installment')
+                        body.max_installments = s.maxInstallments;
+                    if (s.cardMode === 'recurrent') {
+                        body.cycle = s.cycle;
+                        body.ends_on = s.endsOn;
+                    }
+                    body.client_key = intent(JSON.stringify(body));
+                    const result = await PigeAPI.post(cardBase, body);
+                    await loadCards();
+                    feedback(result.status, 'Checkout');
+                    if (live)
+                        ctx.emit('changed');
+                });
+            }
+            function updateCard(item, action) {
+                return run(async () => {
+                    if (action === 'sync' && !can('asaas.reconcile'))
+                        return;
+                    if (action === 'cancel' && (!write() || !item.can_cancel || !window.confirm('Cancelar este checkout ou a recorrência vinculada?')))
+                        return;
+                    const body = action === 'cancel' ? { client_key: intent('card-cancel:' + item.id) } : {};
+                    const out = await PigeAPI.post(cardBase + '/' + enc(item.id) + '/' + action, body);
+                    await loadCards(s.cardPage);
+                    feedback(out.status, 'Checkout');
+                    if (live)
+                        ctx.emit('changed');
+                });
+            }
+            function cardRefundLimit(item, payment) {
+                if (!can('asaas.refund') || !can('asaas.monitor.read') || !['RECEIVED', 'CONFIRMED', 'PARTIALLY_REFUNDED'].includes(payment.status))
+                    return 0;
+                if (item.mode !== 'installment')
+                    return Math.round(Number(payment.value) * 100);
+                const payments = item.payments || [], total = payments.reduce((sum, p) => sum + Math.round(Number(p.value) * 100), 0);
+                if (payments[0]?.id !== payment.id || !payments.every(p => ['RECEIVED', 'CONFIRMED'].includes(p.status)) || total !== item.quote?.charged_cents)
+                    return 0;
+                return total;
+            }
+            function openCardRefund(item, payment) {
+                const cents = cardRefundLimit(item, payment);
+                if (cents <= 0)
+                    return;
+                const amount = (cents / 100).toFixed(2);
+                s.cardRefund = { checkoutId: item.id, paymentId: payment.id, amount, limit: amount, reason: '', full: item.mode === 'installment' };
+            }
+            function refundCard() {
+                return run(async () => {
+                    const form = s.cardRefund;
+                    if (!form || !can('asaas.refund') || !can('asaas.monitor.read'))
+                        return;
+                    if (!window.confirm('Solicitar estorno de ' + display(form.amount, 'money') + ' na transação de cartão selecionada?'))
+                        return;
+                    const payload = { payment_id: form.paymentId, amount: form.amount, description: form.reason.trim() };
+                    const result = await PigeAPI.post(cardBase + '/' + enc(form.checkoutId) + '/refund', { ...payload, client_key: intent('card-refund:' + form.checkoutId + ':' + JSON.stringify(payload)) });
+                    s.cardRefund = null;
+                    await loadCards(s.cardPage);
+                    feedback(result.status, 'Estorno no cartão');
+                    if (live)
+                        ctx.emit('changed');
+                });
+            }
+            async function loadMandates(page = 1) {
+                const query = '?page=' + page + (props.charge ? '&charge_id=' + enc(props.charge.id) : '');
+                const data = await PigeAPI.request(base + '/pix-automatic/authorizations' + query);
+                if (live) {
+                    s.mandates = data.items;
+                    s.pixPage = page;
+                    s.pixMore = data.has_more;
+                }
+            }
+            function pixAction(item, action) {
+                return run(async () => {
+                    if (!write())
+                        return;
+                    if (action === 'cancel' && !window.confirm('Solicitar o cancelamento desta autorização de Pix Automático?'))
+                        return;
+                    const body = action === 'refresh' ? {} : { version: item.version };
+                    if (action === 'cycles') {
+                        if (!props.charge || !window.confirm('Agendar ' + display(props.charge.amount, 'money') + ' para ' + display(props.charge.due_on, 'date') + ' neste mandato?'))
+                            return;
+                        body.charge_id = props.charge.id;
+                    }
+                    const out = await PigeAPI.post(base + '/pix-automatic/authorizations/' + enc(item.id) + '/' + action, body);
+                    await loadMandates(s.pixPage);
+                    feedback(out.status, 'Pix Automático');
+                    if (live)
+                        ctx.emit('changed');
+                });
+            }
+            async function loadSettings() { const data = await PigeAPI.request(base + '/pix-automatic/settings'); if (live) {
+                s.settings = data;
+                s.holidays = data.additional_holidays.join('\n');
+            } }
+            function saveSettings() {
+                return run(async () => {
+                    if (!manage() || !s.settings)
+                        return;
+                    const holidays = s.holidays.split(/[\s,;]+/).filter(Boolean);
+                    if (holidays.some(date => !/^\d{4}-\d{2}-\d{2}$/.test(date)))
+                        throw new Error('Informe cada feriado como AAAA-MM-DD.');
+                    const saved = await PigeAPI.request(base + '/pix-automatic/settings', { method: 'PUT', body: JSON.stringify({ enabled: s.settings.enabled, version: s.settings.version, additional_holidays: [...new Set(holidays)] }) });
+                    s.settings = saved;
+                    s.holidays = saved.additional_holidays.join('\n');
+                    if (s.policy)
+                        s.policy.version = saved.version;
+                    s.notice = 'Configuração do Pix Automático salva.';
+                });
+            }
+            const policyGroups = [
+                { title: 'Meios de pagamento', fields: [['pix_enabled', 'Pix', 'checkbox'], ['boleto_enabled', 'Boleto', 'checkbox'], ['card_enabled', 'Cartão', 'checkbox'], ['card_recurring_enabled', 'Autorizações de cartão recorrente', 'checkbox'], ['interest_percent', 'Juros (%)', 'percent'], ['fine_percent', 'Multa (%)', 'percent'], ['discount_type', 'Tipo de desconto', 'discount'], ['discount_value', 'Desconto', 'decimal'], ['discount_days', 'Dias de antecedência do desconto', 'integer']] },
+                { title: 'Cartão e parcelamento', fields: [['max_installments', 'Máximo de parcelas', 'integer'], ['card_fee_mode', 'Custo das taxas', 'payer'], ['card_free_installments', 'Parcelas sem repasse', 'integer'], ['card_min_installment', 'Parcela mínima (R$)', 'decimal'], ['card_fee_fixed', 'Tarifa fixa (R$)', 'decimal'], ['card_fee_fixed_mode', 'Aplicar tarifa fixa por', 'fixed'], ['card_fee_percent_1', 'Taxa à vista (%)', 'percent'], ['card_fee_percent_2_6', 'Taxa em 2–6 parcelas (%)', 'percent'], ['card_fee_percent_7_12', 'Taxa em 7–12 parcelas (%)', 'percent'], ['card_fee_percent_13_21', 'Taxa em 13–21 parcelas (%)', 'percent']] },
+                { title: 'Ciclo da cobrança', fields: [['sync_lifecycle', 'Sincronizar ciclo da cobrança', 'checkbox'], ['sync_manual_settlement', 'Sincronizar recebimento externo', 'checkbox'], ['cash_settlement_method', 'Quitação integral em dinheiro', 'cash']] },
+                { title: 'Antecipação', fields: [['card_anticipation_mode', 'Modalidade', 'anticipation'], ['card_anticipation_manual_rate_1', 'Manual à vista (%)', 'percent'], ['card_anticipation_manual_rate_installments', 'Manual parcelada (%)', 'percent'], ['card_anticipation_automatic_rate_1', 'Automática à vista (%)', 'percent'], ['card_anticipation_automatic_rate_installments', 'Automática parcelada (%)', 'percent'], ['card_anticipation_first_days', 'Prazo inicial (dias)', 'integer']] },
+            ];
+            const choices = { cash: { receive_in_cash: 'Confirmar recebimento em dinheiro no Asaas', cancel: 'Cancelar via em aberto no Asaas' }, discount: { FIXED: 'Valor fixo (R$)', PERCENTAGE: 'Percentual (%)' }, payer: { absorb: 'Absorvidas pela instituição', customer: 'Repassadas ao pagador' }, fixed: { charge: 'Cobrança', installment: 'Parcela' }, anticipation: { none: 'Sem antecipação', manual: 'Manual', automatic: 'Automática' } };
+            async function loadPolicy() { s.policy = await PigeAPI.request(base + '/settings'); }
+            function savePolicy() {
+                return run(async () => {
+                    if (!manage() || !s.policy?.version)
+                        return;
+                    const saved = await PigeAPI.request(base + '/settings', { method: 'PUT', body: JSON.stringify({ version: s.policy.version, settings: s.policy.settings }) });
+                    s.policy = saved;
+                    if (s.settings && saved.version)
+                        s.settings.version = saved.version;
+                    s.notice = 'Política bancária salva.';
+                });
+            }
+            function adjust() {
+                return run(async () => {
+                    if (!props.charge || !write())
+                        return;
+                    const body = { version: props.charge.version, amount: s.adjustAmount, due_on: s.adjustDate, description: s.adjustDescription, reason: s.adjustReason.trim() };
+                    if (!window.confirm('Enviar os novos dados desta cobrança ao Asaas?'))
+                        return;
+                    const result = await PigeAPI.post(base + '/charges/' + enc(props.charge.id) + '/adjust', { ...body, client_key: intent('adjust:' + JSON.stringify(body)) });
+                    feedback(result.status, 'Ajuste da cobrança');
+                    if (live)
+                        ctx.emit('changed');
+                });
+            }
+            function settlement(action) {
+                return run(async () => {
+                    if (!write() || !props.charge)
+                        return;
+                    const cash = action === 'cash-receipt';
+                    const body = { version: props.charge.version, reason: cash ? s.cashReason : s.reactivateReason };
+                    if (cash) {
+                        body.amount = s.cashAmount;
+                        body.paid_on = s.cashDate;
+                        body.reference = s.cashReference;
+                    }
+                    const confirmation = cash ? 'Registrar recebimento externo de ' + display(s.cashAmount, 'money') + ' nesta cobrança?' : 'Solicitar a reativação desta cobrança no Asaas?';
+                    if (!window.confirm(confirmation))
+                        return;
+                    body.client_key = intent(action + ':' + JSON.stringify(body));
+                    const result = await PigeAPI.post(base + '/charges/' + enc(props.charge.id) + '/' + action, body);
+                    feedback(result.status, cash ? 'Recebimento externo' : 'Reativação');
+                    if (live)
+                        ctx.emit('changed');
+                });
+            }
+            function simulate() {
+                return run(async () => {
+                    if (!props.charge)
+                        return;
+                    s.quote = null;
+                    s.quote = await PigeAPI.post(base + '/quote', { amount: props.charge.amount, installments: s.quoteCount, recurring: s.quoteRecurring, ...(s.brand ? { brand: s.brand } : {}) });
+                });
+            }
+            async function initialize() {
+                s.loaded = false;
+                if (props.mode === 'reports' && can('asaas.reports.read')) {
+                    const data = await PigeAPI.request(base + '/reports/catalog');
+                    if (!live)
+                        return;
+                    s.catalog = data.items;
+                    s.canExport = data.can_export;
+                    s.reportId = s.catalog.find(x => x.id === 'statement')?.id || s.catalog[0]?.id || '';
+                    resetReport();
+                }
+                else if (props.mode === 'monitor')
+                    await loadMonitor(1, true);
+                else if (props.mode === 'settings' && manage())
+                    await Promise.all([loadSettings(), loadPolicy()]);
+                else if (props.mode === 'charge' && s.chargeTab === 'history')
+                    await loadOperations();
+                else if (props.mode === 'pix' || (props.mode === 'charge' && s.chargeTab === 'pix'))
+                    await loadMandates();
+                else if (props.mode === 'cards' || (props.mode === 'charge' && s.chargeTab === 'cards'))
+                    await loadCards();
+                if (live)
+                    s.loaded = true;
+            }
+            function chargeTab(tab) { return run(async () => { s.chargeTab = tab; s.comparison = null; s.op = null; await initialize(); }); }
+            const refundable = () => Boolean(props.charge?.remote_payment_id && props.charge.collection_mode === 'provider' && ['PIX', 'CREDIT_CARD'].includes(props.charge.billing_type) && ['received', 'confirmed', 'partially_refunded'].includes(props.charge.status));
+            if (props.mode === 'charge') {
+                s.refundAmount = props.charge?.amount || '';
+                s.chargeTab = props.charge?.collection_mode === 'manual' ? 'cards' : 'review';
+            }
+            Vue.onMounted(() => { void run(initialize); });
+            return { props, s, can, loadOperations, verifyOp, cardRefundLimit, openCardRefund, refundCard, policyGroups, choices, savePolicy, adjust, settlement, simulate, write, manage, report, groups, initialize, resetReport, consult, exportReport, display, label, checkoutLink, run, loadMonitor, inspectOp, compare, reconcile, diagnostics, cardModes, frequencies, loadCards, createCard, updateCard, loadMandates, pixAction, saveSettings, chargeTab, refundable };
+        }
+    };
+})(PigeAsaas || (PigeAsaas = {}));
 var PigeExpansion;
 (function (PigeExpansion) {
     PigeExpansion.hasUnsavedChanges = () => false;
     const defaultGuardianInstructions = "Leia atentamente antes de iniciar a inscrição.\n\n1. Preencha os dados do aluno e do responsável exatamente como constam nos documentos oficiais.\n2. Informe e-mail e telefone atualizados, pois a instituição poderá utilizá-los para comunicações sobre a inscrição e a matrícula.\n3. Envie somente os documentos solicitados. Ao fotografar, enquadre o documento inteiro, com boa iluminação, sem reflexos e com os dados legíveis.\n4. Quando o sistema sugerir dados a partir da leitura de um documento, confira as informações antes de aplicá-las ao cadastro.\n5. Revise todos os dados antes de enviar a inscrição. Informações incompletas ou divergentes poderão exigir correção ou nova documentação.\n6. A inscrição online não garante vaga nem matrícula. A efetivação depende da análise da instituição, da disponibilidade de vaga e do cumprimento das etapas definidas para este processo.\n7. Acompanhe o andamento pelo Portal dos responsáveis e observe as mensagens, solicitações de ajuste, prazos e documentos pendentes.\n8. Em caso de dúvida ou dificuldade, entre em contato diretamente com a instituição pelos canais oficiais.";
     const defaultPrivacyNotice = "A instituição é responsável pelo tratamento dos dados pessoais informados neste processo de inscrição e matrícula.\n\nOs dados do aluno e de seus responsáveis serão utilizados para receber e analisar a inscrição, conferir documentos, manter contato com a família, organizar o atendimento escolar, preparar e efetivar a matrícula quando aprovada, cumprir obrigações legais e regulatórias e proteger a segurança do processo.\n\nPoderão ser tratados dados de identificação, contato, endereço, informações acadêmicas e documentos necessários à inscrição. Dados pessoais sensíveis somente deverão ser solicitados e utilizados quando forem necessários ao atendimento educacional, à segurança, à acessibilidade, ao cumprimento de obrigação legal ou à proteção dos direitos do aluno, sempre considerando o seu melhor interesse.\n\nA instituição poderá utilizar prestadores indispensáveis à operação do serviço, como hospedagem, armazenamento, comunicação, meios de pagamento e suporte técnico, observando medidas de segurança e confidencialidade. Dados também poderão ser fornecidos a autoridades públicas quando houver obrigação legal ou determinação válida. Os dados não serão comercializados.\n\nAs informações serão mantidas pelo período necessário à análise da inscrição, à execução da relação escolar, ao cumprimento de obrigações legais e à preservação de direitos. Registros que não precisem mais ser mantidos deverão seguir a política de retenção da instituição.\n\nO responsável poderá solicitar à instituição informações sobre o tratamento, correção de dados inexatos e o exercício dos demais direitos aplicáveis previstos na legislação de proteção de dados, pelos canais oficiais de atendimento da escola.\n\nA instituição adota medidas técnicas e administrativas para proteger os dados contra acessos não autorizados, perda, alteração ou divulgação indevida. O envio de dados pela internet, entretanto, exige também que o responsável proteja suas credenciais de acesso e utilize dispositivos confiáveis.\n\nAutorizações opcionais, como o recebimento de comunicações por WhatsApp, devem ser apresentadas separadamente e podem ser alteradas conforme as opções disponibilizadas pela instituição.\n\nAo prosseguir, o responsável declara que leu este aviso e que as informações fornecidas são verdadeiras, sem que essa ciência substitua bases legais específicas exigidas para cada atividade de tratamento.";
-    const emptyCampaign = () => ({ academic_year_id: '', id: '', version: 1, slug: '', title: '', instructions: defaultGuardianInstructions, privacy_notice: defaultPrivacyNotice, terms_version: '1', class_group_ids: [], opens_on: new Date().toISOString().slice(0, 10), closes_on: '', active: false, show_student_portal_button: true, require_verified_contact: true, require_documents: false, require_payment_before_enrollment: false, payment_reservation_hours: null, contract_template_id: '' });
+    const emptyCampaign = () => ({ fee_enabled: false, fee_amount: '', fee_billing_type: 'PIX', fee_connection_id: '', fee_due_days: 3, academic_year_id: '', id: '', version: 1, slug: '', title: '', instructions: defaultGuardianInstructions, privacy_notice: defaultPrivacyNotice, terms_version: '1', class_group_ids: [], opens_on: new Date().toISOString().slice(0, 10), closes_on: '', active: false, show_student_portal_button: true, require_verified_contact: true, require_documents: false, require_payment_before_enrollment: false, payment_reservation_hours: null, contract_template_id: '' });
     const connectConfig = () => ({ base_url: '', instance: '', send_text_path: '', connection_state_path: '', api_key_header: 'apikey', auth_scheme: '', number_field: 'number', text_field: 'text', message_id_path: 'key.id', contract_confirmed: false });
-    PigeExpansion.component = { get components() { return { 'contract-value-field': PigeContractFields.component, 'signing-panel': PigeSigning.component }; }, props: ['schoolId', 'page', 'permissions', 'role'], emits: ['view-student'], render: PigeRenders.expansion, setup(props, context) {
-            const s = Vue.reactive({ identificationFooter: false, bridgeConfig: { enabled: false, base_url: '', issuer_id: '', account_id: '', environment: 'sandbox' }, bridgeSecret: '', bridgeMessage: '', bridgeCharge: '', bridgeClient: '', bridgeInvoice: '', bridgePayer: '', bridgeBilling: 'PIX', bridgeProvider: 'asaas', bridgeBB: { payer_address: '', payer_district: '', payer_zip: '', payer_city: '', payer_state: '', species: '', acceptance: '' }, bridgeRecovery: {}, bridgeExternal: [], bridgeRequests: [], readiness: null, busy: false, error: '', notice: '', q: '', status: '', page: 1, total: 0, tab: 'queue', rows: [], selected: null, campaigns: [], campaignForm: emptyCampaign(), editingCampaign: false, groups: [], campaignYears: [], campaignUnits: [], admissionStage: 'documents', contractDraftKey: '', contractDraftVersion: 0, contractDraftDirty: false, finalReadiness: null, contractTargetId: '', contractChangeReason: '', contractTemplates: [], contractFields: [], contractPreview: null, contractValues: {}, contractPreviewStale: false, counts: {}, reason: '', action: 'review', identity: false, existingStudent: '', existingGuardian: '', matchQ: '', studentMatchQ: '', guardianMatchQ: '', matchWarnings: [], matchNotice: '', matchError: '', matchTruncated: false, reviewPreset: '', studentMatches: [], guardianMatches: [], message: '', internal: false, charges: [], bankSummary: [], bankDueFrom: '', bankDueTo: '', bankingStatus: null, webhookEmail: '', showBankOperations: false, selectedCharge: null, bankEvents: [], receiptForm: { amount: '', paid_on: '', payment_method: 'cash', reference: '', client_key: PigeOnline.newId() }, bankReason: '', chargeOpen: false, chargeInitial: '', discardCharge: false, chargeForm: { admission_id: '', enrollment_id: '', amount: '', due_on: '', description: '', collection_mode: 'manual', billing_type: 'MANUAL', client_key: PigeOnline.newId(), installment_count: 1, required_for_enrollment: false }, enrollmentQ: '', enrollmentMatches: [], connections: [], jobs: [], jobTotal: 0, jobPage: 1, jobStatus: '', provider: 'asaas', connectionForm: { version: undefined, enabled: false, environment: 'sandbox', api_key: '', webhook_token: '', config: connectConfig() }, editingConnection: false, connect: { configured: false, base_url: '', api_key_configured: false, instance_prefix: 'PG360', host_policy: 'base_url', effective_host: '' }, connectInstances: [], connectRemote: [], connectInventoryLoaded: false, connectAdoptName: '', connectLegacyReview: false, connectLegacyConfirm: false, connectLegacyReason: '', connectUnits: [], connectJobs: [], connectJobTotal: 0, connectJobPage: 1, connectJobStatus: '', connectLabel: '', connectPrimary: false, connectCreatePhone: '', connectPhoneDrafts: {}, connectOperation: { instanceId: '', kind: '' }, connectQr: { instanceId: '', base64: '', code: '', pairingCode: '', pending: false, connected: false, kind: '' } });
+    PigeExpansion.component = { get components() { return { 'asaas-panel': PigeAsaas.component, 'contract-value-field': PigeContractFields.component, 'signing-panel': PigeSigning.component }; }, props: ['schoolId', 'page', 'permissions', 'role'], emits: ['view-student'], render: PigeRenders.expansion, setup(props, context) {
+            const s = Vue.reactive({ bankTab: props.permissions.includes('banking.read') ? 'charges' : props.permissions.includes('asaas.reports.read') ? 'reports' : 'monitor', identificationFooter: false, bridgeConfig: { enabled: false, base_url: '', issuer_id: '', account_id: '', environment: 'sandbox' }, bridgeSecret: '', bridgeMessage: '', bridgeCharge: '', bridgeClient: '', bridgeInvoice: '', bridgePayer: '', bridgeBilling: 'PIX', bridgeProvider: 'asaas', bridgeBB: { payer_address: '', payer_district: '', payer_zip: '', payer_city: '', payer_state: '', species: '', acceptance: '' }, bridgeRecovery: {}, bridgeExternal: [], bridgeRequests: [], readiness: null, busy: false, error: '', notice: '', q: '', status: '', page: 1, total: 0, tab: 'queue', rows: [], selected: null, campaigns: [], campaignForm: emptyCampaign(), feeAccounts: [], editingCampaign: false, groups: [], campaignYears: [], campaignUnits: [], admissionStage: 'documents', contractDraftKey: '', contractDraftVersion: 0, contractDraftDirty: false, finalReadiness: null, contractTargetId: '', contractChangeReason: '', contractTemplates: [], contractFields: [], contractPreview: null, contractValues: {}, contractPreviewStale: false, counts: {}, reason: '', action: 'review', identity: false, existingStudent: '', existingGuardian: '', financialPerson: '', eligiblePayers: [], matchQ: '', studentMatchQ: '', guardianMatchQ: '', matchWarnings: [], matchNotice: '', matchError: '', matchTruncated: false, reviewPreset: '', studentMatches: [], guardianMatches: [], message: '', internal: false, charges: [], bankSummary: [], bankDueFrom: '', bankDueTo: '', bankingStatus: null, webhookEmail: '', showBankOperations: false, selectedCharge: null, bankEvents: [], receiptForm: { amount: '', paid_on: '', payment_method: 'cash', reference: '', client_key: PigeOnline.newId() }, bankReason: '', chargeOpen: false, chargeInitial: '', discardCharge: false, chargeForm: { admission_id: '', enrollment_id: '', amount: '', due_on: '', description: '', collection_mode: 'manual', billing_type: 'MANUAL', client_key: PigeOnline.newId(), installment_count: 1, use_recurring_card: false, required_for_enrollment: false }, enrollmentQ: '', enrollmentMatches: [], connections: [], jobs: [], jobTotal: 0, jobPage: 1, jobStatus: '', provider: 'asaas', connectionForm: { version: undefined, enabled: false, environment: 'sandbox', api_key: '', webhook_token: '', config: connectConfig() }, editingConnection: false, connect: { configured: false, base_url: '', api_key_configured: false, instance_prefix: 'PG360', host_policy: 'base_url', effective_host: '' }, connectInstances: [], connectRemote: [], connectInventoryLoaded: false, connectAdoptName: '', connectLegacyReview: false, connectLegacyConfirm: false, connectLegacyReason: '', connectUnits: [], connectJobs: [], connectJobTotal: 0, connectJobPage: 1, connectJobStatus: '', connectLabel: '', connectPrimary: false, connectCreatePhone: '', connectPhoneDrafts: {}, connectOperation: { instanceId: '', kind: '' }, connectQr: { instanceId: '', base64: '', code: '', pairingCode: '', pending: false, connected: false, kind: '' } });
             const draftDirty = () => s.contractDraftDirty;
             if (props.page === 'online')
                 PigeExpansion.hasUnsavedChanges = draftDirty;
@@ -825,14 +1271,16 @@ var PigeExpansion;
             async function connectRetry(job) { await run(async () => { await PigeAPI.post(base() + '/connect/jobs/' + job.id + '/retry', { reason: s.reason }); await connectJobs(); s.notice = 'Mensagem devolvida à fila do WhatsApp.'; }); }
             async function load() {
                 if (props.page === 'online') {
-                    const [readiness, campaigns, groups, templates, fields, years, units] = await Promise.all([
+                    const [readiness, campaigns, groups, templates, fields, years, units, accounts] = await Promise.all([
                         PigeAPI.request(base() + '/admission-readiness'), PigeAPI.request(base() + '/admission-campaigns'),
                         can('admissions.manage') ? PigeAPI.request(base() + '/class-groups') : Promise.resolve([]),
                         can('documents.read') ? PigeAPI.request(base() + '/document-templates?include_inactive=true') : Promise.resolve({ items: [] }),
                         can('documents.read') ? PigeAPI.request(base() + '/document-templates/fields') : Promise.resolve({ fields: [] }),
                         can('admissions.manage') ? PigeAPI.request(base() + '/academic-years') : Promise.resolve([]),
-                        can('admissions.manage') ? PigeAPI.request(base() + '/units') : Promise.resolve([])
+                        can('admissions.manage') ? PigeAPI.request(base() + '/units') : Promise.resolve([]),
+                        can('admissions.manage') ? PigeAPI.request(base() + '/admission-fee-accounts') : Promise.resolve({ items: [] })
                     ]);
+                    s.feeAccounts = accounts.items;
                     s.readiness = readiness;
                     s.campaigns = campaigns;
                     s.groups = groups;
@@ -842,8 +1290,11 @@ var PigeExpansion;
                     s.campaignUnits = units;
                     await queue();
                 }
-                else if (props.page === 'banking') {
+                else if (props.page === 'banking' && can('banking.read')) {
                     await Promise.all([bankList(), bankHealth()]);
+                }
+                else if (props.page === 'banking') {
+                    return;
                 }
                 else if (props.page === 'connect') {
                     await connectLoad();
@@ -878,7 +1329,7 @@ var PigeExpansion;
                 return [{ value: 'review', label: 'Iniciar análise', from: ['submitted', 'waitlisted'] }, { value: 'request_changes', label: 'Solicitar correção', from: ['submitted', 'under_review', 'waitlisted'] }, { value: 'waitlist', label: 'Colocar na lista de espera', from: ['submitted', 'under_review'] }, { value: 'reject', label: 'Indeferir inscrição', from: ['submitted', 'under_review', 'waitlisted', 'changes_requested'] }, { value: 'withdraw', label: 'Registrar desistência', from: ['draft', 'submitted', 'under_review', 'waitlisted', 'changes_requested'] }].filter(item => item.from.includes(status));
             }
             function newCampaign() { s.tab = 'campaigns'; s.campaignForm = emptyCampaign(); s.editingCampaign = true; }
-            function editCampaign(c) { const { id, version, slug, title, instructions, privacy_notice, terms_version, class_group_ids, opens_on, closes_on, active, show_student_portal_button, require_verified_contact, require_documents, require_payment_before_enrollment, payment_reservation_hours, contract_template_id } = c; s.campaignForm = { academic_year_id: c.academic_year_id || str(s.groups.find(g => class_group_ids.includes(g.id))?.academic_year_id), id, version, slug, title, instructions, privacy_notice, terms_version, class_group_ids: [...class_group_ids], opens_on, closes_on, active, show_student_portal_button, require_verified_contact, require_documents, require_payment_before_enrollment, payment_reservation_hours: payment_reservation_hours || null, contract_template_id: contract_template_id || '' }; s.editingCampaign = true; }
+            function editCampaign(c) { const { id, version, slug, title, instructions, privacy_notice, terms_version, class_group_ids, opens_on, closes_on, active, show_student_portal_button, require_verified_contact, require_documents, require_payment_before_enrollment, payment_reservation_hours, contract_template_id } = c; s.campaignForm = { fee_enabled: !!c.fee_enabled, fee_amount: c.fee_amount || '', fee_billing_type: c.fee_billing_type || 'PIX', fee_connection_id: c.fee_connection_id || '', fee_due_days: c.fee_due_days ?? 3, academic_year_id: c.academic_year_id || str(s.groups.find(g => class_group_ids.includes(g.id))?.academic_year_id), id, version, slug, title, instructions, privacy_notice, terms_version, class_group_ids: [...class_group_ids], opens_on, closes_on, active, show_student_portal_button, require_verified_contact, require_documents, require_payment_before_enrollment, payment_reservation_hours: payment_reservation_hours || null, contract_template_id: contract_template_id || '' }; s.editingCampaign = true; }
             async function saveCampaign() {
                 await run(async () => {
                     const { id, version, ...data } = s.campaignForm;
@@ -892,7 +1343,9 @@ var PigeExpansion;
                         throw new Error('Selecione um contrato ativo que exige assinatura e seja válido para o ano letivo das turmas.');
                     if (data.require_payment_before_enrollment && !data.payment_reservation_hours)
                         throw new Error('Defina o prazo de reserva para pagamento em horas.');
-                    const payload = { ...data, contract_template_id: data.contract_template_id || null };
+                    if (data.fee_enabled && (!data.fee_connection_id || !Number.isFinite(Number(data.fee_amount)) || Number(data.fee_amount) <= 0))
+                        throw new Error('Informe o valor da taxa e a conta bancária deste processo.');
+                    const payload = { ...data, fee_amount: data.fee_enabled ? String(data.fee_amount) : null, fee_connection_id: data.fee_enabled ? data.fee_connection_id : null, contract_template_id: data.contract_template_id || null };
                     if (id)
                         await PigeAPI.patch(base() + '/admission-campaigns/' + id, { ...payload, version });
                     else
@@ -927,7 +1380,7 @@ var PigeExpansion;
                 s.studentMatchQ = '';
                 s.guardianMatchQ = '';
                 s.reviewPreset = '';
-            } s.selected = await PigeAPI.request(base() + '/admissions/' + id); s.identity = false; s.studentMatches = []; s.guardianMatches = []; s.existingStudent = ''; s.existingGuardian = ''; s.matchError = ''; s.matchWarnings = []; s.matchNotice = ''; s.matchTruncated = false; await loadMatches(); s.contractTargetId = s.selected.contract?.template_id || ''; s.contractChangeReason = ''; if (changed || previous?.contract?.template_id !== s.selected.contract?.template_id || previous?.contract?.template_version !== s.selected.contract?.template_version) {
+            } s.selected = await PigeAPI.request(base() + '/admissions/' + id); s.identity = false; s.studentMatches = []; s.guardianMatches = []; s.existingStudent = ''; s.existingGuardian = ''; s.financialPerson = ''; s.eligiblePayers = []; s.matchError = ''; s.matchWarnings = []; s.matchNotice = ''; s.matchTruncated = false; await loadMatches(); s.contractTargetId = s.selected.contract?.template_id || ''; s.contractChangeReason = ''; if (changed || previous?.contract?.template_id !== s.selected.contract?.template_id || previous?.contract?.template_version !== s.selected.contract?.template_version) {
                 s.contractPreview = null;
                 s.contractValues = {};
                 s.contractPreviewStale = false;
@@ -940,9 +1393,25 @@ var PigeExpansion;
             async function view(id) { await run(() => openAdmission(id)); }
             async function action() { await run(async () => { const a = s.selected; if (!a)
                 return; await PigeAPI.post(base() + '/admissions/' + a.id + '/actions', { version: a.version, action: s.action, reason: s.reason }); await openAdmission(a.id); await queue(); s.reason = ''; }); }
-            async function match() { await run(async () => { s.existingStudent = ''; s.existingGuardian = ''; await loadMatches(); }); }
+            async function match() { await run(async () => { s.existingStudent = ''; s.existingGuardian = ''; s.financialPerson = ''; s.eligiblePayers = []; await loadMatches(); }); }
+            async function loadEligiblePayers() {
+                const id = s.existingStudent, admission = s.selected?.id;
+                s.financialPerson = '';
+                s.eligiblePayers = [];
+                if (!id)
+                    return;
+                try {
+                    const result = await PigeAPI.request(base() + '/students/' + id);
+                    if (id === s.existingStudent && admission === s.selected?.id)
+                        s.eligiblePayers = result.guardians.filter(link => link.active && link.financial && link.person.active).map(link => link.person);
+                }
+                catch (e) {
+                    if (id === s.existingStudent && admission === s.selected?.id)
+                        s.matchError = e instanceof Error ? e.message : String(e);
+                }
+            }
             async function approve() { await run(async () => { const a = s.selected; if (!a)
-                return; await PigeAPI.post(base() + '/admissions/' + a.id + '/approve', { version: a.version, reason: s.reason, identity_confirmed: s.identity, existing_student_id: s.existingStudent || null, existing_guardian_id: s.existingGuardian || null }); await openAdmission(a.id); await queue(); s.reason = ''; s.admissionStage = s.selected?.contract?.required ? 'contract' : 'finalize'; s.notice = s.selected?.contract?.required ? 'Inscrição aprovada. Emita o contrato da revisão congelada e aguarde a assinatura do responsável antes de efetivar.' : 'Inscrição aprovada; matrícula criada como rascunho. Confira documentação e cobrança antes de efetivar.'; }); }
+                return; await PigeAPI.post(base() + '/admissions/' + a.id + '/approve', { version: a.version, reason: s.reason, identity_confirmed: s.identity, existing_student_id: s.existingStudent || null, existing_guardian_id: s.existingGuardian || null, financial_person_id: s.financialPerson || null }); await openAdmission(a.id); await queue(); s.reason = ''; s.admissionStage = s.selected?.contract?.required ? 'contract' : 'finalize'; s.notice = s.selected?.contract?.required ? 'Inscrição aprovada. Emita o contrato da revisão congelada e aguarde a assinatura do responsável antes de efetivar.' : 'Inscrição aprovada; matrícula criada como rascunho. Confira documentação e cobrança antes de efetivar.'; }); }
             async function reviseContract() { await run(async () => { const a = s.selected, revision = a?.contract.available_template_version; if (!a || !revision || !a.contract.template_id)
                 return; await changeContract(a.contract.template_id, revision, s.contractChangeReason || s.reason); }); }
             async function renewReservation() { await run(async () => { const a = s.selected; if (!a)
@@ -957,7 +1426,7 @@ var PigeExpansion;
             async function whatsapp() { await run(async () => { if (!s.selected)
                 return; await PigeAPI.post(base() + '/connect/messages', { admission_id: s.selected.id, text: s.message, client_key: PigeOnline.newId() }); s.message = ''; s.notice = 'Envio via WhatsApp enfileirado. Consulte o resultado na fila do WhatsApp.'; }); }
             async function download(path, name) { await run(() => PigeAPI.download(base() + path, name)); }
-            function newCharge(admissionId = '') { s.chargeForm = { admission_id: admissionId, enrollment_id: '', amount: '', due_on: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10), description: admissionId ? 'Matrícula' : 'Mensalidade', collection_mode: 'manual', billing_type: 'MANUAL', client_key: PigeOnline.newId(), installment_count: 1, required_for_enrollment: false }; s.enrollmentMatches = []; s.chargeOpen = true; s.error = ''; s.discardCharge = false; s.chargeInitial = JSON.stringify(s.chargeForm); if (!s.bankingStatus)
+            function newCharge(admissionId = '') { s.chargeForm = { admission_id: admissionId, enrollment_id: '', amount: '', due_on: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10), description: admissionId ? 'Matrícula' : 'Mensalidade', collection_mode: 'manual', billing_type: 'MANUAL', client_key: PigeOnline.newId(), installment_count: 1, use_recurring_card: false, required_for_enrollment: false }; s.enrollmentMatches = []; s.chargeOpen = true; s.error = ''; s.discardCharge = false; s.chargeInitial = JSON.stringify(s.chargeForm); if (!s.bankingStatus)
                 void run(bankHealth); }
             function closeCharge(discard = false) {
                 if (s.busy)
@@ -974,7 +1443,7 @@ var PigeExpansion;
                 return PigeOnline.money(Number.isFinite(amount * count) ? (amount * count).toFixed(2) : '0');
             }
             async function findEnrollments() { await run(async () => { s.enrollmentMatches = (await PigeAPI.request(base() + '/enrollments?q=' + encodeURIComponent(s.enrollmentQ))).items; }); }
-            function changeCollectionMode() { s.chargeForm.billing_type = s.chargeForm.collection_mode === 'manual' ? 'MANUAL' : 'PIX'; }
+            function changeCollectionMode() { s.chargeForm.use_recurring_card = false; s.chargeForm.billing_type = s.chargeForm.collection_mode === 'manual' ? 'MANUAL' : 'PIX'; }
             function chargeMethod(c) { return c.collection_mode === 'manual' ? 'Cobrança interna' : c.billing_type === 'PIX' ? 'Pix' : 'Boleto'; }
             function chargeStatus(c) { return c.collection_mode === 'manual' && c.status === 'received_external' ? 'Recebido manualmente' : PigeOnline.label(c.status); }
             const receiptMethods = { cash: 'Dinheiro', pix: 'Pix recebido diretamente', transfer: 'Transferência', card: 'Cartão', other: 'Outro' };
@@ -1010,7 +1479,7 @@ var PigeExpansion;
             Vue.onMounted(() => { window.addEventListener('beforeunload', warnUnsaved); void run(load); });
             Vue.onUnmounted(() => { window.removeEventListener('beforeunload', warnUnsaved); if (PigeExpansion.hasUnsavedChanges === draftDirty)
                 PigeExpansion.hasUnsavedChanges = () => false; });
-            return { dialogTarget: Vue.inject('school-dialog-host', 'body') || 'body', s, props, closeAdmission, reloadContractRegistry, openStudentRegistry, contractFieldGroups: PigeContractFields.groups, contractFieldMeta, contractGroupKeys, setContractFieldValue, saveContractDraft, showReadinessStage, refreshAdmissionStatus, reviewPresets, useReviewPreset, saveBridge, testBridge, queueBridge, retryBridge, statusBridge, loadBridge, issueExternal, externalCommand, campaignSlug, campaignGroupLabel, campaignGroups, admissionActions, bankCards, bankPeriod, reconcileBank, bankError, bankOperation, activateBankWebhook, identity: PigeInstitution.state, changeCollectionMode, chargeMethod, chargeStatus, receiptMethods, receiptDate, receiveManualCharge, receiptPdf, closeCharge, chargeTotal, can, str, run, load, search, paginate, paginateJobs, newCampaign, editCampaign, saveCampaign, campaignYearId, changeCampaignYear, eligibleContractTemplates, templateName, selectedContractVersion, canChangeContract, admissionContractTemplates, contractChoiceChanged, reloadContractTemplates, applyContractChoice, downloadContractHistory, contractHistoryPolicy, loadContractHistoryPolicy, setContractHistoryPolicy, removeContractHistory, contractStatus, contractPreviewKeys, contractFieldLabel, contractValue, contractAutomatic, setContractValue, previewFrozenContract, previewFrozenPdf, issueFrozenContract, downloadSignedContract, view, action, match, approve, finalize, reviseContract, renewReservation, reviewDoc, message, whatsapp, download, newCharge, findEnrollments, createCharge, inspectCharge, chargeAction, configure, saveConnection, testConnection, retry, copy, connectionFor, jobs, connectLoad, connectJobs, connectInventory, connectAdopt, connectAdoptNamed, connectReleaseLegacy, connectPrefer, connectPreferUnit, connectRestart, connectCreate, connectSync, connectQr, connectPairingCode, connectSavePhone, connectLogout, connectDelete, connectTest, connectRetry, clearConnectQr, label: PigeOnline.label, date: PigeOnline.date, dateTime: PigeOnline.dateTime, money: PigeOnline.money, publicURL: PigeOnline.publicURL, safeLink: PigeOnline.safeLink, origin: location.origin, statuses: PigeOnline.statuses };
+            return { dialogTarget: Vue.inject('school-dialog-host', 'body') || 'body', s, props, closeAdmission, reloadContractRegistry, openStudentRegistry, contractFieldGroups: PigeContractFields.groups, contractFieldMeta, contractGroupKeys, setContractFieldValue, saveContractDraft, showReadinessStage, refreshAdmissionStatus, reviewPresets, useReviewPreset, saveBridge, testBridge, queueBridge, retryBridge, statusBridge, loadBridge, issueExternal, externalCommand, campaignSlug, campaignGroupLabel, campaignGroups, admissionActions, bankCards, bankPeriod, reconcileBank, bankError, bankOperation, activateBankWebhook, identity: PigeInstitution.state, changeCollectionMode, chargeMethod, chargeStatus, receiptMethods, receiptDate, receiveManualCharge, receiptPdf, closeCharge, chargeTotal, can, str, run, load, search, paginate, paginateJobs, newCampaign, editCampaign, saveCampaign, campaignYearId, changeCampaignYear, eligibleContractTemplates, templateName, selectedContractVersion, canChangeContract, admissionContractTemplates, contractChoiceChanged, reloadContractTemplates, applyContractChoice, downloadContractHistory, contractHistoryPolicy, loadContractHistoryPolicy, setContractHistoryPolicy, removeContractHistory, contractStatus, contractPreviewKeys, contractFieldLabel, contractValue, contractAutomatic, setContractValue, previewFrozenContract, previewFrozenPdf, issueFrozenContract, downloadSignedContract, view, action, match, approve, loadEligiblePayers, finalize, reviseContract, renewReservation, reviewDoc, message, whatsapp, download, newCharge, findEnrollments, createCharge, inspectCharge, chargeAction, configure, saveConnection, testConnection, retry, copy, connectionFor, jobs, connectLoad, connectJobs, connectInventory, connectAdopt, connectAdoptNamed, connectReleaseLegacy, connectPrefer, connectPreferUnit, connectRestart, connectCreate, connectSync, connectQr, connectPairingCode, connectSavePhone, connectLogout, connectDelete, connectTest, connectRetry, clearConnectQr, label: PigeOnline.label, date: PigeOnline.date, dateTime: PigeOnline.dateTime, money: PigeOnline.money, publicURL: PigeOnline.publicURL, safeLink: PigeOnline.safeLink, origin: location.origin, statuses: PigeOnline.statuses };
         } };
 })(PigeExpansion || (PigeExpansion = {}));
 var PigeDialogs;
@@ -2098,6 +2567,8 @@ var PigeDiagnostics;
 })(PigeDiagnostics || (PigeDiagnostics = {}));
 var PigeDiary;
 (function (PigeDiary) {
+    const emptyLesson = () => ({ academic_period_id: '', lesson_date: today(), lesson_count: 1, content: '', skills: '', methodology: '', activities: '', homework: '', notes: '' });
+    const emptyPlan = (d) => ({ class_group_id: d?.class_group_id || '', component_id: d?.component_id || '', academic_period_id: '', teacher_assignment_id: d?.teacher_assignment_id || '', objectives: '', thematic_units: '', knowledge_objects: '', bncc_references: '', methodology: '', resources: '', assessment_strategy: '', notes: '', status: 'draft' });
     const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bahia', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
     const groups = [
         { label: 'Hoje', pages: [{ id: 'dashboard', label: 'Pendências', tab: 'dashboard' }] },
@@ -2145,10 +2616,13 @@ var PigeDiary;
                 busy: false, error: '', notice: '', tab: 'diaries', page: 'diaries', diaryFilter: '', lessonPeriod: '', dirty: false,
                 diaries: [], selected: null, academicYears: [], periods: [], components: [], groups: [], assignments: [], plans: [],
                 calendarIds: [], periodForm: { academic_year_id: '', class_group_id: '', name: '', starts_on: '', ends_on: '', order_index: 1, active: true },
+                fields: { version: 0, fields: [], standard_columns: {} }, configFields: [], newFieldLabel: '', restoreFieldId: '', newFieldScope: 'lesson',
+                componentEditing: null, removalTarget: null, removalReason: '',
+                lessonEditing: null, planEditing: null, lessonValues: {}, planValues: {},
+                attendanceBase: {},
                 componentForm: { name: '', code: '', workload_hours: 0, active: true },
                 diaryForm: { class_group_id: '', component_id: '', teacher_assignment_id: '', notes: '' },
-                planForm: { class_group_id: '', component_id: '', academic_period_id: '', teacher_assignment_id: '', objectives: '', thematic_units: '', knowledge_objects: '', bncc_references: '', methodology: '', resources: '', assessment_strategy: '', notes: '', status: 'draft' },
-                lessonForm: { academic_period_id: '', lesson_date: today(), lesson_count: 1, content: '', skills: '', methodology: '', activities: '', homework: '', notes: '' },
+                planForm: emptyPlan(), lessonForm: emptyLesson(),
                 selectedLesson: null, attendance: [],
                 assessments: [], assessmentEditing: null, selectedAssessment: null, assessmentRoster: [],
                 assessmentForm: { academic_period_id: '', title: '', kind: 'activity', assessment_date: today(), value_type: 'numeric', max_score: '10', weight: '1', description: '', skills: '', status: 'published' },
@@ -2301,7 +2775,7 @@ var PigeDiary;
                 navigatePage('dashboard', false);
             const str = (v) => v == null ? '' : String(v);
             const date = (v) => { const x = str(v); return x ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(new Date(x.length === 10 ? x + 'T12:00:00Z' : x)) : '—'; };
-            const labels = { open: 'Aberto', draft: 'Rascunho', submitted: 'Enviado', reviewed: 'Revisado', closed: 'Fechado', present: 'Presente', absent: 'Falta', justified_absence: 'Falta justificada', active: 'Ativo', suspended: 'Suspenso', published: 'Publicada', final: 'Final', pending: 'Pendente', calculated: 'Calculado', below_minimum: 'Abaixo da média', attendance_below_minimum: 'Frequência abaixo do mínimo', opinion_pending: 'Parecer pendente', concept: 'Conceito', follow_up: 'Acompanhamento', intervention: 'Intervenção', recovery: 'Recuperação', adaptation: 'Adaptação', referral: 'Encaminhamento', observation: 'Observação', positive: 'Positiva', pedagogical: 'Pedagógica', behavioral: 'Comportamental', safety: 'Segurança', other: 'Outra', resultados_avaliativos_pendentes: 'Há notas pendentes', sem_resultado_aplicavel: 'Sem resultado aplicável', chamada_pendente: 'Chamada pendente', conceito_fora_da_escala: 'Conceito fora da escala', peso_avaliativo_ausente: 'Peso não definido', resultado_numerico_ausente: 'Nota não informada', frequencia_abaixo_do_limite: 'Frequência abaixo do mínimo', parecer_final_pendente: 'Parecer final pendente' };
+            const labels = { archived: 'Arquivado', open: 'Aberto', draft: 'Rascunho', submitted: 'Enviado', reviewed: 'Revisado', closed: 'Fechado', present: 'Presente', absent: 'Falta', justified_absence: 'Falta justificada', active: 'Ativo', suspended: 'Suspenso', published: 'Publicada', final: 'Final', pending: 'Pendente', calculated: 'Calculado', below_minimum: 'Abaixo da média', attendance_below_minimum: 'Frequência abaixo do mínimo', opinion_pending: 'Parecer pendente', concept: 'Conceito', follow_up: 'Acompanhamento', intervention: 'Intervenção', recovery: 'Recuperação', adaptation: 'Adaptação', referral: 'Encaminhamento', observation: 'Observação', positive: 'Positiva', pedagogical: 'Pedagógica', behavioral: 'Comportamental', safety: 'Segurança', other: 'Outra', resultados_avaliativos_pendentes: 'Há notas pendentes', sem_resultado_aplicavel: 'Sem resultado aplicável', chamada_pendente: 'Chamada pendente', conceito_fora_da_escala: 'Conceito fora da escala', peso_avaliativo_ausente: 'Peso não definido', resultado_numerico_ausente: 'Nota não informada', frequencia_abaixo_do_limite: 'Frequência abaixo do mínimo', parecer_final_pendente: 'Parecer final pendente' };
             const label = (v) => labels[str(v)] || str(v) || '—';
             async function run(action) { if (state.busy)
                 return; state.busy = true; state.error = ''; state.notice = ''; try {
@@ -2321,7 +2795,8 @@ var PigeDiary;
                     can('diary.configure') ? PigeAPI.request(base() + '/academic-years') : Promise.resolve([]),
                     can('diary.configure') ? PigeAPI.request(base() + '/class-groups') : Promise.resolve([]),
                     can('diary.configure') ? PigeAPI.request(base() + '/teacher-assignments') : Promise.resolve([]),
-                    PigeAPI.request(base() + '/diary-dashboard')
+                    PigeAPI.request(base() + '/diary-dashboard'),
+                    PigeAPI.request(base() + '/diary-entry-fields')
                 ]);
                 state.diaries = results[0];
                 state.periods = results[1];
@@ -2330,6 +2805,7 @@ var PigeDiary;
                 state.groups = results[4];
                 state.assignments = results[5];
                 state.dashboard = results[6];
+                setComposition(results[7]);
                 if (!state.periodForm.academic_year_id && state.academicYears.length) {
                     const year = state.academicYears.find(x => x.status === 'active' || x.active) || state.academicYears[0];
                     state.periodForm.academic_year_id = str(year.id);
@@ -2367,8 +2843,8 @@ var PigeDiary;
                 state.materials = materials;
                 if (changed) {
                     state.materialForm = { client_key: PigeOnline.newId(), kind: 'Atividade', title: '', body: '', enrollment_id: '' };
-                    state.planForm = { class_group_id: d.class_group_id, component_id: d.component_id, academic_period_id: '', teacher_assignment_id: d.teacher_assignment_id || '', objectives: '', thematic_units: '', knowledge_objects: '', bncc_references: '', methodology: '', resources: '', assessment_strategy: '', notes: '', status: 'draft' };
-                    state.lessonForm = { academic_period_id: '', lesson_date: today(), lesson_count: 1, content: '', skills: '', methodology: '', activities: '', homework: '', notes: '' };
+                    resetPlan();
+                    resetLesson();
                     state.assessmentForm = { academic_period_id: '', title: '', kind: 'activity', assessment_date: today(), value_type: 'numeric', max_score: '10', weight: '1', description: '', skills: '', status: 'published' };
                     state.opinionForm = { academic_period_id: '', enrollment_id: '', text: '', status: 'draft' };
                     state.pedagogicalForm = { enrollment_id: '', record_date: today(), kind: 'observation', text: '' };
@@ -2433,21 +2909,208 @@ var PigeDiary;
                 });
             }
             async function createPeriod() { await run(async () => { await PigeAPI.post(base() + '/academic-periods', state.periodForm); state.periodForm = { class_group_id: state.periodForm.class_group_id, academic_year_id: state.periodForm.academic_year_id, name: '', starts_on: '', ends_on: '', order_index: state.periodForm.order_index + 1, active: true }; await loadBase(); loadCalendar(); state.notice = 'Período letivo criado.'; }); }
-            async function createComponent() { await run(async () => { await PigeAPI.post(base() + '/curriculum-components', state.componentForm); state.componentForm = { name: '', code: '', workload_hours: 0, active: true }; await loadBase(); state.notice = 'Componente curricular criado.'; }); }
+            function setComposition(settings) {
+                state.fields = settings;
+                state.configFields = settings.fields.map(field => ({ ...field }));
+            }
+            const restorableFields = Vue.computed(() => Object.keys(state.fields.standard_columns).filter(id => !state.configFields.some(field => field.id === id)));
+            function restoreField() {
+                const id = state.restoreFieldId;
+                if (!restorableFields.value.includes(id) || state.configFields.length >= 40)
+                    return;
+                state.configFields.push({ id, scope: id.startsWith('standard-plan-') ? 'plan' : 'lesson', label: state.fields.standard_labels?.[id] || '' });
+                state.restoreFieldId = '';
+            }
+            function addField() {
+                const label = state.newFieldLabel.trim();
+                if (label.length < 2 || state.configFields.length >= 40)
+                    return;
+                state.configFields.push({ id: PigeOnline.newId(), label, scope: state.newFieldScope });
+                state.newFieldLabel = '';
+            }
+            function moveField(index, offset) {
+                const target = index + offset;
+                if (target < 0 || target >= state.configFields.length)
+                    return;
+                const [field] = state.configFields.splice(index, 1);
+                state.configFields.splice(target, 0, field);
+            }
+            async function saveFields() {
+                await run(async () => {
+                    const result = await PigeAPI.request(base() + '/diary-entry-fields', { method: 'PUT',
+                        body: JSON.stringify({ version: state.fields.version, fields: state.configFields }) });
+                    setComposition(result);
+                    state.notice = 'Composição atualizada para esta escola.';
+                });
+            }
+            function resetComponent() {
+                state.componentEditing = null;
+                state.componentForm = { name: '', code: '', workload_hours: 0, active: true };
+            }
+            function editComponent(row) {
+                state.componentEditing = row;
+                state.componentForm = { name: str(row.name), code: str(row.code), workload_hours: Number(row.workload_hours), active: Boolean(row.active) };
+                focusHeading('diary-component-heading');
+            }
+            async function createComponent() {
+                await run(async () => {
+                    const endpoint = base() + '/curriculum-components', editing = state.componentEditing;
+                    if (editing)
+                        await PigeAPI.request(endpoint + '/' + editing.id, { method: 'PATCH', body: JSON.stringify({ ...state.componentForm, version: editing.version }) });
+                    else
+                        await PigeAPI.post(endpoint, state.componentForm);
+                    resetComponent();
+                    await loadBase();
+                    state.notice = editing ? 'Componente curricular atualizado.' : 'Componente curricular criado.';
+                });
+            }
+            async function removeComponent() {
+                const row = state.removalTarget;
+                if (!row)
+                    return;
+                await run(async () => {
+                    const result = await PigeAPI.post(base() + '/curriculum-components/' + row.id + '/remove', { version: row.version, reason: state.removalReason });
+                    if (state.componentEditing?.id === row.id)
+                        resetComponent();
+                    state.removalTarget = null;
+                    state.removalReason = '';
+                    await loadBase();
+                    state.notice = result.action === 'retired' ? 'Componente desativado. Os vínculos históricos foram preservados.' : 'Componente sem vínculos removido.';
+                });
+            }
             async function createDiary() { await run(async () => { const body = { ...state.diaryForm, teacher_assignment_id: state.diaryForm.teacher_assignment_id || null }; const d = await PigeAPI.post(base() + '/diaries', body); state.diaryForm = { class_group_id: '', component_id: '', teacher_assignment_id: '', notes: '' }; await loadBase(); await loadDiary(d); if (pilot) {
                 navigatePage('diaries', false);
                 syncLink();
             }
             else
                 state.tab = 'diaries'; state.notice = 'Diário aberto.'; }); }
-            async function createPlan() { if (!state.selected)
-                return; await run(async () => { const f = state.planForm; await PigeAPI.post(base() + '/curriculum-plans', { ...f, academic_period_id: f.academic_period_id || null, teacher_assignment_id: f.teacher_assignment_id || null, bncc_references: f.bncc_references.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean) }); state.plans = await PigeAPI.request(base() + '/curriculum-plans?class_group_id=' + encodeURIComponent(state.selected.class_group_id) + '&component_id=' + encodeURIComponent(state.selected.component_id)); state.notice = 'Planejamento registrado.'; }); }
-            async function createLesson() { if (!state.selected)
-                return; await run(async () => { await PigeAPI.post(base() + '/diaries/' + state.selected.id + '/lessons', { ...state.lessonForm, academic_period_id: state.lessonForm.academic_period_id || null }); state.lessonForm = { academic_period_id: state.lessonForm.academic_period_id, lesson_date: today(), lesson_count: 1, content: '', skills: '', methodology: '', activities: '', homework: '', notes: '' }; await loadDiary(state.selected); state.notice = 'Aula registrada.'; }); }
-            async function openAttendance(lesson) { if (!state.selected)
-                return; await run(async () => { const result = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/lessons/' + lesson.id + '/attendance'); state.selectedLesson = result.lesson; state.attendance = result.roster.map(r => ({ ...r, attendance: r.attendance || { status: 'present', note: '' } })); }); }
-            async function saveAttendance() { if (!state.selected || !state.selectedLesson)
-                return; await run(async () => { await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/lessons/' + state.selectedLesson.id + '/attendance', { method: 'PUT', body: JSON.stringify({ items: state.attendance.map(r => ({ enrollment_id: r.enrollment_id, status: r.attendance?.status || 'present', note: r.attendance?.note || '', version: r.attendance?.version ?? null })) }) }); state.notice = 'Chamada salva.'; await loadDiary(state.selected); }); }
+            function focusHeading(id) {
+                void Vue.nextTick(() => document.getElementById?.(id)?.focus());
+            }
+            function storedFields(row) {
+                if (!row)
+                    return [];
+                const fields = Array.isArray(row.extra_fields) ? row.extra_fields : [];
+                const items = fields.map(field => {
+                    const value = field.column ? row[field.column] : field.value;
+                    return { ...field, value: Array.isArray(value) ? value.join(', ') : str(value) };
+                });
+                // Documentos anteriores à migração contêm apenas as colunas nativas.
+                const scope = row.lesson_date ? 'lesson' : 'plan';
+                for (const [id, column] of Object.entries(state.fields.standard_columns)) {
+                    if (!id.startsWith('standard-' + scope + '-') || items.some(field => field.id === id) || !row[column])
+                        continue;
+                    const value = row[column], label = state.fields.standard_labels?.[id];
+                    if (label && (!Array.isArray(value) || value.length))
+                        items.push({ id, column, label, value: Array.isArray(value) ? value.join(', ') : str(value) });
+                }
+                return items;
+            }
+            function editableValues(row, scope) {
+                const active = new Set(state.fields.fields.filter(field => field.scope === scope).map(field => field.id));
+                return Object.fromEntries(storedFields(row).filter(field => !field.column && active.has(field.id)).map(field => [field.id, field.value]));
+            }
+            function resetPlan() {
+                state.planEditing = null;
+                state.planValues = {};
+                state.planForm = emptyPlan(state.selected);
+            }
+            function editPlan(row) {
+                resetPlan();
+                state.planEditing = row;
+                state.planValues = editableValues(row, 'plan');
+                for (const key of Object.keys(state.planForm)) {
+                    state.planForm[key] = key === 'bncc_references' && Array.isArray(row[key]) ? row[key].join(', ') : str(row[key]);
+                }
+                focusHeading('diary-plan-heading');
+            }
+            async function createPlan() {
+                if (!state.selected)
+                    return;
+                await run(async () => {
+                    const f = state.planForm, editing = state.planEditing, endpoint = base() + '/curriculum-plans';
+                    const body = { ...f, academic_period_id: f.academic_period_id || null, teacher_assignment_id: f.teacher_assignment_id || null,
+                        bncc_references: f.bncc_references.split(/[\s,;]+/).filter(Boolean), field_values: state.planValues };
+                    if (editing)
+                        await PigeAPI.request(endpoint + '/' + editing.id, { method: 'PATCH', body: JSON.stringify({ ...body, version: editing.version }) });
+                    else
+                        await PigeAPI.post(endpoint, body);
+                    state.plans = await PigeAPI.request(endpoint + '?class_group_id=' + encodeURIComponent(f.class_group_id) + '&component_id=' + encodeURIComponent(f.component_id));
+                    resetPlan();
+                    state.notice = editing ? 'Planejamento atualizado.' : 'Planejamento registrado.';
+                });
+            }
+            function resetLesson() { state.lessonEditing = null; state.lessonValues = {}; state.lessonForm = emptyLesson(); }
+            function editLesson(row) {
+                if (pilot && state.page !== 'diaries' && !navigatePage('diaries'))
+                    return;
+                syncLink();
+                state.lessonEditing = row;
+                state.lessonValues = editableValues(row, 'lesson');
+                const { academic_period_id, lesson_date, lesson_count, content, skills, methodology, activities, homework, notes } = row;
+                state.lessonForm = { academic_period_id: academic_period_id || '', lesson_date, lesson_count, content, skills, methodology, activities, homework, notes };
+                focusHeading('diary-lesson-heading');
+            }
+            async function createLesson() {
+                if (!state.selected)
+                    return;
+                await run(async () => {
+                    const endpoint = base() + '/diaries/' + state.selected.id + '/lessons', editing = state.lessonEditing;
+                    const body = { ...state.lessonForm, academic_period_id: state.lessonForm.academic_period_id || null, field_values: state.lessonValues };
+                    if (editing)
+                        await PigeAPI.request(endpoint + '/' + editing.id, { method: 'PATCH', body: JSON.stringify({ ...body, version: editing.version }) });
+                    else
+                        await PigeAPI.post(endpoint, body);
+                    const period = state.lessonForm.academic_period_id;
+                    resetLesson();
+                    state.lessonForm.academic_period_id = period;
+                    await loadDiary(state.selected);
+                    state.notice = editing ? 'Aula atualizada.' : 'Aula registrada.';
+                });
+            }
+            function attendancePath(lesson) { return base() + '/diaries/' + state.selected.id + '/lessons/' + lesson.id + '/attendance'; }
+            async function fetchAttendance(lesson) {
+                const result = await PigeAPI.request(attendancePath(lesson));
+                state.selectedLesson = result.lesson;
+                state.attendanceBase = Object.fromEntries(result.roster.map(r => [r.enrollment_id, { status: r.attendance?.status || '', note: r.attendance?.note || '' }]));
+                state.attendance = result.roster.map(r => ({ ...r, attendance: r.attendance || { status: '', note: '' } }));
+            }
+            const changedAttendance = Vue.computed(() => state.attendance.filter(r => {
+                const previous = state.attendanceBase[r.enrollment_id], current = r.attendance;
+                return current?.status && (previous?.status !== current.status || previous?.note !== current.note);
+            }));
+            const pendingAttendance = Vue.computed(() => state.attendance.filter(row => !row.attendance?.status).length);
+            function markPendingPresent() {
+                for (const row of state.attendance)
+                    if (row.attendance && !row.attendance.status)
+                        row.attendance.status = 'present';
+            }
+            function closeAttendance() {
+                if (changedAttendance.value.length && !window.confirm('Descartar as alterações desta chamada?'))
+                    return false;
+                state.selectedLesson = null;
+                state.attendance = [];
+                state.attendanceBase = {};
+                return true;
+            }
+            async function openAttendance(lesson) {
+                if (!state.selected || (state.selectedLesson && !closeAttendance()))
+                    return;
+                await run(async () => { await fetchAttendance(lesson); focusHeading('diary-attendance-heading'); });
+            }
+            async function saveAttendance() {
+                const lesson = state.selectedLesson;
+                if (!state.selected || !lesson || !changedAttendance.value.length)
+                    return;
+                await run(async () => {
+                    const items = changedAttendance.value.map(r => ({ enrollment_id: r.enrollment_id, status: r.attendance.status, note: r.attendance.note,
+                        version: r.attendance.version ?? null, expected_empty: r.attendance.version == null }));
+                    await PigeAPI.request(attendancePath(lesson), { method: 'PUT', body: JSON.stringify({ items }) });
+                    await fetchAttendance(lesson);
+                    state.summary = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/summary');
+                    state.notice = items.length + ' registro(s) de frequência salvo(s).';
+                });
+            }
             function editAssessment(assessment) {
                 state.assessmentEditing = assessment;
                 state.assessmentForm = { academic_period_id: str(assessment.academic_period_id), title: str(assessment.title), kind: str(assessment.kind), assessment_date: str(assessment.assessment_date), value_type: str(assessment.value_type), max_score: str(assessment.max_score), weight: str(assessment.weight), description: str(assessment.description), skills: str(assessment.skills), status: str(assessment.status) };
@@ -2551,9 +3214,10 @@ var PigeDiary;
                     syncLink();
                 }
                 else
-                    state.tab = request.tab || 'diaries';
-                if (state.selected?.id !== diary.id)
-                    void selectDiary(diary);
+                    state.tab = request.tab === 'attendance' ? 'diaries' : request.tab || 'diaries';
+                const loaded = state.selected?.id !== diary.id ? selectDiary(diary) : Promise.resolve();
+                if (request.tab === 'attendance')
+                    void loaded.then(() => focusHeading('diary-lessons-heading'));
             }
             Vue.watch(() => props.requestedDiary, openRequestedDiary);
             Vue.watch(() => state.busy, openRequestedDiary);
@@ -2583,7 +3247,7 @@ var PigeDiary;
             });
             Vue.onUnmounted(() => { if (pilot)
                 window.removeEventListener('beforeunload', beforeUnload); });
-            return { props, state, periodsFor, loadCalendar, saveCalendar, pilot, catalog, catalogImpact, suggest, decide, lessons, filterPeriod, save, navigation, activeGroup, filteredDiaries, pageLink, go, show, chooseAnother, markDraft, publishMaterial, printMaterial, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, editAssessment, cancelAssessmentEdit, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, resumeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
+            return { props, state, restorableFields, restoreField, addField, moveField, saveFields, editComponent, resetComponent, removeComponent, editLesson, resetLesson, editPlan, resetPlan, storedFields, markPendingPresent, pendingAttendance, changedAttendance, closeAttendance, periodsFor, loadCalendar, saveCalendar, pilot, catalog, catalogImpact, suggest, decide, lessons, filterPeriod, save, navigation, activeGroup, filteredDiaries, pageLink, go, show, chooseAnother, markDraft, publishMaterial, printMaterial, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, editAssessment, cancelAssessmentEdit, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, resumeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
         } };
 })(PigeDiary || (PigeDiary = {}));
 var PigeEducacenso;
@@ -3543,11 +4207,11 @@ var PigeLegacyImport;
 var PigeLearning;
 (function (PigeLearning) {
     PigeLearning.component = { props: ['request', 'download', 'rootPath', 'schoolId', 'studentId', 'identity'], render: PigeRenders.learning, setup(props) {
-            const state = Vue.reactive({ busy: false, error: '', students: [], studentId: '', enrollmentId: '', note: '' });
+            const state = Vue.reactive({ busy: false, error: '', students: [], studentId: '', enrollmentId: '', groupId: '', note: '' });
             const base = () => (props.rootPath || '/profile') + '/learning';
             const student = () => state.students.find(s => s.student_id === state.studentId);
             const enrollment = () => student()?.enrollments.find(e => e.enrollment_id === state.enrollmentId);
-            function selectStudent() { state.enrollmentId = student()?.enrollments[0]?.enrollment_id || ''; }
+            function selectStudent() { state.enrollmentId = student()?.enrollments[0]?.enrollment_id || ''; state.groupId = ''; }
             async function run(action) { if (state.busy)
                 return; state.busy = true; state.error = ''; try {
                 await action();
@@ -3558,8 +4222,22 @@ var PigeLearning;
             finally {
                 state.busy = false;
             } }
-            async function load() { await run(async () => { const data = await props.request(base() + (props.schoolId ? '?school_id=' + encodeURIComponent(props.schoolId) : '')); state.students = props.studentId ? data.students.filter(item => item.student_id === props.studentId) : data.students; state.note = data.note; if (!student())
-                state.studentId = state.students[0]?.student_id || ''; selectStudent(); }); }
+            async function load() {
+                await run(async () => {
+                    const data = await props.request(base() + (props.schoolId ? '?school_id=' + encodeURIComponent(props.schoolId) : ''));
+                    state.students = props.studentId ? data.students.filter(item => item.student_id === props.studentId) : data.students;
+                    state.note = data.note;
+                    if (!student()) {
+                        state.studentId = state.students[0]?.student_id || '';
+                        selectStudent();
+                    }
+                    else if (!enrollment()) {
+                        selectStudent();
+                    }
+                    if (!periodGroups.value.some(group => group.id === state.groupId))
+                        state.groupId = '';
+                });
+            }
             const rows = () => (enrollment()?.subjects || []).flatMap(subject => subject.periods.map(period => ({ ...period, component_name: period.component_name || subject.component_name, diary_id: subject.diary_id })));
             const periodGroups = Vue.computed(() => {
                 const groups = new Map();
@@ -3575,11 +4253,12 @@ var PigeLearning;
                     return (a.order_index ?? 0) - (b.order_index ?? 0) || (a.starts_on || '').localeCompare(b.starts_on || '') || left.className.localeCompare(right.className, 'pt-BR');
                 });
             });
+            const visibleGroups = Vue.computed(() => periodGroups.value.filter(group => !state.groupId || group.id === state.groupId));
             const percent = (value) => value === null || value === undefined ? 'Não apurada' : Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%';
             async function download(documentId = '') { await run(async () => { if (!student() || !enrollment())
-                return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId) + (documentId ? '&document_id=' + encodeURIComponent(documentId) : ''), 'boletim-' + student().student_number + '.pdf'); }); }
+                return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId) + (documentId ? '&document_id=' + encodeURIComponent(documentId) : '') + (props.schoolId ? '&school_id=' + encodeURIComponent(props.schoolId) : ''), 'boletim-' + student().student_number + '.pdf'); }); }
             Vue.onMounted(() => { void load(); });
-            return { props, state, student, enrollment, selectStudent, rows, periodGroups, percent, load, download };
+            return { props, state, student, enrollment, selectStudent, rows, periodGroups, visibleGroups, percent, load, download };
         } };
 })(PigeLearning || (PigeLearning = {}));
 /** Notícias e agenda com transporte compartilhável entre gestão, portal e página pública. */
@@ -4810,7 +5489,7 @@ var PigeUI;
             if (page === 'online')
                 return can('admissions.read');
             if (page === 'banking')
-                return can('banking.read');
+                return can('banking.read') || can('asaas.reports.read') || can('asaas.monitor.read');
             if (page === 'contracts' || page === 'pending-signatures')
                 return can('documents.read');
             if (page === 'signature-review')
@@ -5040,7 +5719,7 @@ var PigeUI;
             void PigeSupport.load(undefined, 'login'); }
         function supportAreaLabels() { return supportAreas.filter(area => Array.isArray(state.supportHub.enabled_areas) && state.supportHub.enabled_areas.includes(area.value)).map(area => area.label).join(', ') || 'Nenhuma área selecionada'; }
         function landingPage() { if (state.user?.role === 'finance' && pageAllowed('banking'))
-            return 'banking'; return ['dashboard', 'people', 'enrollments', 'diary', 'documents', 'reports', 'users', 'help'].find(pageAllowed) || 'help'; }
+            return 'banking'; return ['dashboard', 'people', 'enrollments', 'diary', 'documents', 'reports', 'users', 'banking', 'help'].find(pageAllowed) || 'help'; }
         async function academicPrepared() { await safe(async () => { await loadCatalogs(); await loadPage(); }); }
         async function importedDataChanged() { await safe(async () => { await loadCatalogs(); state.success = 'Importação concluída. Cadastros atualizados para consulta.'; }); }
         async function refreshAccess() {

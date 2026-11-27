@@ -7,8 +7,8 @@ from test_online import online, draft, submit, approve, pc, CSRF, CPF
 from test_contract_signatures import certificate, blank_pdf
 
 
-@pytest.mark.parametrize('guardian_trusted', [True, False])
-def test_campaign_contract_revision_and_activation_gate(online, tmp_path, monkeypatch, guardian_trusted):
+@pytest.mark.parametrize('guardian_trusted,separate_payer', [(True, False), (False, False), (True, True)])
+def test_campaign_contract_revision_and_activation_gate(online, tmp_path, monkeypatch, guardian_trusted, separate_payer):
     o=online
     api=o['api']
     template=api.post('/document-templates',{
@@ -24,7 +24,13 @@ def test_campaign_contract_revision_and_activation_gate(online, tmp_path, monkey
           'require_documents','require_payment_before_enrollment')}
     campaign=api.patch('/admission-campaigns/'+campaign['id'],{
         **data,'version':campaign['version'],'contract_template_id':template['id']})
-    a=approve(o,submit(o,draft(o)))
+    admission=submit(o,draft(o))
+    if separate_payer:
+        from test_admission_continuity import prepare_separate_parties
+        data, _, _ = prepare_separate_parties(o, admission)
+        a = api.post('/admissions/' + admission['id'] + '/approve', data, 200)
+    else:
+        a = approve(o, admission)
     assert a['contract']['required'] is True
     assert a['contract_template_id']==template['id']
     assert a['contract_template_version']==template['version']

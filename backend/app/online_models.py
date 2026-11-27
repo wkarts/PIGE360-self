@@ -1,7 +1,7 @@
 """Admissões, portal de responsáveis e integrações. Tabelas aditivas da versão 0.3."""
 from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint, CheckConstraint, Index
+from sqlalchemy import false, Boolean, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint, CheckConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from .db import Base, Record
 from .models import Scoped
@@ -22,6 +22,12 @@ class AdmissionCampaign(Record, Scoped, Base):
     require_verified_contact: Mapped[bool] = mapped_column(Boolean, default=True)
     require_documents: Mapped[bool] = mapped_column(Boolean, default=False)
     require_payment_before_enrollment: Mapped[bool] = mapped_column(Boolean, default=False)
+    fee_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    fee_amount: Mapped[Decimal | None] = mapped_column(Numeric(12,2))
+    fee_billing_type: Mapped[str] = mapped_column(String(16), default='PIX', server_default='PIX')
+    fee_due_days: Mapped[int] = mapped_column(Integer, default=3, server_default='3')
+    fee_connection_id: Mapped[str | None] = mapped_column(String(36))
+    fee_authorized_by: Mapped[str | None] = mapped_column(String(36))
     payment_reservation_hours: Mapped[int | None] = mapped_column(Integer)
     contract_template_id: Mapped[str | None] = mapped_column(ForeignKey('document_templates.id'), index=True)
     __table_args__ = (CheckConstraint('closes_on >= opens_on', name='campaign_dates'),)

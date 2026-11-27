@@ -55,6 +55,8 @@ def queue(data:IssueInput,db:DB,user:Actor,school:Scope,request:Request):
         prior=decode(old.raw_body.encode())['data']
         if old.invoice_request_id!=invoice.id or prior!=fields:fail(409,'Origem externa já fixada. Não altere pagador ou modalidade para reemitir.')
         return output(old)
+    from .asaas_native import lock_issuance_channel
+    lock_issuance_channel(db, school.id, native.id, 'crm')
     if not supports_external_issue(native):
         fail(409,'Esta cobrança pertence ao canal bancário nativo e não admite outra emissão no CRM.')
     event=envelope(invoice.scope,uid(),'issue',fields);raw=encode(event)

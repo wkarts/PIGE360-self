@@ -1,7 +1,7 @@
 /* Vue pré-compilado; sem eval em runtime. */
 var _Vue=Vue; var PigeRenders={familyPortal:function render(_ctx, _cache) {
   with (_ctx) {
-    const { createElementVNode: _createElementVNode, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, toDisplayString: _toDisplayString, createTextVNode: _createTextVNode, renderList: _renderList, Fragment: _Fragment, vModelText: _vModelText, withModifiers: _withModifiers, withKeys: _withKeys, withDirectives: _withDirectives, vModelDynamic: _vModelDynamic, normalizeClass: _normalizeClass, vModelSelect: _vModelSelect, resolveComponent: _resolveComponent, createBlock: _createBlock } = _Vue
+    const { createElementVNode: _createElementVNode, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, toDisplayString: _toDisplayString, createTextVNode: _createTextVNode, renderList: _renderList, Fragment: _Fragment, vModelText: _vModelText, withModifiers: _withModifiers, withKeys: _withKeys, withDirectives: _withDirectives, vModelDynamic: _vModelDynamic, normalizeClass: _normalizeClass, vModelSelect: _vModelSelect, resolveComponent: _resolveComponent, createBlock: _createBlock, vModelCheckbox: _vModelCheckbox } = _Vue
 
     const _component_learning_portal = _resolveComponent("learning-portal")
 
@@ -669,7 +669,202 @@ var _Vue=Vue; var PigeRenders={familyPortal:function render(_ctx, _cache) {
                                     return (_openBlock(), _createElementBlock("article", {
                                       key: charge.id,
                                       class: "family-line"
-                                    }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(charge.description), 1), _createElementVNode("p", null, "Vencimento: " + _toDisplayString(date(charge.due_on)) + " · " + _toDisplayString(label(charge.status)), 1)]), _createElementVNode("strong", null, _toDisplayString(money(charge.amount)), 1)]))
+                                    }, [
+                                      _createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(charge.description), 1), _createElementVNode("p", null, "Vencimento: " + _toDisplayString(date(charge.due_on)) + " · " + _toDisplayString(label(charge.status)), 1)]),
+                                      _createElementVNode("strong", null, _toDisplayString(money(charge.amount)), 1),
+                                      (charge.collection_mode==='provider' && charge.billing_type==='PIX')
+                                        ? (_openBlock(), _createElementBlock("div", {
+                                            key: 0,
+                                            class: "x-form"
+                                          }, [_createElementVNode("button", {
+                                            type: "button",
+                                            class: "btn btn-secondary",
+                                            "aria-expanded": autoPix.state.id===charge.id,
+                                            onClick: $event => (autoPix.open(charge.id))
+                                          }, "Pix Automático", 8, ["aria-expanded", "onClick"]), (autoPix.state.id===charge.id)
+                                            ? (_openBlock(), _createElementBlock("div", {
+                                                key: 0,
+                                                class: "x-form",
+                                                "aria-live": "polite"
+                                              }, [(autoPix.state.busy)
+                                                ? (_openBlock(), _createElementBlock("p", {
+                                                    key: 0,
+                                                    role: "status"
+                                                  }, "Consultando a cobrança…"))
+                                                : _createCommentVNode("", true), (autoPix.state.error)
+                                                ? (_openBlock(), _createElementBlock("div", {
+                                                    key: 1,
+                                                    role: "alert"
+                                                  }, [_createElementVNode("p", null, _toDisplayString(autoPix.state.error), 1), _createElementVNode("button", {
+                                                    type: "button",
+                                                    class: "btn btn-secondary",
+                                                    disabled: autoPix.state.busy,
+                                                    onClick: autoPix.reload
+                                                  }, "Consultar novamente", 8, ["disabled", "onClick"])]))
+                                                : _createCommentVNode("", true), (autoPix.state.view)
+                                                ? (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [(autoPix.state.view.can_enroll)
+                                                    ? (_openBlock(), _createElementBlock("form", {
+                                                        key: 0,
+                                                        onSubmit: _withModifiers(autoPix.enroll, ["prevent"])
+                                                      }, [
+                                                        _createElementVNode("p", null, [_createTextVNode("Primeiro pagamento de "), _createElementVNode("strong", null, _toDisplayString(autoPix.money(autoPix.state.view.amount)), 1)]),
+                                                        _createElementVNode("label", null, [_createTextVNode("Frequência dos próximos débitos"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((autoPix.state.frequency) = $event) }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(autoPix.frequencies, (label, code) => {
+                                                          return (_openBlock(), _createElementBlock("option", {
+                                                            key: code,
+                                                            value: code
+                                                          }, _toDisplayString(label), 9, ["value"]))
+                                                        }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, autoPix.state.frequency]])]),
+                                                        _createElementVNode("label", null, [_withDirectives(_createElementVNode("input", {
+                                                          type: "checkbox",
+                                                          "onUpdate:modelValue": $event => ((autoPix.state.accepted) = $event)
+                                                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, autoPix.state.accepted]]), _createTextVNode(" " + _toDisplayString(autoPix.state.view.terms), 1)]),
+                                                        _createElementVNode("button", {
+                                                          type: "submit",
+                                                          class: "btn btn-primary",
+                                                          disabled: !autoPix.state.accepted || autoPix.state.busy
+                                                        }, "Gerar QR de adesão", 8, ["disabled"])
+                                                      ], 40, ["onSubmit"]))
+                                                    : _createCommentVNode("", true), (autoPix.state.view.authorization)
+                                                    ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
+                                                        _createElementVNode("p", null, [_createTextVNode("Autorização "), _createElementVNode("strong", null, _toDisplayString(autoPix.label(autoPix.state.view.authorization.status)), 1), _createTextVNode(" · " + _toDisplayString(autoPix.frequencies[autoPix.state.view.authorization.frequency]), 1)]),
+                                                        (autoPix.state.view.authorization.payload)
+                                                          ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [(autoPix.state.view.authorization.encoded_image)
+                                                              ? (_openBlock(), _createElementBlock("img", {
+                                                                  key: 0,
+                                                                  src: 'data:image/png;base64,'+autoPix.state.view.authorization.encoded_image,
+                                                                  width: "160",
+                                                                  height: "160",
+                                                                  alt: "QR Pix da adesão"
+                                                                }, null, 8, ["src"]))
+                                                              : _createCommentVNode("", true), _createElementVNode("label", null, [_createTextVNode("Pix copia e cola"), _createElementVNode("textarea", {
+                                                              readonly: "",
+                                                              value: autoPix.state.view.authorization.payload,
+                                                              onFocus: $event => ($event.target.select())
+                                                            }, null, 40, ["value", "onFocus"])]), (autoPix.state.view.authorization.expires_at)
+                                                              ? (_openBlock(), _createElementBlock("p", { key: 1 }, "QR válido até " + _toDisplayString(new Date(autoPix.state.view.authorization.expires_at).toLocaleString('pt-BR')) + ".", 1))
+                                                              : _createCommentVNode("", true)], 64))
+                                                          : _createCommentVNode("", true),
+                                                        (autoPix.state.view.authorization.cycles.length)
+                                                          ? (_openBlock(), _createElementBlock("ul", { key: 1 }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(autoPix.state.view.authorization.cycles, (c) => {
+                                                              return (_openBlock(), _createElementBlock("li", { key: c.id }, [_createTextVNode(_toDisplayString(c.due_on.split('-').reverse().join('/')) + " · " + _toDisplayString(autoPix.money(c.amount)) + " · " + _toDisplayString(autoPix.label(c.status)), 1), (c.instruction_status)
+                                                                ? (_openBlock(), _createElementBlock("span", { key: 0 }, " · " + _toDisplayString(autoPix.label(c.instruction_status)), 1))
+                                                                : _createCommentVNode("", true)]))
+                                                            }), 128))]))
+                                                          : _createCommentVNode("", true),
+                                                        _createElementVNode("button", {
+                                                          type: "button",
+                                                          class: "btn btn-secondary",
+                                                          disabled: autoPix.state.busy,
+                                                          onClick: autoPix.refresh
+                                                        }, "Atualizar situação", 8, ["disabled", "onClick"]),
+                                                        (['CREATED','ACTIVE'].includes(autoPix.state.view.authorization.status))
+                                                          ? (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [(!autoPix.state.confirmCancel)
+                                                              ? (_openBlock(), _createElementBlock("button", {
+                                                                  key: 0,
+                                                                  type: "button",
+                                                                  class: "btn btn-secondary",
+                                                                  onClick: $event => (autoPix.state.confirmCancel=true)
+                                                                }, "Cancelar autorização", 8, ["onClick"]))
+                                                              : (_openBlock(), _createElementBlock("div", { key: 1 }, [
+                                                                  _createElementVNode("p", null, "Deseja interromper os próximos débitos? Os pagamentos já enviados dependem de confirmação bancária."),
+                                                                  _createElementVNode("button", {
+                                                                    type: "button",
+                                                                    class: "btn btn-secondary",
+                                                                    disabled: autoPix.state.busy,
+                                                                    onClick: autoPix.cancel
+                                                                  }, "Confirmar cancelamento", 8, ["disabled", "onClick"]),
+                                                                  _createTextVNode(),
+                                                                  _createElementVNode("button", {
+                                                                    type: "button",
+                                                                    class: "btn btn-secondary",
+                                                                    onClick: $event => (autoPix.state.confirmCancel=false)
+                                                                  }, "Voltar", 8, ["onClick"])
+                                                                ]))], 64))
+                                                          : _createCommentVNode("", true)
+                                                      ], 64))
+                                                    : (!autoPix.state.view.can_enroll)
+                                                      ? (_openBlock(), _createElementBlock("p", { key: 2 }, "Adesão indisponível para esta cobrança."))
+                                                      : _createCommentVNode("", true)], 64))
+                                                : _createCommentVNode("", true)]))
+                                            : _createCommentVNode("", true)]))
+                                        : _createCommentVNode("", true),
+                                      (charge.has_card_checkout)
+                                        ? (_openBlock(), _createElementBlock("div", {
+                                            key: 1,
+                                            class: "family-attention"
+                                          }, [_createElementVNode("button", {
+                                            type: "button",
+                                            class: "link-button",
+                                            onClick: $event => (cards.load(charge.id))
+                                          }, "Consultar cartão desta cobrança", 8, ["onClick"]), (cards.state.charge===charge.id)
+                                            ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [(cards.state.loading)
+                                                ? (_openBlock(), _createElementBlock("p", {
+                                                    key: 0,
+                                                    role: "status"
+                                                  }, "Consultando cartão…"))
+                                                : _createCommentVNode("", true), (cards.state.error)
+                                                ? (_openBlock(), _createElementBlock("p", {
+                                                    key: 1,
+                                                    role: "alert"
+                                                  }, _toDisplayString(cards.state.error), 1))
+                                                : _createCommentVNode("", true), (cards.state.view?.checkout)
+                                                ? (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [
+                                                    _createElementVNode("p", null, "Valor no cartão " + _toDisplayString(money(String(cards.state.view.checkout.quote.charged_cents/100))), 1),
+                                                    (cards.state.view.checkout.mode==='recurrent')
+                                                      ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Assinatura hospedada no Asaas com início em " + _toDisplayString(date(cards.state.view.checkout.first_due)) + " e término em " + _toDisplayString(date(cards.state.view.checkout.ends_on)) + ".", 1))
+                                                      : _createCommentVNode("", true),
+                                                    (cards.link(cards.state.view.checkout.checkout_url))
+                                                      ? (_openBlock(), _createElementBlock("a", {
+                                                          key: 1,
+                                                          href: cards.link(cards.state.view.checkout.checkout_url),
+                                                          target: "_blank",
+                                                          rel: "noopener noreferrer"
+                                                        }, "Abrir checkout seguro do Asaas", 8, ["href"]))
+                                                      : _createCommentVNode("", true),
+                                                    (cards.state.view.can_authorize)
+                                                      ? (_openBlock(), _createElementBlock("form", {
+                                                          key: 2,
+                                                          onSubmit: _withModifiers($event => (cards.submit(false)), ["prevent"])
+                                                        }, [
+                                                          _createElementVNode("h3", null, "Autorizar cartão para próximas mensalidades"),
+                                                          _createElementVNode("label", null, [_createTextVNode("Limite por título (R$)"), _withDirectives(_createElementVNode("input", {
+                                                            "onUpdate:modelValue": $event => ((cards.state.limit) = $event),
+                                                            type: "number",
+                                                            min: "0.01",
+                                                            step: "0.01",
+                                                            required: ""
+                                                          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, cards.state.limit]])]),
+                                                          _createElementVNode("label", null, [_createTextVNode("Autorização válida até"), _withDirectives(_createElementVNode("input", {
+                                                            "onUpdate:modelValue": $event => ((cards.state.until) = $event),
+                                                            type: "date",
+                                                            required: ""
+                                                          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, cards.state.until]])]),
+                                                          _createElementVNode("label", null, [_withDirectives(_createElementVNode("input", {
+                                                            type: "checkbox",
+                                                            "onUpdate:modelValue": $event => ((cards.state.agreed) = $event),
+                                                            required: ""
+                                                          }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, cards.state.agreed]]), _createTextVNode(_toDisplayString(cards.state.view.terms), 1)]),
+                                                          _createElementVNode("button", {
+                                                            class: "btn",
+                                                            disabled: cards.state.loading||!cards.state.agreed
+                                                          }, "Autorizar débitos por título", 8, ["disabled"])
+                                                        ], 40, ["onSubmit"]))
+                                                      : _createCommentVNode("", true),
+                                                    (cards.state.view.authorization?.active)
+                                                      ? (_openBlock(), _createElementBlock("div", { key: 3 }, [_createElementVNode("p", null, "Débitos autorizados até " + _toDisplayString(date(cards.state.view.authorization.ends_on)) + ", com limite por título de " + _toDisplayString(money(String(cards.state.view.authorization.limit_cents/100))) + ".", 1), _createElementVNode("label", null, [_withDirectives(_createElementVNode("input", {
+                                                          type: "checkbox",
+                                                          "onUpdate:modelValue": $event => ((cards.state.revoke) = $event)
+                                                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, cards.state.revoke]]), _createTextVNode("Quero revogar os débitos futuros")]), _createElementVNode("button", {
+                                                          class: "btn",
+                                                          onClick: $event => (cards.submit(true)),
+                                                          disabled: cards.state.loading||!cards.state.revoke
+                                                        }, "Revogar autorização", 8, ["onClick", "disabled"])]))
+                                                      : _createCommentVNode("", true)
+                                                  ], 64))
+                                                : _createCommentVNode("", true)], 64))
+                                            : _createCommentVNode("", true)]))
+                                        : _createCommentVNode("", true)
+                                    ]))
                                   }), 128)),
                                   (s.financeLoaded&&!s.charges.length)
                                     ? (_openBlock(), _createElementBlock("p", {
@@ -858,17 +1053,24 @@ var _Vue=Vue; var PigeRenders={familyPortal:function render(_ctx, _cache) {
               }), 128))], 40, ["onUpdate:modelValue", "onChange", "disabled"]), [[_vModelSelect, state.studentId]])]))
             : _createCommentVNode("", true), _createElementVNode("label", null, [_createTextVNode("Matrícula"), _withDirectives(_createElementVNode("select", {
             "onUpdate:modelValue": $event => ((state.enrollmentId) = $event),
+            onChange: $event => (state.groupId=''),
             disabled: state.busy
           }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(student()?.enrollments || [], (item) => {
             return (_openBlock(), _createElementBlock("option", {
               key: item.enrollment_id,
               value: item.enrollment_id
             }, _toDisplayString(item.year_name) + " · " + _toDisplayString(item.class_name) + " · " + _toDisplayString(item.number), 9, ["value"]))
-          }), 128))], 8, ["onUpdate:modelValue", "disabled"]), [[_vModelSelect, state.enrollmentId]])])]))
+          }), 128))], 40, ["onUpdate:modelValue", "onChange", "disabled"]), [[_vModelSelect, state.enrollmentId]])])]))
+        : _createCommentVNode("", true),
+      (student() && !student().enrollments.length)
+        ? (_openBlock(), _createElementBlock("p", {
+            key: 3,
+            class: "empty-state"
+          }, "Este aluno ainda não tem uma matrícula disponível para consulta."))
         : _createCommentVNode("", true),
       (!state.students.length && !state.busy && !state.error)
         ? (_openBlock(), _createElementBlock("div", {
-            key: 3,
+            key: 4,
             class: "empty-state"
           }, [_createElementVNode("h3", null, "Nenhum aluno vinculado"), _createElementVNode("p", null, "Solicite à Secretaria a conferência do seu vínculo com o cadastro escolar.")]))
         : _createCommentVNode("", true)
@@ -905,7 +1107,12 @@ var _Vue=Vue; var PigeRenders={familyPortal:function render(_ctx, _cache) {
           }, "Baixar boletim PDF", 8, ["disabled", "onClick"])
         ]), (rows().length)
           ? (_openBlock(), _createElementBlock("div", { key: 0 }, [
-              _createElementVNode("p", { class: "small" }, "O PDF de consulta contém os resultados publicados. Para imprimir a via assinada pela escola, selecione sua revisão."),
+              (enrollment().official_editions?.length)
+                ? (_openBlock(), _createElementBlock("p", {
+                    key: 0,
+                    class: "small"
+                  }, "Escolha a revisão para baixar a via assinada pela escola."))
+                : _createCommentVNode("", true),
               (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(enrollment().official_editions, (edition) => {
                 return (_openBlock(), _createElementBlock("button", {
                   key: edition.id,
@@ -953,11 +1160,22 @@ var _Vue=Vue; var PigeRenders={familyPortal:function render(_ctx, _cache) {
                     : _createCommentVNode("", true)
                 ]))
               }), 128)),
-              (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(periodGroups, (group) => {
+              (periodGroups.length>1)
+                ? (_openBlock(), _createElementBlock("label", {
+                    key: 1,
+                    class: "bulletin-filter"
+                  }, [_createTextVNode("Detalhamento por período e turma "), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.groupId) = $event) }, [_createElementVNode("option", { value: "" }, "Todos os períodos publicados"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(periodGroups, (group) => {
+                    return (_openBlock(), _createElementBlock("option", {
+                      key: group.id,
+                      value: group.id
+                    }, _toDisplayString(group.label) + " · " + _toDisplayString(group.className), 9, ["value"]))
+                  }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.groupId]])]))
+                : _createCommentVNode("", true),
+              (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(visibleGroups, (group) => {
                 return (_openBlock(), _createElementBlock("section", {
                   key: group.id,
                   class: "bulletin-period"
-                }, [_createElementVNode("h3", null, _toDisplayString(group.label) + " · " + _toDisplayString(group.className), 1), _createElementVNode("div", { class: "table-scroll report-records" }, [_createElementVNode("table", null, [_createElementVNode("thead", null, [_createElementVNode("tr", null, [
+                }, [_createElementVNode("h3", null, _toDisplayString(group.label) + " · " + _toDisplayString(group.className), 1), _createElementVNode("div", { class: "table-scroll report-records" }, [_createElementVNode("table", null, [_createElementVNode("caption", { class: "sr-only" }, "Detalhamento de " + _toDisplayString(group.label) + " · " + _toDisplayString(group.className), 1), _createElementVNode("thead", null, [_createElementVNode("tr", null, [
                   _createElementVNode("th", { scope: "col" }, "Componente curricular"),
                   _createElementVNode("th", { scope: "col" }, "Aulas"),
                   _createElementVNode("th", { scope: "col" }, "Nota / conceito"),

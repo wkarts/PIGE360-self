@@ -96,3 +96,49 @@ def test_campaign_accepts_future_contract_only_for_compatible_window_and_kind(on
     api.post('/admissions/' + admission['id'] + '/approve', {'version': admission['version'],
              'identity_confirmed': True, 'reason': 'Conferência do modelo da campanha.'}, 409)
     assert not api.get('/admissions/' + admission['id'])['enrollment_id']
+
+
+def prepare_separate_parties(o, admission):
+    api = o['api']
+    student = api.post('/students', {'person': {'name': 'Aluno Online', 'birth_date': '2017-03-10'}})
+    parent = api.post('/persons', {'name': 'Responsável Teste', 'cpf': CPF})
+    payer = api.post('/persons', {'name': 'Pagador da matrícula', 'cpf': '11144477735'})
+    for person, legal, financial in [(parent, True, False), (payer, False, True)]:
+        api.post('/students/'+student['id']+'/guardians', {'person_id':person['id'], 'legal':legal, 'financial':financial})
+    return {'version':admission['version'],'identity_confirmed':True,'reason':'Vínculos conferidos pela escola.',
+            'existing_student_id':student['id'],'existing_guardian_id':parent['id'],'financial_person_id':payer['id']}, parent, payer
+
+
+def test_separate_payer_receives_new_charges_and_signer_keeps_authority(online):
+    from uuid import uuid4
+    from test_online import charge
+    from conftest import PASSWORD
+    from app.admission_parties import signer
+    from app.contract_templates import _context
+    api = online['api']
+    admission = submit(online, draft(online))
+    path = '/admissions/'+admission['id']
+    data, parent, payer = prepare_separate_parties(online, admission)
+    api.post(path+'/approve', {**data,'financial_person_id':str(uuid4())}, 422)
+    approved = api.post(path+'/approve', data, 200)
+    enrollment = api.get('/enrollments/'+approved['enrollment_id'])
+    assert enrollment['financial_person_id'] == payer['id']
+    a = charge(online, approved, collection_mode='manual')
+    assert a['admission_id'] == approved['id'] and a['account_id'] is None and a['payer_snapshot']['person_id'] == payer['id']
+    assert pc(online, 'GET', path+'/charges') == []
+    with SessionLocal() as db:
+        record = db.get(m.Admission, approved['id'])
+        enr = db.get(m.Enrollment, enrollment['id'])
+        assert signer(db, record, enr).id == parent['id']
+        values = _context(db, db.get(m.School, api.school['id']), enr, parent['id'])
+        assert (values['contratante1.cpf'],values['contratante2.cpf']) == (CPF,payer['cpf'])
+    for person, expected in [(parent,403),(payer,200)]:
+        email = uuid4().hex+'@example.com'
+        api.post('/users',{'name':person['name'],'email':email,'password':PASSWORD,'role':'guardian',
+                           'person_id':person['id'],'school_ids':[api.school['id']]})
+        token = api.client.post('/api/v1/auth/login',json={'email':email,'password':PASSWORD}).json()['access_token']
+        response = api.client.get('/api/v1/family/students/'+data['existing_student_id']+'/charges',headers={'Authorization':'Bearer '+token})
+        assert response.status_code == expected, response.text
+        if expected == 200:
+            assert [row['id'] for row in response.json()['items']] == [a['id']]
+    assert api.post(path+'/finalize',{'version':approved['version'],'reason':'Conferência concluída.'},200)['status']=='enrolled'

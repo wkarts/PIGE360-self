@@ -334,11 +334,11 @@ var PigeOnline;
 var PigeLearning;
 (function (PigeLearning) {
     PigeLearning.component = { props: ['request', 'download', 'rootPath', 'schoolId', 'studentId', 'identity'], render: PigeRenders.learning, setup(props) {
-            const state = Vue.reactive({ busy: false, error: '', students: [], studentId: '', enrollmentId: '', note: '' });
+            const state = Vue.reactive({ busy: false, error: '', students: [], studentId: '', enrollmentId: '', groupId: '', note: '' });
             const base = () => (props.rootPath || '/profile') + '/learning';
             const student = () => state.students.find(s => s.student_id === state.studentId);
             const enrollment = () => student()?.enrollments.find(e => e.enrollment_id === state.enrollmentId);
-            function selectStudent() { state.enrollmentId = student()?.enrollments[0]?.enrollment_id || ''; }
+            function selectStudent() { state.enrollmentId = student()?.enrollments[0]?.enrollment_id || ''; state.groupId = ''; }
             async function run(action) { if (state.busy)
                 return; state.busy = true; state.error = ''; try {
                 await action();
@@ -349,8 +349,22 @@ var PigeLearning;
             finally {
                 state.busy = false;
             } }
-            async function load() { await run(async () => { const data = await props.request(base() + (props.schoolId ? '?school_id=' + encodeURIComponent(props.schoolId) : '')); state.students = props.studentId ? data.students.filter(item => item.student_id === props.studentId) : data.students; state.note = data.note; if (!student())
-                state.studentId = state.students[0]?.student_id || ''; selectStudent(); }); }
+            async function load() {
+                await run(async () => {
+                    const data = await props.request(base() + (props.schoolId ? '?school_id=' + encodeURIComponent(props.schoolId) : ''));
+                    state.students = props.studentId ? data.students.filter(item => item.student_id === props.studentId) : data.students;
+                    state.note = data.note;
+                    if (!student()) {
+                        state.studentId = state.students[0]?.student_id || '';
+                        selectStudent();
+                    }
+                    else if (!enrollment()) {
+                        selectStudent();
+                    }
+                    if (!periodGroups.value.some(group => group.id === state.groupId))
+                        state.groupId = '';
+                });
+            }
             const rows = () => (enrollment()?.subjects || []).flatMap(subject => subject.periods.map(period => ({ ...period, component_name: period.component_name || subject.component_name, diary_id: subject.diary_id })));
             const periodGroups = Vue.computed(() => {
                 const groups = new Map();
@@ -366,11 +380,12 @@ var PigeLearning;
                     return (a.order_index ?? 0) - (b.order_index ?? 0) || (a.starts_on || '').localeCompare(b.starts_on || '') || left.className.localeCompare(right.className, 'pt-BR');
                 });
             });
+            const visibleGroups = Vue.computed(() => periodGroups.value.filter(group => !state.groupId || group.id === state.groupId));
             const percent = (value) => value === null || value === undefined ? 'Não apurada' : Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%';
             async function download(documentId = '') { await run(async () => { if (!student() || !enrollment())
-                return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId) + (documentId ? '&document_id=' + encodeURIComponent(documentId) : ''), 'boletim-' + student().student_number + '.pdf'); }); }
+                return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId) + (documentId ? '&document_id=' + encodeURIComponent(documentId) : '') + (props.schoolId ? '&school_id=' + encodeURIComponent(props.schoolId) : ''), 'boletim-' + student().student_number + '.pdf'); }); }
             Vue.onMounted(() => { void load(); });
-            return { props, state, student, enrollment, selectStudent, rows, periodGroups, percent, load, download };
+            return { props, state, student, enrollment, selectStudent, rows, periodGroups, visibleGroups, percent, load, download };
         } };
 })(PigeLearning || (PigeLearning = {}));
 /** Notícias e agenda com transporte compartilhável entre gestão, portal e página pública. */
@@ -1329,7 +1344,7 @@ var PigeAssist;
 })(PigeAssist || (PigeAssist = {}));
 var PigePortal;
 (function (PigePortal) {
-    const state = Vue.reactive({ schools: [], schoolId: new URLSearchParams(location.search).get('school') || '', catalogFailed: false, assistSource: '', profileReadSource: '', profileOpen: false, ready: false, busy: false, section: 'admissions', step: 0, diaryError: '', error: '', notice: '', online: navigator.onLine, diaryConsent: { version: '', text: '' }, diaryConsentAccepted: false, diaryAccess: { consent_version: '', consent_required: false, eligible_student_count: 0, eligible_students: [], students: [] }, diaryCommunications: [], registrationTerms: { version: '', text: '' }, account: null, campaign: null, campaigns: [], slug: new URLSearchParams(location.search).get('campaign') || '', mode: 'login', registerPurpose: 'admission', rows: [], total: 0, page: 1, selected: null, editing: false, charges: [], code: '', verifyChannel: 'email', verification: { email: false, whatsapp: false, whatsapp_message: '' }, message: '', documentType: '', acceptTerms: false, legal: false, register: { name: '', email: '', password: '', cpf: '', phone: '', address: '', accept_privacy: false, whatsapp_opt_in: false }, login: { email: '', password: '' }, reset: { email: '', code: '', password: '' }, form: { student: PigeOnline.person(), class_group_id: '', previous_school: '', relationship: 'Responsável legal', notes: '', client_key: PigeOnline.newId() } });
+    const state = Vue.reactive({ fee: null, feeError: '', schools: [], schoolId: new URLSearchParams(location.search).get('school') || '', catalogFailed: false, assistSource: '', profileReadSource: '', profileOpen: false, ready: false, busy: false, section: 'admissions', step: 0, diaryError: '', error: '', notice: '', online: navigator.onLine, diaryConsent: { version: '', text: '' }, diaryConsentAccepted: false, diaryAccess: { consent_version: '', consent_required: false, eligible_student_count: 0, eligible_students: [], students: [] }, diaryCommunications: [], registrationTerms: { version: '', text: '' }, account: null, campaign: null, campaigns: [], slug: new URLSearchParams(location.search).get('campaign') || '', mode: 'login', registerPurpose: 'admission', rows: [], total: 0, page: 1, selected: null, editing: false, charges: [], code: '', verifyChannel: 'email', verification: { email: false, whatsapp: false, whatsapp_message: '' }, message: '', documentType: '', acceptTerms: false, legal: false, register: { name: '', email: '', password: '', cpf: '', phone: '', address: '', accept_privacy: false, whatsapp_opt_in: false }, login: { email: '', password: '' }, reset: { email: '', code: '', password: '' }, form: { student: PigeOnline.person(), class_group_id: '', previous_school: '', relationship: 'Responsável legal', notes: '', client_key: PigeOnline.newId() } });
     let supportContext = '';
     function syncSupport() {
         const area = state.account && state.section !== 'admissions' ? 'guardian_portal' : 'online_enrollment';
@@ -1615,7 +1630,7 @@ var PigePortal;
             state.notice = 'Conta criada. Confirme um contato para validar o vínculo com o cadastro escolar.';
         });
     }
-    async function logout() { PigeSupport.dispose(); supportContext = ''; state.assistSource = ''; state.profileReadSource = ''; state.profileOpen = false; await run(async () => { await post('/logout', {}); state.account = null; state.rows = []; state.diaryAccess = { consent_version: '', consent_required: false, eligible_student_count: 0, eligible_students: [], students: [] }; state.diaryCommunications = []; state.diaryConsentAccepted = false; state.selected = null; state.charges = []; state.editing = false; state.register = { name: '', email: '', password: '', cpf: '', phone: '', address: '', accept_privacy: false, whatsapp_opt_in: false }; state.login.password = ''; state.form.student = PigeOnline.person(); resetSigning(); if (signingTimer)
+    async function logout() { PigeSupport.dispose(); supportContext = ''; state.assistSource = ''; state.profileReadSource = ''; state.profileOpen = false; await run(async () => { await post('/logout', {}); state.account = null; state.rows = []; state.diaryAccess = { consent_version: '', consent_required: false, eligible_student_count: 0, eligible_students: [], students: [] }; state.diaryCommunications = []; state.diaryConsentAccepted = false; state.selected = null; state.charges = []; state.fee = null; state.feeError = ''; state.editing = false; state.register = { name: '', email: '', password: '', cpf: '', phone: '', address: '', accept_privacy: false, whatsapp_opt_in: false }; state.login.password = ''; state.form.student = PigeOnline.person(); resetSigning(); if (signingTimer)
         window.clearInterval(signingTimer); }); if (!state.account && signing.sessionId)
         location.assign('/api/v1/portal/signing/govbr/logout'); }
     async function loadVerification() { state.verification = await request('/verification/channels'); }
@@ -1632,7 +1647,35 @@ var PigePortal;
     } state.selected = null; state.form = { student: PigeOnline.person(), class_group_id: '', previous_school: '', relationship: 'Responsável legal', notes: '', client_key: PigeOnline.newId() }; state.editing = true; }
     function edit() { state.assistSource = ''; state.step = 0; state.section = 'admissions'; syncSupport(); selectedFile = null; const a = state.selected; if (!a)
         return; const { previous_school, ...student } = a.student_data; state.form = { student: { ...student }, class_group_id: a.class_group_id, previous_school: previous_school || '', relationship: a.relationship, notes: a.notes, client_key: PigeOnline.newId() }; state.editing = true; }
-    async function openRecord(id) { state.assistSource = ''; selectedFile = null; signedContractFile = null; const a = await request('/admissions/' + id); state.selected = a; state.editing = false; state.acceptTerms = false; state.legal = false; state.charges = await request('/admissions/' + id + '/charges'); state.campaign = await request('/admissions/' + id + '/campaign'); state.slug = state.campaign.slug; state.schoolId = state.account?.school_id || state.campaign.school_id; state.documentType = a.document_types.find(d => !a.attachments.some(f => f.document_type_id === d.id && f.review_status !== 'rejected'))?.id || ''; resetSigning(); await loadSigningMethods(); }
+    async function openRecord(id) { state.fee = null; state.feeError = ''; state.assistSource = ''; selectedFile = null; signedContractFile = null; const a = await request('/admissions/' + id); state.selected = a; state.editing = false; state.acceptTerms = false; state.legal = false; state.charges = await request('/admissions/' + id + '/charges'); state.campaign = await request('/admissions/' + id + '/campaign'); state.slug = state.campaign.slug; state.schoolId = state.account?.school_id || state.campaign.school_id; state.documentType = a.document_types.find(d => !a.attachments.some(f => f.document_type_id === d.id && f.review_status !== 'rejected'))?.id || ''; resetSigning(); await loadSigningMethods(); if (state.campaign.fee_enabled && !['draft', 'withdrawn', 'rejected'].includes(a.status))
+        await readFee(id); }
+    async function readFee(id) {
+        try {
+            const fee = await request('/admissions/' + encodeURIComponent(id) + '/fee');
+            if (state.selected?.id === id) {
+                state.fee = fee;
+                state.feeError = '';
+            }
+        }
+        catch (e) {
+            if (state.selected?.id === id)
+                state.feeError = e instanceof Error ? e.message : String(e);
+        }
+    }
+    async function issueFee() {
+        await run(async () => {
+            const id = state.selected?.id;
+            if (!id || !state.fee?.can_issue || !state.fee.quote || state.fee.charge)
+                return;
+            const fee = await post('/admissions/' + encodeURIComponent(id) + '/fee', { quote: state.fee.quote });
+            if (state.selected?.id !== id)
+                return;
+            state.fee = fee;
+            state.feeError = '';
+            state.notice = fee.message;
+            state.charges = await request('/admissions/' + id + '/charges');
+        });
+    }
     async function view(id) { await run(() => openRecord(id)); }
     async function backToAdmissions() { await run(async () => { state.selected = null; state.editing = false; selectedFile = null; signedContractFile = null; state.assistSource = ''; if (!state.campaign?.accepting) {
         state.campaign = null;
@@ -1825,5 +1868,5 @@ var PigePortal;
     function progressStep() { const status = state.selected?.status; return status === 'enrolled' ? 4 : status === 'approved' ? 3 : status && ['submitted', 'under_review', 'waitlisted', 'rejected'].includes(status) ? 2 : 1; }
     const editable = () => !state.selected || ['draft', 'changes_requested'].includes(state.selected.status);
     Vue.createApp({ components: { 'assist-panel': PigeAssist.component, 'learning-portal': PigeLearning.component, 'school-community': PigeCommunity.component }, render: PigeRenders.portal, setup() { Vue.onMounted(() => { PigeMFA.init(mfaRequest, afterMFA, logout, true); window.addEventListener('online', () => { state.online = true; }); window.addEventListener('offline', () => { state.online = false; }); if ('serviceWorker' in navigator && window.isSecureContext)
-            void navigator.serviceWorker.register('/sw.js').catch(() => { }); void PigeInstitution.load(); void start(); }); return { state, learningDownload, formSteps, today, formatCPF, formatPhone, nextStep, selectSection, useGuardianAddress, selectedGroup, documentStatus, submissionIssues, progressStep, start, visibleCampaigns, selectSchool, assistRequest, personAssistFields, detailFields, readAttachment, mfa: PigeMFA, identity: PigeInstitution.state, run, selectCampaign, login, register, logout, verifyRequest, verifyConfirm, resetRequest, resetConfirm, newAdmission, edit, view, backToAdmissions, save, fileChange, signing, personalCertificateChange, signPersonalA1, signGovbr, signedContractChange, uploadSignedContract, upload, submit, sendMessage, withdraw, download, paginate, refresh, copy, saveProfile, loadRegistrationTerms, openRegistration, chooseRegistrationPurpose, loadDiaryPortal, activateDiaryAccess, revokeDiaryAccess, markDiaryCommunicationRead, editable, label: PigeOnline.label, date: PigeOnline.date, dateTime: PigeOnline.dateTime, money: PigeOnline.money, safeLink: PigeOnline.safeLink }; } }).mount('#portal');
+            void navigator.serviceWorker.register('/sw.js').catch(() => { }); void PigeInstitution.load(); void start(); }); return { state, issueFee, learningDownload, formSteps, today, formatCPF, formatPhone, nextStep, selectSection, useGuardianAddress, selectedGroup, documentStatus, submissionIssues, progressStep, start, visibleCampaigns, selectSchool, assistRequest, personAssistFields, detailFields, readAttachment, mfa: PigeMFA, identity: PigeInstitution.state, run, selectCampaign, login, register, logout, verifyRequest, verifyConfirm, resetRequest, resetConfirm, newAdmission, edit, view, backToAdmissions, save, fileChange, signing, personalCertificateChange, signPersonalA1, signGovbr, signedContractChange, uploadSignedContract, upload, submit, sendMessage, withdraw, download, paginate, refresh, copy, saveProfile, loadRegistrationTerms, openRegistration, chooseRegistrationPurpose, loadDiaryPortal, activateDiaryAccess, revokeDiaryAccess, markDiaryCommunicationRead, editable, label: PigeOnline.label, date: PigeOnline.date, dateTime: PigeOnline.dateTime, money: PigeOnline.money, safeLink: PigeOnline.safeLink }; } }).mount('#portal');
 })(PigePortal || (PigePortal = {}));

@@ -64,9 +64,9 @@ def publication_ids(enrollment):
     return sorted({p['publication_id'] for subject in enrollment['subjects'] for p in subject['periods']})
 
 
-def published_editions(db, student, enrollments):
+def published_editions(db, student, enrollments, active_sources=None):
     from sqlalchemy import select
-    valid = {e['enrollment_id']: set(publication_ids(e)) for e in enrollments}
+    valid = active_sources if active_sources is not None else {e['enrollment_id']: set(publication_ids(e)) for e in enrollments}
     result = {eid: [] for eid in valid}
     docs = db.scalars(select(m.IssuedDocument).where(m.IssuedDocument.school_id == student.school_id,
         m.IssuedDocument.student_id == student.id, m.IssuedDocument.enrollment_id.in_(valid),

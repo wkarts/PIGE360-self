@@ -31,7 +31,7 @@ from .banking import apply_remote, queue_charge_sync, crm_issue_attempted
 
 LOG = logging.getLogger('pige360.worker')
 HEARTBEAT = Path('/tmp/pige360-worker-heartbeat')
-SAFE_KINDS = {'bank_sync', 'mailbox_provision', 'legacy_import'}
+SAFE_KINDS = {'asaas_card_sync', 'bank_sync', 'mailbox_provision', 'legacy_import'}
 
 def refresh_pix(db, charge, provider):
     if charge.billing_type != 'PIX' or charge.status not in ('pending', 'overdue'):
@@ -59,14 +59,32 @@ def customer_reference(charge):
     content = f'{charge.school_id}:{charge.payer_snapshot["cpf"]}'.encode()
     return 'pige360-payer:' + hmac.new(key, content, hashlib.sha256).hexdigest()
 
+def verify_recovered_customer(provider, charge, payment):
+    if charge.remote_customer_id:
+        return
+    expected = customer_reference(charge)
+    customer = provider.find('customers', expected)
+    cpf = ''.join(c for c in str((customer or {}).get('cpfCnpj') or '') if c.isdigit())
+    if (not customer or not customer.get('id') or customer.get('externalReference') != expected
+            or customer['id'] != payment.get('customer') or not cpf or cpf != charge.payer_snapshot.get('cpf')):
+        raise IntegrationFailure('BANK_CUSTOMER_REQUIRES_RECONCILIATION', uncertain=True)
+    charge.remote_customer_id = customer['id']
+
+
 def bank_job(db, job, payload, conn):
     charge = db.get(m.BankCharge, payload['charge_id'])
     if not charge or charge.school_id != job.school_id or charge.connection_id != conn.id:
         raise IntegrationFailure('CHARGE_SCOPE_MISMATCH')
+    from .asaas_auto_pix import holds_charge, local_cycle, process_job as process_auto_pix
+    if holds_charge(db, charge.id):
+        cycle = local_cycle(db,charge.id)
+        if job.kind == 'bank_sync':
+            return process_auto_pix(db,job,{'auth_id':cycle.authorization_id, 'cycle_id':cycle.id},conn)
+        raise IntegrationFailure('PIX_AUTO_CHARGE_RESERVED')
     provider = AsaasProvider(conn)
     if job.kind == 'bank_issue':
-        if charge.status == 'cancelled':
-            return ''
+        if charge.status in {'cancelled', 'received', 'received_external', 'refunded', 'partially_refunded', 'disputed', 'confirmed'}:
+            return charge.remote_payment_id or ''
         if charge.remote_payment_id:
             payment = provider.get_payment(charge.remote_payment_id)
         else:
@@ -96,6 +114,7 @@ def bank_job(db, job, payload, conn):
                 charge.payment_attempted = True
                 db.commit()
                 payment = provider.create_payment(charge)
+        verify_recovered_customer(provider, charge, payment)
         apply_remote(db, charge, payment, 'issue')
         db.commit()  # Resultado financeiro não depende da chamada secundária de QR Code.
         refresh_pix(db, charge, provider)
@@ -104,6 +123,7 @@ def bank_job(db, job, payload, conn):
         payment = provider.get_payment(charge.remote_payment_id) if charge.remote_payment_id else provider.find('payments', charge.external_reference)
         if payment is None:
             raise IntegrationFailure('REMOTE_PAYMENT_NOT_FOUND', uncertain=charge.payment_attempted)
+        verify_recovered_customer(provider, charge, payment)
         apply_remote(db, charge, payment, 'reconciliation')
         db.commit()
         refresh_pix(db, charge, provider)
@@ -158,6 +178,12 @@ def execute(db, job):
     conn = db.get(m.IntegrationConnection, job.connection_id) if job.connection_id else None
     if job.connection_id and (not conn or not conn.enabled or conn.school_id != job.school_id):
         raise IntegrationFailure('INTEGRATION_DISABLED')
+    if job.kind in {'pix_auto_cycle','pix_auto_sync'}:
+        from .asaas_auto_pix import process_job
+        return process_job(db,job,payload,conn)
+    if job.kind in {'asaas_card_sync','asaas_card_invoice'}:
+        from .asaas_cards import execute_job
+        return execute_job(db,job,payload)
     if job.kind.startswith('bank_'):
         if not conn or conn.provider != 'asaas': raise IntegrationFailure('BANK_NOT_CONFIGURED')
         return bank_job(db, job, payload, conn)
@@ -353,6 +379,8 @@ def schedule_reconciliations():
             m.BankCharge.status.in_(['pending','overdue','confirmed','uncertain','refund_requested','disputed']),
             (m.BankCharge.last_synced_at.is_(None))|(m.BankCharge.last_synced_at<cutoff)
         ).order_by(m.BankCharge.last_synced_at.asc(),m.BankCharge.created_at).limit(25)))
+        from .asaas_auto_pix import schedule_periodic
+        schedule_periodic(db,cutoff,interval)
         for charge in rows:
             key=f'bank-periodic:{charge.id}:{int(now().timestamp())//interval}'
             queue_charge_sync(db,charge,key)

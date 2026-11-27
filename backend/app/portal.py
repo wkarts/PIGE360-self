@@ -101,7 +101,7 @@ def own_admission(db,account,id):
     if not row:fail(404,'Inscrição não encontrada.')
     return row
 
-def campaign_output(db,obj):
+def campaign_output(db,obj,*,private=False):
     from .registry import occupancy
     school=db.get(m.School,obj.school_id)
     groups=[]
@@ -115,7 +115,7 @@ def campaign_output(db,obj):
         y=db.get(m.AcademicYear,g.academic_year_id)
         if y.status!='active':continue
         groups.append({'id':g.id,'name':g.name,'grade':db.get(m.Grade,g.grade_id).name,'shift':db.get(m.Shift,g.shift_id).name,'year':y.name,'unit':db.get(m.Unit,g.unit_id).name,'vacancies':max(0,g.capacity-occupancy(db,g.id))})
-    return {**output(obj),'student_portal_url':settings().portal_public_url.rstrip('/')+'/family' if settings().portal_public_url else '/family','school_name':school.name,'school_phone':school.phone,'school_email':school.email,'groups':groups,'accepting':obj.active and obj.opens_on<=today()<=obj.closes_on and bool(groups)}
+    return {**output(obj,('fee_authorized_by',) if private else ('fee_authorized_by','fee_connection_id')),'fee_amount':format(obj.fee_amount,'.2f') if obj.fee_amount is not None else None,'student_portal_url':settings().portal_public_url.rstrip('/')+'/family' if settings().portal_public_url else '/family','school_name':school.name,'school_phone':school.phone,'school_email':school.email,'groups':groups,'accepting':obj.active and obj.opens_on<=today()<=obj.closes_on and bool(groups)}
 
 def document_types(db,admission):
     group=db.get(m.ClassGroup,admission.class_group_id)
@@ -124,7 +124,9 @@ def document_types(db,admission):
 def admission_output(db,obj,public=True):
     campaign=db.get(m.AdmissionCampaign,obj.campaign_id)
     data=output(obj)
-    if public:data.pop('reviewed_by',None)
+    if public:
+        data.pop('reviewed_by',None)
+        data['guardian_snapshot'] = {key: value for key, value in (obj.guardian_snapshot or {}).items() if key != 'signer_person_id'}
     data.update({'status_label':STATUS_LABELS[obj.status],'campaign_title':campaign.title,'class_name':db.get(m.ClassGroup,obj.class_group_id).name})
     data['attachments']=[output(x,('storage_key',)) for x in db.scalars(select(m.AdmissionAttachment).where(m.AdmissionAttachment.admission_id==obj.id,m.AdmissionAttachment.active.is_(True)).order_by(m.AdmissionAttachment.created_at))]
     criteria=[m.AdmissionMessage.admission_id==obj.id]
@@ -737,7 +739,8 @@ def submit_signed_contract(id:str,issued_id:str,request:Request,db:DB,account:Pa
     if obj.contract_signing_order!='applicant_first' and record.signature_status not in ('company_signed','pending_validation','verified','rejected'):
         fail(409,'A escola deve assinar o contrato com o certificado A1 antes do envio pelo responsável.')
     enrollment=db.get(m.Enrollment,obj.enrollment_id)
-    guardian=db.get(m.Person,enrollment.financial_person_id) if enrollment.financial_person_id else None
+    from .admission_parties import signer
+    guardian = signer(db, obj, enrollment)
     if not guardian or not guardian.cpf or account.cpf!=guardian.cpf:
         fail(409,'O CPF do titular da conta deve coincidir com o responsável da matrícula. Procure a Secretaria.')
     maximum=settings().max_upload_mb*1024*1024
@@ -751,6 +754,25 @@ def submit_signed_contract(id:str,issued_id:str,request:Request,db:DB,account:Pa
     parent_audit(db,request,account,'contract.submitted',record,{'sha256':hashlib.sha256(raw).hexdigest()})
     db.flush()
     return {'id':record.id,'signature_status':record.signature_status,'message':'Arquivo recebido. A matrícula aguarda a validação da assinatura pela Secretaria.'}
+
+@router.get('/admissions/{id}/fee')
+def admission_fee(id:str,db:DB,account:Parent,response:Response):
+    from .admission_fees import fee_view
+    response.headers['Cache-Control']='no-store'
+    return fee_view(db,own_admission(db,account,id),account)
+
+
+@router.post('/admissions/{id}/fee')
+def request_admission_fee(id:str,data:s.AdmissionFeeIssue,db:DB,account:Parent,request:Request,response:Response):
+    from .admission_fees import request_fee
+    response.headers['Cache-Control']='no-store'
+    lock_school(db,account.school_id)
+    obj=own_admission(db,account,id)
+    result,charge,created=request_fee(db,obj,account,data.quote)
+    if created:
+        parent_audit(db,request,account,'admission.fee_requested',charge,{'admission_id':obj.id,'protocol':obj.number})
+    return result
+
 
 @router.get('/admissions/{id}/charges')
 def charges(id:str,db:DB,account:Parent):

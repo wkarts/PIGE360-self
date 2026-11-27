@@ -78,7 +78,7 @@
       <div class="sidebar-label">GESTÃO E SERVIÇOS</div>
       <nav v-if="!isProfileRole()" aria-label="Administração">
         <a v-if="can('admissions.read')" href="#/online" :class="{active:state.page==='online'}" :aria-current="state.page==='online'?'page':undefined" @click.prevent="navigate('online')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#online"></use></svg>Inscrições online</a>
-        <div v-if="can('banking.read')" class="nav-group" :class="{selected:state.page==='banking'}">
+        <div v-if="pageAllowed('banking')" class="nav-group" :class="{selected:state.page==='banking'}">
           <button type="button" class="nav-group-toggle" aria-label="Financeiro" @click="state.financeOpen=!state.financeOpen" :aria-expanded="state.financeOpen" aria-controls="finance-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#billing"></use></svg><span>Financeiro</span><svg class="nav-chevron ui-icon" :class="{expanded:state.financeOpen}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
           <div id="finance-menu" class="nav-group-items" v-show="state.financeOpen"><a href="#/banking" :class="{active:state.page==='banking'}" :aria-current="state.page==='banking'?'page':undefined" @click.prevent="navigate('banking')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#billing"></use></svg>Cobranças</a></div>
         </div>

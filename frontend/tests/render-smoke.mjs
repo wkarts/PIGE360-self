@@ -192,7 +192,7 @@ const diaryComponent=sandbox.PigeDiary.component;
 const diaryContext=diaryComponent.setup({schoolId:'school-test',permissions:['diary.read','diary.configure']});
 const renderDiary=()=>diaryComponent.render.call(diaryContext,diaryContext,[]);
 let diaryCalls=[];
-sandbox.PigeAPI.request=async path=>{diaryCalls.push(path);if(path.endsWith('/academic-years'))return[{id:'year-test',name:'2026',status:'active',starts_on:'2026-01-01',ends_on:'2026-12-31'}];if(path.endsWith('/diary-dashboard'))return{items:[],totals:{}};return[];};
+sandbox.PigeAPI.request=async path=>{diaryCalls.push(path);if(path.endsWith('/academic-years'))return[{id:'year-test',name:'2026',status:'active',starts_on:'2026-01-01',ends_on:'2026-12-31'}];if(path.endsWith('/diary-dashboard'))return{items:[],totals:{}};if(path.endsWith('/diary-entry-fields'))return{version:0,fields:[],standard_columns:{}};return[];};
 await diaryContext.load();
 assert.ok(diaryCalls.includes('/schools/school-test/academic-years'));
 assert.ok(!diaryCalls.includes('/schools/school-test/diary'));
@@ -331,6 +331,7 @@ sandbox.PigeAPI.request=async path=>{
   if(path.endsWith('/document-templates/fields'))return{fields:[{key:'financeiro.anuidade',label:'Anuidade',source:'manual'}]};
   if(path.includes('/admissions-summary'))return{counts:{}};
   if(path.includes('/preparation?'))return{version:0,values:{}};
+  if(path.endsWith('/admission-fee-accounts'))return{items:[]};
   if(path.endsWith('/admissions/admission-1/readiness'))return{ready:false,checks:[{code:'contract',ready:false,message:'Emita o contrato',stage:'contract'}]};
   if(path.includes('/admissions/admission-1'))return admission;
   if(path.includes('/bank-charges'))return{items:[],total:0};
