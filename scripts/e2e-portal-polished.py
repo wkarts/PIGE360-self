@@ -290,7 +290,7 @@ try:
         plan_card = workspace.get_by_role('article').filter(has_text='Comparar operações e justificar resultados.')
         expect(plan_card).to_be_visible()
         plan_card.get_by_role('button',name='Editar planejamento').click()
-        workspace.get_by_label('Situação',exact=True).select_option('published')
+        workspace.get_by_role('combobox',name='Situação do planejamento',exact=True).select_option('published')
         with teacher_page.expect_response(lambda r: '/curriculum-plans/' in r.url and r.request.method=='PATCH') as edited:
             workspace.get_by_role('button',name='Salvar planejamento').click()
         assert edited.value.ok and edited.value.json()['status']=='published'

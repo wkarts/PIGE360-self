@@ -122,6 +122,10 @@ jobs:
           npm run build --prefix frontend
           node --check frontend/dist/sw.js
           python scripts/ci/validate.py
+      - name: Matrícula, diário e boletim no Chromium
+        run: |
+          python -m playwright install --with-deps chromium
+          python scripts/e2e-online.py
       - name: Testes FastAPI com PostgreSQL real
         working-directory: backend
         env:
@@ -133,10 +137,8 @@ jobs:
             | awk '{ print substr($0,1,1000); fflush(); }'
       - name: E2E HTTP no Chromium (sem bridge)
         run: |
-          python -m playwright install --with-deps chromium
           python scripts/qa/capture-site-models.py
           python scripts/e2e.py
-          python scripts/e2e-online.py
           python scripts/e2e-management.py
           python scripts/e2e-community.py
           python scripts/e2e-cadastres.py

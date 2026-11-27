@@ -1389,7 +1389,10 @@ var _Vue=Vue; var PigeRenders={teacherPortal:function render(_ctx, _cache) {
                               rows: "2"
                             }, null, 8, ["onUpdate:modelValue"])), [[_vModelText, state.planValues[field.id]]])]))
                     }), 128)),
-                    _createElementVNode("label", null, [_createTextVNode("Situação"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.planForm.status) = $event) }, [_createElementVNode("option", { value: "draft" }, "Rascunho"), _createElementVNode("option", { value: "published" }, "Publicado"), (state.planEditing)
+                    _createElementVNode("label", null, [_createTextVNode("Situação do planejamento"), _withDirectives(_createElementVNode("select", {
+                      "onUpdate:modelValue": $event => ((state.planForm.status) = $event),
+                      "aria-label": "Situação do planejamento"
+                    }, [_createElementVNode("option", { value: "draft" }, "Rascunho"), _createElementVNode("option", { value: "published" }, "Publicado"), (state.planEditing)
                       ? (_openBlock(), _createElementBlock("option", {
                           key: 0,
                           value: "archived"

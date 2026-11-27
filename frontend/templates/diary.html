@@ -290,7 +290,7 @@
               <input v-if="state.fields.standard_columns[field.id]==='bncc_references'" v-model="state.planForm.bncc_references" placeholder="Separe códigos por espaço, vírgula ou ponto e vírgula">
               <textarea v-else-if="state.fields.standard_columns[field.id]" v-model="state.planForm[state.fields.standard_columns[field.id]]" :maxlength="state.fields.standard_columns[field.id]==='resources'?4000:8000" rows="2"></textarea>
               <textarea v-else v-model="state.planValues[field.id]" maxlength="4000" rows="2"></textarea></label>
-            <label>Situação<select v-model="state.planForm.status"><option value="draft">Rascunho</option><option value="published">Publicado</option><option v-if="state.planEditing" value="archived">Arquivado</option></select></label>
+            <label>Situação do planejamento<select v-model="state.planForm.status" aria-label="Situação do planejamento"><option value="draft">Rascunho</option><option value="published">Publicado</option><option v-if="state.planEditing" value="archived">Arquivado</option></select></label>
             <div class="actions"><button class="btn btn-primary">Salvar planejamento</button><button v-if="state.planEditing" type="button" class="btn btn-secondary" @click="resetPlan">Cancelar edição</button></div>
           </form>
         </section>
