@@ -206,7 +206,7 @@ try:
         record('Logout revoga sessão e refresh não restaura acesso encerrado')
         student_user=call('POST','/users',{'name':'Aluno Horizonte','email':'student-access@example.com','password':PASSWORD,'role':'student','person_id':students[0]['person_id']})
         family.get_by_label('E-mail',exact=True).fill('student-access@example.com');family.get_by_label('Senha',exact=True).fill(PASSWORD);family.get_by_role('button',name='Entrar no portal',exact=True).click()
-        expect(family.get_by_label('Você está acompanhando',exact=True).locator('option')).to_have_count(1)
+        expect(family.get_by_label('Aluno',exact=True).locator('option')).to_have_count(1)
         family_nav('Financeiro');expect(family.get_by_text('Seu vínculo não autoriza',exact=False)).to_be_visible()
         family.get_by_role('button',name='Sair do portal',exact=True).click()
         family.get_by_label('E-mail',exact=True).fill('family-access@example.com');family.get_by_label('Senha',exact=True).fill(PASSWORD);family.get_by_role('button',name='Entrar no portal',exact=True).click()

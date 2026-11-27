@@ -70,13 +70,15 @@ def allowed(path,method):
     teacher=re.fullmatch(r'/api/v1/teacher/schools/[0-9a-f-]{36}/(.+)',path)
     if teacher:
         resource=teacher[1]
-        if resource in {'programacao','diaries','academic-periods','curriculum-components','diary-dashboard'}:return method=='GET'
+        if resource in {'programacao','diaries','academic-periods','curriculum-components','diary-dashboard','diary-entry-fields'}:return method=='GET'
         if resource=='curriculum-plans':return method in {'GET','POST'}
+        if re.fullmatch(r'curriculum-plans/[0-9a-f-]{36}',resource):return method=='PATCH'
         diary=re.fullmatch(r'diaries/[0-9a-f-]{36}(?:/(.*))?',resource)
         if not diary:return False
         tail=diary[1] or ''
         if tail in {'','summary','history','assessment-rules','communication-recipients'}:return method=='GET'
         if tail in {'lessons','submit'}:return method=='POST'
+        if re.fullmatch(r'lessons/[0-9a-f-]{36}/remove',tail):return method=='POST'
         if tail in {'materials','assessments','opinions','pedagogical-records','communications','occurrences'}:return method in {'GET','POST'}
         if re.fullmatch(r'(lessons/[0-9a-f-]{36}/attendance|assessments/[0-9a-f-]{36}/results)',tail):return method in {'GET','PUT'}
         if re.fullmatch(r'(lessons|assessments|occurrences)/[0-9a-f-]{36}',tail):return method=='PATCH'

@@ -65,6 +65,26 @@ class SurfaceTests(unittest.TestCase):
                 server.server_close()
                 thread.join(timeout=2)
 
+    def test_teacher_diary_proxy_uses_only_the_documented_methods(self):
+        identifier = '12345678-1111-2222-3333-123456789012'
+        prefix = f'/api/v1/teacher/schools/{identifier}/'
+        lesson = f'diaries/{identifier}/lessons/{identifier}'
+        routes = {
+            'diary-entry-fields': {'GET'},
+            'curriculum-components': {'GET'},
+            'curriculum-plans': {'GET', 'POST'},
+            f'curriculum-plans/{identifier}': {'PATCH'},
+            lesson: {'PATCH'},
+            lesson + '/attendance': {'GET', 'PUT'},
+            lesson + '/remove': {'POST'},
+        }
+        for teacher in (True, False):
+            with patch.object(portal, 'TEACHER_ONLY', teacher):
+                for route, methods in routes.items():
+                    for method in ('GET', 'POST', 'PUT', 'PATCH', 'DELETE'):
+                        with self.subTest(teacher=teacher, route=route, method=method):
+                            self.assertEqual(portal.allowed(prefix + route, method), teacher and method in methods)
+
     def test_support_widget_portal_policy(self):
         path='/api/v1/schools/12345678-1111-2222-3333-123456789012/support-widget'
         for teacher in (True,False):
