@@ -296,6 +296,23 @@ try:
         assert edited.value.ok and edited.value.json()['status']=='published'
         workspace.get_by_role('button',name='Diários',exact=True).click()
         lesson = workspace.locator('form').filter(has=teacher_page.get_by_label('Conteúdo ministrado'))
+        lesson.get_by_label('Data',exact=True).fill('2027-02-02')
+        lesson.get_by_label('Período').select_option(period['id'])
+        lesson.get_by_label('Conteúdo ministrado').fill('Registro provisório para revisão docente')
+        lesson.get_by_role('button',name='Registrar aula').click()
+        workspace.get_by_role('button',name='Editar aula de 02/02/2027',exact=True).click()
+        lesson.get_by_label('Conteúdo ministrado').fill('Revisão do registro provisório')
+        with teacher_page.expect_response(lambda r: '/lessons/' in r.url and r.request.method=='PATCH') as lesson_change:
+            lesson.get_by_role('button',name='Salvar alterações da aula').click()
+        assert lesson_change.value.ok and lesson_change.value.json()['content']=='Revisão do registro provisório'
+        workspace.get_by_role('button',name='Editar aula de 02/02/2027',exact=True).click()
+        lesson.get_by_role('button',name='Remover aula',exact=True).click()
+        removal = workspace.locator('form').filter(has=teacher_page.get_by_role('heading',name='Remover aula de 02/02/2027'))
+        removal.get_by_label('Justificativa').fill('Data lançada por engano antes de iniciar a chamada.')
+        with teacher_page.expect_response(lambda r: r.url.endswith('/remove') and r.request.method=='POST') as lesson_removed:
+            removal.get_by_role('button',name='Confirmar remoção da aula').click()
+        assert lesson_removed.value.ok and lesson_removed.value.json()['removed']
+        expect(workspace.get_by_role('button',name='Abrir chamada de 02/02/2027',exact=True)).to_have_count(0)
         lesson.get_by_label('Data', exact=True).fill('2027-02-01')
         lesson.get_by_label('Quantidade de aulas').fill('2')
         lesson.get_by_label('Período').select_option(period['id'])
