@@ -144,7 +144,8 @@ def staff_record(person_id: str, kind: Literal['employee', 'teacher'], request: 
                 m.AcademicYear.name, m.Unit.name, m.ClassGroup.name, m.TeacherAssignment.subject_name))]))
     title = 'Ficha cadastral do ' + ('colaborador' if kind == 'employee' else 'professor')
     pdf = render_table(school, title, [], [], sections=sections, profile={'name': person.name, 'detail': title},
-            photo=student_photo(db, school.id, person), reserve_photo=True, kit=True, layout='record',
+            photo=student_photo(db, school.id, person), reserve_photo=True, kit=True, layout='compact_record' if kind == 'employee' else 'record',
+            signatures=['Colaborador', 'Assinatura da instituição'] if kind == 'employee' else None,
             orientation=direction, module='Cadastro funcional', issuer=user.name, electronic_notice=True, db=db)
     audit(db, request, user, 'person.record.exported', person, school.id, {'kind': kind, 'orientation': direction})
     return Response(pdf, media_type='application/pdf', headers={'Cache-Control': 'no-store'})
