@@ -481,6 +481,32 @@ def queue_invoice(db,school,user,charge):
     return row
 
 
+def reconcile_invoice_job(db,job):
+    """Projeta o resultado persistido do débito depois de rollback ou expiração do worker."""
+    row=db.scalar(select(CardCheckout).where(
+        CardCheckout.school_id==job.school_id, CardCheckout.connection_id==job.connection_id,
+        CardCheckout.client_key==job.dedupe_key, CardCheckout.mode=='invoice').with_for_update())
+    if not row:
+        return
+    operation=origin_operation(db,row)
+    if operation and operation.kind=='card_invoice' and operation.issuance_channel=='card':
+        if operation.status=='completed' and payment_id(operation.remote_id):
+            row.remote_id=operation.remote_id
+            if row.status in ('scheduled','uncertain','creating'):
+                row.status='processing'
+            job.remote_id=operation.remote_id
+            job.status='completed'
+            job.completed_at=now()
+            job.error_code=''
+            enqueue(db,row.school_id,'asaas_card_sync',{'checkout_id':row.id},
+                    'card-invoice-sync:'+operation.id,row.connection_id)
+            return
+        job.status='failed' if operation.status=='failed' else 'uncertain'
+        job.error_code=operation.error_code or job.error_code
+    if not row.remote_id and row.status in ('scheduled','creating','processing','uncertain'):
+        row.status=job.status
+
+
 def execute_job(db,job,payload):
     row=db.get(CardCheckout,payload['checkout_id'])
     if not row or row.school_id!=job.school_id or row.connection_id!=job.connection_id:raise IntegrationFailure('CARD_SCOPE_MISMATCH')

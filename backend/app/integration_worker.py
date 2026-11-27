@@ -231,6 +231,9 @@ def recover_expired(db):
         row.error_code = 'WORKER_LEASE_EXPIRED'
         row.available_at = now() + timedelta(seconds=30)
         row.lease_until = None
+        if row.kind == 'asaas_card_invoice':
+            from .asaas_cards import reconcile_invoice_job
+            reconcile_invoice_job(db,row)
         if row.kind == 'backup_send':
             from .backup_delivery import sync_state
             sync_state(db,row)
@@ -282,7 +285,11 @@ def process_one(job_id=None):
                 db.rollback(); db.refresh(job)
                 job.status = 'failed' if job.kind in SAFE_KINDS else 'uncertain'
                 job.error_code = 'UNEXPECTED_WORKER_ERROR'
-                LOG.error('job=%s kind=%s code=%s', job.id, job.kind, job.error_code)
+                if job.kind != 'asaas_card_invoice':
+                    LOG.error('job=%s kind=%s code=%s', job.id, job.kind, job.error_code)
+            if job.kind == 'asaas_card_invoice' and job.status in ('failed','uncertain'):
+                from .asaas_cards import reconcile_invoice_job
+                reconcile_invoice_job(db,job)
             job.lease_until = None
             if job.kind == 'backup_send':
                 from .backup_delivery import sync_state

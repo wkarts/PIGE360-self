@@ -152,3 +152,56 @@ def test_hosted_installments_and_subscription_follow_checkout_contract(offered):
     data=state['posts'][-1][2]
     assert data['chargeTypes']==['RECURRENT']
     assert data['subscription']=={'cycle':'MONTHLY','nextDueDate':subscription['due_on'],'endDate':until}
+
+
+def test_invoice_worker_uses_durable_outcome_after_provider_or_readback_failure(offered,monkeypatch):
+    from fastapi import HTTPException
+    from app.db import now
+    from app.integration_core import IntegrationFailure
+    from app.integration_worker import process_one
+    api,_,enrollment,_,_,checkout,_,state,family,root=offered
+    state['payments']=[{**state['payment'],'creditCard':{'creditCardToken':'tok_synthetic_worker_example_123'}}]
+    api.post('/banking/asaas/cards/checkouts/'+checkout['id']+'/sync',{},200)
+    consent=family.post(root+'/authorize',json={'accepted':True,'terms_version':cards.TERMS,
+                       'ends_on':str(today()+timedelta(days=30)),'limit_cents':16000})
+    assert consent.status_code==200,consent.text
+    normal_send,normal_read=cards.asaas_request,cards.asaas_read
+    sends=[]
+    for scenario,expected,code in [('declined','failed','PROVIDER_HTTP_422'),
+                                   ('timeout','uncertain','PROVIDER_TIMEOUT'),
+                                   ('readback','completed','')]:
+        title=api.post('/bank-charges',payload(enrollment,use_recurring_card=True))['items'][0]
+        def send(conn,method,path,params=None,payload=None):
+            assert (method,path)==('POST','/payments')
+            sends.append(scenario)
+            if scenario=='declined':
+                raise IntegrationFailure('PROVIDER_HTTP_422')
+            if scenario=='timeout':
+                raise IntegrationFailure('PROVIDER_TIMEOUT',uncertain=True)
+            return normal_send(conn,method,path,params=params,payload=payload)
+        def read(conn,path,params=None):
+            if scenario=='readback' and path=='/payments/pay_token':
+                raise HTTPException(502,'Consulta temporariamente indisponível.')
+            return normal_read(conn,path,params=params)
+        monkeypatch.setattr(cards,'asaas_request',send)
+        monkeypatch.setattr(cards,'asaas_read',read)
+        with SessionLocal.begin() as db:
+            job=db.scalar(select(m.IntegrationJob).where(m.IntegrationJob.dedupe_key=='card-invoice:'+title['id']))
+            job.available_at=now()-timedelta(seconds=1)
+            job_id=job.id
+        assert process_one(job_id) is True
+        assert process_one(job_id) is False
+        with SessionLocal() as db:
+            job=db.get(m.IntegrationJob,job_id)
+            row=db.scalar(select(CardCheckout).where(CardCheckout.charge_id==title['id']))
+            operation=cards.origin_operation(db,row)
+            assert operation.status==expected
+            assert (job.status,job.error_code)==(expected,code)
+            if scenario=='readback':
+                assert (job.remote_id,row.remote_id,row.status)==('pay_token','pay_token','processing')
+                assert db.scalar(select(m.IntegrationJob.id).where(
+                    m.IntegrationJob.dedupe_key=='card-invoice-sync:'+operation.id,
+                    m.IntegrationJob.kind=='asaas_card_sync'))
+            else:
+                assert row.remote_id is None and row.status==expected
+    assert sends==['declined','timeout','readback']
