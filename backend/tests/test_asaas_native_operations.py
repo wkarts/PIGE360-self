@@ -61,7 +61,7 @@ def test_timeout_conflicting_channel_and_proven_recovery(api):
         school, user, conn = context(db, api)
         charge = m.BankCharge(school_id=school.id, collection_mode='manual', payer_snapshot={},
                               description='Mensalidade de teste', amount=Decimal('10.00'), due_on=date.today(),
-                              billing_type='BOLETO', external_reference=uid(), client_key=uid(),
+                              billing_type='MANUAL', external_reference=uid(), client_key=uid(),
                               status='pending', created_by=user.id)
         db.add(charge);db.commit()
         send = Mock(side_effect=IntegrationFailure('PROVIDER_TIMEOUT', uncertain=True))
@@ -87,7 +87,7 @@ def test_local_validation_and_uncertain_mutations_do_not_emit(api):
     connection(api)
     with SessionLocal() as db:
         school, user, conn = context(db, api)
-        charge = m.BankCharge(school_id=school.id,collection_mode='manual',payer_snapshot={},status='pending',
+        charge = m.BankCharge(school_id=school.id,connection_id=conn.id,collection_mode='provider',payer_snapshot={},status='pending',
                  description='Teste',amount=Decimal('20'),due_on=date.today(),billing_type='PIX',
                  external_reference=uid(),client_key=uid(),created_by=user.id)
         db.add(charge);db.commit()

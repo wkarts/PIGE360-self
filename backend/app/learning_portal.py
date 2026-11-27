@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from . import models as m
 from .school_reports import format_value
 from .common import audit
@@ -48,13 +48,20 @@ def own_profile_students(db, user, school_id='', *, financial=False):
         return list(db.scalars(select(m.Student).where(
             m.Student.person_id == person.id, m.Student.school_id == person.school_id,
         )))
-    return list(db.scalars(select(m.Student).join(
-        m.GuardianLink, m.GuardianLink.student_id == m.Student.id,
-    ).where(
-        m.GuardianLink.person_id == person.id, m.GuardianLink.school_id == person.school_id,
-        m.GuardianLink.active.is_(True), (m.GuardianLink.financial if financial else m.GuardianLink.legal).is_(True),
-        m.Student.school_id == person.school_id,
-    )).unique())
+    link = m.GuardianLink
+    scope = link.legal.is_(True)
+    if financial:
+        from .banking import charge_for_payer
+        owns_charge = select(m.BankCharge.id).where(
+            m.BankCharge.school_id == person.school_id, m.BankCharge.enrollment_id == m.Enrollment.id,
+            charge_for_payer(person)).correlate(m.Enrollment).exists()
+        designated = select(m.Enrollment.id).where(
+            m.Enrollment.school_id == person.school_id, m.Enrollment.student_id == m.Student.id,
+            or_(m.Enrollment.financial_person_id == person.id, owns_charge)).correlate(m.Student).exists()
+        scope = link.financial.is_(True) & (link.legal.is_(True) | designated)
+    return list(db.scalars(select(m.Student).join(link, link.student_id == m.Student.id).where(
+        link.person_id == person.id, link.school_id == person.school_id, link.active.is_(True),
+        m.Student.school_id == person.school_id, scope)).unique())
 
 
 def own_portal_students(db, account):

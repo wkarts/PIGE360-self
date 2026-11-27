@@ -74,7 +74,7 @@ def context(db:DB,user:Actor):
 
 @router.get('/students/{student_id}/charges')
 def charges(student_id: str, db: DB, user: Actor, page: int = Query(1, ge=1), page_size: int = Query(200, ge=1, le=200)):
-    from .banking import effective_status_expression
+    from .banking import charge_for_payer, effective_status_expression
     student = own_finance_student(db, user, student_id)
     charge = m.BankCharge
     ids = select(m.Enrollment.id).where(m.Enrollment.student_id == student.id, m.Enrollment.school_id == student.school_id)
@@ -83,8 +83,7 @@ def charges(student_id: str, db: DB, user: Actor, page: int = Query(1, ge=1), pa
                  charge.payer_snapshot['person_id'].as_string() == user.person_id))
     if not any(item.id == student.id for item in students(db,user)):
         person = db.get(m.Person,user.person_id)
-        owner = charge.payer_snapshot['person_id'].as_string()
-        scope += (or_(owner == user.person_id, (owner.is_(None) & (charge.payer_snapshot['cpf'].as_string() == person.cpf))) if person.cpf else owner == user.person_id,)
+        scope += (charge_for_payer(person),)
     status = effective_status_expression()
     total, overdue_count = db.execute(select(func.count(charge.id), func.count(charge.id).filter(status == 'overdue')).where(*scope)).one()
     from .asaas_card_models import CardCheckout

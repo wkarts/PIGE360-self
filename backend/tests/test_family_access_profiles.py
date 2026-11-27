@@ -195,6 +195,32 @@ def test_guardian_link_restrictions_apply_with_and_without_selected_school(api,f
             assert result.status_code==200 and result.json()['students']==[],result.text
 
 
+def test_financial_only_link_needs_a_designation_or_own_charge(api):
+    from test_manual_banking import payload
+    _,headers,student,payer=account(api,'guardian')
+    enrollment=api.enroll(student,api.catalogs()['group'])
+    with SessionLocal.begin() as db:
+        link=db.query(m.GuardianLink).filter_by(person_id=payer['id'],student_id=student['id']).one()
+        link.legal=False
+        db.get(m.Enrollment,enrollment['id']).financial_person_id=None
+    path='/api/v1/family/students/'+student['id']+'/charges'
+    assert api.client.get(path,headers=headers).status_code==404
+    title=api.post('/bank-charges',payload(enrollment))['items'][0]
+    context=api.client.get('/api/v1/family/context',headers=headers).json()['students']
+    assert [(s['id'],s['academic_authorized']) for s in context]==[(student['id'],False)]
+    assert [c['id'] for c in api.client.get(path,headers=headers).json()['items']]==[title['id']]
+    assert api.client.get('/api/v1/profile/learning',headers=headers).json()['students']==[]
+    with SessionLocal.begin() as db:
+        db.get(m.BankCharge,title['id']).payer_snapshot={'name':'Outro pagador'}
+    assert api.client.get('/api/v1/family/context',headers=headers).json()['students']==[]
+    with SessionLocal.begin() as db:
+        db.get(m.Enrollment,enrollment['id']).financial_person_id=payer['id']
+    assert api.client.get(path,headers=headers).json()['items']==[]
+    with SessionLocal.begin() as db:
+        db.query(m.GuardianLink).filter_by(person_id=payer['id'],student_id=student['id']).one().active=False
+    assert api.client.get(path,headers=headers).status_code==404
+
+
 def test_two_children_have_independent_financial_permissions_and_revoked_access(api):
     _,headers,first,guardian=account(api,'guardian')
     second=api.student('Segundo filho sintético')

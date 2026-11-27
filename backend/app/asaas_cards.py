@@ -366,7 +366,9 @@ def receipt(db,school,row,remote,user,request):
         fail(404,'Pagamento indisponível.')
     if transaction['status']!='RECEIVED':
         fail(409,'O comprovante exige recebimento confirmado pelo Asaas.')
-    if refund_history(conn,remote)>0:
+    from .asaas_native import refund_totals
+    reserved, _ = refund_totals(asaas_read(conn,'/payments/'+remote+'/refunds'))
+    if reserved>0:
         fail(409,'Existe estorno vinculado ao pagamento. Consulte o histórico financeiro.')
     charge=scoped(db,m.BankCharge,row.charge_id,school.id)
     fields=[('Pagador',charge.payer_snapshot.get('name','')),('Cobrança',charge.description),

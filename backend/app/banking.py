@@ -21,6 +21,15 @@ STATUS={'PENDING':'pending','CONFIRMED':'confirmed','RECEIVED':'received','RECEI
         'OVERDUE':'overdue','REFUNDED':'refunded','REFUND_REQUESTED':'refund_requested','REFUND_IN_PROGRESS':'refund_requested',
         'PARTIALLY_REFUNDED':'partially_refunded','CHARGEBACK_REQUESTED':'disputed','CHARGEBACK_DISPUTE':'disputed','AWAITING_CHARGEBACK_REVERSAL':'disputed'}
 
+def charge_for_payer(person):
+    owner = m.BankCharge.payer_snapshot['person_id'].as_string()
+    identified = owner == person.id
+    if not person.cpf:
+        return identified
+    legacy = and_(owner.is_(None), m.BankCharge.payer_snapshot['cpf'].as_string() == person.cpf)
+    return or_(identified, legacy)
+
+
 def charge_output(obj,public=False):
     data=output(obj,('payer_snapshot', 'customer_attempted','payment_attempted','created_by') if public else ('customer_attempted','payment_attempted'))
     data['amount']=format(obj.amount,'.2f')
