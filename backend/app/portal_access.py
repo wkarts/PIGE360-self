@@ -2,7 +2,7 @@
 import hashlib
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from . import models as m
 from .security import fail
 
@@ -82,6 +82,9 @@ def verified_guardian_contact_matches(account, person):
 
 def verified_guardian_links(db, account):
     """Legal student links confirmed by the portal account's verified identity."""
+    cpf = _digits(account.cpf)
+    if not cpf:
+        return []
     active_enrollments = select(m.Enrollment.student_id).where(
         m.Enrollment.school_id == account.school_id,
         m.Enrollment.status.in_(['active', 'suspended']),
@@ -98,6 +101,8 @@ def verified_guardian_links(db, account):
             m.Student.status == 'active',
             m.Student.id.in_(active_enrollments),
             m.Person.school_id == account.school_id,
+            # Cadastros legados podem conservar a máscara; confirme o contato e o CPF abaixo.
+            or_(m.Person.cpf == cpf, func.length(m.Person.cpf) > len(cpf)),
             m.Person.active.is_(True),
         )
         .order_by(m.Student.id, m.GuardianLink.id)
@@ -109,9 +114,10 @@ def verified_guardian_links(db, account):
     ]
 
 
-def active_portal_student_access(db, account):
+def active_portal_student_access(db, account, *, guardian_links=None):
     """Current opt-ins intersected with current legal links and verified contacts."""
-    eligible = {link.id: (student, person) for link, student, person in verified_guardian_links(db, account)}
+    links = verified_guardian_links(db, account) if guardian_links is None else guardian_links
+    eligible = {link.id: (student, person) for link, student, person in links}
     if not eligible:
         return []
     accesses = db.scalars(select(m.PortalStudentAccess).where(
@@ -134,7 +140,7 @@ def portal_diary_access_summary(db, account):
     eligible = verified_guardian_links(db, account)
     current_by_link = {
         access.guardian_link_id: access
-        for access, _student, _person in active_portal_student_access(db, account)
+        for access, _student, _person in active_portal_student_access(db, account, guardian_links=eligible)
     }
     consent_required = any(
         link.id not in current_by_link or

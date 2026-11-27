@@ -3,9 +3,9 @@ import hashlib
 from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, File, Form, Request, UploadFile
+from fastapi import APIRouter, File, Form, Query, Request, UploadFile
 from fastapi.responses import Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from . import class_materials, models as m
 from .common import audit, number
@@ -13,7 +13,7 @@ from .config import settings
 from .documents import validate_upload, write_file
 from .learning_portal import own_profile_students
 from .profiles import student_summary
-from .reports import protocol_event
+from .reports import collect_pendencies, protocol_event
 from .security import Actor, DB, fail, lock_school
 from .storage import read_bytes
 
@@ -37,9 +37,17 @@ def may_finance(db,user,student):
 
 @router.get('/context')
 def context(db:DB,user:Actor):
+    linked = students(db, user)
+    pending_by_student = {}
+    if linked:
+        # own_profile_students já resolveu a instituição ativa e os vínculos autorizados.
+        ids = [student.id for student in linked]
+        pending = collect_pendencies(db, linked[0].school_id, {'_student_ids': ids}, student_limit=len(ids))
+        pending_by_student = {row['student_id']: row['documents'] for row in pending['items']}
     result=[]
-    for student in students(db,user):
+    for student in linked:
         item=student_summary(db,student,student.school_id,include_documents=True)
+        item['document_pendencies'] = pending_by_student.get(student.id, [])
         item['financial_authorized']=may_finance(db,user,student)
         result.append(item)
     schools=db.execute(select(m.School.id,m.School.name).join(m.SchoolAccess,m.SchoolAccess.school_id==m.School.id).where(m.SchoolAccess.user_id==user.id,m.SchoolAccess.active.is_(True),m.SchoolAccess.archived_at.is_(None),m.School.active.is_(True)).order_by(m.School.name)).all()
@@ -47,12 +55,22 @@ def context(db:DB,user:Actor):
 
 
 @router.get('/students/{student_id}/charges')
-def charges(student_id:str,db:DB,user:Actor):
-    student=own_student(db,user,student_id)
-    if not may_finance(db,user,student):fail(403,'Vínculo financeiro não autorizado.')
-    ids=select(m.Enrollment.id).where(m.Enrollment.student_id==student.id,m.Enrollment.school_id==student.school_id)
-    rows=db.scalars(select(m.BankCharge).where(m.BankCharge.school_id==student.school_id,m.BankCharge.enrollment_id.in_(ids)).order_by(m.BankCharge.due_on.desc()).limit(200))
-    return {'items':[{'id':r.id,'description':r.description,'amount':str(r.amount),'due_on':r.due_on,'status':r.status,'collection_mode':r.collection_mode} for r in rows], 'note':'Somente cobranças registradas para estas matrículas. O status exibido não executa cobrança ou baixa.'}
+def charges(student_id: str, db: DB, user: Actor, page: int = Query(1, ge=1), page_size: int = Query(200, ge=1, le=200)):
+    from .banking import effective_status_expression
+    student = own_student(db, user, student_id)
+    if not may_finance(db, user, student):
+        fail(403, 'Vínculo financeiro não autorizado.')
+    charge = m.BankCharge
+    ids = select(m.Enrollment.id).where(m.Enrollment.student_id == student.id, m.Enrollment.school_id == student.school_id)
+    scope = (charge.school_id == student.school_id, charge.enrollment_id.in_(ids))
+    status = effective_status_expression()
+    total, overdue_count = db.execute(select(func.count(charge.id), func.count(charge.id).filter(status == 'overdue')).where(*scope)).one()
+    rows = db.execute(select(charge.id, charge.description, charge.amount, charge.due_on, status.label('status'), charge.collection_mode)
+                      .where(*scope).order_by(charge.due_on.desc(), charge.id.desc())
+                      .offset((page - 1) * page_size).limit(page_size))
+    return {'items': [dict(row._mapping, amount=format(row.amount, '.2f')) for row in rows],
+            'total': total, 'overdue_count': overdue_count, 'page': page, 'page_size': page_size,
+            'note': 'Somente cobranças registradas para estas matrículas. O status exibido não executa cobrança ou baixa.'}
 
 
 @router.get('/students/{student_id}/documents/{document_id}')

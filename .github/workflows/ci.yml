@@ -153,6 +153,7 @@ jobs:
           PIGE_E2E_EVIDENCE_DIR=ci-evidence/online-verification python scripts/e2e-online-verification.py
           python scripts/e2e-support.py
           python scripts/e2e-school-operations.py
+          python scripts/e2e-academic-pilots.py
           python scripts/e2e-assisted.py
           python scripts/e2e-completion.py
           python scripts/e2e-continuity.py
@@ -165,6 +166,10 @@ jobs:
           if [[ -d evidence/0.10.0 ]]; then cp -a evidence/0.10.0/. ci-evidence/browser/; fi
           # Checkpoint sanitizado do código efetivamente testado; sem .env real ou fontes.
           python scripts/ci/package.py --version "$(cat VERSION)" --commit "$(git rev-parse HEAD)" --output ci-evidence/checkpoint/PIGE360-Self-source.zip
+          checkpoint_dir="$(mktemp -d)"
+          unzip -q ci-evidence/checkpoint/PIGE360-Self-source.zip -d "$checkpoint_dir"
+          python "$checkpoint_dir/pige360-self/scripts/verify_package.py"
+          python "$checkpoint_dir/pige360-self/scripts/verify-signature-trust.py"
       - name: Docker Compose e teste de inicialização
         env:
           NODE_BASE_IMAGE: ${{ inputs.node_ref || 'ghcr.io/wkarts/pige360-self-base-node:22-alpine' }}

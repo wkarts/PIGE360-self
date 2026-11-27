@@ -7,6 +7,7 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+from functools import lru_cache
 import re
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -17,7 +18,7 @@ PUBLIC=os.environ.get('PORTAL_PUBLIC_URL','').rstrip('/')
 INTERNAL_TOKEN=os.environ.get('PORTAL_INTERNAL_TOKEN','')
 STATIC=Path(os.environ.get('FRONTEND_PATH','/portal/public')).resolve()
 MAX_BODY=20*1024*1024
-ASSETS={'teacher.js','teacher.css','auth.css','ui-icons.svg','family.js','family.css','portal.js','renders.js','app.css','institution-layout.css','portal.css','community.css','mfa.css','assist.css','camera.css','diagnostic-client.js','first-access.js','first-access.html','favicon.svg','icons/icon-192.png','icons/icon-512.png','vendor/vue-3.5.13.global.prod.js'}
+ASSETS={'teacher.js','teacher.css','auth.css','ui-icons.svg','family.js','family.css','portal.js','family-renders.js','teacher-renders.js','renders.js','app.css','institution-layout.css','portal.css','community.css','mfa.css','assist.css','camera.css','diagnostic-client.js','first-access.js','first-access.html','favicon.svg','icons/icon-192.png','icons/icon-512.png','vendor/vue-3.5.13.global.prod.js'}
 
 
 TEACHER_ONLY = os.environ.get('PORTAL_SURFACE', '') == 'teacher'
@@ -124,11 +125,20 @@ def portal_csp(upstream=''):
             "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
 
 
+@lru_cache(maxsize=1)
+def static_build_id(directory):
+    try:
+        value = json.loads((directory / 'build-info.json').read_text())['build_id']
+        return value if isinstance(value, str) and re.fullmatch(r'[a-f0-9]{16}', value) else ''
+    except (OSError, KeyError, ValueError, TypeError):
+        return ''
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,*args):pass
-    def respond(self,status,body,mime='text/plain; charset=utf-8',headers=(),widget_policy=''):
+    def respond(self,status,body,mime='text/plain; charset=utf-8',headers=(),widget_policy='',cache_control='no-store'):
         self.send_response(status);self.send_header('Content-Type',mime);self.send_header('Content-Length',str(len(body)))
-        self.send_header('Cache-Control','no-store');self.send_header('Referrer-Policy','no-referrer');self.send_header('X-Content-Type-Options','nosniff')
+        self.send_header('Cache-Control',cache_control);self.send_header('Referrer-Policy','no-referrer');self.send_header('X-Content-Type-Options','nosniff')
         self.send_header('Content-Security-Policy',portal_csp(widget_policy))
         for key,value in headers:self.send_header(key,value)
         self.end_headers();self.wfile.write(body)
@@ -163,7 +173,7 @@ class Handler(BaseHTTPRequestHandler):
             target = '/' if legacy == '/professor' else legacy
             return self.respond(302, b'', headers=[('Location', target + ('?' + parsed.query if parsed.query else ''))])
         name = routes.get(path.rstrip('/') or '/', path.lstrip('/'))
-        teacher_files = {'professor.html', 'teacher.js', 'teacher.css'}
+        teacher_files = {'professor.html', 'teacher.js', 'teacher-renders.js', 'teacher.css'}
         shared_files = {'auth.css', 'app.css', 'family.css', 'portal.css', 'institution-layout.css', 'mfa.css',
                         'ui-icons.svg', 'renders.js', 'vendor/vue-3.5.13.global.prod.js', 'favicon.svg'}
         files = teacher_files | shared_files if TEACHER_ONLY else (ASSETS | {'family.html', 'online.html'}) - teacher_files
@@ -186,7 +196,13 @@ class Handler(BaseHTTPRequestHandler):
             except (OSError,ValueError,TypeError,http.client.HTTPException):pass # A UI conserva o estado de indisponibilidade, sem marca inventada.
             finally:
                 if conn:conn.close()
-        return self.respond(200,content,mimetypes.guess_type(name)[0] or 'application/octet-stream',widget_policy=widget_policy)
+        cache_control = 'no-store'
+        if name.endswith(('.js', '.css')):
+            version = static_build_id(STATIC)
+            if version and parse_qs(parsed.query).get('v') == [version]:
+                cache_control = 'public, max-age=31536000, immutable'
+        return self.respond(200,content,mimetypes.guess_type(name)[0] or 'application/octet-stream',
+                            widget_policy=widget_policy,cache_control=cache_control)
 
     def proxy(self,path):
         conn=None

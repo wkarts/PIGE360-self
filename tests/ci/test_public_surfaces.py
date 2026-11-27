@@ -35,6 +35,36 @@ class SurfaceTests(unittest.TestCase):
         self.addCleanup(lambda:(server.shutdown(),server.server_close(),thread.join(timeout=2)))
         return f'http://127.0.0.1:{server.server_port}'
 
+    def test_portal_caches_only_current_version_static_code(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            static = Path(folder)
+            current = '0123456789abcdef'
+            (static / 'build-info.json').write_text(json.dumps({'build_id': current}))
+            for name in ('family-renders.js', 'teacher-renders.js'):
+                (static / name).write_text('/* test */')
+            server = ThreadingHTTPServer(('127.0.0.1', 0), portal.Handler)
+            origin = f'http://127.0.0.1:{server.server_port}'
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                with patch.object(portal, 'PUBLIC', origin), patch.object(portal, 'STATIC', static):
+                    for teacher, asset, other in [(False, 'family-renders.js', 'teacher-renders.js'),
+                                                   (True, 'teacher-renders.js', 'family-renders.js')]:
+                        with patch.object(portal, 'TEACHER_ONLY', teacher):
+                            for suffix, policy in [('', 'no-store'), ('?v=old', 'no-store'),
+                                                   ('?v=' + current, 'public, max-age=31536000, immutable')]:
+                                with urlopen(f'{origin}/{asset}{suffix}', timeout=3) as response:
+                                    self.assertEqual(response.headers['Cache-Control'], policy)
+                            with self.assertRaises(HTTPError) as denied:
+                                urlopen(f'{origin}/{other}?v={current}', timeout=3)
+                            self.assertEqual(denied.exception.code, 404)
+                            self.assertEqual(denied.exception.headers['Cache-Control'], 'no-store')
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
     def test_support_widget_portal_policy(self):
         path='/api/v1/schools/12345678-1111-2222-3333-123456789012/support-widget'
         for teacher in (True,False):

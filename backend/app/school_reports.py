@@ -77,7 +77,8 @@ def format_value(value, kind='text'):
 
 def render_table(school_name, title, columns, rows, *, summary=None, period='', filters=None,
                  notes=None, monthly=None, issuer='', db=None, sections=None, profile=None, photo=None, signatures=None, notes_title='Critérios de leitura',
-                 module='Secretaria', circulation='Uso restrito aos destinatários autorizados', electronic_notice=False, status_summary=None, orientation='portrait', kit=False, layout='', report_color='', reserve_photo=False):
+                 module='Secretaria', circulation='Uso restrito aos destinatários autorizados', electronic_notice=False, status_summary=None, orientation='portrait', kit=False, layout='', report_color='', reserve_photo=False,
+                 report_family='', preview_copy=False):
     """Relatório analítico: cabeçalhos repetidos, indicadores, filtros e paginação.
 
     Não utiliza o formulário de declarações, evitando blocos de assinatura e
@@ -94,13 +95,15 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
         identity = identity_data(db) if db is not None else {
             'display_name': school_name, 'short_name': school_name[:30], 'primary_color': '#205D79',
             'secondary_color': '#172b3a', 'font_family': 'system', 'logo_asset_id': ''}
-        name = school_name if kit else identity['display_name']
-        font_choice = (school.report_preferences or {}).get('font_family', 'inherit') if school and kit else 'inherit'
+        school_stationery = kit or bool(report_family)
+        report_settings = (school.report_preferences or {}) if school and school_stationery else {}
+        name = school_name if school_stationery else identity['display_name']
+        font_choice = report_settings.get('font_family', 'inherit')
         if font_choice != 'inherit':
             identity = {**identity, 'font_family': font_choice}
         brand_regular, brand_bold = _font(identity, db)
         regular, bold = brand_regular, brand_bold
-        color = report_color or ((school.report_preferences or {}).get('color') if kit and school else '') or identity['primary_color']
+        color = report_color or report_settings.get('color') or identity['primary_color']
         primary = colors.HexColor(color)
         ink = colors.HexColor('#172b3a')
         accent = primary if foreground(color) == '#FFFFFF' else ink
@@ -408,13 +411,34 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
             parts.extend([Spacer(1, 4 * mm), p('Emitido por: ' + issuer, 'small')])
         logo = db.get(InstitutionAsset, identity['logo_asset_id']) if db is not None and identity.get('logo_asset_id') else None
         logo_image = ImageReader(io.BytesIO(logo.content)) if logo else None
-        if kit and school and school.report_logo:
+        if school_stationery and school and school.report_logo:
             logo_image = ImageReader(io.BytesIO(school.report_logo))
         stamp = now().astimezone(ZoneInfo('America/Bahia')).strftime('%d/%m/%Y às %H:%M')
         from .config import settings
         from reportlab.platypus import KeepInFrame
         version = settings().app_version if db is not None else ''
         edition = 'Sistema de gestão escolar' + (' · ' + version if version and version != 'unknown' else '')
+        institutional_mark = report_family in report_settings.get('watermark_documents', [])
+        def watermark(canvas):
+            canvas.saveState()
+            canvas.translate(page_width / 2, page_height / 2)
+            if institutional_mark and logo_image:
+                canvas.setFillAlpha(.075)
+                side_length = min(page_width, page_height) * .34
+                canvas.drawImage(logo_image, -side_length / 2, -side_length / 2,
+                                 width=side_length, height=side_length, preserveAspectRatio=True, mask='auto')
+            canvas.rotate(23)
+            canvas.setFillColor(ink)
+            canvas.setFillAlpha(.09)
+            if institutional_mark and not logo_image:
+                size = min(30, (page_width * .6) / max(pdfmetrics.stringWidth(school_name, bold, 1), 1))
+                canvas.setFont(bold, size)
+                canvas.drawCentredString(0, -30 if preview_copy else 0, school_name)
+            if preview_copy:
+                canvas.setFont(bold, 36)
+                canvas.drawCentredString(0, 0, 'PRÉVIA')
+            canvas.restoreState()
+
         def header(canvas, document):
             canvas.saveState()
             if kit:
@@ -491,6 +515,8 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                 for state in self._report_pages:
                     self.__dict__.update(state)
                     self.saveState()
+                    if institutional_mark or preview_copy:
+                        watermark(self)
                     if kit and self._pageNumber == total:
                         self.setStrokeColor(accent)
                         self.rect(margin, 20*mm, 61*mm, 12*mm, fill=0, stroke=1)
@@ -524,7 +550,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                     self.line(margin, 19 * mm, page_width - margin, 19 * mm)
                     self.setFillColor(muted)
                     self.setFont(regular, 7.5)
-                    issued_label = 'Emitido em ' + stamp + (' · ' + issuer if kit and issuer else '')
+                    issued_label = ('Via de consulta · ' if preview_copy else '') + 'Emitido em ' + stamp + (' · ' + issuer if kit and issuer else '')
                     self.drawString(margin, 14 * mm, issued_label[:110])
                     self.drawRightString(page_width - margin, 14 * mm, f'Página {self._pageNumber} de {total}')
                     self.setFont(regular, 7)

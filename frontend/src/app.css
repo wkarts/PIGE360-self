@@ -583,4 +583,8 @@ td .link-button { text-align: left; }
 .bulletin-period h3{margin:1rem 0 .35rem;padding:.4rem .65rem;border-inline-start:3px solid var(--primary,#205d79);background:var(--bg,#f2f5f6);font-size:1rem}
 .report-records td,.bulletin-period td{font-size:.84rem;line-height:1.45;font-variant-numeric:tabular-nums}
 @page school-report{size:A4 portrait;margin:13mm}
-@media print{.report-result,.bulletin-sheet{page:school-report;border:0;padding:0}.report-records thead{display:table-header-group}.report-records tr{break-inside:avoid}.bulletin-period h3{break-after:avoid}}
+.report-watermark-options{display:flex;flex-wrap:wrap;gap:.5rem 1rem;border:1px solid var(--border);border-radius:6px;padding:.5rem .75rem}
+.report-watermark-options label{display:inline-flex;align-items:center;gap:.35rem}
+.report-watermark-options input[type=checkbox]{width:1rem;min-height:auto}
+@page school-bulletin{size:A4 landscape;margin:13mm}
+@media print{.report-result,.bulletin-sheet{page:school-report;border:0;padding:0}.bulletin-sheet{page:school-bulletin}.report-records thead{display:table-header-group}.report-records tr{break-inside:avoid}.bulletin-period h3{break-after:avoid}}

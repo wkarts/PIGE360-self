@@ -32,7 +32,7 @@ from .portal_access import (
 router=APIRouter(prefix='/api/v1/portal',tags=['Portal dos responsáveis'])
 EDITABLE={'draft','changes_requested'}
 COMPLEMENTARY_DOCUMENT = 'Anexo complementar da inscrição'
-STATUS_LABELS={'draft':'Rascunho','submitted':'Enviada','under_review':'Em análise','changes_requested':'Correção solicitada','waitlisted':'Lista de espera','approved':'Aprovada / matrícula em preparação','enrolled':'Matriculada','rejected':'Indeferida','withdrawn':'Desistência'}
+STATUS_LABELS={'draft':'Rascunho','submitted':'Enviada','under_review':'Em análise','changes_requested':'Correção solicitada','waitlisted':'Lista de espera','approved':'Aprovada / matrícula em preparação','enrolled':'Inscrição efetivada','rejected':'Indeferida','withdrawn':'Desistência'}
 
 def rate_limit(db,request,namespace,key,limit=12,seconds=900):
     """Persiste a tentativa mesmo quando o restante da requisição for recusado."""
@@ -137,7 +137,10 @@ def admission_output(db,obj,public=True):
         data['preserved_contracts'] = []
     if obj.enrollment_id:
         enrollment=db.get(m.Enrollment,obj.enrollment_id)
-        data['enrollment']={'id':enrollment.id,'number':enrollment.number,'status':enrollment.status,'class_group_id':enrollment.class_group_id}
+        from .student_reports import ENROLLMENT_LABELS
+        data['enrollment'] = {'id': enrollment.id, 'number': enrollment.number, 'status': enrollment.status,
+                              'status_label': ENROLLMENT_LABELS.get(enrollment.status, enrollment.status),
+                              'class_group_id': enrollment.class_group_id}
         issued=list(db.scalars(select(m.IssuedDocument).where(m.IssuedDocument.enrollment_id==enrollment.id,m.IssuedDocument.school_id==obj.school_id).order_by(m.IssuedDocument.created_at.desc(),m.IssuedDocument.id.desc())))
         from .contract_history import access_state
         data['issued_documents']=[]

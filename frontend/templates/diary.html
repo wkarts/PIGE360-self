@@ -205,7 +205,8 @@
             <button v-if="can('diary.review')" class="btn btn-primary" @click="reviewDiary">Marcar como revisado</button>
           </template>
           <template v-else-if="state.selected.status==='reviewed'">
-            <p class="alert info">Diário revisado. Registros estão bloqueados até uma reabertura formal.</p>
+            <p class="alert info">Diário revisado pela coordenação.</p>
+            <button v-if="can('diary.reopen') && state.history.closures.some(c=>c.active && c.academic_period_id)" class="btn btn-secondary" @click="save(resumeDiary)">Continuar lançamentos nos períodos abertos</button>
             <div v-if="can('diary.close')" class="x-form">
               <div class="x-grid"><label>Período do fechamento<select v-model="state.closePeriod"><option value="">Diário completo</option><option v-for="p in periodsFor(state.selected)" :key="p.id" :value="p.id">{{p.name}}</option></select></label><label>Justificativa / conferência<input v-model="state.closeReason" minlength="3" maxlength="1000"></label></div>
               <button class="btn btn-primary" @click="save(closeDiary)">{{state.closePeriod?'Fechar período':'Fechar diário'}}</button>
@@ -262,7 +263,7 @@
         <section v-if="show('results')" class="panel x-card">
           <div class="x-heading"><div><h2>Resultados do período</h2><p>Consulte as notas e a frequência consolidadas pela coordenação.</p></div></div>
           <div class="x-filter"><label>Período<select v-model="state.assessmentRuleForm.period_id" @change="selectRulePeriod(state.assessmentRuleForm.period_id);state.periodResults=[]"><option value="">Selecione</option><option v-for="p in periodsFor(state.selected)" :key="p.id" :value="p.id">{{p.name}}</option></select></label><button class="btn btn-secondary" @click="loadPeriodResults" :disabled="!state.assessmentRuleForm.period_id">Consultar</button><button v-if="can('diary.review') && ['open','reviewed'].includes(state.selected.status)" class="btn btn-primary" @click="consolidatePeriod" :disabled="!state.assessmentRuleForm.period_id">Consolidar agora</button></div>
-          <div v-if="state.periodResults.some(r=>r.requires_recalculation)" class="alert warning">Há resultados calculados com um critério anterior de frequência. A coordenação deve consolidar novamente o período.</div>
+          <div v-if="state.periodResults.some(r=>r.requires_recalculation)" class="alert warning">Há resultados calculados com uma regra anterior de avaliação ou frequência. A coordenação deve consolidar novamente o período.</div>
           <div v-if="state.periodResults.length" class="table-wrap"><table><thead><tr><th>Aluno</th><th>Resultado</th><th>Frequência</th><th>Situação</th><th>Observações</th></tr></thead><tbody><tr v-for="r in state.periodResults" :key="r.id"><td><strong>{{r.student_name}}</strong><small>{{r.student_number}}</small></td><td>{{r.numeric_value??r.concept_value??'—'}}</td><td>{{r.requires_recalculation?'Recalcular':r.calculation?.attendance_percent!=null?Number(r.calculation.attendance_percent).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'—'}}</td><td>{{label(r.status)}}</td><td>{{(r.flags||[]).map(label).join(', ')||'—'}}</td></tr></tbody></table></div>
         </section>
 

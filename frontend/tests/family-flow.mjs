@@ -13,10 +13,11 @@ function fixture(path='/family',search=''){
   fetch:async(url,opts)=>{calls.push({url,opts});return new Response(JSON.stringify({}));}};
  sandbox.window=sandbox;sandbox.addEventListener=(type,fn)=>events[type]=fn;sandbox.removeEventListener=()=>{};
  vm.createContext(sandbox);
- for(const file of ['vendor/vue-3.5.13.global.prod.js','renders.js'])vm.runInContext(fs.readFileSync(root+'dist/'+file,'utf8'),sandbox);
+ const surface=path==='/professor'?'teacher':'family';
+ for(const file of ['vendor/vue-3.5.13.global.prod.js',surface+'-renders.js'])vm.runInContext(fs.readFileSync(root+'dist/'+file,'utf8'),sandbox);
  sandbox.Vue.onMounted=fn=>events.mounted=fn;sandbox.Vue.onUnmounted=()=>{};
  sandbox.Vue.createApp=options=>({mount(){apps.push(options);}});
- vm.runInContext(fs.readFileSync(root+'dist/family.js','utf8'),sandbox);
+ vm.runInContext(fs.readFileSync(root+'dist/'+surface+'.js','utf8'),sandbox);
  // O transporte privado e o SDK público têm ciclos independentes.
  const supportCalls=[];
  sandbox.PigeSupport.load=async(...args)=>{supportCalls.push(args);};
@@ -132,3 +133,65 @@ console.log('Family auth epoch: delayed refresh cannot resurrect logout, overwri
  assert.deepEqual(focused,['family-menu-close'],'Fechamento obsoleto não captura foco após reabertura');
 }
 console.log('Family drawer: immediate visibility, deferred focus and rapid open/close guards OK.');
+
+{
+ const {ctx,render,sandbox}=fixture();
+ ctx.s.ready=true;ctx.s.account={...account,role:'student'};ctx.s.schoolId='school-a';
+ ctx.s.students=[{...student('a'),document_pendencies:[{document_type_id:'atest',name:'Atestado atual',status:'expired'}]}];
+ ctx.s.studentId='a';
+ assert.match(text(render()),/Portal do aluno/);
+ assert.doesNotMatch(text(render()),/Meus alunos|Portal da família|Justificativas de ausência/);
+ ctx.section('documents');
+ assert.match(text(render()),/Atestado atual/);
+ assert.match(text(render()),/Histórico de documentos/);
+ assert.equal(ctx.pendingDocuments().length,1);
+ ctx.s.students[0].document_pendencies=[];
+ assert.equal(ctx.pendingDocuments().length,0,'Histórico pendente não reabre a exigência atual');
+ delete ctx.s.students[0].document_pendencies;
+ assert.match(text(render()),/Consulta de pendências indisponível/);
+ assert.doesNotMatch(text(render()),/Nenhuma pendência documental registrada/);
+ ctx.s.account=account;
+ assert.match(text(render()),/Portal da família/);
+
+ let finish;
+ sandbox.fetch=()=>new Promise(resolve=>{finish=resolve;});
+ ctx.section('materials');await tick();
+ assert.match(text(render()),/Carregando atividades/);
+ assert.doesNotMatch(text(render()),/Nenhuma atividade/);
+ finish(new Response(JSON.stringify({detail:'Atividades indisponíveis'}),{status:503}));
+ await tick();
+ assert.match(text(render()),/Atividades indisponíveis/);
+ assert.doesNotMatch(text(render()),/Nenhuma atividade/);
+ const retry=ctx.loadSchoolwork();await tick();finish(new Response('[]'));await retry;
+ assert.match(text(render()),/Nenhuma atividade/);
+ assert.doesNotMatch(text(render()),/Atividades indisponíveis|Carregando atividades/);
+}
+
+{
+ const {ctx,sandbox,render}=fixture();ctx.s.ready=true;ctx.s.account=account;
+ ctx.s.schoolId='school-a';ctx.s.students=[student('a')];ctx.s.studentId='a';
+ sandbox.fetch=async url=>{
+  const page=new URL(url,'https://example.test').searchParams.get('page');
+  const status=page==='2'?'overdue':'pending';
+  return new Response(JSON.stringify({items:[{id:'item-'+page,description:'Mensalidade',due_on:'2026-05-01',amount:'120.00',status}],
+    total:31,overdue_count:1,note:'Cobranças da matrícula'}));
+ };
+ await ctx.finance();
+ assert.match(text(render()),/1 vencida\(s\)/,'O total de vencidas inclui as demais páginas');
+ ctx.section('finance');assert.match(text(render()),/Página 1 de 2/);
+ await ctx.finance(2);assert.match(text(render()),/Página 2 de 2/);
+ assert.match(text(render()),/Vencida/);
+ assert.equal(ctx.label('received_external'),'Recebido externamente');
+}
+
+
+{
+ const {ctx,sandbox}=fixture('/professor');
+ const focused=[];
+ sandbox.document.getElementById=id=>({focus(){focused.push(id);}});
+ ctx.s.menuOpen=true;
+ ctx.navigate('overview');
+ await sandbox.Vue.nextTick();
+ assert.equal(ctx.s.menuOpen,false);
+ assert.equal(focused.at(-1),'teacher-title','Selecionar seção no menu docente leva o foco ao título');
+}

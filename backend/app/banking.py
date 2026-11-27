@@ -9,6 +9,8 @@ from sqlalchemy import func, select, or_, and_, case
 from . import models as m, online_schemas as s
 from .common import audit, output
 from .db import uid, now
+from .admission_reservations import payment_changed
+from .crm_bridge_models import CRMBridgeExternalRequest
 from .schemas import PersonInput
 from .security import Actor, DB, Scope, fail, require, scoped, lock_school, check_version
 from .integration_core import AsaasProvider, IntegrationFailure, connection, enqueue
@@ -56,6 +58,14 @@ def charge_query(school_id, status='', q='', admission_id='', due_from=None, due
     return stmt
 
 
+def crm_issue_attempted(db, charge):
+    return db.scalar(select(CRMBridgeExternalRequest.id).where(
+        CRMBridgeExternalRequest.school_id == charge.school_id,
+        CRMBridgeExternalRequest.charge_id == charge.id,
+        CRMBridgeExternalRequest.status.in_(['sending', 'uncertain', 'observed']),
+    )) is not None
+
+
 def queue_charge_sync(db, charge, key=None):
     if charge.collection_mode=='manual' or not charge.connection_id:
         fail(409,'Cobrança interna: registre o recebimento manualmente. Não existe emissão bancária para conciliar.')
@@ -101,7 +111,6 @@ def apply_remote(db,charge,payment,source):
         from .integration_core import admission_notification
         admission=db.get(m.Admission,charge.admission_id)
         if admission:admission_notification(db,admission,'Há uma atualização na cobrança vinculada à sua inscrição.','bank-'+charge.id+'-'+state+'-'+str(charge.version))
-    from .admission_reservations import payment_changed
     payment_changed(db,charge)
     return charge
 
@@ -162,6 +171,7 @@ def create_charges(data:s.ChargeInput,db:DB,user:Actor,school:Scope,request:Requ
         else:
             db.add(m.BankEvent(school_id=school.id,charge_id=obj.id,source='manual_created',previous_status='',status='pending',details={'amount':format(obj.amount,'.2f'),'due_on':due.isoformat(),'actor_id':user.id}))
         audit(db,request,user,'bank.charge.queued' if conn else 'bank.charge.manual_created',obj,school.id,{'amount':str(obj.amount),'billing_type':obj.billing_type,'collection_mode':obj.collection_mode,'environment':conn.environment if conn else 'internal'})
+        payment_changed(db,obj)
         results.append(obj)
     return {'items':[charge_output(x) for x in results],'count':len(results),'message':'Cobranças enfileiradas; aguarde emissão pelo worker.' if conn else 'Cobranças internas registradas. Nenhuma emissão foi enviada ao banco.'}
 
@@ -233,6 +243,7 @@ def cancel(id:str,data:s.Reason,db:DB,user:Actor,school:Scope,request:Request):
         obj.status='cancelled';obj.version+=1
         db.add(m.BankEvent(school_id=school.id,charge_id=obj.id,source='local_cancel',previous_status=previous_status,status='cancelled',details={'reason':data.reason}))
         for job in db.scalars(select(m.IntegrationJob).where(m.IntegrationJob.dedupe_key=='bank-issue:'+obj.id,m.IntegrationJob.status.in_(['pending','retry']))):job.status='cancelled'
+        payment_changed(db,obj)
     else:
         enqueue(db,school.id,'bank_cancel',{'charge_id':obj.id},'bank-cancel:'+obj.id,obj.connection_id)
     audit(db,request,user,'bank.cancel.requested',obj,school.id,{'reason':data.reason})
@@ -250,6 +261,8 @@ def authorize_reissue(id:str,data:s.Reason,db:DB,user:Actor,school:Scope,request
     except IntegrationFailure as error:fail(503,'Não foi possível conferir a conta: '+error.code)
     if existing:
         apply_remote(db,obj,existing,'manual_reconciliation');return charge_output(obj)
+    if crm_issue_attempted(db, obj):
+        fail(409,'Esta cobrança possui emissão externa no CRM. Confira a origem registrada antes de emitir pelo banco.')
     obj.payment_attempted=False;obj.customer_attempted=False;obj.status='queued';obj.version+=1
     job=db.scalar(select(m.IntegrationJob).where(m.IntegrationJob.dedupe_key=='bank-issue:'+obj.id))
     if job:job.status='pending';job.error_code='';job.attempts=0;job.available_at=now();job.lease_until=None
@@ -277,7 +290,6 @@ def manual_receipt(id:str,data:s.ManualReceipt,db:DB,user:Actor,school:Scope,req
     obj.status='received_external';obj.version+=1
     details={'amount':format(data.amount,'.2f'),'paid_on':data.paid_on.isoformat(),'payment_method':data.payment_method,'reference':data.reference,'actor_id':user.id}
     db.add(m.BankEvent(school_id=school.id,charge_id=obj.id,source='manual_receipt',previous_status=old,status=obj.status,details=details))
-    from .admission_reservations import payment_changed
     payment_changed(db,obj)
     audit(db,request,user,'bank.charge.manual_received',obj,school.id,details)
     return charge_output(obj)

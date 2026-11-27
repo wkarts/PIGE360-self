@@ -229,7 +229,10 @@ try:
         expect(admin.get_by_label('Parecer para a efetivação',exact=True)).to_have_value('Conferi os requisitos da inscrição e autorizo a efetivação na turma selecionada.')
         admin.get_by_role('button',name='Efetivar matrícula e emitir comprovante').click()
         expect(admin.get_by_text('Matrícula efetivada. Comprovante disponível no portal do responsável.',exact=True)).to_be_visible();record('Efetivação da matrícula e emissão persistida do comprovante')
-        parent.reload();parent.locator('.x-record',has_text='Lucas Almeida — Teste').click();expect(parent.get_by_text('Matriculada',exact=True)).to_be_visible()
+        parent.reload()
+        parent.locator('.x-record', has_text='Lucas Almeida — Teste').click()
+        expect(parent.get_by_text('Inscrição efetivada', exact=True)).to_be_visible()
+        expect(parent.get_by_text('Situação acadêmica atual: Ativa', exact=False)).to_be_visible()
         if bridge:
             parent.get_by_role('button',name='Baixar documento escolar').click();parent.wait_for_function("window.__downloads.includes('comprovante-matricula.pdf')")
         else:
@@ -248,7 +251,7 @@ try:
         row=admin.get_by_role('row').filter(has_text=active['number'])
         expect(row).to_contain_text(group['name'])
         expect(row.get_by_text('Ativa',exact=True)).to_be_visible()
-        record('Secretaria confere o mesmo número ativo na turma e a família vê Matriculada.')
+        record('Secretaria e família conferem a situação acadêmica ativa após a efetivação da inscrição.')
         period=post('/academic-periods',{'academic_year_id':year['id'],'name':'1º Bimestre','starts_on':'2027-01-01','ends_on':'2027-04-30','order_index':1})
         component=post('/curriculum-components',{'name':'Matemática'})
         diary=post('/diaries',{'class_group_id':group['id'],'component_id':component['id'],'teacher_assignment_id':assignment['id']})

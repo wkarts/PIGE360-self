@@ -61,6 +61,7 @@ namespace PigeTeacher {
   function navigate(section:string){
     if(section!=='diary' && location.hash==='#diario')history.replaceState(history.state,'',location.pathname+location.search);
     s.menuOpen=false;s.section=section;
+    void Vue.nextTick(()=>{if(!s.menuOpen && s.section===section)document.getElementById('teacher-title')?.focus();});
     if(section==='news')void run(()=>publications());
     if(section==='agenda')void run(agenda);
   }

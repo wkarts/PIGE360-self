@@ -40,7 +40,24 @@ def recipients(db: DB, user: Actor, school: Scope, academic_year_id: str, class_
     if grade_id:
         stmt = stmt.where(m.ClassGroup.grade_id == grade_id)
     rows = db.execute(stmt.order_by(m.Person.name, m.Enrollment.id).offset(offset).limit(26)).mappings().all()
-    return {'items': rows[:25], 'more': len(rows) > 25}
+    items = [dict(row) for row in rows[:25]]
+    if items:
+        editions = db.execute(select(m.IssuedDocument.enrollment_id, m.IssuedDocument.snapshot).where(
+            m.IssuedDocument.school_id == school.id, m.IssuedDocument.kind == 'official_bulletin',
+            m.IssuedDocument.signature_status == 'company_signed',
+            m.IssuedDocument.enrollment_id.in_([item['id'] for item in items]))).all()
+        source_ids = {source for _, snapshot in editions for source in snapshot.get('publication_ids', [])}
+        active = set(db.scalars(select(m.DiaryClosure.id).where(m.DiaryClosure.school_id == school.id,
+            m.DiaryClosure.active.is_(True), m.DiaryClosure.id.in_(source_ids)))) if source_ids else set()
+        by_id = {item['id']: item for item in items}
+        for enrollment_id, snapshot in editions:
+            item = by_id[enrollment_id]
+            revision = snapshot['revision']
+            item['last_revision'] = max(item.get('last_revision', 0), revision)
+            sources = snapshot.get('publication_ids', [])
+            if sources and active.issuperset(sources):
+                item['revision'] = max(item.get('revision', 0), revision)
+    return {'items': items, 'more': len(rows) > 25}
 
 
 def bulletin_data(db, school, eid):
@@ -68,7 +85,8 @@ def preview(enrollment_id: str, db: DB, user: Actor, school: Scope,
 
 
 @router.post('/reports/bulletins/{enrollment_id}/issue')
-def issue_official(enrollment_id: str, operation: UUID, request: Request, db: DB, user: Actor, school: Scope):
+def issue_official(enrollment_id: str, operation: UUID, request: Request, db: DB, user: Actor, school: Scope,
+                   expected_revision: int | None = Query(default=None, ge=0)):
     office_access(user)
     if user.role not in {'admin', 'direction'}:
         fail(403, 'Somente direção ou administração pode assinar em nome da escola.')
@@ -80,7 +98,9 @@ def issue_official(enrollment_id: str, operation: UUID, request: Request, db: DB
     student, info, entry = bulletin_data(db, school, enrollment_id)
     count = db.scalar(select(func.count()).select_from(m.IssuedDocument).where(m.IssuedDocument.school_id == school.id,
                       m.IssuedDocument.enrollment_id == enrollment_id, m.IssuedDocument.kind == 'official_bulletin'))
-    stamp = {**preferences(school), 'model': entry['bulletin_model'], 'revision': count + 1,
+    if expected_revision is not None and count != expected_revision:
+        fail(409, 'Outra revisão já foi emitida. Atualize a lista de matrículas antes de assinar.')
+    stamp = {**preferences(school), 'model': entry['bulletin_model'], 'layout_version': '10', 'revision': count + 1,
              'class_group_id': entry['class_group_id'], 'academic_year_id': entry['academic_year_id'],
              'publication_ids': publication_ids(entry), 'institutional_signature_field': SCHOOL_FIELD}
     pdf = prepare_signature(render_bulletin(db, student, info, [entry], user.name, signing=True))
@@ -144,7 +164,7 @@ def staff_record(person_id: str, kind: Literal['employee', 'teacher'], request: 
                 m.AcademicYear.name, m.Unit.name, m.ClassGroup.name, m.TeacherAssignment.subject_name))]))
     title = 'Ficha cadastral do ' + ('colaborador' if kind == 'employee' else 'professor')
     pdf = render_table(school, title, [], [], sections=sections, profile={'name': person.name, 'detail': title},
-            photo=student_photo(db, school.id, person), reserve_photo=True, kit=True, layout='compact_record' if kind == 'employee' else 'record',
+            photo=student_photo(db, school.id, person), reserve_photo=True, kit=True, layout='compact_record', report_family='records',
             signatures=['Colaborador', 'Assinatura da instituição'] if kind == 'employee' else None,
             orientation=direction, module='Cadastro funcional', issuer=user.name, electronic_notice=True, db=db)
     audit(db, request, user, 'person.record.exported', person, school.id, {'kind': kind, 'orientation': direction})

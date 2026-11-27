@@ -60,7 +60,7 @@ def compose_student_document(db, school, student, person, enrollment_id, kind, i
     identity = public_identity(db)
     detailed = kind in {'student_record', 'enrollment_form'}
     snapshot = {'school': output(school), 'person': output(person), 'student': output(student), 'issuer': issuer,
-                'template_version': '3', 'orientation': orientation, 'layout_version': '9' if detailed else '8', 'institution_identity': identity, 'brand': identity['display_name']}
+                'template_version': '3', 'orientation': orientation, 'layout_version': '10' if detailed else '8', 'institution_identity': identity, 'brand': identity['display_name']}
     sections = []
     basic = [('Nome completo', person.name), ('Data de nascimento', date_text(person.birth_date))]
     if detailed:
@@ -184,7 +184,8 @@ def compose_student_document(db, school, student, person, enrollment_id, kind, i
         profile={'name': person.name, 'detail': f'Aluno {student.number} | Situação cadastral: ' + ('Ativo' if student.status == 'active' else 'Inativo')},
         photo=student_photo(db, school.id, person) if detailed else None,
         signatures=['Responsável / aluno maior de idade', 'Secretaria / instituição'] if detailed else ['Secretaria / representante da instituição'],
-        notes=notes, notes_title='', issuer=issuer, db=db, kit=detailed, layout='compact_record' if detailed else '',
+        notes=notes, notes_title='', issuer=issuer, db=db, kit=detailed, report_family='records' if detailed else '',
+        layout='compact_record' if detailed else '',
         orientation=orientation if detailed else 'portrait', reserve_photo=detailed)
     snapshot['report_sections'] = sections
     return content, snapshot

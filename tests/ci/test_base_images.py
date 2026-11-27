@@ -7,6 +7,7 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -153,12 +154,18 @@ class CatalogAndRetentionTests(unittest.TestCase):
             self.assertNotIn('vercel',file.read_text().lower())
 
 class PackageLockTests(unittest.TestCase):
+    def trust_fixture(self, root):
+        trust = Path(pack.TRUST_DIR)
+        shutil.copytree(ROOT / trust, root / trust)
+        return b''.join((path.relative_to(root).as_posix() + '\0').encode() for path in (root / trust).iterdir())
+
     def test_source_checkpoint_excludes_previous_release_image_references(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);(root/'deploy').mkdir();(root/'VERSION').write_text('0.10.0\n')
             (root/'deploy/images.env').write_text('APP_IMAGE=previous-release\n')
             (root/'deploy/images.lock.json').write_text('{}')
-            with patch.object(pack.subprocess,'check_output',return_value=b'VERSION\x00deploy/images.env\x00deploy/images.lock.json\x00'),redirect_stdout(io.StringIO()):
+            tracked = self.trust_fixture(root) + b'VERSION\x00deploy/images.env\x00deploy/images.lock.json\x00'
+            with patch.object(pack.subprocess,'check_output',return_value=tracked),redirect_stdout(io.StringIO()):
                 pack.package(root,root/'test.zip','0.10.0','a'*40)
             with zipfile.ZipFile(root/'test.zip') as archive:
                 self.assertNotIn('pige360-self/deploy/images.env',archive.namelist())
@@ -172,12 +179,40 @@ class PackageLockTests(unittest.TestCase):
             lock={'schema_version':1,'images':{k:{'ref':'ghcr.io/wkarts/pige360-self-'+k+'@sha256:'+'a'*64} for k in ('node','python','postgres')}}
             (root/'ci-evidence/base-images.lock.json').write_text(json.dumps(lock))
             image='ghcr.io/wkarts/pige360-self@sha256:'+'b'*64
-            with patch.object(pack.subprocess,'check_output',return_value=b'VERSION\x00.env\x00font.ttf\x00evidence/server.log\x00'),redirect_stdout(io.StringIO()):
-                pack.package(root,root/'test.zip','0.3.0','a'*40,image)
+            (root/'Dockerfile').write_text('FROM local\nARG APP_VERSION=0.3.0\n')
+            (root/'school.pem').write_text('private fixture')
+            tracked = self.trust_fixture(root) + b'VERSION\x00.env\x00font.ttf\x00evidence/server.log\x00Dockerfile\x00school.pem\x00'
+            with patch.object(pack.subprocess,'check_output',return_value=tracked),redirect_stdout(io.StringIO()):
+                pack.package(root,root/'test.zip','0.3.1','a'*40,image)
             with zipfile.ZipFile(root/'test.zip') as archive:
+                self.assertEqual(archive.read('pige360-self/VERSION'), b'0.3.1\n')
+                self.assertEqual(json.loads(archive.read('pige360-self/MANIFEST.json'))['source_version'], '0.3.0')
+                self.assertIn(b'ARG APP_VERSION=0.3.1\n', archive.read('pige360-self/Dockerfile'))
+                self.assertNotIn('pige360-self/school.pem', archive.namelist())
+                archive.extractall(root/'extracted')
+                public = root/'extracted/pige360-self'/pack.TRUST_DIR
+                for entry in json.loads((public/'manifest.json').read_text())['certificates']:
+                    self.assertEqual((public/entry['file']).read_bytes(), (root/pack.TRUST_DIR/entry['file']).read_bytes())
                 self.assertIn('pige360-self/deploy/images.lock.json',archive.namelist())
                 self.assertNotIn('pige360-self/.env',archive.namelist());self.assertNotIn('pige360-self/font.ttf',archive.namelist())
                 self.assertNotIn('pige360-self/evidence/server.log',archive.namelist())
                 self.assertIn(image,archive.read('pige360-self/deploy/images.env').decode())
+
+    def test_missing_corrupt_or_mixed_pem_fails_before_distribution(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            tracked = self.trust_fixture(root)
+            cert = next((root/pack.TRUST_DIR).glob('*.pem'))
+            original = cert.read_bytes()
+            with patch.object(pack.subprocess, 'check_output', return_value=tracked):
+                for content in (None, original+b'\n-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n',
+                                b'-----BEGIN CERTIFICATE-----\nQUJD\n-----END CERTIFICATE-----\n'):
+                    with self.subTest(content=content is not None), self.assertRaises(ValueError):
+                        if content is None:
+                            cert.unlink()
+                        else:
+                            cert.write_bytes(content)
+                        pack.package(root, root/'test.zip', '1.2.3', 'a'*40)
+            self.assertFalse((root/'test.zip').exists())
 
 if __name__=='__main__':unittest.main()

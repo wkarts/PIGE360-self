@@ -307,7 +307,8 @@ def learning_data(db, students):
                 stream = BytesIO()
                 picture.convert('RGB').save(stream, format='JPEG')
                 thumbnail = 'data:image/jpeg;base64,' + base64.b64encode(stream.getvalue()).decode()
-        logo = 'data:image/png;base64,' + base64.b64encode(school.report_logo).decode() if school.report_logo else ''
+        from .report_preferences import school_logo_url
+        logo = school_logo_url(school)
         output.append({'report_logo': logo, 'report_font': (school.report_preferences or {}).get('font_family', 'inherit'), 'photo': thumbnail, 'student_id': student.id, 'student_name': (person.social_name or person.name) if person else '',
                        'student_number': student.number, 'school_id': student.school_id,
                        'school_name': school.name if school else '', 'enrollments': items})

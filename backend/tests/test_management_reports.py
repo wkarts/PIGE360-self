@@ -160,7 +160,7 @@ def test_complete_student_documents(api):
         assert 'Não contém assinatura digital' in text and 'Página 1 de' in text
     with SessionLocal() as db:
         emitted = db.get(m.IssuedDocument, issued['id'])
-        assert emitted.snapshot['layout_version'] == '9' and emitted.snapshot['guardians'][0]['person']['name'] == guardian['name']
+        assert emitted.snapshot['layout_version'] == '10' and emitted.snapshot['guardians'][0]['person']['name'] == guardian['name']
 
 
 def test_academic_results_use_consolidated_value_and_flag_rule_change(api):
@@ -203,3 +203,29 @@ def test_institutional_footer_and_continuation_on_every_page():
                       'Uso restrito aos destinatários autorizados', f'Página {index} de {len(pages)}'):
             assert label in text
     assert 'Aluno sintético 174' in pages[-1].extract_text()
+
+
+def test_students_report_keeps_active_class_and_shows_next_draft(api, monkeypatch):
+    from app import management_reports
+
+    current = api.catalogs(capacity=3)
+    future_year = api.post('/academic-years', {'name': '2027', 'starts_on': '2027-01-01', 'ends_on': '2027-12-31'})
+    future_group = api.post('/class-groups', {'name': '4º Ano B', 'unit_id': current['unit']['id'],
+        'academic_year_id': future_year['id'], 'grade_id': current['grade']['id'],
+        'shift_id': current['shift']['id'], 'capacity': 3})
+    student = api.student('Aluno com rematrícula', adult=True)
+    enrollment = api.enroll(student, current['group'])
+    api.post('/enrollments', {'student_id': student['id'], 'class_group_id': future_group['id'],
+        'enrolled_on': '2027-01-04', 'enrollment_type': 'renewal'})
+    timestamp = datetime(2026, 9, 25, 15, 0, tzinfo=UTC)
+    with SessionLocal() as db:
+        db.get(m.Student, student['id']).created_at = timestamp
+        db.get(m.Enrollment, enrollment['id']).status = 'active'
+        db.commit()
+    monkeypatch.setattr(management_reports, 'now', lambda: timestamp)
+    result = api.get('/reports/management/students' + PERIOD)
+    assert result['items'][0]['class_name'] == current['group']['name']
+    assert result['items'][0]['draft_class'] == '4º Ano B · 2027'
+    only_draft = api.get('/reports/management/students' + PERIOD + '&academic_year_id=' + future_year['id'])
+    assert only_draft['items'][0]['class_name'] == 'Sem matrícula vigente'
+    assert next(m['value'] for m in only_draft['summary'] if m['key'] == 'enrolled') == 0

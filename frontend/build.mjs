@@ -32,11 +32,17 @@ for(const name of ['contractValue','enrollmentWorkflow','academicPreparation','n
  const code=render.toString();if(code.includes('_hoisted_'))throw new Error('Render contém constantes externas.');
  renders[name]=code;
 }
-fs.writeFileSync(path.join(dist,'renders.js'),'/* Vue pré-compilado; sem eval em runtime. */\nvar _Vue=Vue; var PigeRenders={'+Object.entries(renders).map(([key,code])=>key+':'+code).join(',')+'};\n');
+function writeRenders(filename, names) {
+ const entries=names.map(name=>name+':'+renders[name]);
+ fs.writeFileSync(path.join(dist,filename),'/* Vue pré-compilado; sem eval em runtime. */\nvar _Vue=Vue; var PigeRenders={'+entries.join(',')+'};\n');
+}
+writeRenders('renders.js',Object.keys(renders));
+writeRenders('family-renders.js',['familyPortal','learning']);
+writeRenders('teacher-renders.js',['teacherPortal','diary']);
 fs.cpSync(path.join(root,'public'),dist,{recursive:true});
 fs.mkdirSync(path.join(dist,'vendor'),{recursive:true});fs.copyFileSync(path.join(root,'vendor/vue-3.5.13.global.prod.js'),path.join(dist,'vendor/vue-3.5.13.global.prod.js'));
 fs.copyFileSync(path.join(root,'src/app.css'),path.join(dist,'app.css'));
-const staticFiles=['/','/index.html','/app.js','/portal.js','/family.js','/teacher.js','/news.js','/renders.js','/app.css','/vendor/vue-3.5.13.global.prod.js'];
+const staticFiles=['/','/index.html','/app.js','/portal.js','/family.js','/teacher.js','/news.js','/renders.js','/family-renders.js','/teacher-renders.js','/app.css','/vendor/vue-3.5.13.global.prod.js'];
 function collectPublic(dir,prefix='') { for(const entry of fs.readdirSync(dir,{withFileTypes:true})) {
  const name=prefix+'/'+entry.name;
  if(entry.isDirectory()){if(!['/branding','/fonts'].includes(name))collectPublic(path.join(dir,entry.name),name);}

@@ -13,8 +13,10 @@ import logging
 import smtplib
 import ssl
 import time
+from collections import deque
 from datetime import datetime, timedelta
 from email.message import EmailMessage
+from importlib import import_module
 from pathlib import Path
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -25,7 +27,7 @@ from .config import settings
 from .security import utc
 from .integration_core import AsaasProvider, ConnectProvider, IntegrationFailure, unseal, enqueue
 from .connect_core import ConnectApiClient
-from .banking import apply_remote, queue_charge_sync
+from .banking import apply_remote, queue_charge_sync, crm_issue_attempted
 
 LOG = logging.getLogger('pige360.worker')
 HEARTBEAT = Path('/tmp/pige360-worker-heartbeat')
@@ -70,6 +72,8 @@ def bank_job(db, job, payload, conn):
         else:
             payment = provider.find('payments', charge.external_reference)
             if payment is None:
+                if crm_issue_attempted(db, charge):
+                    raise IntegrationFailure('CRM_EXTERNAL_ISSUE_REQUIRES_REVIEW', uncertain=True)
                 if charge.payment_attempted:
                     raise IntegrationFailure('PAYMENT_POST_REQUIRES_RECONCILIATION', uncertain=True)
                 if not charge.remote_customer_id:
@@ -354,6 +358,20 @@ def schedule_reconciliations():
             queue_charge_sync(db,charge,key)
         db.commit()
 
+def process_next_queue(queues):
+    """Avança a fila inicial a cada tentativa e executa até um trabalho no ciclo."""
+    for _ in range(len(queues)):
+        name, consume = queues[0]
+        queues.rotate(-1)
+        try:
+            if consume():
+                return True
+        except Exception:
+            emit('worker.queue_failed', service='worker', level='ERROR', code='WORKER_QUEUE_FAILED')
+            LOG.error('code=WORKER_QUEUE_FAILED queue=%s', name)
+    return False
+
+
 def main():
     from .queue_notifications import install, wait_for_integration
     install()
@@ -368,6 +386,13 @@ def main():
     emit('service.started',service='worker')
     done = 0
     next_reconcile = 0.0
+    queues = deque([
+        ('integrations', process_one),
+        ('connect', process_connect_one),
+        ('crm', lambda: import_module('.crm_bridge', __package__).process_one()),
+        ('crm_external', lambda: import_module('.crm_bridge_external', __package__).process_one()),
+        ('backup', lambda: import_module('.backups', __package__).process_one()),
+    ])
     while True:
         HEARTBEAT.touch()
         diagnostic_heartbeat('worker')
@@ -379,18 +404,7 @@ def main():
                     schedule_certificate_alerts(db)
                     db.commit()
                 next_reconcile=time.monotonic()+60
-            worked = process_one() or process_connect_one()
-            # Optional bridge faults must never prevent native banking/notifications.
-            try:
-                from .crm_bridge import process_one as process_crm_one
-                from .crm_bridge_external import process_one as process_crm_external_one
-                worked = process_crm_one() or worked
-                worked = process_crm_external_one() or worked
-            except Exception:
-                LOG.error('code=CRM_BRIDGE_WORKER_FAILED')
-            if not worked:
-                from .backups import process_one as process_backup_one
-                worked=process_backup_one()
+            worked = process_next_queue(queues)
         except Exception:
             emit('worker.loop_failed',service='worker',level='ERROR',code='WORKER_DATABASE_OR_CONFIGURATION_ERROR')
             LOG.error('code=WORKER_DATABASE_OR_CONFIGURATION_ERROR'); worked = False

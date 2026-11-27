@@ -1,5 +1,6 @@
 """Executado somente na stack Docker descartável, com app e workers parados."""
 import hashlib
+from datetime import timedelta
 from pathlib import Path
 import os
 import sys
@@ -7,8 +8,8 @@ sys.path.insert(0,'/app/backend')
 from app import models as m
 from app.config import settings
 from app.schemas import Login
-from app.db import SessionLocal, uid
-from app.backups import create_bundle, bundle_path, verify_bundle
+from app.db import SessionLocal, now, uid
+from app.backups import BackupRun, create_bundle, bundle_path, verify_bundle
 from app.backup_restore import restore
 from app.documents import write_file
 from app.storage import read_bytes, ensure_storage, delete_key
@@ -30,6 +31,13 @@ with SessionLocal.begin() as db:
     company_id,school_id,user_id,file_id=company.id,school.id,user.id,file.id
 
 for backend in ('local','s3'):
+    with SessionLocal.begin() as db:
+        session = m.AuthSession(user_id=user_id, token_hash=hashlib.sha256(uid().encode()).hexdigest(),
+                                expires_at=now()+timedelta(hours=1))
+        delivery = BackupRun(created_by=user_id, status='processing', remote_status='sending')
+        db.add_all([session, delivery])
+        db.flush()
+        session_id, delivery_id = session.id, delivery.id
     if backend=='s3':
         cfg.storage_backend='s3';cfg.storage_endpoint_url='http://minio:9000'
         cfg.storage_use_ssl=False;cfg.storage_force_path_style=True;cfg.storage_auto_create_bucket=True
@@ -53,6 +61,9 @@ for backend in ('local','s3'):
     with SessionLocal.begin() as db:db.get(m.Company,company_id).name='Alteração posterior ao snapshot'
     restore(bundle_path(ident))
     with SessionLocal() as db:
+        assert db.get(m.AuthSession,session_id).revoked
+        delivery = db.get(BackupRun,delivery_id)
+        assert (delivery.status,delivery.remote_status,delivery.error_code)==('failed','uncertain','RESTORE_INTERRUPTED')
         assert db.get(m.Company,company_id).name=='Mantenedora sintética de backup'
         assert read_bytes(db.get(m.FileRecord,file_id))==b'synthetic local backup document'
         if backend=='s3':
@@ -78,7 +89,6 @@ for backend in ('local','s3'):
 
 # Estado conhecido para a prova visual subsequente em Docker. Nunca usa escola real.
 from app.security import hash_password
-from app.backups import BackupRun
 with SessionLocal.begin() as db:
     db.get(m.User,user_id).password_hash=hash_password(synthetic_login.password)
     if not db.get(m.SchoolAccess,(user_id,school_id)):db.add(m.SchoolAccess(user_id=user_id,school_id=school_id))

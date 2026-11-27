@@ -176,48 +176,79 @@ var PigeLearning;
 })(PigeLearning || (PigeLearning = {}));
 var PigeSupport;
 (function (PigeSupport) {
+    const runtime = window;
     PigeSupport.status = Vue.reactive({ error: '' });
-    let loadedSource = '', activeScope = '';
-    let pending = null;
-    let retryAt = 0;
     const busyMessage = 'O atendimento recebeu muitas solicitações. Aguarde antes de tentar novamente.';
-    let frame = null;
-    let observer = null;
-    let viewportTimer, startupTimer;
+    const roots = '#hub-widget-holder,#hub-bubble-holder';
+    // A URL sem versão pode continuar em cache por um ano após atualizar o HUB.
+    const sdkRevision = 'launcher-tooltip-1';
+    let sdkRefresh = 0;
+    let loadedSource = '', activeScope = '', sdkSource = '', sessionSource = '';
+    let pending = null;
+    let sdkQueue = Promise.resolve();
+    let script = null, activeSDK = null, lastSDK = null;
+    let generation = 0, retryAt = 0, startupTimer;
     let recovery = null, checkingArea = false, retryArea = null;
-    const startupTimeout = 8000;
-    function cancelStartup() {
-        if (startupTimer !== undefined)
-            window.clearTimeout(startupTimer);
-        startupTimer = undefined;
+    let visibilityStyle = null;
+    let listeningReady = false;
+    function setChecking(checking) {
+        checkingArea = checking;
+        visibilityStyle?.remove();
+        visibilityStyle = null;
+        if (checking) {
+            visibilityStyle = document.createElement('style');
+            visibilityStyle.textContent = roots + '{display:none!important}';
+            document.head.appendChild(visibilityStyle);
+        }
+        if (recovery)
+            recovery.hidden = checking;
     }
-    let generation = 0;
-    function release() {
+    function cancelStartup(stopListening = true) {
+        if (startupTimer !== undefined) {
+            window.clearTimeout(startupTimer);
+        }
+        startupTimer = undefined;
+        if (stopListening && listeningReady) {
+            window.removeEventListener('hub:ready', onReady);
+            listeningReady = false;
+        }
+    }
+    function onReady() {
+        if (!activeSDK || !runtime.$hub?.hasLoaded)
+            return;
         cancelStartup();
         recovery?.remove();
         recovery = null;
-        observer?.disconnect();
-        observer = null;
-        if (viewportTimer !== undefined)
-            window.clearInterval(viewportTimer);
-        viewportTimer = undefined;
-        const previous = frame;
-        frame = null;
-        loadedSource = '';
-        // O SDK executa em outro documento. Remover esse contexto encerra seus
-        // timers, listeners, iframes e DOM mesmo quando ele não oferece destroy.
-        try {
-            previous?.contentWindow?.hubSDK?.destroy?.();
-        }
-        catch { /* Atendimento não bloqueia a aplicação. */ }
-        previous?.remove();
+        PigeSupport.status.error = '';
     }
-    function dispose() { ++generation; activeScope = ''; pending = null; retryAt = 0; checkingArea = false; retryArea = null; release(); PigeSupport.status.error = ''; }
-    PigeSupport.dispose = dispose;
-    function offerRecovery(element, config, message) {
-        if (frame !== element || recovery)
-            return;
+    function release(clearSession = false) {
         cancelStartup();
+        recovery?.remove();
+        recovery = null;
+        // O SDK remove apenas seus próprios elementos e listeners no documento atual.
+        (activeSDK || (clearSession ? lastSDK : null))?.destroy?.({ clearSession });
+        if (clearSession) {
+            lastSDK = null;
+            sessionSource = '';
+        }
+        activeSDK = null;
+        loadedSource = '';
+    }
+    function dispose() {
+        ++generation;
+        pending = null;
+        retryAt = 0;
+        retryArea = null;
+        release(true);
+        activeScope = '';
+        setChecking(false);
+        PigeSupport.status.error = '';
+    }
+    PigeSupport.dispose = dispose;
+    function offerRecovery(config, message) {
+        if (recovery)
+            return;
+        cancelStartup(false);
         PigeSupport.status.error = message;
         const button = document.createElement('button');
         button.dataset.pigeSupportRecovery = 'true';
@@ -228,57 +259,50 @@ var PigeSupport;
         button.style.cssText = `position:fixed;${side}:max(1rem,env(safe-area-inset-${side}));bottom:max(1rem,env(safe-area-inset-bottom));z-index:2147483000;max-width:calc(100vw - 2rem);padding:.7rem 1rem;border:0;border-radius:999px;background:#174576;color:#fff;font:600 1rem/1.35 system-ui;cursor:pointer;`;
         button.hidden = checkingArea;
         button.addEventListener('click', () => {
-            if (frame !== element || checkingArea || recovery !== button)
+            if (checkingArea || recovery !== button)
                 return;
             const retry = retryArea;
             release();
-            retry?.(); // Busca a configuração vigente e respeita Retry-After.
+            retry?.();
         });
         recovery = button;
         document.body.appendChild(button);
     }
-    function clipWidget(element) {
-        if (frame !== element)
-            return;
-        const doc = element.contentDocument, win = element.contentWindow;
-        if (!doc || !win)
-            return;
-        let left = win.innerWidth, top = win.innerHeight, right = 0, bottom = 0;
-        // Recorta o documento do SDK à bolha/painel visível. A área transparente
-        // não intercepta cliques, scroll ou campos da página da escola.
-        for (const node of Array.from(doc.querySelectorAll('iframe,button,[role="button"],[class*="bubble-holder"],[class*="launcher"]'))) {
-            let visible = true;
-            for (let ancestor = node; ancestor && ancestor !== doc.documentElement; ancestor = ancestor.parentElement) {
-                const css = win.getComputedStyle(ancestor);
-                if (css.display === 'none' || css.visibility === 'hidden' || Number(css.opacity) === 0) {
-                    visible = false;
-                    break;
-                }
-            }
-            if (!visible)
-                continue;
-            const rect = node.getBoundingClientRect();
-            if (rect.width < 2 || rect.height < 2 || rect.right <= 0 || rect.bottom <= 0 || rect.left >= win.innerWidth || rect.top >= win.innerHeight)
-                continue;
-            left = Math.min(left, Math.max(0, rect.left - 4));
-            top = Math.min(top, Math.max(0, rect.top - 4));
-            right = Math.max(right, Math.min(win.innerWidth, rect.right + 4));
-            bottom = Math.max(bottom, Math.min(win.innerHeight, rect.bottom + 4));
-        }
-        element.style.clipPath = right > left && bottom > top ? `inset(${top}px ${Math.max(0, win.innerWidth - right)}px ${Math.max(0, win.innerHeight - bottom)}px ${left}px)` : 'inset(100%)';
-        element.style.visibility = right > left && bottom > top ? 'visible' : 'hidden';
-        if (element.style.visibility === 'visible' && !checkingArea) {
-            cancelStartup();
-            if (recovery) {
-                recovery.remove();
-                recovery = null;
-                PigeSupport.status.error = '';
-            }
-        }
+    function loadSDK(baseUrl) {
+        // Serializa downloads: um script antigo não pode sobrescrever o SDK novo.
+        const task = sdkQueue.catch(() => { }).then(async () => {
+            const compatible = () => typeof runtime.hubSDK?.run === 'function' && typeof runtime.hubSDK?.destroy === 'function';
+            if (sdkSource === baseUrl && compatible())
+                return;
+            sdkSource = '';
+            const download = (refresh = false) => new Promise((resolve, reject) => {
+                script?.remove();
+                const element = document.createElement('script');
+                script = element;
+                element.dataset.pigeSupportHub = 'true';
+                element.src = baseUrl + '/packs/js/sdk.js?pige_sdk=' + sdkRevision +
+                    (refresh ? '&pige_reload=' + Date.now() + '-' + (++sdkRefresh) : '');
+                element.defer = true;
+                element.async = true;
+                element.onload = () => resolve();
+                element.onerror = () => { element.remove(); reject(new Error('hub-sdk-download')); };
+                document.head.appendChild(element);
+            });
+            await download();
+            // Uma única revalidação recupera uma cópia antiga sem gerar polling/retries infinitos.
+            if (!compatible())
+                await download(true);
+            if (typeof runtime.hubSDK?.run !== 'function')
+                throw new Error('hub-sdk-missing');
+            if (typeof runtime.hubSDK.destroy !== 'function')
+                throw new Error('hub-sdk-lifecycle');
+            sdkSource = baseUrl;
+        });
+        sdkQueue = task;
+        return task;
     }
     async function load(schoolId = '', area = 'login', sessionKey = 'public') {
-        const scope = JSON.stringify([schoolId, sessionKey]);
-        const context = JSON.stringify([scope, area]);
+        const scope = JSON.stringify([schoolId, sessionKey]), context = JSON.stringify([scope, area]);
         if (scope !== activeScope) {
             dispose();
             activeScope = scope;
@@ -287,17 +311,15 @@ var PigeSupport;
             return pending.promise;
         pending = null;
         const request = ++generation;
-        checkingArea = true;
-        if (frame)
-            frame.style.display = 'none';
-        if (recovery)
-            recovery.hidden = true;
+        setChecking(true);
         if (!schoolId && area !== 'login') {
             release();
+            setChecking(false);
             return;
         }
         if (Date.now() < retryAt) {
             release();
+            setChecking(false);
             PigeSupport.status.error = busyMessage;
             return;
         }
@@ -325,6 +347,7 @@ var PigeSupport;
                 const delay = /^\d+$/.test(header) ? Number(header) * 1000 : Date.parse(header) - Date.now();
                 retryAt = Date.now() + (Number.isFinite(delay) && delay >= 0 ? delay : 60000);
                 release();
+                setChecking(false);
                 PigeSupport.status.error = busyMessage;
                 return;
             }
@@ -334,10 +357,10 @@ var PigeSupport;
         catch { /* Indisponibilidade do atendimento não bloqueia o formulário. */ }
         if (request !== generation)
             return;
-        checkingArea = false;
         retryArea = retry;
         if (!config?.enabled || !config.base_url || !config.website_token) {
             release();
+            setChecking(false);
             return;
         }
         let baseUrl;
@@ -349,89 +372,95 @@ var PigeSupport;
         }
         catch {
             release();
+            setChecking(false);
             PigeSupport.status.error = 'Revise o endereço configurado para o atendimento.';
             return;
         }
-        const sourceKey = JSON.stringify([scope, baseUrl, config.website_token, config.position, config.type, config.launcherTitle]);
-        if (sourceKey === loadedSource && frame) {
-            frame.style.display = '';
-            if (recovery) {
-                recovery.hidden = false;
+        const sourceKey = JSON.stringify([scope, baseUrl, config.website_token, config.position, config.type, config.launcherTitle, config.launcherTooltip]);
+        const sessionKey = JSON.stringify([scope, baseUrl, config.website_token]);
+        if (sourceKey === loadedSource && activeSDK) {
+            setChecking(false);
+            if (recovery)
                 PigeSupport.status.error = recovery.title;
-            }
-            clipWidget(frame);
             return;
         }
-        release();
-        const element = document.createElement('iframe');
-        element.dataset.pigeSupportFrame = 'true';
-        element.title = 'Atendimento da instituição';
-        element.tabIndex = -1;
-        element.src = 'about:blank';
-        element.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;background:transparent;z-index:2147483000;clip-path:inset(100%);visibility:hidden;color-scheme:light;';
-        frame = element;
-        loadedSource = sourceKey;
-        document.body.appendChild(element);
-        const doc = element.contentDocument, runtime = element.contentWindow;
-        if (!doc || !runtime) {
-            release();
-            PigeSupport.status.error = 'Não foi possível abrir o atendimento.';
-            return;
-        }
-        doc.documentElement.lang = 'pt-BR';
-        doc.documentElement.style.background = 'transparent';
-        doc.body.style.cssText = 'margin:0;background:transparent;';
-        runtime.hubSettings = { position: config.position || 'left', type: config.type || 'expanded_bubble', launcherTitle: config.launcherTitle || 'Suporte' };
-        const sdk = doc.createElement('script');
-        sdk.src = baseUrl + '/packs/js/sdk.js';
-        sdk.defer = true;
-        sdk.async = true;
-        sdk.onload = () => {
-            if (frame !== element)
+        release(sessionSource !== '' && sessionKey !== sessionSource);
+        try {
+            await loadSDK(baseUrl);
+            if (request !== generation)
                 return;
-            try {
-                if (!runtime.hubSDK?.run)
-                    throw new Error('SDK indisponível');
-                runtime.hubSDK.run({ websiteToken: config.website_token, baseUrl });
-                observer = new MutationObserver(() => clipWidget(element));
-                observer.observe(doc.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
-                viewportTimer = window.setInterval(() => clipWidget(element), 250);
-                clipWidget(element);
+            const sdk = runtime.hubSDK;
+            // O descarte é necessário para trocar escola/conta sem manter a conversa anterior.
+            if (!sdk?.run || !sdk.destroy) {
+                sdkSource = '';
+                throw new Error('hub-sdk-lifecycle');
             }
-            catch {
-                PigeSupport.status.error = 'O atendimento não iniciou. Confira a configuração com o administrador.';
-                release();
-            }
-        };
-        sdk.onerror = () => offerRecovery(element, config, 'O atendimento não carregou nesta página. Tente novamente.');
-        startupTimer = window.setTimeout(() => offerRecovery(element, config, 'O atendimento não ficou pronto nesta página. Tente novamente.'), startupTimeout);
-        doc.head.appendChild(sdk);
+            runtime.hubSettings = { position: config.position || 'left', type: config.type || 'expanded_bubble', launcherTitle: config.launcherTitle || 'Suporte', launcherTooltip: config.launcherTooltip?.trim() || 'Abrir Conversa' };
+            activeSDK = sdk;
+            lastSDK = sdk;
+            loadedSource = sourceKey;
+            sessionSource = sessionKey;
+            window.addEventListener('hub:ready', onReady);
+            listeningReady = true;
+            startupTimer = window.setTimeout(() => offerRecovery(config, 'O atendimento não ficou pronto nesta página. Tente novamente.'), 15000);
+            sdk.run({ websiteToken: config.website_token, baseUrl });
+            setChecking(false);
+            if (runtime.$hub?.hasLoaded)
+                onReady();
+        }
+        catch (error) {
+            if (request !== generation)
+                return;
+            release();
+            setChecking(false);
+            const reason = error instanceof Error ? error.message : '';
+            const message = reason === 'hub-sdk-download' ? 'Não foi possível baixar o SDK do atendimento. Verifique a conexão e tente novamente.' :
+                reason === 'hub-sdk-missing' ? 'O script do atendimento não disponibilizou o SDK. Verifique a publicação do HUB.' :
+                    reason === 'hub-sdk-lifecycle' ? 'O HUB ainda entregou um SDK antigo após atualizar o cache. Publique o SDK atualizado e tente novamente.' :
+                        'O atendimento não iniciou. Tente novamente; se persistir, revise a integração do suporte.';
+            offerRecovery(config, message);
+        }
     }
-    window.addEventListener('pagehide', dispose);
+    window.addEventListener('pagehide', () => { ++generation; release(); setChecking(false); });
 })(PigeSupport || (PigeSupport = {}));
 /** Portal privado: shell da aplicação, transporte e autorizações escolares preservados. */
 var PigeFamily;
 (function (PigeFamily) {
-    const titles = { materials: 'Atividades', absences: 'Justificativas de ausência', overview: 'Visão geral', students: 'Meus alunos', academic: 'Vida acadêmica', news: 'Comunicados', agenda: 'Agenda escolar', finance: 'Financeiro', documents: 'Documentos', support: 'Atendimento' };
+    const titles = { materials: 'Atividades', absences: 'Justificativas de ausência', overview: 'Visão geral', students: 'Alunos que acompanho', academic: 'Vida acadêmica', news: 'Comunicados', agenda: 'Agenda escolar', finance: 'Financeiro', documents: 'Documentos', support: 'Atendimento' };
     function routeSection() { const view = new URLSearchParams(location.search).get('view'); return view && titles[view] ? view : location.pathname.includes('documents') ? 'documents' : location.pathname.includes('finance') ? 'finance' : location.pathname.includes('academic') ? 'academic' : 'overview'; }
-    const s = Vue.reactive({ ready: false, busy: false, error: '', contextError: false, account: null, email: '', password: '', passwordVisible: false, menuOpen: false, schoolId: '', schools: {}, section: routeSection(), students: [], studentId: new URLSearchParams(location.search).get('student') || '', charges: [], financeNote: '', financeError: '', financeLoaded: false, news: [], events: [], feedItems: [], feedTotal: 0, feedPage: 1, feedBusy: false, feedError: '', overviewFeedError: '', selectedPost: null });
-    const schoolwork = Vue.reactive({ materials: [], absences: [], day: '', reason: '', file: null, key: '', receipt: '', fileVersion: 0 });
-    function clearSchoolwork() { schoolwork.materials = []; schoolwork.absences = []; schoolwork.file = null; schoolwork.key = ''; schoolwork.day = ''; schoolwork.reason = ''; schoolwork.receipt = ''; schoolwork.fileVersion++; }
+    const s = Vue.reactive({ ready: false, busy: false, error: '', contextError: false, account: null, email: '', password: '', passwordVisible: false, menuOpen: false, schoolId: '', schools: {}, section: routeSection(), students: [], studentId: new URLSearchParams(location.search).get('student') || '', charges: [], financePage: 1, financePageSize: 30, financeTotal: 0, financeOverdue: 0, financeNote: '', financeError: '', financeLoaded: false, news: [], events: [], feedItems: [], feedTotal: 0, feedPage: 1, feedBusy: false, feedError: '', overviewFeedError: '', selectedPost: null });
+    let schoolworkSequence = 0;
+    const schoolwork = Vue.reactive({ loading: false, error: '', materials: [], absences: [], day: '', reason: '', file: null, key: '', receipt: '', fileVersion: 0 });
+    function clearSchoolwork() { schoolworkSequence++; schoolwork.loading = false; schoolwork.error = ''; schoolwork.materials = []; schoolwork.absences = []; schoolwork.file = null; schoolwork.key = ''; schoolwork.day = ''; schoolwork.reason = ''; schoolwork.receipt = ''; schoolwork.fileVersion++; }
     function pickEvidence(event) { schoolwork.file = event.target.files?.[0] || null; }
     async function loadSchoolwork() {
-        const current = generation, id = s.studentId, section = s.section;
+        const sequence = ++schoolworkSequence, id = s.studentId, section = s.section;
+        schoolwork.error = '';
+        schoolwork.loading = false;
         if (!id || !['materials', 'absences'].includes(section) || (section === 'absences' && s.account?.role !== 'guardian'))
             return;
+        schoolwork.loading = true;
         const path = '/family/students/' + id + '/' + section;
-        if (section === 'materials') {
-            const items = await request(path);
-            if (current === generation && s.studentId === id)
-                schoolwork.materials = items;
+        const current = () => sequence === schoolworkSequence && s.studentId === id && s.section === section;
+        try {
+            if (section === 'materials') {
+                const items = await request(path);
+                if (current())
+                    schoolwork.materials = items;
+            }
+            else {
+                const items = await request(path);
+                if (current())
+                    schoolwork.absences = items;
+            }
         }
-        else {
-            const items = await request(path);
-            if (current === generation && s.studentId === id)
-                schoolwork.absences = items;
+        catch (error) {
+            if (current())
+                schoolwork.error = error instanceof Error ? error.message : 'Não foi possível consultar os registros.';
+        }
+        finally {
+            if (current())
+                schoolwork.loading = false;
         }
     }
     async function submitAbsence() {
@@ -461,7 +490,7 @@ var PigeFamily;
     function checkAuth(epoch) { if (epoch !== authEpoch)
         throw new SessionChanged(); }
     function invalidateAuth() { authEpoch++; refreshing = null; }
-    function clearPrivate() { generation++; feedGeneration++; clearSchoolwork(); s.students = []; s.charges = []; s.financeNote = ''; s.financeError = ''; s.financeLoaded = false; s.news = []; s.events = []; s.feedItems = []; s.feedTotal = 0; s.feedPage = 1; s.feedBusy = false; s.selectedPost = null; s.feedError = ''; s.overviewFeedError = ''; s.menuOpen = false; }
+    function clearPrivate() { generation++; feedGeneration++; clearSchoolwork(); s.students = []; s.charges = []; s.financeTotal = 0; s.financePage = 1; s.financeOverdue = 0; s.financeNote = ''; s.financeError = ''; s.financeLoaded = false; s.news = []; s.events = []; s.feedItems = []; s.feedTotal = 0; s.feedPage = 1; s.feedBusy = false; s.selectedPost = null; s.feedError = ''; s.overviewFeedError = ''; s.menuOpen = false; }
     async function raw(path, options = {}) { const headers = new Headers(options.headers); headers.set('X-CSRF-Protection', '1'); if (token)
         headers.set('Authorization', 'Bearer ' + token); if (s.schoolId)
         headers.set('X-School-Id', s.schoolId); if (typeof options.body === 'string')
@@ -566,28 +595,42 @@ var PigeFamily;
             s.contextError = true;
         throw e;
     } }
-    const label = (value) => ({ open: 'Aberto', in_progress: 'Em atendimento', waiting: 'Aguardando', draft: 'Em preparação', active: 'Efetivada', suspended: 'Suspensa', completed: 'Concluída', pending: 'Pendente', overdue: 'Vencida', validated: 'Validado', received: 'Recebido', waived: 'Dispensado', rejected: 'Revisão necessária', expired: 'Vencido', queued: 'Em processamento', cancelled: 'Cancelada', paid: 'Paga', settled: 'Liquidada', issued: 'Emitida', registered: 'Registrada' }[value] || value);
+    const label = (value) => ({ open: 'Aberto', in_progress: 'Em atendimento', waiting: 'Aguardando', draft: 'Em preparação', active: 'Efetivada', suspended: 'Suspensa', completed: 'Concluída', pending: 'Pendente', overdue: 'Vencida', validated: 'Validado', received: 'Recebido', received_external: 'Recebido externamente', confirmed: 'Confirmada', refunded: 'Estornada', partially_refunded: 'Estorno parcial', refund_requested: 'Estorno solicitado', disputed: 'Em contestação', awaiting_review: 'Em análise', failed: 'Falha na emissão', uncertain: 'Em conciliação', waived: 'Dispensado', rejected: 'Revisão necessária', expired: 'Vencido', queued: 'Em processamento', cancelled: 'Cancelada', paid: 'Paga', settled: 'Liquidada', issued: 'Emitida', registered: 'Registrada' }[value] || value);
     const student = () => s.students.find(x => x.id === s.studentId);
-    const pendingDocuments = () => (student()?.documents || []).filter(x => ['pending', 'rejected', 'expired'].includes(x.status));
-    const overdue = () => s.charges.filter(x => x.status === 'overdue');
+    const pendingDocuments = () => student()?.document_pendencies ?? [];
+    const studentView = () => s.account?.role === 'student';
+    const portalName = () => studentView() ? 'Portal do aluno' : 'Portal da família';
     const initials = (name) => name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]).join('').toLocaleUpperCase('pt-BR');
-    const title = () => titles[s.section] || titles.overview;
+    const title = (name = s.section) => studentView() && name === 'students' ? 'Meu cadastro' : studentView() && name === 'academic' ? 'Minha vida escolar' : titles[name] || titles.overview;
     const date = (value) => { if (!value)
         return 'Data não informada'; const d = new Date(value.length === 10 ? value + 'T12:00:00' : value); return Number.isNaN(d.getTime()) ? 'Data não informada' : new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: 'short', year: 'numeric', ...(value.length > 10 ? { hour: '2-digit', minute: '2-digit' } : {}) }).format(d); };
     const money = (value) => Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    async function finance() { s.charges = []; s.financeNote = ''; s.financeError = ''; s.financeLoaded = false; if (!student()?.financial_authorized)
-        return; const selected = s.studentId, current = generation; try {
-        const data = await request('/family/students/' + selected + '/charges');
-        if (selected !== s.studentId || current !== generation)
+    async function finance(page = 1) {
+        s.charges = [];
+        s.financeLoaded = false;
+        s.financeNote = '';
+        s.financeError = '';
+        s.financeOverdue = 0;
+        s.financeTotal = 0;
+        if (!student()?.financial_authorized)
             return;
-        s.charges = data.items;
-        s.financeNote = data.note;
-        s.financeLoaded = true;
+        const selected = s.studentId, current = generation;
+        try {
+            const data = await request(`/family/students/${selected}/charges?page=${page}&page_size=${s.financePageSize}`);
+            if (selected !== s.studentId || current !== generation)
+                return;
+            s.charges = data.items;
+            s.financeTotal = data.total ?? 0;
+            s.financeOverdue = data.overdue_count ?? data.items.filter(row => row.status === 'overdue').length;
+            s.financePage = page;
+            s.financeNote = data.note;
+            s.financeLoaded = true;
+        }
+        catch (e) {
+            if (selected === s.studentId && current === generation)
+                s.financeError = e instanceof Error ? e.message : 'Não foi possível carregar o financeiro.';
+        }
     }
-    catch (e) {
-        if (selected === s.studentId && current === generation)
-            s.financeError = e instanceof Error ? e.message : 'Não foi possível carregar o financeiro.';
-    } }
     function feedPath(kind, page = 1, size = 12, upcoming = false) { return '/schools/' + encodeURIComponent(s.schoolId) + '/community-feed?' + new URLSearchParams({ kind, page: String(page), page_size: String(size), upcoming: String(upcoming) }); }
     async function overviewFeed() { if (!s.schoolId)
         return; const current = generation; try {
@@ -672,8 +715,7 @@ var PigeFamily;
     function section(name) { if (!titles[name])
         return; const changed = s.section !== name; s.section = name; s.selectedPost = null; closeMenu(false); if (changed)
         updateLocation(true); if (['materials', 'absences'].includes(name))
-        void loadSchoolwork().catch(e => { if (s.section === name)
-            s.error = e.message; }); if (['news', 'agenda'].includes(name))
+        void loadSchoolwork(); if (['news', 'agenda'].includes(name))
         void loadFeed(); void Vue.nextTick(() => window.document.getElementById('family-title')?.focus()); }
     async function popstate() { s.section = routeSection(); s.selectedPost = null; closeMenu(false); const id = new URLSearchParams(location.search).get('student'); if (id && s.students.some(x => x.id === id) && id !== s.studentId) {
         clearSchoolwork();
@@ -693,6 +735,6 @@ var PigeFamily;
             Vue.onUnmounted(PigeSupport.dispose);
             Vue.onMounted(() => { window.addEventListener('popstate', popstate); window.addEventListener('keydown', menuKeys); window.addEventListener('resize', resized); PigeMFA.init(request, authenticated, logout); void start(); });
             Vue.onUnmounted(() => { window.removeEventListener('popstate', popstate); window.removeEventListener('keydown', menuKeys); window.removeEventListener('resize', resized); });
-            return { s, schoolwork, pickEvidence, submitAbsence, label, student, title, initials, date, money, pendingDocuments, overdue, login, logout, changeSchool, changeStudent, chooseStudent, document, request, download, section, run, load, loadFeed, openPost, closePost, openMenu, closeMenu, mfa: PigeMFA, identity: PigeInstitution.state };
+            return { s, schoolwork, loadSchoolwork, studentView, portalName, pickEvidence, submitAbsence, label, student, title, initials, date, money, pendingDocuments, finance, login, logout, changeSchool, changeStudent, chooseStudent, document, request, download, section, run, load, loadFeed, openPost, closePost, openMenu, closeMenu, mfa: PigeMFA, identity: PigeInstitution.state };
         } }).mount('#family');
 })(PigeFamily || (PigeFamily = {}));

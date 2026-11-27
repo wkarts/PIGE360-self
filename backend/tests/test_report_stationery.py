@@ -70,3 +70,33 @@ def test_diary_attendance_and_individual_exports_have_typed_registers(api):
         text = '\n'.join(page.extract_text() for page in pages)
         assert all(label in text for label in labels)
         assert student['number'] in text and 'NOTA_INTERNA' not in text
+
+
+def test_school_stationery_and_optional_watermark_on_management_pdf(api, client, admin):
+    from base64 import b64decode
+    from PIL import Image
+    from test_school_report_kit import artwork
+
+    assert save(client, admin, files={'logo': ('rede.png', artwork(True), 'image/png')}).is_success
+    image = Image.new('RGB', (60, 40), '#12a850')
+    stream = io.BytesIO()
+    image.save(stream, 'PNG')
+    prefs = api.get('/report-preferences')
+    result = client.put(api.base + '/report-preferences/logo', headers=api.headers,
+                        files={'file': ('escola.png', stream.getvalue(), 'image/png')},
+                        data={'version': str(prefs['version'])})
+    assert result.is_success
+    stored_logo = b64decode(api.get('/reports/catalog')['report_logo'].split(',', 1)[1])
+    assert Image.open(io.BytesIO(stored_logo)).convert('RGB').getpixel((0, 0)) == (18, 168, 80)
+    for groups, placements in [([], 1), (['records'], 1), (['management'], 2)]:
+        prefs = api.get('/report-preferences')
+        api.call('PUT', '/report-preferences', {**prefs, 'watermark_documents': groups})
+        content = api.get('/reports/management/enrollments.pdf').content
+        reader = PdfReader(io.BytesIO(content))
+        assert reader.metadata.author == api.school['name']
+        for page in reader.pages:
+            assert page.images[0].image.convert('RGB').getpixel((0, 0)) == (18, 168, 80)
+            assert page.get_contents().get_data().count(b' Do') == placements
+            assert 'PRÉVIA' not in page.extract_text()
+    prefs = api.get('/report-preferences')
+    assert api.call('PUT', '/report-preferences', {'version': prefs['version'], 'color':'#215a68'})['watermark_documents'] == ['management']

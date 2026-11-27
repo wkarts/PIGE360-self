@@ -211,8 +211,12 @@ def theme(db: DB):
     if data['font_family'] == 'custom' and data['font_asset_id']:
         css += '@font-face{font-family:InstitutionFont;src:url("/api/v1/institution/assets/' + data['font_asset_id'] + '");font-display:swap;}'
     dark = '#' + ''.join(f'{round(int(primary[i:i+2], 16) * .82):02x}' for i in (1, 3, 5))
+    # Controles com fundo branco precisam de um tom de texto mesmo quando a marca é clara.
+    on_primary = foreground(primary)
+    readable = primary if on_primary == '#FFFFFF' else '#' + ''.join(
+        f'{round(int(primary[i:i+2], 16) * .44):02x}' for i in (1, 3, 5))
     css += (f':root{{--primary:{primary};--primary-dark:{dark};--ink:{secondary};'
-            f'--institution-font:{family};--primary-on:{foreground(primary)};'
+            f'--institution-font:{family};--primary-on:{on_primary};--primary-readable:{readable};'
             f'--pige360-petroleum:{primary};--pige360-navy:{secondary};font-family:{family};}}'
             '.btn-primary{color:var(--primary-on)}')
     return Response(css, media_type='text/css')

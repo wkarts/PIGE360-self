@@ -312,7 +312,7 @@ console.log('Signing smoke: telas separadas, A1 efêmero, revisão por matrícul
 // Campanha salva o modelo selecionado; a inscrição aprovada emite a revisão congelada.
 const expansion=sandbox.PigeExpansion.component.setup({schoolId:'school-test',page:'online',permissions:['admissions.manage','admissions.write','documents.read','documents.generate']});
 const originalPatch=sandbox.PigeAPI.patch;
-const templateChoice={id:'template-contract',version:8,name:'Contrato 2027',active:true,require_signature:true,academic_year_id:'year-2027'};
+const templateChoice={id:'template-contract',version:8,name:'Contrato 2027',kind:'educational_contract',active:true,require_signature:true,academic_year_id:'year-2027'};
 const group={id:'group-2027',academic_year_id:'year-2027',name:'Turma A',capacity:30};
 let campaignSaved=null,frozenPreviewVersion=0,frozenIssueVersion=0,finalizeCount=0;
 const admission={id:'admission-1',version:3,number:'PRE-1',status:'approved',enrollment_id:'enrollment-1',contract_template_id:'template-contract',contract_template_version:5,contract:{required:true,template_id:'template-contract',template_version:5,issued_document_id:null,signature_status:'awaiting_school'}};
@@ -323,7 +323,11 @@ sandbox.PigeAPI.request=async path=>{
   if(path.endsWith('/academic-years'))return[{id:'year-2027',name:'2027',status:'active'}];
   if(path.endsWith('/units'))return[];
   if(path.endsWith('/academic-years'))return[{id:'year-2027',name:'2027'}];
-  if(path.endsWith('/document-templates?include_inactive=true'))return{items:[templateChoice]};
+  if(path.endsWith('/document-templates?include_inactive=true'))return{items:[
+    templateChoice,
+    {...templateChoice,id:'signed-declaration',kind:'declaration'},
+    {...templateChoice,id:'expired-contract',valid_until:'2026-12-31'},
+  ]};
   if(path.endsWith('/document-templates/fields'))return{fields:[{key:'financeiro.anuidade',label:'Anuidade',source:'manual'}]};
   if(path.includes('/admissions-summary'))return{counts:{}};
   if(path.includes('/preparation?'))return{version:0,values:{}};
@@ -345,6 +349,7 @@ await expansion.saveCampaign();assert.equal(campaignSaved,null,'Sem turma, o pro
 Object.assign(expansion.s.campaignForm,{academic_year_id:'year-2027',title:'Matrículas 2027',slug:'matriculas-2027',opens_on:'2027-01-01',closes_on:'2027-03-31'});
 expansion.s.campaignForm.class_group_ids=['group-2027'];expansion.s.campaignForm.contract_template_id='template-contract';
 expansion.s.campaignForm.show_student_portal_button=false;
+assert.deepEqual(Array.from(expansion.eligibleContractTemplates(), item=>item.id), ['template-contract']);
 await expansion.saveCampaign();assert.equal(campaignSaved.contract_template_id,'template-contract');
 assert.equal(campaignSaved.show_student_portal_button,false,'False must be serialized instead of falling back to the default');
 expansion.editCampaign({...campaignSaved,id:'campaign-saved',version:2});

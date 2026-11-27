@@ -47,6 +47,10 @@ def received(charge):
 def start(db, admission, campaign, *, reviewed=False):
     """A aprovação reserva antes da cobrança; renovação exige revisão explícita."""
     if not campaign.require_payment_before_enrollment:
+        if reviewed:
+            admission.reservation_status = 'none'
+            admission.reserved_until = None
+            admission.reservation_paid_at = None
         return
     if not campaign.payment_reservation_hours:
         fail(409, 'Defina no processo o prazo de reserva para pagamento antes de aprovar.')

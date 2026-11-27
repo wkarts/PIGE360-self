@@ -16,6 +16,8 @@ new=parse(os.environ['VERSION'])
 if any(parse(t)>new for t in tags if STABLE.fullmatch(t)):
     raise SystemExit('Já existe release mais recente. Promoção de aliases abortada.')
 PY
+mkdir -p release
+python scripts/ci/package.py --version "$VERSION" --commit "$TARGET_SHA" --image "$IMAGE@$DIGEST" --output "release/PIGE360-Self-$VERSION.zip"
 if git rev-parse --verify "refs/tags/$VERSION" >/dev/null 2>&1; then
   [[ "$(git rev-list -n 1 "$VERSION")" == "$TARGET_SHA" ]]
 else
@@ -24,8 +26,6 @@ else
   git tag -a "$VERSION" "$TARGET_SHA" -m "PIGE360 Self $VERSION"
   git push origin "refs/tags/$VERSION"
 fi
-mkdir -p release
-python scripts/ci/package.py --version "$VERSION" --commit "$TARGET_SHA" --image "$IMAGE@$DIGEST" --output "release/PIGE360-Self-$VERSION.zip"
 printf '# PIGE360 Self %s\n\nCommit: `%s`\n\nImagem da aplicação: `%s@%s`\nAgente de e-mail: `%s@%s`\nWebmail: `%s@%s`\n\nTestes, builds e smoke da stack concluídos pelo pipeline.\nImplantação Docker self-hosted; nenhum deploy externo executado.\n' "$VERSION" "$TARGET_SHA" "$IMAGE" "$DIGEST" "$MAIL_AGENT_IMAGE" "$MAIL_AGENT_DIGEST" "$SOGO_IMAGE" "$SOGO_DIGEST" > release/NOTES.md
 if ! gh release view "$VERSION" >/dev/null 2>&1; then
   gh release create "$VERSION" --verify-tag --draft --title "PIGE360 Self $VERSION" --notes-file release/NOTES.md
