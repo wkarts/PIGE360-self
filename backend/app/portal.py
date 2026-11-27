@@ -105,15 +105,8 @@ def campaign_output(db,obj,*,private=False):
     from .registry import occupancy
     school=db.get(m.School,obj.school_id)
     groups=[]
-    for id in obj.class_group_ids:
-        g=db.get(m.ClassGroup,id)
-        if not g or g.school_id!=obj.school_id or not g.active or (obj.academic_year_id and g.academic_year_id!=obj.academic_year_id):continue
-        from .enrollments import check_group
-        from fastapi import HTTPException
-        try:check_group(db,g,obj.school_id)
-        except HTTPException:continue
+    for g in offered_groups(db, obj):
         y=db.get(m.AcademicYear,g.academic_year_id)
-        if y.status!='active':continue
         groups.append({'id':g.id,'name':g.name,'grade':db.get(m.Grade,g.grade_id).name,'shift':db.get(m.Shift,g.shift_id).name,'year':y.name,'unit':db.get(m.Unit,g.unit_id).name,'vacancies':max(0,g.capacity-occupancy(db,g.id))})
     return {**output(obj,('fee_authorized_by',) if private else ('fee_authorized_by','fee_connection_id')),'fee_amount':format(obj.fee_amount,'.2f') if obj.fee_amount is not None else None,'student_portal_url':settings().portal_public_url.rstrip('/')+'/family' if settings().portal_public_url else '/family','school_name':school.name,'school_phone':school.phone,'school_email':school.email,'groups':groups,'accepting':obj.active and obj.opens_on<=today()<=obj.closes_on and bool(groups)}
 

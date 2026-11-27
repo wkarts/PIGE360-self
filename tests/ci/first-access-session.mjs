@@ -5,9 +5,10 @@ import vm from 'node:vm';
 
 const script=fs.readFileSync(new URL('../../frontend/public/first-access.js',import.meta.url),'utf8');
 const id='11111111-1111-4111-8111-111111111111',token='synthetic-invitation-token-0000000000000000';
-async function page(hash='',search='',failure=false){
+async function page(hash='',search='',failure=false,loginPath='/'){
   const fields={},calls=[],history=[];
-  for(const key of ['status','invite-form','institution-name','institution-logo','school','password','confirmation'])fields[key]={hidden:true,textContent:'',value:''};
+  for(const key of ['status','invite-form','institution-name','institution-logo','school','password','confirmation','login-link'])fields[key]={hidden:true,textContent:'',value:''};
+  fields['login-link'].href='/';
   fields['invite-form'].addEventListener=(_,handler)=>fields['invite-form'].submit=handler;
   fields['invite-form'].querySelector=()=>({disabled:false});
   const identity={display_name:'Colégio Horizonte',primary_color:'#A12255',version:4,logo_url:'/api/v1/institution/assets/'+'a'.repeat(64)+'.png'};
@@ -18,7 +19,7 @@ async function page(hash='',search='',failure=false){
     sessionStorage:new Proxy({},{get(){throw Error('token em armazenamento JavaScript');}}),
     fetch:async(path,options)=>{
       calls.push({path,options});
-      return {ok:!failure,json:async()=>path.endsWith('/identity')?identity:path.endsWith('/inspect')?{invitation_id:id,school_name:'Nome cadastral'}:{message:'Senha definida.'}};
+      return {ok:!failure,json:async()=>path.endsWith('/identity')?identity:path.endsWith('/inspect')?{invitation_id:id,school_name:'Nome cadastral',login_path:loginPath}:{message:'Senha definida.',login_path:loginPath}};
     }};
   vm.runInNewContext(script,context);
   await new Promise(resolve=>setImmediate(resolve));
@@ -39,6 +40,13 @@ assert.equal(accept.options.credentials,'same-origin');
 assert.equal(accept.options.headers['X-CSRF-Protection'],'1');
 assert.equal(initial.fields.password.value,'');
 assert.equal(initial.fields['invite-form'].hidden,true);
+for (const [loginPath,expected] of [['/professor','/professor'], ['/family','/family'], ['/','/'], ['https://example.invalid/','/']]) {
+  const {fields}=await page('#'+token,'',false,loginPath);
+  assert.equal(fields['login-link'].href,expected);
+  fields.password.value=fields.confirmation.value='Synthetic-Test-Password!';
+  await fields['invite-form'].submit({preventDefault(){}});
+  assert.equal(fields['login-link'].href,expected);
+}
 const refreshed=await page('','?invitation='+id);
 assert.equal(refreshed.fields['invite-form'].hidden,false);
 assert.deepEqual(JSON.parse(refreshed.calls.find(c=>c.path.endsWith('/inspect')).options.body),{invitation_id:id});

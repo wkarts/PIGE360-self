@@ -27,6 +27,9 @@ const students=[
   {enrollment_id:'e3',name:'Caio',attendance:null}
 ];
 const base='/schools/school-one';
+const diaryView=sandbox.Vue.proxyRefs(ctx);
+const diaryProps=()=>sandbox.PigeRenders.diary.call(diaryView,diaryView,[]).props;
+
 sandbox.PigeAPI.request=async(url,options={})=>{
   calls.push({url,method:options.method||'GET'});
   if([base+'/academic-years',base+'/class-groups',base+'/teacher-assignments'].includes(url))throw new Error('403: recurso administrativo');
@@ -50,6 +53,8 @@ sandbox.PigeAPI.request=async(url,options={})=>{
   if(url.endsWith('/summary'))return{lessons:diary.lessons.length,lesson_count:diary.lessons.length,attendance_records:0,absences:0,justified_absences:0,roster:2};
   if(url.endsWith('/history'))return{closures:[],revisions:[]};
   if(url.endsWith('/assessments/assessment-one/results')&&options.method==='PUT'){gradePayload=JSON.parse(options.body);return{saved:gradePayload.items.length};}
+  if(url.endsWith('/assessments/assessment-one/results'))return {instrument:{id:'assessment-one',value_type:'numeric'},roster:[{enrollment_id:'e1',result:{numeric_score:8,note:'',concept:''}}]};
+
   if(url.endsWith('/assessments/assessment-one')&&options.method==='PATCH'){const payload=JSON.parse(options.body);assert.equal(payload.status,'published');assert.equal(payload.version,3);return{...payload,id:'assessment-one',version:4};}
   return[];
 };
@@ -92,15 +97,34 @@ console.log('Diário: professor, refresh de aulas/transições, nota zero/parcia
 
 await ctx.openAttendance(ctx.state.selected.lessons[0]);
 assert.equal(ctx.state.attendance[1].attendance.status,'','Sem chamada não significa presente');
+assert.equal(diaryProps()['data-workspace-dirty'],false);
 ctx.state.attendance[1].attendance.status='justified_absence';
+assert.equal(diaryProps()['data-workspace-dirty'],true,'Edição individual identifica a guia do Diário como rascunho.');
 await ctx.saveAttendance();
 assert.deepEqual(attendancePayload.items,[{enrollment_id:'e2',status:'justified_absence',note:'',version:null,expected_empty:true}]);
+assert.equal(diaryProps()['data-workspace-dirty'],false,'Chamada salva libera a guia.');
 ctx.markPendingPresent();
+assert.equal(diaryProps()['data-workspace-dirty'],true,'Marcação em lote protege a chamada mesmo sem digitar em um campo.');
 assert.equal(ctx.state.attendance[0].attendance.status,'absent');
 assert.equal(ctx.state.attendance[1].attendance.status,'justified_absence');
 assert.equal(ctx.state.attendance[2].attendance.status,'present');
 await ctx.saveAttendance();
 assert.equal(attendancePayload.items[0].enrollment_id,'e3');
+await ctx.openAssessment({id:'assessment-one'});
+assert.equal(diaryProps()['data-workspace-dirty'],false);
+ctx.state.assessmentRoster[0].result.numeric_score='8.5';
+assert.equal(diaryProps()['data-workspace-dirty'],true,'Nota em edição requer confirmação.');
+ctx.state.assessmentRoster[0].result.numeric_score='8';
+assert.equal(diaryProps()['data-workspace-dirty'],false,'Retornar à nota salva libera a guia.');
+ctx.state.configFields[0].label='Campo alterado';
+assert.equal(diaryProps()['data-workspace-dirty'],true,'A composição editada também protege a guia.');
+ctx.setComposition(ctx.state.fields);
+assert.equal(diaryProps()['data-workspace-dirty'],false);
+const opening=ctx.openAttendance(ctx.state.selected.lessons[0]);
+assert.equal(diaryProps()['aria-busy'],true,'A guia informa operações em andamento.');
+await opening;
+assert.equal(diaryProps()['aria-busy'],false);
+
 ctx.editLesson(ctx.state.selected.lessons[0]);ctx.state.lessonValues['field-lesson']='Anexo B';
 await ctx.createLesson();assert.equal(ctx.state.error,'');
 assert.equal(lessonUpdate.version,1);assert.deepEqual(lessonUpdate.field_values,{'field-lesson':'Anexo B'});
@@ -146,3 +170,43 @@ for(const [caption,target,expectedTab] of [['Fazer chamada','attendance','diarie
   assert.equal(workspace.state.tab,expectedTab);
 }
 console.log('Portal independente do professor: botões de chamada e planejamento fora do piloto acionam o diário e usam a API docente.');
+
+// A coordenação cria a atribuição por pessoa e vincula um diário já aberto, preservando as aulas.
+const manager=sandbox.PigeDiary.component.setup({schoolId:'school-one',permissions:['diary.read','diary.configure','staff.assignments.read','staff.assignments.write','people.read']});
+let linkedAssignment=null,assignmentBody,diaryUpdate;
+sandbox.PigeAPI.request=async(url,options={})=>{
+  if(url.includes('/teachers?q=')){
+    assert.ok(url.includes('Maria%20Lima'));
+    return {items:[{person:{id:'person-two',name:'Maria Lima',active:true}}]};
+  }
+  if(url===base+'/teacher-assignments')return linkedAssignment?[linkedAssignment]:[];
+  if(url===base+'/class-groups')return[{id:'class-one',name:'1° ano'}];
+  if(url===base+'/academic-years')return[{id:'year-one',name:'2026'}];
+  if(url===base+'/diaries/diary-one/teacher-assignment' && options.method==='PUT'){
+    diaryUpdate=JSON.parse(options.body);
+    diary={...diary,teacher_assignment_id:diaryUpdate.teacher_assignment_id,version:diary.version+1};
+    return diary;
+  }
+  return mockRequest(url,options);
+};
+sandbox.PigeAPI.post=async(url,body)=>{
+  assert.equal(url,base+'/teacher-assignments');
+  assignmentBody=structuredClone(body);
+  linkedAssignment={id:'assignment-two',teacher_person_id:body.teacher_person_id,subject_name:body.subject_name,
+    class_group_id:body.class_group_id,active:true};
+  return linkedAssignment;
+};
+await manager.load();
+manager.state.diaryForm.class_group_id='class-one';manager.state.diaryForm.component_id='component-one';
+manager.syncDiaryAssignment();assert.equal(manager.existingDiary.value.id,'diary-one');
+manager.state.teacherSearch='Maria Lima';await manager.searchTeachers();
+assert.equal(manager.state.teacherResults[0].person.id,'person-two');
+manager.state.teacherPersonId='person-two';
+const expectedVersion=diary.version;
+await manager.createDiary();
+assert.equal(manager.state.error,'');
+assert.deepEqual(assignmentBody,{teacher_person_id:'person-two',class_group_id:'class-one',subject_name:'Matemática',active:true});
+assert.deepEqual(diaryUpdate,{version:expectedVersion,teacher_assignment_id:'assignment-two'});
+assert.equal(manager.state.selected.id,'diary-one');
+assert.equal(manager.state.selected.teacher_assignment_id,'assignment-two');
+console.log('Diário: atribuição docente pela ficha de professor e vínculo versionado em diário existente OK.');

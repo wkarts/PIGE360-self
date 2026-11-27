@@ -167,6 +167,8 @@ def send_email(payload):
             if cfg.smtp_username: smtp.login(cfg.smtp_username, cfg.smtp_password)
             sending = True
             smtp.send_message(message)
+    except smtplib.SMTPRecipientsRefused:
+        raise IntegrationFailure('SMTP_RECIPIENT_REFUSED') from None
     except (OSError, smtplib.SMTPException):
         raise IntegrationFailure('SMTP_SEND_FAILED', uncertain=sending)
     return ''

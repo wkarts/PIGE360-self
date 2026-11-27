@@ -420,9 +420,10 @@ var PigeDiary;
                 attendanceBase: {},
                 componentForm: { name: '', code: '', workload_hours: 0, active: true },
                 diaryForm: { class_group_id: '', component_id: '', teacher_assignment_id: '', notes: '' },
+                teacherSearch: '', teacherPersonId: '', teacherResults: [], teacherSearched: false,
                 planForm: emptyPlan(), lessonForm: emptyLesson(),
                 selectedLesson: null, attendance: [],
-                assessments: [], assessmentEditing: null, selectedAssessment: null, assessmentRoster: [],
+                assessments: [], assessmentEditing: null, selectedAssessment: null, assessmentBaseline: '', assessmentRoster: [],
                 assessmentForm: { academic_period_id: '', title: '', kind: 'activity', assessment_date: today(), value_type: 'numeric', max_score: '10', weight: '1', description: '', skills: '', status: 'published' },
                 opinions: [], opinionForm: { academic_period_id: '', enrollment_id: '', text: '', status: 'draft' },
                 pedagogicalRecords: [], pedagogicalForm: { enrollment_id: '', record_date: today(), kind: 'observation', text: '' },
@@ -592,7 +593,7 @@ var PigeDiary;
                     PigeAPI.request(base() + '/curriculum-components'),
                     can('diary.configure') ? PigeAPI.request(base() + '/academic-years') : Promise.resolve([]),
                     can('diary.configure') ? PigeAPI.request(base() + '/class-groups') : Promise.resolve([]),
-                    can('diary.configure') ? PigeAPI.request(base() + '/teacher-assignments') : Promise.resolve([]),
+                    can('diary.configure') && can('staff.assignments.read') ? PigeAPI.request(base() + '/teacher-assignments') : Promise.resolve([]),
                     PigeAPI.request(base() + '/diary-dashboard'),
                     PigeAPI.request(base() + '/diary-entry-fields')
                 ]);
@@ -782,12 +783,86 @@ var PigeDiary;
                     state.notice = result.action === 'retired' ? 'Componente desativado. Os vínculos históricos foram preservados.' : 'Componente sem vínculos removido.';
                 });
             }
-            async function createDiary() { await run(async () => { const body = { ...state.diaryForm, teacher_assignment_id: state.diaryForm.teacher_assignment_id || null }; const d = await PigeAPI.post(base() + '/diaries', body); state.diaryForm = { class_group_id: '', component_id: '', teacher_assignment_id: '', notes: '' }; await loadBase(); await loadDiary(d); if (pilot) {
-                navigatePage('diaries', false);
-                syncLink();
+            const existingDiary = Vue.computed(() => state.diaries.find(row => row.class_group_id === state.diaryForm.class_group_id && row.component_id === state.diaryForm.component_id));
+            const selectedComponent = Vue.computed(() => state.components.find(row => row.id === state.diaryForm.component_id));
+            const matchingAssignments = Vue.computed(() => {
+                const subject = str(selectedComponent.value?.name).trim().toLocaleLowerCase('pt-BR');
+                if (!subject)
+                    return [];
+                return state.assignments.filter(row => row.active && row.class_group_id === state.diaryForm.class_group_id &&
+                    (!str(row.subject_name).trim() || str(row.subject_name).trim().toLocaleLowerCase('pt-BR') === subject));
+            });
+            function resetTeacherSearch() {
+                state.teacherPersonId = '';
+                state.teacherResults = [];
+                state.teacherSearched = false;
             }
-            else
-                state.tab = 'diaries'; state.notice = 'Diário aberto.'; }); }
+            function syncDiaryAssignment() {
+                state.diaryForm.teacher_assignment_id = existingDiary.value?.teacher_assignment_id || '';
+                state.teacherSearch = '';
+                resetTeacherSearch();
+            }
+            function configureTeacher(d) {
+                if (pilot) {
+                    go('new-diary');
+                    if (state.page !== 'new-diary')
+                        return;
+                }
+                else
+                    state.tab = 'setup';
+                state.diaryForm.class_group_id = d.class_group_id;
+                state.diaryForm.component_id = d.component_id;
+                syncDiaryAssignment();
+                focusHeading('diary-assignment-heading');
+            }
+            async function searchTeachers() {
+                const term = state.teacherSearch.trim();
+                if (term.length < 2)
+                    return;
+                await run(async () => {
+                    resetTeacherSearch();
+                    const result = await PigeAPI.request(base() + '/teachers?q=' + encodeURIComponent(term) + '&page_size=30');
+                    if (state.teacherSearch.trim() === term) {
+                        state.teacherResults = result.items.filter(row => row.person.active);
+                        state.teacherSearched = true;
+                    }
+                });
+            }
+            async function createDiary() {
+                await run(async () => {
+                    const current = existingDiary.value;
+                    const form = state.diaryForm;
+                    let assignment = form.teacher_assignment_id || null;
+                    if (state.teacherPersonId && selectedComponent.value) {
+                        const row = await PigeAPI.post(base() + '/teacher-assignments', { teacher_person_id: state.teacherPersonId,
+                            class_group_id: form.class_group_id, subject_name: str(selectedComponent.value.name), active: true });
+                        if (!state.assignments.some(item => item.id === row.id))
+                            state.assignments.push(row);
+                        assignment = row.id;
+                        form.teacher_assignment_id = row.id;
+                        resetTeacherSearch();
+                    }
+                    let diary;
+                    if (current) {
+                        diary = await PigeAPI.request(base() + '/diaries/' + current.id + '/teacher-assignment', { method: 'PUT', body: JSON.stringify({ version: current.version, teacher_assignment_id: assignment }) });
+                    }
+                    else {
+                        diary = await PigeAPI.post(base() + '/diaries', { ...form, teacher_assignment_id: assignment });
+                    }
+                    state.diaryForm = { class_group_id: '', component_id: '', teacher_assignment_id: '', notes: '' };
+                    state.teacherSearch = '';
+                    resetTeacherSearch();
+                    await loadBase();
+                    await loadDiary(diary);
+                    if (pilot) {
+                        navigatePage('diaries', false);
+                        syncLink();
+                    }
+                    else
+                        state.tab = 'diaries';
+                    state.notice = current ? 'Vínculo docente do diário atualizado.' : 'Diário aberto.';
+                });
+            }
             function focusHeading(id) {
                 void Vue.nextTick(() => document.getElementById?.(id)?.focus());
             }
@@ -954,8 +1029,21 @@ var PigeDiary;
                     state.notice = editing ? 'Avaliação atualizada. Consolide o período para atualizar o boletim.' : 'Avaliação criada.';
                 });
             }
-            async function openAssessment(a) { if (!state.selected)
-                return; await run(async () => { const result = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/assessments/' + a.id + '/results'); state.selectedAssessment = result.instrument; state.assessmentRoster = result.roster.map(r => ({ ...r, result: r.result || { numeric_score: null, concept: '', note: '' } })); }); }
+            function gradeValues() {
+                return JSON.stringify(state.assessmentRoster.map(({ enrollment_id, result }) => [enrollment_id, str(result?.numeric_score), str(result?.concept), str(result?.note)]));
+            }
+            const workspaceDirty = Vue.computed(() => state.dirty || compositionDirty.value || changedAttendance.value.length > 0 ||
+                Boolean(state.selectedAssessment && gradeValues() !== state.assessmentBaseline));
+            async function openAssessment(a) {
+                if (!state.selected)
+                    return;
+                await run(async () => {
+                    const result = await PigeAPI.request(base() + '/diaries/' + state.selected.id + '/assessments/' + a.id + '/results');
+                    state.selectedAssessment = result.instrument;
+                    state.assessmentRoster = result.roster.map(r => ({ ...r, result: r.result || { numeric_score: null, concept: '', note: '' } }));
+                    state.assessmentBaseline = gradeValues();
+                });
+            }
             async function saveAssessmentResults() {
                 if (!state.selected || !state.selectedAssessment)
                     return;
@@ -1064,7 +1152,7 @@ var PigeDiary;
             });
             Vue.onUnmounted(() => { if (pilot)
                 window.removeEventListener('beforeunload', beforeUnload); });
-            return { props, state, compositionDirty, setComposition, restorableFields, restoreField, addField, moveField, saveFields, editComponent, resetComponent, removeComponent, editLesson, resetLesson, removeLesson, editPlan, resetPlan, storedFields, markPendingPresent, pendingAttendance, changedAttendance, closeAttendance, periodsFor, loadCalendar, saveCalendar, pilot, catalog, catalogImpact, suggest, decide, lessons, filterPeriod, save, navigation, activeGroup, filteredDiaries, pageLink, go, show, chooseAnother, markDraft, publishMaterial, printMaterial, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, editAssessment, cancelAssessmentEdit, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, resumeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
+            return { props, state, workspaceDirty, existingDiary, matchingAssignments, configureTeacher, syncDiaryAssignment, resetTeacherSearch, searchTeachers, compositionDirty, setComposition, restorableFields, restoreField, addField, moveField, saveFields, editComponent, resetComponent, removeComponent, editLesson, resetLesson, removeLesson, editPlan, resetPlan, storedFields, markPendingPresent, pendingAttendance, changedAttendance, closeAttendance, periodsFor, loadCalendar, saveCalendar, pilot, catalog, catalogImpact, suggest, decide, lessons, filterPeriod, save, navigation, activeGroup, filteredDiaries, pageLink, go, show, chooseAnother, markDraft, publishMaterial, printMaterial, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, editAssessment, cancelAssessmentEdit, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, resumeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
         } };
 })(PigeDiary || (PigeDiary = {}));
 var PigeSupport;

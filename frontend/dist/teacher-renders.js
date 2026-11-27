@@ -217,9 +217,26 @@ var _Vue=Vue; var PigeRenders={teacherPortal:function render(_ctx, _cache) {
                   }, _toDisplayString(item.name), 9, ["value"]))
                 }), 128))], 40, ["value", "disabled", "onChange"])]))
               : _createCommentVNode("", true)]),
+            (s.section==='overview' || s.section==='diary')
+              ? (_openBlock(), _createElementBlock("details", {
+                  key: 0,
+                  class: "panel teacher-guide"
+                }, [_createElementVNode("summary", null, "Guia de uso do diário"), _createElementVNode("div", { class: "teacher-guide-content" }, [_createElementVNode("ol", null, [_createElementVNode("li", null, "Em Visão geral, localize a turma e o componente em Minhas turmas. Se o diário ainda não aparecer, peça à coordenação que confira sua atribuição."), _createElementVNode("li", null, "Use Planejar aula para preparar o planejamento. Para registrar uma aula e consultar seu conteúdo, escolha Abrir diário."), _createElementVNode("li", null, "Use Fazer chamada, selecione a aula e registre a frequência dos alunos. Confira os lançamentos antes de salvar.")]), _createElementVNode("figure", null, [_createElementVNode("a", {
+                  href: "/guia/professor.webp",
+                  target: "_blank",
+                  rel: "noopener",
+                  "aria-label": "Ampliar imagem de Minhas turmas (nova aba)"
+                }, [_createElementVNode("img", {
+                  src: "/guia/professor.webp",
+                  width: "278",
+                  height: "287",
+                  loading: "lazy",
+                  alt: "Exemplo de Minhas turmas com os botões Abrir diário, Fazer chamada e Planejar aula para Ciências."
+                })]), _createElementVNode("figcaption", null, "Os três atalhos abrem a turma e o componente escolhidos.")])])]))
+              : _createCommentVNode("", true),
             (s.error)
               ? (_openBlock(), _createElementBlock("p", {
-                  key: 0,
+                  key: 1,
                   class: "alert error",
                   role: "alert"
                 }, [_createTextVNode(_toDisplayString(s.error) + " ", 1), _createElementVNode("button", {
@@ -230,13 +247,13 @@ var _Vue=Vue; var PigeRenders={teacherPortal:function render(_ctx, _cache) {
               : _createCommentVNode("", true),
             (!s.schools.length&&!s.error&&!s.busy)
               ? (_openBlock(), _createElementBlock("p", {
-                  key: 1,
+                  key: 2,
                   class: "alert"
                 }, "Peça à Secretaria que vincule sua conta de Professor à instituição."))
               : _createCommentVNode("", true),
             (s.section==='news')
               ? (_openBlock(), _createElementBlock("section", {
-                  key: 2,
+                  key: 3,
                   class: "panel x-card"
                 }, [
                   _createElementVNode("h2", null, "Comunicados da escola"),
@@ -262,13 +279,13 @@ var _Vue=Vue; var PigeRenders={teacherPortal:function render(_ctx, _cache) {
               : _createCommentVNode("", true),
             (s.agenda && !s.agenda.diaries.length && s.section==='diary')
               ? (_openBlock(), _createElementBlock("p", {
-                  key: 3,
+                  key: 4,
                   class: "alert"
                 }, "Peça à Coordenação que confira sua atribuição e abra o diário da turma."))
               : _createCommentVNode("", true),
             (s.agenda)
               ? _withDirectives((_openBlock(), _createElementBlock("section", {
-                  key: 4,
+                  key: 5,
                   class: "teacher-overview"
                 }, [_withDirectives(_createElementVNode("section", { class: "panel x-card" }, [_createElementVNode("h2", null, "Minhas turmas"), (!s.agenda.assignments.length)
                   ? (_openBlock(), _createElementBlock("p", { key: 0 }, "A Coordenação precisa associar seu cadastro à turma e à disciplina em Atribuições docentes."))
@@ -319,7 +336,7 @@ var _Vue=Vue; var PigeRenders={teacherPortal:function render(_ctx, _cache) {
               : _createCommentVNode("", true),
             (s.agenda?.diaries.length)
               ? _withDirectives((_openBlock(), _createElementBlock("section", {
-                  key: 5,
+                  key: 6,
                   "aria-label": "Diário de classe"
                 }, [(_openBlock(), _createBlock(_component_school_diary, {
                   "school-name": s.schools.find(item=>item.id===s.schoolId)?.name,
@@ -334,11 +351,13 @@ var _Vue=Vue; var PigeRenders={teacherPortal:function render(_ctx, _cache) {
   }
 },diary:function render(_ctx, _cache) {
   with (_ctx) {
-    const { toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createTextVNode: _createTextVNode, Fragment: _Fragment, createElementVNode: _createElementVNode, renderList: _renderList, withModifiers: _withModifiers, normalizeClass: _normalizeClass, vModelSelect: _vModelSelect, withDirectives: _withDirectives, vModelText: _vModelText, vModelCheckbox: _vModelCheckbox } = _Vue
+    const { toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createTextVNode: _createTextVNode, Fragment: _Fragment, createElementVNode: _createElementVNode, renderList: _renderList, withModifiers: _withModifiers, normalizeClass: _normalizeClass, vModelSelect: _vModelSelect, withDirectives: _withDirectives, vModelText: _vModelText, vModelCheckbox: _vModelCheckbox, withKeys: _withKeys } = _Vue
 
     return (_openBlock(), _createElementBlock("section", {
       class: "diary-workspace",
-      "aria-label": "Diário Escolar Digital"
+      "aria-label": "Diário Escolar Digital",
+      "aria-busy": state.busy,
+      "data-workspace-dirty": workspaceDirty
     }, [(state.error)
       ? (_openBlock(), _createElementBlock("div", {
           key: 0,
@@ -859,13 +878,16 @@ var _Vue=Vue; var PigeRenders={teacherPortal:function render(_ctx, _cache) {
               ? (_openBlock(), _createElementBlock("section", {
                   key: 2,
                   class: "panel x-card"
-                }, [_createElementVNode("h2", null, "Abrir diário"), _createElementVNode("form", {
+                }, [_createElementVNode("h2", {
+                  id: "diary-assignment-heading",
+                  tabindex: "-1"
+                }, "Abrir diário ou vincular professor"), _createElementVNode("form", {
                   class: "x-form",
                   onSubmit: _withModifiers($event => (save(createDiary)), ["prevent"])
                 }, [
                   _createElementVNode("div", { class: "x-grid" }, [_createElementVNode("label", null, [_createTextVNode("Turma"), _withDirectives(_createElementVNode("select", {
                     "onUpdate:modelValue": $event => ((state.diaryForm.class_group_id) = $event),
-                    onChange: $event => (state.diaryForm.teacher_assignment_id=''),
+                    onChange: syncDiaryAssignment,
                     required: ""
                   }, [_createElementVNode("option", { value: "" }, "Selecione"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.groups, (g) => {
                     return (_openBlock(), _createElementBlock("option", {
@@ -874,33 +896,80 @@ var _Vue=Vue; var PigeRenders={teacherPortal:function render(_ctx, _cache) {
                     }, _toDisplayString(g.name), 9, ["value"]))
                   }), 128))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.diaryForm.class_group_id]])]), _createElementVNode("label", null, [_createTextVNode("Componente"), _withDirectives(_createElementVNode("select", {
                     "onUpdate:modelValue": $event => ((state.diaryForm.component_id) = $event),
+                    onChange: syncDiaryAssignment,
                     required: ""
                   }, [_createElementVNode("option", { value: "" }, "Selecione"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.components.filter(row=>row.active), (c) => {
                     return (_openBlock(), _createElementBlock("option", {
                       key: c.id,
                       value: c.id
                     }, _toDisplayString(c.name), 9, ["value"]))
-                  }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.diaryForm.component_id]])]), _createElementVNode("label", null, [_createTextVNode("Atribuição docente"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.diaryForm.teacher_assignment_id) = $event) }, [_createElementVNode("option", { value: "" }, "Sem atribuição definida"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.assignments.filter(x=>x.active && x.class_group_id===state.diaryForm.class_group_id), (a) => {
+                  }), 128))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.diaryForm.component_id]])]), _createElementVNode("label", null, [_createTextVNode("Atribuição docente"), _withDirectives(_createElementVNode("select", {
+                    "onUpdate:modelValue": $event => ((state.diaryForm.teacher_assignment_id) = $event),
+                    onChange: $event => (state.teacherPersonId=''),
+                    disabled: !state.diaryForm.component_id || !can('staff.assignments.read')
+                  }, [_createElementVNode("option", { value: "" }, "Sem atribuição definida"), (existingDiary?.teacher_assignment_id && !matchingAssignments.some(a=>a.id===existingDiary.teacher_assignment_id))
+                    ? (_openBlock(), _createElementBlock("option", {
+                        key: 0,
+                        value: existingDiary.teacher_assignment_id,
+                        disabled: ""
+                      }, _toDisplayString(existingDiary.teacher_name) + " · Atribuição anterior", 9, ["value"]))
+                    : _createCommentVNode("", true), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(matchingAssignments, (a) => {
                     return (_openBlock(), _createElementBlock("option", {
                       key: a.id,
                       value: a.id
-                    }, _toDisplayString(a.teacher_name) + " · " + _toDisplayString(a.subject_name||'Componente não informado'), 9, ["value"]))
-                  }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.diaryForm.teacher_assignment_id]])])]),
+                    }, _toDisplayString(a.teacher_name) + " · " + _toDisplayString(a.subject_name||'Turma'), 9, ["value"]))
+                  }), 128))], 40, ["onUpdate:modelValue", "onChange", "disabled"]), [[_vModelSelect, state.diaryForm.teacher_assignment_id]])])]),
+                  (can('staff.assignments.write') && can('people.read') && state.diaryForm.class_group_id && state.diaryForm.component_id && (!existingDiary || existingDiary.status==='open'))
+                    ? (_openBlock(), _createElementBlock("fieldset", { key: 0 }, [
+                        _createElementVNode("legend", null, "Vincular professor do cadastro"),
+                        _createElementVNode("label", null, [_createTextVNode("Buscar professor por nome ou registro"), _withDirectives(_createElementVNode("input", {
+                          type: "search",
+                          "onUpdate:modelValue": $event => ((state.teacherSearch) = $event),
+                          onInput: resetTeacherSearch,
+                          onKeydown: _withKeys(_withModifiers(searchTeachers, ["prevent"]), ["enter"]),
+                          maxlength: "160"
+                        }, null, 40, ["onUpdate:modelValue", "onInput", "onKeydown"]), [[_vModelText, state.teacherSearch]])]),
+                        _createElementVNode("button", {
+                          class: "btn btn-secondary",
+                          type: "button",
+                          onClick: searchTeachers,
+                          disabled: state.teacherSearch.trim().length<2 || state.busy
+                        }, "Pesquisar professores", 8, ["onClick", "disabled"]),
+                        (state.teacherResults.length)
+                          ? (_openBlock(), _createElementBlock("label", { key: 0 }, [_createTextVNode("Professor cadastrado"), _withDirectives(_createElementVNode("select", {
+                              "onUpdate:modelValue": $event => ((state.teacherPersonId) = $event),
+                              onChange: $event => (state.diaryForm.teacher_assignment_id='')
+                            }, [_createElementVNode("option", { value: "" }, "Selecione"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.teacherResults, (t) => {
+                              return (_openBlock(), _createElementBlock("option", {
+                                key: t.person.id,
+                                value: t.person.id
+                              }, _toDisplayString(t.person.name) + _toDisplayString(t.registration_number?' · '+t.registration_number:''), 9, ["value"]))
+                            }), 128))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.teacherPersonId]])]))
+                          : (state.teacherSearched)
+                            ? (_openBlock(), _createElementBlock("p", {
+                                key: 1,
+                                role: "status"
+                              }, "Nenhum professor ativo encontrado para esta busca."))
+                            : _createCommentVNode("", true)
+                      ]))
+                    : _createCommentVNode("", true),
                   (!state.groups.length || !state.components.length)
                     ? (_openBlock(), _createElementBlock("p", {
-                        key: 0,
+                        key: 1,
                         class: "alert info"
                       }, [_createTextVNode("Antes de abrir o diário, cadastre uma turma em "), _createElementVNode("a", { href: "#/academic" }, "Estrutura acadêmica"), _createTextVNode(" e crie o componente curricular nesta aba.")]))
                     : _createCommentVNode("", true),
-                  _createElementVNode("label", null, [_createTextVNode("Observações"), _withDirectives(_createElementVNode("textarea", {
-                    "onUpdate:modelValue": $event => ((state.diaryForm.notes) = $event),
-                    rows: "2",
-                    maxlength: "4000"
-                  }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.diaryForm.notes]])]),
+                  existingDiary
+                    ? (_openBlock(), _createElementBlock("p", { key: 2 }, "Diário " + _toDisplayString(label(existingDiary.status)) + " · " + _toDisplayString(existingDiary.teacher_name||'Professor não definido') + ".", 1))
+                    : (_openBlock(), _createElementBlock("label", { key: 3 }, [_createTextVNode("Observações"), _withDirectives(_createElementVNode("textarea", {
+                        "onUpdate:modelValue": $event => ((state.diaryForm.notes) = $event),
+                        rows: "2",
+                        maxlength: "4000"
+                      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.diaryForm.notes]])])),
                   _createElementVNode("button", {
                     class: "btn btn-primary",
-                    disabled: !state.groups.length || !state.components.length
-                  }, "Abrir diário", 8, ["disabled"])
+                    disabled: !state.groups.length || !state.components.length || (existingDiary && (existingDiary.status!=='open' || !can('staff.assignments.write') || (!state.teacherPersonId && state.diaryForm.teacher_assignment_id===(existingDiary.teacher_assignment_id||''))))
+                  }, _toDisplayString(existingDiary?'Salvar vínculo docente':'Abrir diário'), 9, ["disabled"])
                 ], 40, ["onSubmit"])]))
               : _createCommentVNode("", true)
           ], 64))
@@ -969,15 +1038,21 @@ var _Vue=Vue; var PigeRenders={teacherPortal:function render(_ctx, _cache) {
                   ? (_openBlock(), _createElementBlock("section", {
                       key: 0,
                       class: "panel x-card"
-                    }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, _toDisplayString(state.selected.year_name) + " · " + _toDisplayString(state.selected.class_name), 1), _createElementVNode("h2", null, _toDisplayString(state.selected.component_name), 1), _createElementVNode("p", null, [_createTextVNode(_toDisplayString(state.selected.teacher_name||'Professor não definido') + " · ", 1), _createElementVNode("span", { class: "badge" }, _toDisplayString(label(state.selected.status)), 1)])]), _createElementVNode("div", { class: "actions" }, [(!pilot)
+                    }, [_createElementVNode("div", { class: "x-heading" }, [_createElementVNode("div", null, [_createElementVNode("p", { class: "eyebrow" }, _toDisplayString(state.selected.year_name) + " · " + _toDisplayString(state.selected.class_name), 1), _createElementVNode("h2", null, _toDisplayString(state.selected.component_name), 1), _createElementVNode("p", null, [_createTextVNode(_toDisplayString(state.selected.teacher_name||'Professor não definido') + " · ", 1), _createElementVNode("span", { class: "badge" }, _toDisplayString(label(state.selected.status)), 1)])]), _createElementVNode("div", { class: "actions" }, [(can('diary.configure') && can('staff.assignments.write') && state.selected.status==='open')
                       ? (_openBlock(), _createElementBlock("button", {
                           key: 0,
+                          class: "btn btn-secondary",
+                          onClick: $event => (configureTeacher(state.selected))
+                        }, "Vincular professor", 8, ["onClick"]))
+                      : _createCommentVNode("", true), (!pilot)
+                      ? (_openBlock(), _createElementBlock("button", {
+                          key: 1,
                           class: "btn btn-secondary",
                           onClick: chooseAnother
                         }, "← Voltar", 8, ["onClick"]))
                       : _createCommentVNode("", true), (can('diary.reports'))
                       ? (_openBlock(), _createElementBlock("button", {
-                          key: 1,
+                          key: 2,
                           class: "btn btn-secondary",
                           onClick: report
                         }, "Baixar PDF", 8, ["onClick"]))
@@ -2004,6 +2079,6 @@ var _Vue=Vue; var PigeRenders={teacherPortal:function render(_ctx, _cache) {
                   : _createCommentVNode("", true), _createElementVNode("p", { class: "preserve-lines" }, _toDisplayString(item.message), 1)]))
               }), 128))])], 64))], 64))
         : _createCommentVNode("", true)
-    ], 40, ["onInput", "disabled"])]))
+    ], 40, ["onInput", "disabled"])], 8, ["aria-busy", "data-workspace-dirty"]))
   }
 }};

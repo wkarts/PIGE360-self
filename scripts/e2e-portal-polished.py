@@ -67,6 +67,9 @@ try:
     else:raise AssertionError('Serviços separados de website/portal não ficaram prontos')
     assert httpx.get(TEACHER_URL+'/api/v1/family/context').status_code==404
     assert httpx.get(TEACHER_URL+'/family.html').status_code==404
+    teacher_guide = httpx.get(TEACHER_URL + '/guia/professor.webp')
+    assert teacher_guide.status_code == 200 and teacher_guide.headers['content-type'].startswith('image/webp')
+    assert teacher_guide.content[8:12] == b'WEBP'
     assert httpx.get(PORTAL_URL+'/professor').status_code==404
     for origin, old, clean in [(PORTAL_URL, '/online.html', '/online'),(PORTAL_URL, '/family.html', '/family'),
                                (PORTAL_URL, '/first-access.html', '/first-access'),(TEACHER_URL, '/professor.html', '/')]:
@@ -109,7 +112,9 @@ try:
     operator('secretary')
     operator('finance')
     operator('direction')
-    teacher = operator('teacher', post('/persons', {'name':'Docente de Matemática'})['id'])
+    operator('coordination')
+    teacher_profile = post('/teachers', {'person': {'name': 'Docente de Matemática'}})
+    teacher = operator('teacher', teacher_profile['person']['id'])
     for origin, email in [(PORTAL_URL, teacher['email']), (PORTAL_URL, 'secretaria@example.com'), (TEACHER_URL, 'secretaria@example.com')]:
         denied = httpx.post(origin+'/api/v1/auth/login', json={'email':email,'password':password},
                             headers={'Origin':origin,'X-CSRF-Protection':'1'})
@@ -119,8 +124,6 @@ try:
         for path in paths:
             assert httpx.get(origin+path).status_code == 404, path
     record('Perfis e superfícies isolados: páginas, APIs e emissão de sessão conferidas em origens distintas.')
-    assignment = post('/teacher-assignments', {'teacher_user_id': teacher['id'],
-                      'class_group_id': group['id'], 'subject_name':'Matemática'})
     with sync_playwright() as pw, capture_browser_failure():
         binary=os.getenv('CHROMIUM_PATH') or (None if Path(pw.chromium.executable_path).exists() else shutil.which('chromium'))
         browser=pw.chromium.launch(headless=True,**({'executable_path':binary} if binary else {}),args=['--no-sandbox'])
@@ -254,7 +257,30 @@ try:
         record('Secretaria e família conferem a situação acadêmica ativa após a efetivação da inscrição.')
         period=post('/academic-periods',{'academic_year_id':year['id'],'name':'1º Bimestre','starts_on':'2027-01-01','ends_on':'2027-04-30','order_index':1})
         component=post('/curriculum-components',{'name':'Matemática'})
-        diary=post('/diaries',{'class_group_id':group['id'],'component_id':component['id'],'teacher_assignment_id':assignment['id']})
+        coordinator = browser.new_page(viewport={'width':1440,'height':1000}, locale='pt-BR')
+        coordinator.set_default_timeout(8000)
+        coordinator.on('pageerror', lambda error: errors.append('coordenação: '+str(error)))
+        page = coordinator
+        login_page(coordinator, 'coordination@example.com')
+        coordinator.locator('aside a[href="#/diary"]').click()
+        workspace = coordinator.locator('.diary-workspace')
+        workspace.get_by_role('button', name='Configuração', exact=True).click()
+        opening = workspace.locator('section.x-card').filter(has=coordinator.get_by_role('heading', name='Abrir diário ou vincular professor'))
+        opening.get_by_role('combobox', name=re.compile('^Turma')).select_option(group['id'])
+        opening.get_by_role('combobox', name=re.compile('^Componente')).select_option(component['id'])
+        opening.get_by_label('Buscar professor por nome ou registro').fill('Docente de Matemática')
+        opening.get_by_role('button', name='Pesquisar professores').click()
+        opening.get_by_role('combobox', name=re.compile('^Professor cadastrado')).select_option(teacher_profile['person']['id'])
+        with coordinator.expect_response(lambda r: r.url.endswith('/teacher-assignments') and r.request.method=='POST') as assigned, \
+             coordinator.expect_response(lambda r: r.url.endswith('/diaries') and r.request.method=='POST') as created:
+            opening.get_by_role('button', name='Abrir diário', exact=True).click()
+        assert assigned.value.status == created.value.status == 201
+        diary = created.value.json()
+        assert diary['teacher_assignment_id'] == assigned.value.json()['id']
+        expect(workspace.get_by_text('Diário aberto.', exact=True)).to_be_visible()
+        record('Gestor localiza o docente cadastrado, vincula a turma e o componente e abre o diário pela interface.')
+        coordinator.screenshot(path=str(OUT/'diario-vinculado-pela-coordenacao.png'))
+        coordinator.close()
         diary_path='/diaries/'+diary['id']
         def put(path,data):
             response=client.put(base+path,headers=headers,json=data);assert response.is_success,response.text;return response.json()
@@ -684,6 +710,19 @@ try:
         manager.get_by_label('Senha',exact=True).fill(password)
         manager.get_by_role('button',name='Entrar na aplicação').click()
         expect(manager.get_by_role('heading',name='Componentes curriculares')).to_be_visible()
+        manager_diary = manager.locator('.diary-workspace')
+        manager_diary.get_by_role('button', name=re.compile(r'^Mover .+ para baixo')).first.click()
+        expect(manager_diary).to_have_attribute('data-workspace-dirty', 'true')
+        warnings = []
+        def keep_draft(dialog):
+            warnings.append(dialog.message)
+            dialog.dismiss()
+        manager.once('dialog', keep_draft)
+        manager.get_by_role('button', name='Fechar outras guias', exact=True).click()
+        assert len(warnings) == 1 and 'Diário Escolar' in warnings[0] and 'não salvas' in warnings[0], warnings
+        expect(manager_diary).to_be_visible()
+        manager_diary.get_by_role('button', name='Descartar alterações na composição').click()
+        expect(manager_diary).to_have_attribute('data-workspace-dirty', 'false')
         manager.close()
         expect(desk_diary.get_by_role('heading',name='Períodos letivos')).to_have_count(0)
         desk_diary.get_by_role('link',name='Aulas e chamada').click()

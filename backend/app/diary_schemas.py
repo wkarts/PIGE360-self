@@ -67,6 +67,11 @@ class DiaryInput(Input):
     notes: str = Field(default="",max_length=4000)
 
 
+class DiaryAssignmentInput(Input):
+    version: int = Field(ge=1)
+    teacher_assignment_id: str | None
+
+
 class LessonInput(Input):
     field_values: FieldValues | None = None
     academic_period_id: str | None = None

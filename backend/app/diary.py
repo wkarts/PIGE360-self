@@ -680,6 +680,17 @@ def diaries(db: DB, user: Actor, school: DiaryScope, class_group_id: str = ""):
     return [_diary_output(db,x) for x in db.scalars(stmt.order_by(m.SchoolDiary.created_at.desc()))]
 
 
+def validate_diary_assignment(db, school_id, group, component, assignment_id):
+    if not assignment_id:
+        return
+    assignment = _scoped(db, m.TeacherAssignment, assignment_id, school_id)
+    if not assignment.active or assignment.class_group_id != group.id or assignment.academic_year_id != group.academic_year_id:
+        fail(422, "Selecione uma atribuição docente ativa da turma e do ano letivo.")
+    subject = assignment.subject_name.strip().casefold()
+    if subject and subject != component.name.strip().casefold():
+        fail(422, "A disciplina da atribuição docente não corresponde ao componente do diário.")
+
+
 @router.post("/diaries", status_code=201)
 def create_diary(data: s.DiaryInput, db: DB, user: Actor, school: DiaryScope, request: Request):
     require(user, "diary.configure")
@@ -687,24 +698,42 @@ def create_diary(data: s.DiaryInput, db: DB, user: Actor, school: DiaryScope, re
     group = _scoped(db, m.ClassGroup, data.class_group_id, school.id)
     require_available(db, group)
     require_available(db, _scoped(db, m.AcademicYear, group.academic_year_id, school.id))
-    available_on(db, _scoped(db, m.CurriculumComponent, data.component_id, school.id))
-    assignment = None
-    if data.teacher_assignment_id:
-        assignment = _scoped(db, m.TeacherAssignment, data.teacher_assignment_id, school.id)
-        if assignment.class_group_id != group.id or assignment.academic_year_id != group.academic_year_id:
-            fail(422, "A atribuição docente não corresponde à turma/ano letivo.")
+    component = _scoped(db, m.CurriculumComponent, data.component_id, school.id)
+    available_on(db, component)
+    validate_diary_assignment(db, school.id, group, component, data.teacher_assignment_id)
     obj = m.SchoolDiary(
         school_id=school.id,
         class_group_id=group.id,
         academic_year_id=group.academic_year_id,
         component_id=data.component_id,
-        teacher_assignment_id=assignment.id if assignment else None,
+        teacher_assignment_id=data.teacher_assignment_id or None,
         notes=data.notes,
         status="open",
     )
     db.add(obj); db.flush()
     audit(db, request, user, "diary.created", obj, school.id)
     return _diary_output(db,obj)
+
+
+@router.put("/diaries/{diary_id}/teacher-assignment")
+def set_diary_assignment(diary_id: str, data: s.DiaryAssignmentInput, db: DB, user: Actor, school: DiaryScope, request: Request):
+    require(user, "diary.configure")
+    require(user, "staff.assignments.write")
+    lock_school(db, school.id)
+    diary = _locked_diary(db, school.id, diary_id)
+    check_version(diary, data.version)
+    _require_open_diary(diary)
+    group = _scoped(db, m.ClassGroup, diary.class_group_id, school.id)
+    component = _scoped(db, m.CurriculumComponent, diary.component_id, school.id)
+    assignment_id = data.teacher_assignment_id or None
+    validate_diary_assignment(db, school.id, group, component, assignment_id)
+    previous = diary.teacher_assignment_id
+    if previous != assignment_id:
+        diary.teacher_assignment_id = assignment_id
+        diary.version += 1
+        audit(db, request, user, "diary.teacher_assignment.updated", diary, school.id,
+              {"previous_assignment_id": previous, "teacher_assignment_id": assignment_id})
+    return _diary_output(db, diary)
 
 
 @router.get("/diaries/{diary_id}")

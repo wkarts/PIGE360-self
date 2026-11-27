@@ -103,6 +103,8 @@ def send(db, school_id, payload, fallback):
             sending = True
             refused = client.send_message(message)
             if refused: raise IntegrationFailure('SMTP_RECIPIENT_REFUSED', uncertain=True)
+    except smtplib.SMTPRecipientsRefused:
+        raise IntegrationFailure('SMTP_RECIPIENT_REFUSED') from None
     except (OSError, smtplib.SMTPException, IntegrationFailure) as error:
         if isinstance(error, IntegrationFailure) and error.uncertain: raise
         # Depois de DATA, não repetir automaticamente: pode ter sido aceito.

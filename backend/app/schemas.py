@@ -401,6 +401,7 @@ class UserInput(Input):
     role: Literal['admin','direction','coordination','secretary','finance','teacher','student','guardian','viewer'] = 'secretary'
     school_ids: list[str] = Field(default_factory=list, max_length=100)
     person_id: str | None = None
+    reuse_person_access: bool = False
     create_mailbox: bool = False
     mailbox_school_id: str | None = None
     mailbox_local_part: str = Field(default='', max_length=64)

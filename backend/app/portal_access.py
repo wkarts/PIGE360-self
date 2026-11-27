@@ -4,6 +4,7 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 from sqlalchemy import func, or_, select
 from . import models as m
+from .lifecycle_models import filter_archived
 from .security import fail
 
 
@@ -11,14 +12,28 @@ def today():
     return datetime.now(ZoneInfo('America/Bahia')).date()
 
 
+def available_group_query(school_id):
+    group = m.ClassGroup
+    query = select(group).join(m.AcademicYear).join(m.Unit).join(m.Grade).join(m.Shift).where(
+        group.school_id == school_id, group.active.is_(True),
+        m.AcademicYear.school_id == school_id, m.AcademicYear.status == 'active',
+        m.Unit.school_id == school_id, m.Unit.active.is_(True),
+        m.Grade.school_id == school_id, m.Grade.active.is_(True),
+        m.Shift.school_id == school_id, m.Shift.active.is_(True),
+    )
+    for model in (group, m.AcademicYear, m.Unit, m.Grade, m.Shift):
+        query = filter_archived(query, model)
+    return query
+
+
 def offered_groups(db, campaign):
     if not campaign.class_group_ids:
         return []
-    return list(db.scalars(select(m.ClassGroup).join(m.AcademicYear).where(
-        m.ClassGroup.id.in_(campaign.class_group_ids),
-        m.ClassGroup.school_id == campaign.school_id,
-        m.ClassGroup.active.is_(True), m.AcademicYear.status == 'active',
-        m.AcademicYear.school_id == campaign.school_id)))
+    query = available_group_query(campaign.school_id).where(m.ClassGroup.id.in_(campaign.class_group_ids))
+    if campaign.academic_year_id:
+        query = query.where(m.ClassGroup.academic_year_id == campaign.academic_year_id)
+    available = {group.id: group for group in db.scalars(query)}
+    return [available[ident] for ident in campaign.class_group_ids if ident in available]
 
 
 def public_context(db):
@@ -188,9 +203,7 @@ def portal_diary_access_summary(db, account):
 
 def readiness(db, school):
     day = today()
-    groups = list(db.scalars(select(m.ClassGroup).join(m.AcademicYear).where(
-        m.ClassGroup.school_id == school.id, m.ClassGroup.active.is_(True),
-        m.AcademicYear.status == 'active')))
+    groups = list(db.scalars(available_group_query(school.id)))
     years = list(db.scalars(select(m.AcademicYear.id).where(
         m.AcademicYear.school_id == school.id, m.AcademicYear.status == 'active')))
     campaigns = list(db.scalars(select(m.AdmissionCampaign).where(

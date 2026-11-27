@@ -25,3 +25,12 @@
   .diary-workspace .diary-roll-row .x-grid { grid-template-columns: minmax(0, 1fr); }
   .diary-workspace .diary-roll-row select, .diary-workspace .diary-roll-row input, .diary-workspace .actions button { min-height: 44px; width: 100%; }
 }
+
+.teacher-guide { margin-block: 1rem; }
+.teacher-guide summary { cursor: pointer; font-weight: 650; }
+.teacher-guide-content { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1rem; margin-top: 1rem; }
+.teacher-guide-content ol { flex: 1 1 21rem; margin: 0; padding-inline-start: 1.5rem; }
+.teacher-guide-content li + li { margin-top: .75rem; }
+.teacher-guide-content figure { flex: 0 1 18rem; margin: 0; }
+.teacher-guide-content img { max-width: 100%; height: auto; }
+.teacher-guide-content figcaption { margin-top: .4rem; }

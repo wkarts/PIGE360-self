@@ -35,31 +35,31 @@
       <p v-if="!state.online" class="alert warning">Sem conexão com o servidor. O acesso aos dados exige conexão.</p>
     </section>
   </div>
-  <div v-else class="workspace">
+  <div v-else class="workspace" :class="{'sidebar-collapsed':sidebarRail()}">
     <a href="#main-content" class="skip-content" data-focus-content>Ir para o conteúdo</a>
     <div v-if="state.menuOpen" class="sidebar-shade" @click="state.menuOpen=false"></div>
     <aside id="school-navigation" class="sidebar" :class="{visible:state.menuOpen}" aria-label="Navegação da escola">
       <div class="sidebar-brand">
         <button type="button" class="icon-button sidebar-close" aria-label="Fechar menu" @click="state.menuOpen=false"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#close"></use></svg></button>
-      <a href="#/dashboard" class="brand-line" :inert="state.schoolLoading" @click.prevent="navigate('dashboard')"><img v-if="identity.logo_url" class="sidebar-logo" :src="identity.logo_url" :alt="identity.display_name"><strong v-else class="institution-name">{{ identity.short_name }}</strong></a>
+      <a href="#/dashboard" class="brand-line" :aria-label="identity.display_name" :title="identity.display_name" :inert="state.schoolLoading" @click.prevent="navigate('dashboard')"><img v-if="identity.logo_url" class="sidebar-logo" :src="identity.logo_url" :alt="identity.display_name"><strong v-else class="institution-name">{{ sidebarRail() ? initials(identity.short_name) : identity.short_name }}</strong></a>
       </div>
       <div v-if="state.schoolLoading" class="sidebar-scroll"><p class="sidebar-label" role="status">Carregando o menu da escola…</p></div>
       <div v-else class="sidebar-scroll" tabindex="0" role="region" aria-label="Rolagem do menu">
       <div class="sidebar-label">OPERAÇÃO ESCOLAR</div>
-      <nav v-if="state.emailAvailable" aria-label="E-mail institucional"><a href="#/webmail" :class="{active:state.page==='webmail'}" :aria-current="state.page==='webmail'?'page':undefined" @click.prevent="navigate('webmail')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#email"></use></svg>E-mail</a><a v-if="state.user?.role!=='admin'" href="#/email" :class="{active:state.page==='email'}" :aria-current="state.page==='email'?'page':undefined" @click.prevent="navigate('email')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#integrations"></use></svg>Preferências de e-mail</a></nav>
+      <nav v-if="state.emailAvailable" aria-label="E-mail institucional"><a href="#/webmail" :class="{active:state.page==='webmail'}" :aria-current="state.page==='webmail'?'page':undefined" @click.prevent="navigate('webmail')" title="E-mail"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#email"></use></svg><span class="nav-label">E-mail</span></a><a v-if="state.user?.role!=='admin'" href="#/email" :class="{active:state.page==='email'}" :aria-current="state.page==='email'?'page':undefined" @click.prevent="navigate('email')" title="Preferências de e-mail"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#integrations"></use></svg><span class="nav-label">Preferências de e-mail</span></a></nav>
       <nav v-if="!isProfileRole()" aria-label="Menu principal">
-        <a v-if="can('dashboard.read') || isProfileRole()" href="#/dashboard" :class="{active:state.page==='dashboard'}" :aria-current="state.page==='dashboard'?'page':undefined" @click.prevent="navigate('dashboard')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#dashboard"></use></svg>Visão geral</a>
+        <a v-if="can('dashboard.read') || isProfileRole()" href="#/dashboard" :class="{active:state.page==='dashboard'}" :aria-current="state.page==='dashboard'?'page':undefined" @click.prevent="navigate('dashboard')" title="Visão geral"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#dashboard"></use></svg><span class="nav-label">Visão geral</span></a>
         <div v-if="can('people.read') || can('read')" class="nav-group" :class="{selected:registryPages.includes(state.page)}">
-          <button type="button" class="nav-group-toggle" aria-label="Cadastros" @click="state.cadastresOpen=!state.cadastresOpen" :aria-expanded="state.cadastresOpen" aria-controls="cadastres-menu"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#records"></use></svg><span>Cadastros</span><svg class="nav-chevron ui-icon" :class="{expanded:state.cadastresOpen}" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#chevron"></use></svg></button>
+          <button type="button" class="nav-group-toggle" aria-label="Cadastros" title="Cadastros" @click="toggleMenuGroup('cadastresOpen')" :aria-expanded="!sidebarRail() && state.cadastresOpen" aria-controls="cadastres-menu"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#records"></use></svg><span>Cadastros</span><svg class="nav-chevron ui-icon" :class="{expanded:state.cadastresOpen}" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#chevron"></use></svg></button>
           <div id="cadastres-menu" class="nav-group-items" v-show="state.cadastresOpen">
             <a v-for="key in registryPages" :key="key" :href="'#/'+key" :class="{active:state.page===key}" :aria-current="state.page===key?'page':undefined" @click.prevent="navigate(key)"><svg class="nav-icon" aria-hidden="true" focusable="false"><use :href="'/ui-icons.svg#'+key"></use></svg><span>{{ pageLabels[key] }}</span></a>
           </div>
         </div>
-        <a v-if="can('enrollments.read')" href="#/enrollments" :class="{active:state.page==='enrollments'}" :aria-current="state.page==='enrollments'?'page':undefined" @click.prevent="navigate('enrollments')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#enrollment"></use></svg>Matrículas</a>
-        <a v-if="can('academic.read')" href="#/academic" :class="{active:state.page==='academic'}" :aria-current="state.page==='academic'?'page':undefined" @click.prevent="navigate('academic')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#academic"></use></svg>Estrutura acadêmica</a>
-        <a v-if="can('diary.read')" href="#/diary" :class="{active:state.page==='diary'}" :aria-current="state.page==='diary'?'page':undefined" @click.prevent="navigate('diary')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#academic"></use></svg>Diário Escolar</a>
+        <a v-if="can('enrollments.read')" href="#/enrollments" :class="{active:state.page==='enrollments'}" :aria-current="state.page==='enrollments'?'page':undefined" @click.prevent="navigate('enrollments')" title="Matrículas"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#enrollment"></use></svg><span class="nav-label">Matrículas</span></a>
+        <a v-if="can('academic.read')" href="#/academic" :class="{active:state.page==='academic'}" :aria-current="state.page==='academic'?'page':undefined" @click.prevent="navigate('academic')" title="Estrutura acadêmica"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#academic"></use></svg><span class="nav-label">Estrutura acadêmica</span></a>
+        <a v-if="can('diary.read')" href="#/diary" :class="{active:state.page==='diary'}" :aria-current="state.page==='diary'?'page':undefined" @click.prevent="navigate('diary')" title="Diário Escolar"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#academic"></use></svg><span class="nav-label">Diário Escolar</span></a>
         <div v-if="can('documents.read')" class="nav-group" :class="{selected:documentPages.includes(state.page)}">
-          <button type="button" class="nav-group-toggle" aria-label="Documentos" @click="state.documentsOpen=!state.documentsOpen" :aria-expanded="state.documentsOpen" aria-controls="documents-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#documents"></use></svg><span>Documentos</span><svg class="nav-chevron ui-icon" :class="{expanded:state.documentsOpen}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
+          <button type="button" class="nav-group-toggle" aria-label="Documentos" title="Documentos" @click="toggleMenuGroup('documentsOpen')" :aria-expanded="!sidebarRail() && state.documentsOpen" aria-controls="documents-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#documents"></use></svg><span>Documentos</span><svg class="nav-chevron ui-icon" :class="{expanded:state.documentsOpen}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
           <div id="documents-menu" class="nav-group-items" v-show="state.documentsOpen">
             <a href="#/documents" :class="{active:state.page==='documents'}" :aria-current="state.page==='documents'?'page':undefined" @click.prevent="navigate('documents')">Pendências documentais</a>
             <a href="#/contracts" :class="{active:state.page==='contracts'}" :aria-current="state.page==='contracts'?'page':undefined" @click.prevent="navigate('contracts')">Modelos e contratos</a>
@@ -67,46 +67,46 @@
             <a v-if="can('documents.validate')" href="#/signature-review" :class="{active:state.page==='signature-review'}" :aria-current="state.page==='signature-review'?'page':undefined" @click.prevent="navigate('signature-review')">Conferência de assinaturas</a>
           </div>
         </div>
-        <a v-if="can('protocols.read')" href="#/protocols" :class="{active:state.page==='protocols'}" :aria-current="state.page==='protocols'?'page':undefined" @click.prevent="navigate('protocols')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#protocols"></use></svg>Protocolos</a>
-        <a v-if="can('reports.read')" href="#/reports" :class="{active:state.page==='reports'}" :aria-current="state.page==='reports'?'page':undefined" @click.prevent="navigate('reports')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#reports"></use></svg>Relatórios</a>
+        <a v-if="can('protocols.read')" href="#/protocols" :class="{active:state.page==='protocols'}" :aria-current="state.page==='protocols'?'page':undefined" @click.prevent="navigate('protocols')" title="Protocolos"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#protocols"></use></svg><span class="nav-label">Protocolos</span></a>
+        <a v-if="can('reports.read')" href="#/reports" :class="{active:state.page==='reports'}" :aria-current="state.page==='reports'?'page':undefined" @click.prevent="navigate('reports')" title="Relatórios"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#reports"></use></svg><span class="nav-label">Relatórios</span></a>
       </nav>
       <div class="sidebar-label">INSTITUIÇÃO</div>
       <nav v-if="!isProfileRole()" aria-label="Gestão da instituição">
-        <a v-if="can('schools.manage')" href="#/settings" :class="{active:state.page==='settings'}" :aria-current="state.page==='settings'?'page':undefined" @click.prevent="navigate('settings')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#school"></use></svg>Instituição</a>
-        <a v-if="can('users.manage')" href="#/users" :class="{active:state.page==='users'}" :aria-current="state.page==='users'?'page':undefined" @click.prevent="navigate('users')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#access"></use></svg>Usuários e acessos</a>
+        <a v-if="can('schools.manage')" href="#/settings" :class="{active:state.page==='settings'}" :aria-current="state.page==='settings'?'page':undefined" @click.prevent="navigate('settings')" title="Instituição"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#school"></use></svg><span class="nav-label">Instituição</span></a>
+        <a v-if="can('users.manage')" href="#/users" :class="{active:state.page==='users'}" :aria-current="state.page==='users'?'page':undefined" @click.prevent="navigate('users')" title="Usuários e acessos"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#access"></use></svg><span class="nav-label">Usuários e acessos</span></a>
       </nav>
       <div class="sidebar-label">GESTÃO E SERVIÇOS</div>
       <nav v-if="!isProfileRole()" aria-label="Administração">
-        <a v-if="can('admissions.read')" href="#/online" :class="{active:state.page==='online'}" :aria-current="state.page==='online'?'page':undefined" @click.prevent="navigate('online')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#online"></use></svg>Inscrições online</a>
+        <a v-if="can('admissions.read')" href="#/online" :class="{active:state.page==='online'}" :aria-current="state.page==='online'?'page':undefined" @click.prevent="navigate('online')" title="Inscrições online"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#online"></use></svg><span class="nav-label">Inscrições online</span></a>
         <div v-if="pageAllowed('banking')" class="nav-group" :class="{selected:state.page==='banking'}">
-          <button type="button" class="nav-group-toggle" aria-label="Financeiro" @click="state.financeOpen=!state.financeOpen" :aria-expanded="state.financeOpen" aria-controls="finance-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#billing"></use></svg><span>Financeiro</span><svg class="nav-chevron ui-icon" :class="{expanded:state.financeOpen}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
-          <div id="finance-menu" class="nav-group-items" v-show="state.financeOpen"><a href="#/banking" :class="{active:state.page==='banking'}" :aria-current="state.page==='banking'?'page':undefined" @click.prevent="navigate('banking')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#billing"></use></svg>Cobranças</a></div>
+          <button type="button" class="nav-group-toggle" aria-label="Financeiro" title="Financeiro" @click="toggleMenuGroup('financeOpen')" :aria-expanded="!sidebarRail() && state.financeOpen" aria-controls="finance-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#billing"></use></svg><span>Financeiro</span><svg class="nav-chevron ui-icon" :class="{expanded:state.financeOpen}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
+          <div id="finance-menu" class="nav-group-items" v-show="state.financeOpen"><a href="#/banking" :class="{active:state.page==='banking'}" :aria-current="state.page==='banking'?'page':undefined" @click.prevent="navigate('banking')" title="Cobranças"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#billing"></use></svg><span class="nav-label">Cobranças</span></a></div>
         </div>
         <div v-if="can('connect.manage') || can('integrations.manage') || pageAllowed('educacenso') || state.user?.role==='admin'" class="nav-group" :class="{selected:integrationPages.includes(state.page)}">
-          <button type="button" class="nav-group-toggle" aria-label="Integrações" @click="state.integrationsOpen=!state.integrationsOpen" :aria-expanded="state.integrationsOpen" aria-controls="integrations-menu"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#integrations"></use></svg><span>Integrações</span><svg class="nav-chevron ui-icon" :class="{expanded:state.integrationsOpen}" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#chevron"></use></svg></button>
+          <button type="button" class="nav-group-toggle" aria-label="Integrações" title="Integrações" @click="toggleMenuGroup('integrationsOpen')" :aria-expanded="!sidebarRail() && state.integrationsOpen" aria-controls="integrations-menu"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#integrations"></use></svg><span>Integrações</span><svg class="nav-chevron ui-icon" :class="{expanded:state.integrationsOpen}" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#chevron"></use></svg></button>
           <div id="integrations-menu" class="nav-group-items" v-show="state.integrationsOpen">
             <a v-if="pageAllowed('educacenso')" href="#/educacenso" :class="{active:state.page==='educacenso'}" @click.prevent="navigate('educacenso')">Educacenso</a>
-            <a v-if="can('connect.manage')" href="#/connect" :class="{active:state.page==='connect'}" :aria-current="state.page==='connect'?'page':undefined" @click.prevent="navigate('connect')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#whatsapp"></use></svg>WhatsApp</a>
-            <a v-if="state.user?.role==='admin'" href="#/email" :class="{active:state.page==='email'}" :aria-current="state.page==='email'?'page':undefined" @click.prevent="navigate('email')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#integrations"></use></svg>Parâmetros de e-mail</a>
-            <a v-if="can('integrations.manage')" href="#/integrations" :class="{active:state.page==='integrations'}" :aria-current="state.page==='integrations'?'page':undefined" @click.prevent="navigate('integrations')"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#bank"></use></svg>Bancária</a>
+            <a v-if="can('connect.manage')" href="#/connect" :class="{active:state.page==='connect'}" :aria-current="state.page==='connect'?'page':undefined" @click.prevent="navigate('connect')" title="WhatsApp"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#whatsapp"></use></svg><span class="nav-label">WhatsApp</span></a>
+            <a v-if="state.user?.role==='admin'" href="#/email" :class="{active:state.page==='email'}" :aria-current="state.page==='email'?'page':undefined" @click.prevent="navigate('email')" title="Parâmetros de e-mail"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#integrations"></use></svg><span class="nav-label">Parâmetros de e-mail</span></a>
+            <a v-if="can('integrations.manage')" href="#/integrations" :class="{active:state.page==='integrations'}" :aria-current="state.page==='integrations'?'page':undefined" @click.prevent="navigate('integrations')" title="Bancária"><svg class="nav-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#bank"></use></svg><span class="nav-label">Bancária</span></a>
           </div>
         </div>
         <div class="nav-group" :class="{selected:state.page==='community'}">
-          <button type="button" class="nav-group-toggle" aria-label="Publicidade" @click="state.publicityOpen=!state.publicityOpen" :aria-expanded="state.publicityOpen" aria-controls="publicity-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#online"></use></svg><span>Publicidade</span><svg class="nav-chevron ui-icon" :class="{expanded:state.publicityOpen}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
-          <div id="publicity-menu" class="nav-group-items" v-show="state.publicityOpen"><a href="#/community" :class="{active:state.page==='community'}" :aria-current="state.page==='community'?'page':undefined" @click.prevent="navigate('community')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#online"></use></svg>Notícias e eventos</a><a v-if="can('schools.manage')" href="#/community/site" @click.prevent="openSiteEditor"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#online"></use></svg>Site da escola</a></div>
+          <button type="button" class="nav-group-toggle" aria-label="Publicidade" title="Publicidade" @click="toggleMenuGroup('publicityOpen')" :aria-expanded="!sidebarRail() && state.publicityOpen" aria-controls="publicity-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#online"></use></svg><span>Publicidade</span><svg class="nav-chevron ui-icon" :class="{expanded:state.publicityOpen}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
+          <div id="publicity-menu" class="nav-group-items" v-show="state.publicityOpen"><a href="#/community" :class="{active:state.page==='community'}" :aria-current="state.page==='community'?'page':undefined" @click.prevent="navigate('community')" title="Notícias e eventos"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#online"></use></svg><span class="nav-label">Notícias e eventos</span></a><a v-if="can('schools.manage')" href="#/community/site" @click.prevent="openSiteEditor" title="Site da escola"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#online"></use></svg><span class="nav-label">Site da escola</span></a></div>
         </div>
         <div v-if="can('schools.manage')" class="nav-group" :class="{selected:configurationPages.includes(state.page)}">
-          <button type="button" class="nav-group-toggle" aria-label="Configurações" @click="state.configurationOpen=!state.configurationOpen" :aria-expanded="state.configurationOpen" aria-controls="configuration-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#school"></use></svg><span>Configurações</span><svg class="nav-chevron ui-icon" :class="{expanded:state.configurationOpen}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
+          <button type="button" class="nav-group-toggle" aria-label="Configurações" title="Configurações" @click="toggleMenuGroup('configurationOpen')" :aria-expanded="!sidebarRail() && state.configurationOpen" aria-controls="configuration-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#school"></use></svg><span>Configurações</span><svg class="nav-chevron ui-icon" :class="{expanded:state.configurationOpen}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
           <div id="configuration-menu" class="nav-group-items" v-show="state.configurationOpen">
             <a href="#/certificate" :class="{active:state.page==='certificate'}" :aria-current="state.page==='certificate'?'page':undefined" @click.prevent="navigate('certificate')">Certificados A1</a>
           </div>
         </div>
         <div v-if="state.user?.role==='admin' || adminTool('legacy-import')" class="nav-group admin-nav-group" :class="{selected:administrationPages.includes(state.page)}">
-          <button type="button" class="nav-group-toggle" aria-label="Administração do sistema" @click="state.adminMenuOpen=!state.adminMenuOpen" :aria-expanded="state.adminMenuOpen" aria-controls="administration-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#admin"></use></svg><span>Administração do sistema</span><svg class="nav-chevron ui-icon" :class="{expanded:state.adminMenuOpen}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
+          <button type="button" class="nav-group-toggle" aria-label="Administração do sistema" title="Administração do sistema" @click="toggleMenuGroup('adminMenuOpen')" :aria-expanded="!sidebarRail() && state.adminMenuOpen" aria-controls="administration-menu"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#admin"></use></svg><span>Administração do sistema</span><svg class="nav-chevron ui-icon" :class="{expanded:state.adminMenuOpen}" aria-hidden="true"><use href="/ui-icons.svg#chevron"></use></svg></button>
           <div id="administration-menu" class="nav-group-items" v-show="state.adminMenuOpen">
-            <a v-if="adminTool('diagnostics')" href="#/diagnostics" :class="{active:state.page==='diagnostics'}" :aria-current="state.page==='diagnostics'?'page':undefined" @click.prevent="navigate('diagnostics')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#diagnostics"></use></svg>Diagnóstico</a>
-            <a v-if="adminTool('audit')" href="#/audit" :class="{active:state.page==='audit'}" :aria-current="state.page==='audit'?'page':undefined" @click.prevent="navigate('audit')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#audit"></use></svg>Auditoria</a>
-            <a v-if="adminTool('legacy-import')" href="#/legacy-import" :class="{active:state.page==='legacy-import'}" :aria-current="state.page==='legacy-import'?'page':undefined" @click.prevent="navigate('legacy-import')"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#portability"></use></svg>Portabilidade de dados</a>
+            <a v-if="adminTool('diagnostics')" href="#/diagnostics" :class="{active:state.page==='diagnostics'}" :aria-current="state.page==='diagnostics'?'page':undefined" @click.prevent="navigate('diagnostics')" title="Diagnóstico"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#diagnostics"></use></svg><span class="nav-label">Diagnóstico</span></a>
+            <a v-if="adminTool('audit')" href="#/audit" :class="{active:state.page==='audit'}" :aria-current="state.page==='audit'?'page':undefined" @click.prevent="navigate('audit')" title="Auditoria"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#audit"></use></svg><span class="nav-label">Auditoria</span></a>
+            <a v-if="adminTool('legacy-import')" href="#/legacy-import" :class="{active:state.page==='legacy-import'}" :aria-current="state.page==='legacy-import'?'page':undefined" @click.prevent="navigate('legacy-import')" title="Portabilidade de dados"><svg class="nav-icon" aria-hidden="true"><use href="/ui-icons.svg#portability"></use></svg><span class="nav-label">Portabilidade de dados</span></a>
           </div>
         </div>
       </nav>
@@ -115,6 +115,7 @@
     </aside>
     <div class="main-column" :class="{'webmail-layout':state.page==='webmail'}">
       <header class="topbar">
+        <button type="button" class="icon-button sidebar-toggle" @click="toggleSidebar" :aria-label="taskState.sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'" :title="taskState.sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'" :aria-expanded="!taskState.sidebarCollapsed" aria-controls="school-navigation"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#sidebar-toggle"></use></svg></button>
         <button type="button" class="icon-button menu-button" @click="state.menuOpen=!state.menuOpen" aria-label="Abrir menu" :aria-expanded="state.menuOpen" aria-controls="school-navigation"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#menu"></use></svg></button>
         <div class="school-switch"><span class="small muted">INSTITUIÇÃO ATIVA</span><select aria-label="Selecionar escola" :value="state.schoolId" @change="selectSchool" :disabled="state.busy || state.schoolLoading || !!state.modal.kind || contractDirty()"><option v-for="s in state.schools" :key="s.id" :value="s.id">{{ s.name }}</option></select></div>
         <div class="topbar-actions"><details v-if="state.certificateAlerts.length" class="notice-menu"><summary :aria-label="state.certificateAlerts.length+' aviso de certificado'"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#bell"></use></svg><span class="notice-count">{{ state.certificateAlerts.length }}</span></summary><div class="notice-popover"><p class="eyebrow">AVISOS DA ESCOLA</p><button v-for="notice in state.certificateAlerts" :key="notice.id" type="button" @click="navigate('certificate')"><strong>{{ notice.title }}</strong><span>{{ notice.message }}</span></button></div></details><span class="online-chip" :class="{offline:!state.online}"><i class="dot"></i>{{ state.online?'Online':'Sem conexão' }}</span><button v-if="state.canInstall" class="btn btn-secondary small-button" @click="install">Instalar aplicativo</button><div class="user-caption"><strong>{{ state.user.name }}</strong><small>{{ label(state.user.role) }}</small></div><button class="avatar user-avatar" @click="editMyProfile" title="Meu perfil" aria-label="Meu perfil"><img v-if="state.userPhotoUrl" :src="state.userPhotoUrl" alt="Minha foto"><span v-else>{{ initials(state.user.name) }}</span></button><button type="button" class="icon-button" @click="logout" title="Sair" aria-label="Sair"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#logout"></use></svg></button></div>
@@ -124,11 +125,12 @@
         <div class="work-tabs-list" role="tablist" aria-label="Tarefas abertas" @keydown="keyTabs">
           <button v-if="taskState.home!=='dashboard'&&!pageAllowed('dashboard')" type="button" role="tab" aria-selected="false" disabled title="Visão geral indisponível para este perfil">Visão geral</button>
           <div v-for="key in taskState.pages" :key="key" class="work-tab" :class="{current:key===state.page}">
-            <button type="button" role="tab" data-work-tab :aria-selected="key===state.page" :tabindex="key===state.page?0:-1" aria-controls="main-content" @click="navigate(key)">{{pageLabels[key]}}</button>
+            <button type="button" role="tab" data-work-tab :aria-selected="key===state.page" :tabindex="key===state.page?0:-1" aria-controls="main-content" :title="key===taskState.home && taskState.pages.length>1 ? 'Duplo clique para fechar as outras guias' : undefined" @click="selectWorkspaceTab(key,$event)" @dblclick="key===taskState.home && closeOtherDesks()">{{pageLabels[key]}}</button>
             <button v-if="key!==taskState.home" type="button" class="work-tab-close" :aria-label="'Fechar guia '+pageLabels[key]" @click="closeDesk(key)">×</button>
           </div>
         </div>
         <button type="button" class="work-tabs-step" aria-label="Rolar guias para a direita" @click="scrollTabs($event,1)">›</button>
+        <button v-if="taskState.pages.length>1" type="button" class="work-close-others" @click="closeOtherDesks" aria-label="Fechar outras guias" title="Fechar outras guias"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#close-tabs"></use></svg></button>
         <button v-if="taskState.paused" type="button" class="work-resume" @click="resumeForm">Retomar formulário</button>
       </div>
       <main id="main-content" class="main-content" tabindex="-1" aria-label="Conteúdo da escola">
@@ -144,6 +146,7 @@
             <button v-if="state.page!=='help'" class="btn btn-secondary page-help" @click="navigate('help')">Guia de uso</button>
             <button v-if="registryPages.includes(state.page) && state.page!=='people' && !state.selectedStudent && !state.personRecord && can('people.write')" class="btn btn-secondary" @click="reusePerson">Vincular pessoa existente</button>
             <button v-if="isBusiness() && !state.personRecord && can('people.write')" class="btn btn-primary" @click="newBusiness()">+ Cadastrar {{ businessTypes[state.page].singular }}</button>
+            <button v-if="can('users.manage') && portalRole()" type="button" class="btn btn-secondary" @click="openPortalAccess">Gerenciar acesso ao portal</button>
             <button v-if="state.personRecord" class="btn btn-secondary" @click="closePersonRecord">← Voltar à lista</button>
             <button v-if="state.selectedStudent" class="btn btn-secondary" @click="studentList">← Todos os alunos</button>
             <button v-if="state.page==='people' && !state.personRecord && can('people.write')" class="btn btn-primary" @click="newPerson">+ Nova pessoa</button>
@@ -200,6 +203,21 @@
             <p v-else-if="state.user.role==='teacher'">Suas turmas, aulas e registros pedagógicos em um só lugar.</p>
             <p v-else>Acompanhe as informações escolares e os comunicados da sua escola.</p>
           </header>
+          <section class="guide-walkthrough" aria-labelledby="guide-walkthrough-title">
+            <header><h3 id="guide-walkthrough-title">Passo a passo com imagens</h3>
+              <label>Escolher tarefa<select :value="state.currentGuide().id" @change="state.guideSelection.topic=$event.target.value"><option v-for="item in state.guideChoices()" :key="item.id" :value="item.id">{{item.title}}</option></select></label>
+            </header>
+            <div class="guide-walkthrough-body" :key="state.currentGuide().id">
+              <div><h4>{{state.currentGuide().title}}</h4><ol><li v-for="step in state.currentGuide().steps" :key="step">{{step}}</li></ol></div>
+              <figure>
+                <a :href="'/guia/'+state.currentGuide().image+'.webp'" target="_blank" rel="noopener" :aria-label="'Ampliar imagem: '+state.currentGuide().title+' (nova aba)'">
+                  <img :src="'/guia/'+state.currentGuide().image+'.webp'" :alt="state.currentGuide().alt">
+                  <span>Ampliar imagem ↗</span>
+                </a>
+                <figcaption>{{state.currentGuide().caption}}</figcaption>
+              </figure>
+            </div>
+          </section>
           <div v-if="!isProfileRole()" class="guide-grid">
             <article v-if="can('academic.read') || can('read')" class="guide-card">
               <div class="guide-card-heading"><span class="guide-step" aria-hidden="true">01</span><div><p class="guide-category">Preparação</p><h3>Organize a estrutura acadêmica</h3></div></div>
@@ -257,15 +275,61 @@
             <div><p v-if="isProfileRole()">Para corrigir seus dados, solicitar acesso ou conferir um vínculo com aluno ou turma, procure a Secretaria da escola.</p><template v-else><p>Se o formulário indicar um campo obrigatório ou inválido, corrija o campo destacado e tente salvar novamente.</p><p>Se outra pessoa tiver alterado o cadastro, atualize a tela e confira os dados antes de repetir a operação.</p></template><p>Se a dificuldade continuar, informe à equipe de suporte a mensagem e o código de referência exibidos na tela, quando houver.</p></div>
           </details>
         </section>
-        <section v-if="state.page==='dashboard' && !isProfileRole()" class="dashboard">
-          <div class="welcome-card"><div><p class="eyebrow">ROTINA ESCOLAR EM DIA</p><h2>Rotina da escola</h2><p>Cadastros, matrículas e pendências em um só lugar.</p><div class="actions"><button v-if="can('people.write')" class="btn btn-primary" @click="newStudent()">+ Cadastrar aluno</button><button v-if="can('enrollments.write')" class="btn btn-secondary" @click="newEnrollment">Nova matrícula →</button></div></div></div>
-          <div class="stats-grid">
-            <div class="stat-card"><span>Alunos cadastrados</span><strong>{{ state.dashboard.students ?? '—' }}</strong><small>Cadastros ativos na escola</small><i><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#students"></use></svg></i></div>
-            <div class="stat-card"><span>Matrículas ativas</span><strong>{{ state.dashboard.enrollments ?? '—' }}</strong><small>Vínculos confirmados</small><i><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#enrollment"></use></svg></i></div>
-            <div class="stat-card"><span>Aguardando ativação</span><strong>{{ state.dashboard.drafts ?? '—' }}</strong><small>Matrículas em rascunho</small><i class="amber"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#clock"></use></svg></i></div>
-            <div class="stat-card"><span>Vagas disponíveis</span><strong>{{ state.dashboard.available ?? '—' }}</strong><small>Nos períodos letivos ativos</small><i><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/ui-icons.svg#academic"></use></svg></i></div>
+        <section v-if="state.page==='dashboard' && !isProfileRole()" class="dashboard school-dashboard" aria-label="Painel da escola" :aria-busy="state.loading">
+          <nav v-if="can('people.write') || can('enrollments.write') || pageAllowed('online') || pageAllowed('diary') || pageAllowed('users')" class="dash-toolbar" aria-label="Ações da escola">
+            <div class="dash-primary" v-if="can('people.write') || can('enrollments.write')">
+              <button v-if="can('people.write')" type="button" class="btn btn-secondary" @click="newStudent()">Cadastrar aluno</button>
+              <button v-if="can('enrollments.write')" type="button" class="btn btn-primary" @click="newEnrollment">Nova matrícula</button>
+            </div>
+            <div class="dash-shortcuts" v-if="pageAllowed('online') || pageAllowed('diary') || pageAllowed('users')">
+              <a v-if="pageAllowed('online')" href="#/online" @click.prevent="navigate('online')">Inscrições online</a>
+              <a v-if="pageAllowed('diary')" href="#/diary" @click.prevent="navigate('diary')">Diário Escolar</a>
+              <a v-if="pageAllowed('users')" href="#/users" @click.prevent="navigate('users')">Usuários e acessos</a>
+            </div>
+          </nav>
+          <dl class="dash-metrics" aria-label="Indicadores escolares">
+            <div v-for="metric in [
+              {key:'students',label:'Alunos ativos',icon:'students'},
+              {key:'enrollments',label:'Matrículas ativas',icon:'enrollment'},
+              {key:'drafts',label:'Matrículas em rascunho',icon:'clock'},
+              {key:'available',label:'Vagas disponíveis',icon:'academic'}
+            ]" :key="metric.key" class="panel dash-metric">
+              <dt><svg aria-hidden="true" focusable="false" class="ui-icon"><use :href="'/ui-icons.svg#'+metric.icon"></use></svg>{{ metric.label }}</dt>
+              <dd>{{ state.dashboard[metric.key] ?? '—' }}</dd>
+            </div>
+          </dl>
+          <div class="dash-sections">
+            <section v-if="pageAllowed('enrollments')" class="panel dash-recent">
+              <div class="panel-header"><h2>Matrículas recentes</h2><a href="#/enrollments" @click.prevent="navigate('enrollments')">Ver todas <span aria-hidden="true">→</span></a></div>
+              <p v-if="state.loading && !state.dashboard.recent_enrollments" class="dash-notice" role="status">Carregando matrículas…</p>
+              <p v-else-if="!state.dashboard.recent_enrollments" class="dash-notice">Matrículas recentes indisponíveis.</p>
+              <p v-else-if="!state.dashboard.recent_enrollments.length" class="dash-notice">Nenhuma matrícula registrada nesta escola.</p>
+              <template v-else>
+                <div class="dash-row dash-labels" aria-hidden="true"><span>Aluno e matrícula</span><span>Turma e ano letivo</span><span>Situação</span></div>
+                <ul>
+                  <li v-for="e in state.dashboard.recent_enrollments" :key="e.id">
+                    <button type="button" class="dash-row" @click="viewEnrollment(e.id)">
+                      <span class="dash-student"><span class="sr-only">Abrir matrícula de </span><strong>{{ e.student_name }}</strong><small>{{ e.number }}</small></span>
+                      <span class="dash-class">{{ e.class_name }}<small>{{ e.year_name }}</small></span>
+                      <span class="badge" :class="e.status">{{ enrollmentLabel(e.status) }}</span>
+                    </button>
+                  </li>
+                </ul>
+              </template>
+            </section>
+            <section v-if="pageAllowed('documents') || pageAllowed('protocols') || pageAllowed('academic')" class="panel dash-followup">
+              <div class="panel-header"><h2>Acompanhamento</h2></div>
+              <a v-if="pageAllowed('documents')" href="#/documents" @click.prevent="navigate('documents')">
+                <span>Documentos recebidos<small>Aguardando análise</small></span><strong>{{ state.dashboard.received_documents ?? '—' }}</strong>
+              </a>
+              <a v-if="pageAllowed('protocols')" href="#/protocols" @click.prevent="navigate('protocols')">
+                <span>Protocolos abertos<small v-if="state.dashboard.overdue_protocols != null">{{ state.dashboard.overdue_protocols }} com prazo vencido</small></span><strong>{{ state.dashboard.open_protocols ?? '—' }}</strong>
+              </a>
+              <a v-if="pageAllowed('academic')" href="#/academic" @click.prevent="navigate('academic')">
+                <span>Turmas ativas<small>Nos períodos letivos ativos</small></span><strong>{{ state.dashboard.classes ?? '—' }}</strong>
+              </a>
+            </section>
           </div>
-          <div class="dashboard-grid"><section class="panel"><div class="panel-header"><h2>Matrículas recentes</h2><button class="link-button" @click="navigate('enrollments')">Ver todas →</button></div><div class="table-scroll"><table><thead><tr><th>Aluno</th><th>Turma</th><th>Situação</th></tr></thead><tbody><tr v-for="e in state.dashboard.recent_enrollments" :key="e.id" @click="viewEnrollment(e.id)" class="clickable"><td><strong>{{ e.student_name }}</strong><small>{{ e.number }}</small></td><td>{{ e.class_name }}<small>{{ e.year_name }}</small></td><td><span class="badge" :class="e.status">{{ enrollmentLabel(e.status) }}</span></td></tr></tbody></table><div v-if="!state.dashboard.recent_enrollments?.length" class="empty-state"><span>▤</span><h3>Sua primeira matrícula começa aqui</h3><p>Cadastre o aluno e configure uma turma para iniciar.</p></div></div></section><section class="panel attention-panel"><p class="eyebrow">ACOMPANHAMENTO</p><h2>O que precisa de atenção?</h2><button @click="navigate('documents')"><span>Documentos recebidos<small>Aguardando análise da Secretaria</small></span><b>{{ state.dashboard.received_documents ?? 0 }}</b></button><button @click="navigate('protocols')"><span>Protocolos abertos<small>{{ state.dashboard.overdue_protocols ?? 0 }} com prazo vencido</small></span><b>{{ state.dashboard.open_protocols ?? 0 }}</b></button><button @click="navigate('academic')"><span>Turmas disponíveis<small>Estrutura dos períodos ativos</small></span><b>{{ state.dashboard.classes ?? 0 }}</b></button></section></div>
         </section>
         <section v-if="state.page==='dashboard' && isProfileRole()" class="dashboard">
           <school-community :key="state.schoolId+'-feed'" :school-id="state.schoolId" :permissions="[]" :request="request" :compact="true"></school-community>
@@ -385,12 +449,13 @@
         <reports-panel :can-configure="can('schools.manage')" :can-issue="can('documents.generate') && ['admin','direction','coordination','secretary'].includes(state.user?.role)" :can-sign="['admin','direction'].includes(state.user?.role)" :identity="identity" v-if="state.page==='reports'" :key="state.schoolId" :school-id="state.schoolId" :catalogs="state.catalogs"></reports-panel>
         <enrollment-workflow @new-person="newPerson()" @new-student="newStudent()" v-if="state.page==='enrollments'&&can('enrollments.write')" :key="state.schoolId+'-enrollment-workflow'" :school-id="state.schoolId" :permissions="state.user.permissions" :role="state.user.role" />
         <school-community v-if="state.page==='community'" :key="state.schoolId" :website-request="state.websiteRequest" :school-id="state.schoolId" :permissions="state.user.permissions" :request="request"></school-community>
-        <users-panel v-if="state.page==='users' &amp;&amp; can('users.manage')" :key="state.schoolId+':users'" :school-id="state.schoolId" :current-user-id="state.user.id" @changed="refreshAccess"></users-panel>
+        <users-panel v-if="state.page==='users' &amp;&amp; can('users.manage')" :key="state.schoolId+':users:'+(state.portalTarget?.request || 0)" :portal-target="state.portalTarget" :school-id="state.schoolId" :current-user-id="state.user.id" @changed="refreshAccess"></users-panel>
         <signing-panel v-if="['certificate','pending-signatures','signature-review'].includes(state.page)" :mode="state.page" :key="state.schoolId+':'+state.page" :school-id="state.schoolId" :permissions="state.user.permissions" :role="state.user.role"></signing-panel>
         <section v-if="state.page==='settings'" class="institution-workspace">
           <header class="institution-summary"><div class="institution-mark"><img v-if="identity.logo_url" :src="identity.logo_url" alt=""><svg v-else class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#school"></use></svg></div><div><p class="eyebrow">SUA INSTITUIÇÃO</p><h2>{{ school()?.name }}</h2><p>{{ state.companies.find(c=>c.id===school()?.company_id)?.name }}</p></div><span class="badge" :class="school()?.active?'active':'archived'">{{ school()?.active?'Ativa':'Inativa' }}</span></header>
           <nav class="institution-tabs" aria-label="Configurações da instituição"><button v-for="tab in institutionTabs.filter(t=>state.user.role==='admin' || ['general','support'].includes(t.id))" :key="tab.id" type="button" :aria-pressed="state.institutionTab===tab.id" :class="{active:state.institutionTab===tab.id}" @click="state.institutionTab=tab.id">{{ tab.label }}</button></nav>
           <div v-if="state.institutionTab==='general'" class="institution-grid">
+            <article v-if="can('users.manage')" class="panel institution-card"><div class="institution-card-title"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#access"></use></svg><h3>Usuários e acessos</h3></div><p>Gerencie os logins de alunos, responsáveis, professores e equipe.</p><div class="institution-card-actions"><button type="button" class="btn btn-secondary" @click="navigate('users')">Gerenciar usuários</button></div></article>
             <article class="panel institution-card institution-profile"><div class="institution-card-title"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#school"></use></svg><h3>Dados da escola</h3></div><dl class="institution-data"><div><dt>Nome</dt><dd>{{ school()?.name }}</dd></div><div><dt>Endereço</dt><dd>{{ school()?.address || 'Não informado' }}</dd></div><div><dt>Telefone</dt><dd>{{ school()?.phone || 'Não informado' }}</dd></div><div><dt>E-mail</dt><dd>{{ school()?.email || 'Não informado' }}</dd></div><div class="wide"><dt>Documentos para matrícula</dt><dd>{{ school()?.document_policy==='block'?'Validar os obrigatórios antes da ativação':'Avisar sobre pendências sem impedir a ativação' }}</dd></div></dl><div class="institution-card-actions"><button class="btn btn-secondary" @click="newSchool(school())">Editar dados</button><button v-if="state.user.role==='admin'" class="link-button" @click="editMaintainer">Dados da mantenedora</button></div></article>
             <article class="panel institution-card"><div class="institution-card-title"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#academic"></use></svg><h3>Unidades e organização</h3></div><p>Organize os locais de atendimento e a estrutura que recebe seus alunos.</p><div class="institution-stat"><strong>{{ (state.catalogs.units || []).length }}</strong><span>unidades cadastradas</span></div><div class="institution-card-actions"><button class="btn btn-secondary" @click="manageUnits">Gerenciar unidades</button><button class="link-button" @click="navigate('academic')">Estrutura acadêmica →</button></div></article>
             <article class="panel institution-card"><div class="institution-card-title"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#certificate"></use></svg><h3>Certificados A1</h3></div><p>Cadastre o certificado da escola e acompanhe sua validade.</p><div v-for="notice in state.certificateAlerts" :key="notice.id" class="certificate-inline-notice"><strong>{{ notice.title }}</strong><p>{{ notice.message }}</p></div><div class="institution-card-actions"><button class="btn btn-secondary" @click="navigate('certificate')">Gerenciar certificados</button></div></article>

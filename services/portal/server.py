@@ -175,7 +175,7 @@ class Handler(BaseHTTPRequestHandler):
             target = '/' if legacy == '/professor' else legacy
             return self.respond(302, b'', headers=[('Location', target + ('?' + parsed.query if parsed.query else ''))])
         name = routes.get(path.rstrip('/') or '/', path.lstrip('/'))
-        teacher_files = {'professor.html', 'teacher.js', 'teacher-renders.js', 'teacher.css'}
+        teacher_files = {'professor.html', 'teacher.js', 'teacher-renders.js', 'teacher.css', 'guia/professor.webp'}
         shared_files = {'auth.css', 'app.css', 'family.css', 'portal.css', 'institution-layout.css', 'mfa.css',
                         'ui-icons.svg', 'renders.js', 'vendor/vue-3.5.13.global.prod.js', 'favicon.svg'}
         files = teacher_files | shared_files if TEACHER_ONLY else (ASSETS | {'family.html', 'online.html'}) - teacher_files

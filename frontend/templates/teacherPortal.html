@@ -29,6 +29,17 @@
       <div class="teacher-account"><span>{{s.user.name}}</span><button class="btn btn-secondary" :disabled="s.busy" @click="logout">Sair</button></div>
     </header>
     <div class="teacher-heading"><h1 id="teacher-title" tabindex="-1">{{({overview:'Visão geral',agenda:'Minha programação',diary:'Diário de classe',materials:'Atividades e trabalhos',news:'Avisos e publicações'})[s.section]}}</h1><label v-if="s.schools.length>1">Instituição<select :value="s.schoolId" :disabled="s.busy" @change="selectSchool"><option v-for="item in s.schools" :key="item.id" :value="item.id">{{item.name}}</option></select></label></div>
+    <details v-if="s.section==='overview' || s.section==='diary'" class="panel teacher-guide">
+      <summary>Guia de uso do diário</summary>
+      <div class="teacher-guide-content">
+        <ol>
+          <li>Em Visão geral, localize a turma e o componente em Minhas turmas. Se o diário ainda não aparecer, peça à coordenação que confira sua atribuição.</li>
+          <li>Use Planejar aula para preparar o planejamento. Para registrar uma aula e consultar seu conteúdo, escolha Abrir diário.</li>
+          <li>Use Fazer chamada, selecione a aula e registre a frequência dos alunos. Confira os lançamentos antes de salvar.</li>
+        </ol>
+        <figure><a href="/guia/professor.webp" target="_blank" rel="noopener" aria-label="Ampliar imagem de Minhas turmas (nova aba)"><img src="/guia/professor.webp" width="278" height="287" loading="lazy" alt="Exemplo de Minhas turmas com os botões Abrir diário, Fazer chamada e Planejar aula para Ciências."></a><figcaption>Os três atalhos abrem a turma e o componente escolhidos.</figcaption></figure>
+      </div>
+    </details>
     <p v-if="s.error" class="alert error" role="alert">{{s.error}} <button class="btn" :disabled="s.busy" @click="run(workspace)">Tentar novamente</button></p>
     <p v-if="!s.schools.length&&!s.error&&!s.busy" class="alert">Peça à Secretaria que vincule sua conta de Professor à instituição.</p>
     <section v-if="s.section==='news'" class="panel x-card"><h2>Comunicados da escola</h2><p v-if="!s.news.length&&!s.busy">Nenhuma publicação disponível.</p><article v-for="item in s.news" :key="item.id"><h3>{{item.title}}</h3><p class="preserve">{{item.content||item.summary}}</p></article><div v-if="s.newsTotal>10" class="actions"><button :disabled="s.busy||s.newsPage===1" @click="run(()=>publications(s.newsPage-1))">Anterior</button><button :disabled="s.busy||s.newsPage*10>=s.newsTotal" @click="run(()=>publications(s.newsPage+1))">Próxima</button></div></section>

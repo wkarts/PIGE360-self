@@ -136,6 +136,15 @@ def create_in_school(data, db, user, request, school):
         person = db.get(Person, data.person_id)
         if not person or person.school_id != school.id:
             fail(422, 'A pessoa vinculada não pertence à instituição ativa.')
+    if data.reuse_person_access and data.person_id and data.role in PORTAL_ROLES:
+        # A ficha pode ter sido aberta por dois operadores antes do primeiro convite.
+        linked = db.execute(
+            select(User, SchoolAccess).join(SchoolAccess, SchoolAccess.user_id == User.id)
+            .where(SchoolAccess.school_id == school.id, User.person_id == data.person_id, User.role == data.role)
+            .order_by(User.id).limit(1)
+        ).first()
+        if linked:
+            return {**scoped_output(db, linked[0], linked[1]), 'existing_person_access': True}
     email = str(data.email).lower()
     existing=db.scalar(select(User).where(User.email==email).with_for_update())
     if existing:

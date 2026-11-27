@@ -125,6 +125,22 @@ assert.match(loginText(reportRender()),/Distribuição por situação/);
 assert.match(loginText(reportRender()),/Uso restrito/);
 assert.ok(nodes(reportRender()).some(node=>node.type==='img' && node.props.src==='/logo-escola'));
 context.state.page='help';let guideTree=render();assert.match(loginText(guideTree),/Siga a ordem da rotina escolar/);assert.match(loginText(guideTree),/Cadastre cada pessoa uma vez/);
+const guidePermissions=context.state.user.permissions;
+context.state.user.permissions=[...guidePermissions,'users.manage','admissions.read','diary.configure','diary.read','enrollments.read'];
+for (const topic of context.state.guideChoices()) {
+  context.state.guideSelection.topic=topic.id;
+  const image=nodes(render()).find(node=>node.type==='img' && node.props?.src==='/guia/'+topic.image+'.webp');
+  assert.ok(image?.props.alt && topic.steps.length>=2, 'Orientações e imagem acessíveis para '+topic.title);
+  const bytes=fs.readFileSync(path.join(root,'dist','guia',topic.image+'.webp'));
+  assert.equal(bytes.toString('ascii',8,12),'WEBP');
+}
+context.state.user.permissions=['diary.read'];
+assert.ok(!context.state.guideChoices().some(item=>item.id==='users' || item.id==='diary'));
+assert.ok(context.state.guideChoices().some(item=>item.id==='teacher'));
+context.state.guideSelection.topic='users';
+assert.equal(context.state.currentGuide().id,'navigation');
+context.state.user.permissions=guidePermissions;
+context.state.guideSelection.topic='navigation';
 context.state.page='students';assert.match(loginText(render()),/Novo aluno/);assert.ok(!loginText(render()).includes('Pesquise antes de criar uma nova identidade'),'Orientação redundante removida da listagem');
 const originalRequest=sandbox.PigeAPI.request;let routeCalls=[];
 sandbox.PigeAPI.request=async path=>{routeCalls.push(path);return {};};
@@ -189,7 +205,7 @@ sandbox.PigeDiagnostics.component.render.call(diagnosticContext,diagnosticContex
 console.log('Portal vazio, falha de API e render do diagnóstico OK.');
 
 const diaryComponent=sandbox.PigeDiary.component;
-const diaryContext=diaryComponent.setup({schoolId:'school-test',permissions:['diary.read','diary.configure']});
+const diaryContext=sandbox.Vue.proxyRefs(diaryComponent.setup({schoolId:'school-test',permissions:['diary.read','diary.configure']}));
 const renderDiary=()=>diaryComponent.render.call(diaryContext,diaryContext,[]);
 let diaryCalls=[];
 sandbox.PigeAPI.request=async path=>{diaryCalls.push(path);if(path.endsWith('/academic-years'))return[{id:'year-test',name:'2026',status:'active',starts_on:'2026-01-01',ends_on:'2026-12-31'}];if(path.endsWith('/diary-dashboard'))return{items:[],totals:{}};if(path.endsWith('/diary-entry-fields'))return{version:0,fields:[],standard_columns:{}};return[];};

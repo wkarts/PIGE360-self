@@ -2,6 +2,17 @@
 (() => {
   let token=location.hash.slice(1),invitationId=new URLSearchParams(location.search).get('invitation')||undefined;
   const status=document.getElementById('status'),form=document.getElementById('invite-form');
+  const loginLabels = new Map([
+    ['/professor', 'Ir para o Portal do Professor'],
+    ['/family', 'Ir para o Portal do Aluno e Responsável'],
+    ['/', 'Ir para o login']
+  ]);
+  function updateLoginLink(path) {
+    if (!loginLabels.has(path)) return;
+    const link = document.getElementById('login-link');
+    link.href = path;
+    link.textContent = loginLabels.get(path);
+  }
   function identity(data){
     document.getElementById('institution-name').textContent=data.display_name;
     document.title=data.display_name+' · Primeiro acesso';
@@ -18,8 +29,9 @@
     // O servidor preserva o convite em cookie HttpOnly, restrito a esta API e à validade original.
     // Só remover o fragmento após a resposta: uma falha de rede ainda permite reabrir/atualizar.
     token='';invitationId=data.invitation_id;history.replaceState(null,'',location.pathname+'?invitation='+encodeURIComponent(invitationId));
+    updateLoginLink(data.login_path);
     document.getElementById('school').textContent='Acesso a '+data.school_name;
     status.textContent='Escolha uma senha com pelo menos 12 caracteres. O convite será utilizado somente ao confirmar.';form.hidden=false;
   }).catch(e=>{status.textContent=e.message;token='';});
-  form.addEventListener('submit',async event=>{event.preventDefault();const button=form.querySelector('button'),password=document.getElementById('password'),confirmation=document.getElementById('confirmation');if(password.value!==confirmation.value){status.textContent='As senhas não conferem.';return;}button.disabled=true;try{const result=await send('accept',{invitation_id:invitationId,password:password.value});token='';password.value='';confirmation.value='';form.hidden=true;status.textContent=result.message;}catch(e){status.textContent=e.message;}finally{button.disabled=false;}});
+  form.addEventListener('submit',async event=>{event.preventDefault();const button=form.querySelector('button'),password=document.getElementById('password'),confirmation=document.getElementById('confirmation');if(password.value!==confirmation.value){status.textContent='As senhas não conferem.';return;}button.disabled=true;try{const result=await send('accept',{invitation_id:invitationId,password:password.value});token='';password.value='';confirmation.value='';form.hidden=true;updateLoginLink(result.login_path);status.textContent=result.message;}catch(e){status.textContent=e.message;}finally{button.disabled=false;}});
 })();

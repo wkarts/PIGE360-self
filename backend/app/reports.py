@@ -8,6 +8,7 @@ from fastapi.responses import Response
 from sqlalchemy import func, select, or_
 from . import models as m, schemas as s
 from .common import audit, number, output
+from .access_security import permissions_for
 from .db import now
 from .documents import checklist, render_pdf
 from .registry import occupancy, validate
@@ -108,7 +109,10 @@ def dashboard(db: DB, user: Actor, school: Scope):
         return db.scalar(select(func.count()).select_from(model).where(model.school_id == school.id, *filters)) or 0
     groups = db.scalars(select(m.ClassGroup).join(m.AcademicYear, m.AcademicYear.id == m.ClassGroup.academic_year_id).where(m.ClassGroup.school_id == school.id, m.ClassGroup.active.is_(True), m.AcademicYear.status == 'active')).all()
     from .enrollments import enrollment_output
-    recent = db.scalars(select(m.Enrollment).where(m.Enrollment.school_id == school.id).order_by(m.Enrollment.created_at.desc()).limit(6)).all()
+    recent = []
+    if 'enrollments.read' in permissions_for(user, db, school.id):
+        recent = db.scalars(select(m.Enrollment).where(m.Enrollment.school_id == school.id)
+                            .order_by(m.Enrollment.created_at.desc()).limit(6)).all()
     return {'students': count(m.Student, m.Student.status == 'active'), 'enrollments': count(m.Enrollment, m.Enrollment.status == 'active'),
             'drafts': count(m.Enrollment, m.Enrollment.status == 'draft'), 'classes': len(groups),
             'available': sum(max(0, g.capacity - occupancy(db, g.id)) for g in groups),

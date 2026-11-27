@@ -267,6 +267,17 @@ def create_teacher_assignment(data: s.TeacherAssignmentInput, db: DB, user: Acto
         person = scoped(db, m.Person, teacher.person_id, school.id)
     group = scoped(db, m.ClassGroup, data.class_group_id, school.id)
     validate_assignment_available(db, school.id, group, person or (db.get(m.Person, teacher.person_id) if teacher and teacher.person_id else None))
+    # O formulário pode ser reenviado após criar o vínculo e antes de gravar o diário.
+    if person and not teacher and data.active:
+        existing = db.scalars(select(m.TeacherAssignment).where(
+            m.TeacherAssignment.school_id == school.id, m.TeacherAssignment.teacher_person_id == person.id,
+            m.TeacherAssignment.class_group_id == group.id, m.TeacherAssignment.academic_year_id == group.academic_year_id,
+            m.TeacherAssignment.active.is_(True),
+        ).order_by(m.TeacherAssignment.created_at))
+        subject = data.subject_name.strip().casefold()
+        for assignment in existing:
+            if assignment.subject_name.strip().casefold() == subject:
+                return assignment_output(db, assignment)
     obj = m.TeacherAssignment(
         school_id=school.id,
         teacher_user_id=teacher.id if teacher else None,

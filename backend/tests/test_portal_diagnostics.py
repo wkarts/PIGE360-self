@@ -94,6 +94,36 @@ def test_no_active_groups_not_advertised(client,api):
     assert 'no_active_groups' in api.get('/admission-readiness')['campaigns'][0]['reasons']
 
 
+@pytest.mark.parametrize('resource', ['units', 'grades', 'shifts'])
+def test_open_campaign_tracks_availability_of_its_academic_structure(client, api, resource):
+    offer = campaign(api)
+    catalog = api.get('/' + resource)[0]
+    path = '/' + resource + '/' + catalog['id']
+    disabled = api.patch(path, {'version': catalog['version'], 'data': {'name': catalog['name'], 'active': False}})
+    public = '/api/v1/portal/campaigns'
+    assert offer['slug'] not in {item['slug'] for item in client.get(public).json()}
+    detail = client.get(public + '/' + offer['slug']).json()
+    assert detail['groups'] == [] and not detail['accepting']
+    readiness = api.get('/admission-readiness')
+    assert not readiness['ready'] and readiness['active_groups'] == 0
+    assert 'no_active_groups' in readiness['campaigns'][0]['reasons']
+
+    api.patch(path, {'version': disabled['version'], 'data': {'name': catalog['name'], 'active': True}})
+    assert offer['slug'] in {item['slug'] for item in client.get(public).json()}
+    assert client.get(public + '/' + offer['slug']).json()['accepting']
+    assert api.get('/admission-readiness')['ready']
+
+
+def test_moving_an_offered_class_to_another_year_hides_it_from_the_campaign(client, api):
+    offer = campaign(api)
+    group = api.get('/class-groups')[0]
+    next_year = api.post('/academic-years', {'name': 'Outro período', 'starts_on': '2027-01-01', 'ends_on': '2027-12-31'})
+    data = {key: group[key] for key in ('name', 'unit_id', 'grade_id', 'shift_id', 'capacity')}
+    api.patch('/class-groups/' + group['id'], {'version': group['version'], 'data': {**data, 'academic_year_id': next_year['id']}})
+    assert offer['slug'] not in {item['slug'] for item in client.get('/api/v1/portal/campaigns').json()}
+    assert 'no_active_groups' in api.get('/admission-readiness')['campaigns'][0]['reasons']
+
+
 def test_error_reference_and_request_logging(client,tmp_path,monkeypatch):
     monkeypatch.setattr(telemetry,'directory',lambda:tmp_path)
     r=client.post('/api/v1/portal/login?token=never-record-me',json={'password':'Secret-Do-Not-Record','email':'private@example.com'})

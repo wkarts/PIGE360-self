@@ -49,6 +49,27 @@ def test_invitation_atomic_user_outbox_and_correct_recipient(api,client,monkeypa
     with SessionLocal() as db:assert db.get(m.IntegrationJob,job).encrypted_payload==''
 
 
+@pytest.mark.parametrize(('role', 'path'), [
+    ('teacher', '/professor'), ('student', '/family'), ('guardian', '/family'), ('viewer', '/')
+])
+def test_first_access_returns_the_login_for_the_invited_role(api, client, role, path):
+    if role == 'student':
+        person = api.student()['person']
+    elif role == 'guardian':
+        person = api.guardian(api.student())
+    elif role == 'teacher':
+        person = api.post('/persons', {'name': 'Docente de homologação'})
+    else:
+        person = {}
+    user, _, _, token, _ = invite(api, role=role, person_id=person.get('id'))
+    inspected = client.post('/api/v1/invitations/inspect', json={'token': token})
+    assert inspected.status_code == 200 and inspected.json()['login_path'] == path
+    accepted = client.post('/api/v1/invitations/accept', json={'token': token, 'password': PASSWORD})
+    assert accepted.status_code == 200 and accepted.json()['login_path'] == path
+    login = client.post('/api/v1/auth/login', json={'email': user['email'], 'password': PASSWORD})
+    assert login.status_code == 200
+
+
 @pytest.mark.parametrize('condition',['expired','revoked','disabled_user','disabled_access','archived_access','removed_access'])
 def test_invitation_rejects_expiry_revocation_and_disabled_scopes(api,client,condition):
     user,ident,job,token,payload=invite(api)

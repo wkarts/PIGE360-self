@@ -53,6 +53,8 @@ def info(db,user_id,school_id):
     if not row:return None
     job=db.get(m.IntegrationJob,row.job_id)
     labels={'pending':'Enfileirado','retry':'Aguardando nova tentativa','processing':'Processando','completed':'Aceito pelo servidor SMTP','failed':'Falha de envio','uncertain':'Resultado SMTP desconhecido; reenvio revoga o link anterior'}
+    if job and job.status == 'failed' and job.error_code == 'SMTP_RECIPIENT_REFUSED':
+        labels['failed'] = 'Destinatário recusado pelo servidor SMTP'
     return {'id':row.id,'state':state(row),'expires_at':row.expires_at,'used_at':row.used_at,'revoked_at':row.revoked_at,
         'delivery_status':job.status if job else 'failed','delivery_label':labels.get(job.status,'Indisponível') if job else 'Indisponível',
         'attempts':job.attempts if job else 0,'error_code':job.error_code if job else '',
@@ -95,6 +97,7 @@ class TokenInput(Input):
 class AcceptInput(TokenInput):password:str=Field(min_length=12,max_length=128)
 
 
+PORTAL_LOGIN_PATHS = {'teacher': '/professor', 'student': '/family', 'guardian': '/family'}
 INVITATION_COOKIE='pige_invitation'
 INVITATION_COOKIE_PATH='/api/v1/invitations'
 
@@ -138,7 +141,8 @@ def inspect(data:TokenInput,db:DB,request:Request,response:Response):
     row=resolve_session(db,token,data);school=db.get(m.School,row.school_id)
     if data.invitation_id and data.invitation_id!=row.id:fail(400,'Convite indisponível. Reabra o link enviado pela escola.')
     invitation_cookie(response,row.id,token,max_age=max(1,int((utc(row.expires_at)-now()).total_seconds())))
-    return {'invitation_id':row.id,'school_name':school.name,'expires_at':row.expires_at,'min_password_length':12}
+    return {'invitation_id':row.id,'school_name':school.name,'expires_at':row.expires_at,'min_password_length':12,
+            'login_path': PORTAL_LOGIN_PATHS.get(db.get(m.User, row.user_id).role, '/')}
 
 
 @router.post('/invitations/accept')
@@ -163,7 +167,7 @@ def accept(data:AcceptInput,db:DB,request:Request,response:Response):
     if job:job.encrypted_payload=''
     audit(db,request,user,'users.invitation_used',row,row.school_id)
     invitation_cookie(response,row.id)
-    return {'message':'Senha definida. Entre com seu e-mail e sua nova senha.','login_path':'/'}
+    return {'message':'Senha definida. Entre com seu e-mail e sua nova senha.','login_path': PORTAL_LOGIN_PATHS.get(user.role, '/')}
 
 
 @router.post('/schools/{school_id}/users/{user_id}/invitation/{action}')
