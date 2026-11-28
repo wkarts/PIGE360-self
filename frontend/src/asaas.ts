@@ -68,6 +68,14 @@ namespace PigeAsaas {
       let live=true,appliedFilters='';
       const intentKeys=new Map<string,string>();
       Vue.onUnmounted(()=>{live=false;});
+      async function confirmBankAction(message:string,title:string,confirmLabel:string,allowed:()=>boolean,destructive=false){
+        const school=props.schoolId,mode=props.mode,charge=props.charge;
+        const chargeId=charge?.id,version=charge?.version;
+        if(!allowed())return false;
+        const approved=await PigeDialogs.confirm(message,{title,confirmLabel,destructive});
+        return approved && live && root==='/schools/'+enc(props.schoolId) && props.schoolId===school &&
+          props.mode===mode && props.charge?.id===chargeId && props.charge?.version===version && allowed();
+      }
       const report=()=>s.catalog.find(item=>item.id===s.reportId);
       function resetReport(){
         const def=report();
@@ -148,7 +156,8 @@ namespace PigeAsaas {
       function refund(){return run(async()=>{
         if(!can('asaas.monitor.read')||!can('asaas.refund')||!refundable()||!props.charge)return;
         const charge=props.charge,amount=s.refundAmount,description=s.refundReason.trim();
-        if(!window.confirm('Solicitar estorno de '+display(amount,'money')+' para esta cobrança?'))return;
+        if(!await confirmBankAction('Solicitar estorno de '+display(amount,'money')+' para esta cobrança?',
+          'Estornar cobrança','Solicitar estorno',()=>can('asaas.monitor.read')&&can('asaas.refund')&&refundable(),true))return;
         const key='refund:'+charge.id+':'+amount+':'+description;
         const result=await PigeAPI.post<{status?:string}>(base+'/monitor/charges/'+enc(charge.id)+'/refund',{client_key:intent(key),amount,description});
         feedback(result.status,'Solicitação de estorno');
@@ -172,7 +181,8 @@ namespace PigeAsaas {
       });}
       function updateCard(item:Checkout,action:'sync'|'cancel'){return run(async()=>{
         if(action==='sync'&&!can('asaas.reconcile'))return;
-        if(action==='cancel'&&(!write()||!item.can_cancel||!window.confirm('Cancelar este checkout ou a recorrência vinculada?')))return;
+        if(action==='cancel' && !await confirmBankAction('Cancelar este checkout ou a recorrência vinculada?',
+          'Cancelar checkout','Cancelar checkout',()=>write()&&Boolean(item.can_cancel),true))return;
         const body=action==='cancel'?{client_key:intent('card-cancel:'+item.id)}:{};
         const out=await PigeAPI.post<Checkout>(cardBase+'/'+enc(item.id)+'/'+action,body);
         await loadCards(s.cardPage);feedback(out.status,'Checkout');if(live)ctx.emit('changed');
@@ -197,8 +207,9 @@ namespace PigeAsaas {
       function refundCard(){return run(async()=>{
         const form=s.cardRefund;
         if(!form||!can('asaas.refund')||!can('asaas.monitor.read'))return;
-        if(!window.confirm('Solicitar estorno de '+display(form.amount,'money')+' na transação de cartão selecionada?'))return;
         const payload={payment_id:form.paymentId,amount:form.amount,description:form.reason.trim()};
+        if(!await confirmBankAction('Solicitar estorno de '+display(payload.amount,'money')+' na transação de cartão selecionada?',
+          'Estornar transação do cartão','Solicitar estorno',()=>can('asaas.refund')&&can('asaas.monitor.read')&&s.cardRefund===form,true))return;
         const result=await PigeAPI.post<{status:string}>(cardBase+'/'+enc(form.checkoutId)+'/refund',{...payload,client_key:intent('card-refund:'+form.checkoutId+':'+JSON.stringify(payload))});
         s.cardRefund=null;await loadCards(s.cardPage);feedback(result.status,'Estorno no cartão');if(live)ctx.emit('changed');
       });}
@@ -209,11 +220,15 @@ namespace PigeAsaas {
       }
       function pixAction(item:Mandate,action:'refresh'|'cancel'|'cycles'){return run(async()=>{
         if(!write())return;
-        if(action==='cancel'&&!window.confirm('Solicitar o cancelamento desta autorização de Pix Automático?'))return;
-        const body:Row=action==='refresh'?{}:{version:item.version};
+        const version=item.version,allowed=()=>write()&&item.version===version;
+        const body:Row=action==='refresh'?{}:{version};
+        if(action==='cancel' && !await confirmBankAction('Solicitar o cancelamento desta autorização de Pix Automático?',
+          'Cancelar autorização de Pix Automático','Cancelar autorização',allowed,true))return;
         if(action==='cycles'){
-          if(!props.charge||!window.confirm('Agendar '+display(props.charge.amount,'money')+' para '+display(props.charge.due_on,'date')+' neste mandato?'))return;
-          body.charge_id=props.charge.id;
+          const charge=props.charge;
+          if(!charge || !await confirmBankAction('Agendar '+display(charge.amount,'money')+' para '+display(charge.due_on,'date')+' neste mandato?',
+            'Agendar Pix Automático','Agendar pagamento',allowed))return;
+          body.charge_id=charge.id;
         }
         const out=await PigeAPI.post<{status?:string}>(base+'/pix-automatic/authorizations/'+enc(item.id)+'/'+action,body);
         await loadMandates(s.pixPage);feedback(out.status,'Pix Automático');if(live)ctx.emit('changed');
@@ -242,7 +257,8 @@ namespace PigeAsaas {
       function adjust(){return run(async()=>{
         if(!props.charge||!write())return;
         const body={version:props.charge.version,amount:s.adjustAmount,due_on:s.adjustDate,description:s.adjustDescription,reason:s.adjustReason.trim()};
-        if(!window.confirm('Enviar os novos dados desta cobrança ao Asaas?'))return;
+        if(!await confirmBankAction('Enviar os novos dados desta cobrança ao Asaas?',
+          'Alterar cobrança no Asaas','Enviar alteração',write))return;
         const result=await PigeAPI.post<{status:string}>(base+'/charges/'+enc(props.charge.id)+'/adjust',{...body,client_key:intent('adjust:'+JSON.stringify(body))});
         feedback(result.status,'Ajuste da cobrança');if(live)ctx.emit('changed');
       });}
@@ -252,7 +268,8 @@ namespace PigeAsaas {
         const body:Row={version:props.charge.version,reason:cash?s.cashReason:s.reactivateReason};
         if(cash){body.amount=s.cashAmount;body.paid_on=s.cashDate;body.reference=s.cashReference;}
         const confirmation=cash?'Registrar recebimento externo de '+display(s.cashAmount,'money')+' nesta cobrança?':'Solicitar a reativação desta cobrança no Asaas?';
-        if(!window.confirm(confirmation))return;
+        if(!await confirmBankAction(confirmation,cash?'Registrar recebimento externo':'Reativar cobrança',
+          cash?'Registrar recebimento':'Solicitar reativação',write))return;
         body.client_key=intent(action+':'+JSON.stringify(body));
         const result=await PigeAPI.post<{status:string}>(base+'/charges/'+enc(props.charge.id)+'/'+action,body);
         feedback(result.status,cash?'Recebimento externo':'Reativação');if(live)ctx.emit('changed');
@@ -280,7 +297,7 @@ namespace PigeAsaas {
         s.refundAmount=props.charge?.amount||'';s.chargeTab=props.charge?.collection_mode==='manual'?'cards':'review';
       }
       Vue.onMounted(()=>{void run(initialize);});
-      return {props,s,can,unpaid,loadOperations,verifyOp,cardReceipt,cardRefundLimit,openCardRefund,refundCard,policyGroups,choices,savePolicy,adjust,settlement,simulate,write,manage,report,groups,initialize,resetReport,consult,exportReport,display,label,checkoutLink,run,loadMonitor,inspectOp,compare,reconcile,diagnostics,cardModes,frequencies,loadCards,createCard,updateCard,loadMandates,pixAction,saveSettings,chargeTab,refundable};
+      return {props,s,can,unpaid,loadOperations,verifyOp,cardReceipt,cardRefundLimit,openCardRefund,refundCard,policyGroups,choices,savePolicy,adjust,settlement,simulate,write,manage,report,groups,initialize,resetReport,consult,exportReport,display,label,checkoutLink,run,loadMonitor,inspectOp,compare,reconcile,diagnostics,cardModes,frequencies,loadCards,createCard,updateCard,loadMandates,pixAction,saveSettings,chargeTab,refundable,refund};
     }
   };
 }

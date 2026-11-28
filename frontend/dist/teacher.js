@@ -1,4 +1,204 @@
 "use strict";
+var PigeDialogs;
+(function (PigeDialogs) {
+    let contextVersion = 0;
+    let pending;
+    function cancelPending() { contextVersion++; pending?.cancel(); }
+    PigeDialogs.cancelPending = cancelPending;
+    function ask(kind, message, options) {
+        // Um segundo acionamento não pode aproveitar a decisão do primeiro.
+        if (pending) {
+            if (kind !== 'alert')
+                return Promise.resolve(null);
+            if (pending.kind === 'alert' && pending.message === message)
+                return pending.closed.then(() => null);
+            const version = contextVersion;
+            return pending.closed.then(() => version === contextVersion ? ask(kind, message, options) : null);
+        }
+        const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const minimum = Math.max(0, options.minLength || 0);
+        const maximum = options.maxLength;
+        const state = Vue.reactive({ value: options.initialValue || '', error: '' });
+        let signalClosed;
+        const closed = new Promise(resolve => { signalClosed = resolve; });
+        return new Promise(resolve => {
+            function finish(accepted) {
+                if (pending?.cancel !== cancel)
+                    return;
+                if (accepted && kind !== 'alert' && opener && !opener.isConnected)
+                    accepted = false;
+                if (accepted && kind === 'prompt' && state.value.trim().length < minimum) {
+                    state.error = 'Informe pelo menos ' + minimum + (minimum === 1 ? ' caractere.' : ' caracteres.');
+                    dialog.querySelector('textarea')?.focus();
+                    return;
+                }
+                if (accepted && kind === 'prompt' && maximum !== undefined && state.value.length > maximum) {
+                    state.error = 'Use no máximo ' + maximum + (maximum === 1 ? ' caractere.' : ' caracteres.');
+                    dialog.querySelector('textarea')?.focus();
+                    return;
+                }
+                pending = undefined;
+                window.removeEventListener('pagehide', cancelPending);
+                window.removeEventListener('popstate', cancelPending);
+                window.removeEventListener('hashchange', cancelPending);
+                dialog.close();
+                app.unmount();
+                host.remove();
+                if (opener?.isConnected)
+                    opener.focus({ preventScroll: true });
+                resolve(accepted ? (kind === 'prompt' ? state.value : 'ok') : null);
+                signalClosed();
+            }
+            const cancel = () => finish(false);
+            const app = Vue.createApp({ render: PigeRenders.actionDialog, setup: () => ({
+                    kind, message, minimum, maximum, state, finish,
+                    title: options.title || ({ confirm: 'Confirmar ação', alert: 'Aviso', prompt: 'Informe um valor' })[kind],
+                    inputLabel: options.inputLabel || 'Resposta',
+                    confirmLabel: options.confirmLabel || (kind === 'alert' ? 'Entendi' : 'Confirmar'),
+                    cancelLabel: options.cancelLabel || 'Voltar', destructive: Boolean(options.destructive),
+                }) });
+            app.mount(host);
+            const dialog = host.querySelector('dialog');
+            dialog.addEventListener('keydown', event => {
+                if (event.key !== 'Tab')
+                    return;
+                const controls = dialog.querySelectorAll('button,textarea');
+                const first = controls[0], last = controls[controls.length - 1];
+                if (event.shiftKey && document.activeElement === first) {
+                    event.preventDefault();
+                    last.focus();
+                }
+                if (!event.shiftKey && document.activeElement === last) {
+                    event.preventDefault();
+                    first.focus();
+                }
+            });
+            pending = { cancel, closed, kind, message };
+            window.addEventListener('pagehide', cancelPending);
+            window.addEventListener('popstate', cancelPending);
+            window.addEventListener('hashchange', cancelPending);
+            dialog.showModal();
+            const selector = kind === 'prompt' ? 'textarea' : kind === 'alert' ? '[type="submit"]' : '[data-dialog-back]';
+            dialog.querySelector(selector)?.focus({ preventScroll: true });
+        });
+    }
+    async function confirm(message, options = {}) {
+        return await ask('confirm', message, options) !== null;
+    }
+    PigeDialogs.confirm = confirm;
+    async function alert(message, options = {}) {
+        await ask('alert', message, options);
+    }
+    PigeDialogs.alert = alert;
+    function prompt(message, options = {}) {
+        return ask('prompt', message, options);
+    }
+    PigeDialogs.prompt = prompt;
+    let installed = false;
+    function install() {
+        if (installed)
+            return;
+        installed = true;
+        let current = null, opener = null;
+        let saved = [], previousOverflow = '';
+        function restore() { for (const item of saved)
+            item.element.inert = item.inert; saved = []; document.body.style.overflow = previousOverflow; }
+        function update() {
+            if (pending)
+                return;
+            const dialogs = Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]'));
+            const next = dialogs.filter(element => element.getClientRects().length > 0).at(-1) || null;
+            if (next === current)
+                return;
+            if (current) {
+                restore();
+                current = null;
+                if (!next && opener?.isConnected)
+                    opener.focus({ preventScroll: true });
+            }
+            if (!next) {
+                opener = null;
+                return;
+            }
+            if (next.closest('.school-task') && !next.querySelector('[data-task-minimize]') && !next.querySelector('video') && !next.closest('.camera-dialog')) {
+                const header = next.querySelector('.modal-header');
+                if (header) {
+                    const minimize = document.createElement('button');
+                    minimize.type = 'button';
+                    minimize.className = 'btn task-minimize';
+                    minimize.dataset.taskMinimize = '';
+                    minimize.textContent = 'Minimizar';
+                    minimize.title = 'Manter o formulário aberto e voltar às guias';
+                    minimize.onclick = () => {
+                        const backdrop = next.closest('.modal-backdrop');
+                        if (!backdrop)
+                            return;
+                        backdrop.dataset.taskPaused = '';
+                        document.dispatchEvent(new Event('pige-pause-form'));
+                    };
+                    header.appendChild(minimize);
+                }
+            }
+            opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            current = next;
+            previousOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            let branch = next;
+            while (branch.parentElement) {
+                for (const sibling of Array.from(branch.parentElement.children)) {
+                    if (sibling !== branch && sibling instanceof HTMLElement) {
+                        saved.push({ element: sibling, inert: sibling.inert });
+                        sibling.inert = true;
+                    }
+                }
+                if (branch.parentElement === document.body)
+                    break;
+                branch = branch.parentElement;
+            }
+            const heading = next.querySelector('[data-dialog-title]');
+            if (heading) {
+                heading.tabIndex = -1;
+                heading.focus({ preventScroll: true });
+            }
+            else
+                next.querySelector('button,input,select,textarea')?.focus({ preventScroll: true });
+        }
+        new MutationObserver(update).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-task-paused'] });
+        document.addEventListener('keydown', event => {
+            if (!current || pending)
+                return;
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                current.querySelector('[data-dialog-close]')?.click();
+                return;
+            }
+            if (event.key !== 'Tab')
+                return;
+            const controls = Array.from(current.querySelectorAll('button,a[href],input,select,textarea,summary,[tabindex="0"]'))
+                .filter(el => !el.matches(':disabled') && el.getClientRects().length > 0 && !el.closest('[inert]'));
+            const first = controls[0], last = controls.at(-1);
+            if (!first) {
+                event.preventDefault();
+                return;
+            }
+            if (event.shiftKey && (document.activeElement === first || !controls.includes(document.activeElement))) {
+                event.preventDefault();
+                last?.focus();
+            }
+            else if (!event.shiftKey && (document.activeElement === last || !controls.includes(document.activeElement))) {
+                event.preventDefault();
+                first.focus();
+            }
+        }, true);
+        document.addEventListener('focusin', event => { if (!pending && current && !current.contains(event.target))
+            current.querySelector('[data-dialog-title],button')?.focus(); });
+        update();
+    }
+    PigeDialogs.install = install;
+})(PigeDialogs || (PigeDialogs = {}));
 var PigeAPI;
 (function (PigeAPI) {
     let token = '';
@@ -584,8 +784,8 @@ var PigeDiary;
                 diaries: [], selected: null, academicYears: [], periods: [], components: [], groups: [], assignments: [], plans: [],
                 calendarIds: [], periodForm: { academic_year_id: '', class_group_id: '', name: '', starts_on: '', ends_on: '', order_index: 1, active: true },
                 fields: { version: 0, fields: [], standard_columns: {} }, configFields: [], configVersion: 0, newFieldLabel: '', restoreFieldId: '', newFieldScope: 'lesson',
-                componentEditing: null, removalTarget: null, removalReason: '',
-                lessonRemoval: false, lessonRemovalReason: '', lessonEditing: null, planEditing: null, lessonValues: {}, planValues: {},
+                componentEditing: null,
+                lessonEditing: null, planEditing: null, lessonValues: {}, planValues: {},
                 attendanceBase: {},
                 componentForm: { name: '', code: '', workload_hours: 0, active: true },
                 diaryForm: { class_group_id: '', component_id: '', teacher_assignment_id: '', notes: '' },
@@ -638,15 +838,20 @@ var PigeDiary;
                     state.notice = 'Sugestão guardada em rascunho.';
                 });
             }
-            function decide(action) {
+            async function decide(action) {
                 const impact = catalog.impact;
                 if (!impact || catalog.reason.trim().length < 3)
                     return;
                 const verbs = { retire: 'Desativar', publish: 'Publicar', discard: 'Descartar' };
-                if (!window.confirm(verbs[action] + ' este componente curricular?'))
+                const reason = catalog.reason, school = props.schoolId;
+                if (!await PigeDialogs.confirm(verbs[action] + ' este componente curricular?', {
+                    title: 'Componente curricular', confirmLabel: verbs[action] + ' componente', destructive: action !== 'publish'
+                }))
+                    return;
+                if (!active || props.schoolId !== school || catalog.impact !== impact || catalog.reason !== reason)
                     return;
                 return run(async () => {
-                    await PigeAPI.post(base() + '/diary-catalog/' + impact.id + '/decisions', { action, version: impact.version, reason: catalog.reason });
+                    await PigeAPI.post(base() + '/diary-catalog/' + impact.id + '/decisions', { action, version: impact.version, reason });
                     catalog.impact = null;
                     catalog.target = '';
                     catalog.reason = '';
@@ -665,13 +870,14 @@ var PigeDiary;
                 return state.diaries.filter(d => [d.year_name, d.class_name, d.component_name, d.teacher_name].join(' ').toLocaleLowerCase('pt-BR').includes(term));
             });
             const lessons = Vue.computed(() => (state.selected?.lessons || []).filter(lesson => !pilot || !state.lessonPeriod || lesson.academic_period_id === state.lessonPeriod));
-            function filterPeriod(event) {
+            async function filterPeriod(event) {
                 const select = event.target;
-                if (!mayLeave()) {
-                    select.value = state.lessonPeriod;
+                const next = select.value;
+                select.value = state.lessonPeriod;
+                if (workspaceDirty.value && !await confirmLeave())
                     return;
-                }
-                state.lessonPeriod = select.value;
+                state.lessonPeriod = next;
+                select.value = next;
                 state.selectedLesson = null;
                 syncLink();
             }
@@ -692,16 +898,25 @@ var PigeDiary;
             }
             function syncLink() { if (pilot)
                 history.replaceState(history.state, '', pageLink(state.page)); }
-            function mayLeave() { return !state.dirty || window.confirm('Continuar com alterações ainda não salvas no Diário?'); }
-            function navigatePage(id, check = true) {
+            let active = true;
+            async function confirmLeave() {
+                const selected = state.selected, page = state.page, school = props.schoolId;
+                const accepted = await PigeDialogs.confirm('Há alterações ainda não salvas no diário. Deseja continuar?', {
+                    title: 'Sair da edição do diário?', confirmLabel: 'Continuar', cancelLabel: 'Voltar à edição'
+                });
+                return accepted && active && props.schoolId === school && state.selected === selected && page === state.page;
+            }
+            function navigatePage(id) {
                 const page = navigation.value.flatMap(group => group.pages).find(item => item.id === id);
-                if (!page || (check && page.id !== state.page && !mayLeave()))
+                if (!page)
                     return false;
                 state.page = page.id;
                 state.tab = page.tab;
                 return true;
             }
-            function go(id) {
+            async function go(id) {
+                if (id !== state.page && workspaceDirty.value && !await confirmLeave())
+                    return;
                 if (navigatePage(id)) {
                     syncLink();
                     if (id === 'catalog')
@@ -722,18 +937,14 @@ var PigeDiary;
                     state.dirty = draftPages.size > 0;
                 }
             }
-            function beforeUnload(event) { if (workspaceDirty.value) {
-                event.preventDefault();
-                event.returnValue = '';
-            } }
             function markDraft(event) {
                 if (tracksDrafts && event.target.closest('form,.x-form,td')) {
                     draftPages.add(draftSection());
                     state.dirty = true;
                 }
             }
-            function chooseAnother() {
-                if (!mayLeave())
+            async function chooseAnother() {
+                if (workspaceDirty.value && !await confirmLeave())
                     return;
                 draftPages.clear();
                 state.dirty = false;
@@ -742,8 +953,8 @@ var PigeDiary;
                 state.selectedLesson = null;
                 syncLink();
             }
-            if (pilot && !navigatePage(initial.get('guia') || 'dashboard', false))
-                navigatePage('dashboard', false);
+            if (pilot && !navigatePage(initial.get('guia') || 'dashboard'))
+                navigatePage('dashboard');
             const str = (v) => v == null ? '' : String(v);
             const date = (v) => { const x = str(v); return x ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(new Date(x.length === 10 ? x + 'T12:00:00Z' : x)) : '—'; };
             const labels = { archived: 'Arquivado', open: 'Aberto', draft: 'Rascunho', submitted: 'Enviado', reviewed: 'Revisado', closed: 'Fechado', present: 'Presente', absent: 'Falta', justified_absence: 'Falta justificada', active: 'Ativo', suspended: 'Suspenso', published: 'Publicada', final: 'Final', pending: 'Pendente', calculated: 'Calculado', below_minimum: 'Abaixo da média', attendance_below_minimum: 'Frequência abaixo do mínimo', opinion_pending: 'Parecer pendente', concept: 'Conceito', follow_up: 'Acompanhamento', intervention: 'Intervenção', recovery: 'Recuperação', adaptation: 'Adaptação', referral: 'Encaminhamento', observation: 'Observação', positive: 'Positiva', pedagogical: 'Pedagógica', behavioral: 'Comportamental', safety: 'Segurança', other: 'Outra', resultados_avaliativos_pendentes: 'Há notas pendentes', sem_resultado_aplicavel: 'Sem resultado aplicável', chamada_pendente: 'Chamada pendente', conceito_fora_da_escala: 'Conceito fora da escala', peso_avaliativo_ausente: 'Peso não definido', resultado_numerico_ausente: 'Nota não informada', frequencia_abaixo_do_limite: 'Frequência abaixo do mínimo', parecer_final_pendente: 'Parecer final pendente' };
@@ -834,8 +1045,8 @@ var PigeDiary;
                 state.communicationRecipients = [];
                 state.communicationForm = { enrollment_id: '', academic_period_id: '', occurrence_id: '', recipient_guardian_link_ids: [], title: '', message: '', client_key: PigeOnline.newId() };
             }
-            async function selectDiary(d) {
-                if (state.selected?.id !== d.id && !mayLeave())
+            async function selectDiary(d, discardApproved = false) {
+                if (state.selected?.id !== d.id && discardApproved !== true && workspaceDirty.value && !await confirmLeave())
                     return;
                 await run(async () => {
                     await loadDiary(d);
@@ -942,16 +1153,20 @@ var PigeDiary;
                     state.notice = editing ? 'Componente curricular atualizado.' : 'Componente curricular criado.';
                 });
             }
-            async function removeComponent() {
-                const row = state.removalTarget;
-                if (!row)
+            async function removeComponent(row) {
+                if (state.busy || !can('diary.configure'))
+                    return;
+                const school = props.schoolId, version = row.version;
+                const reason = await PigeDialogs.prompt('Componentes com registros serão desativados. Componentes sem vínculos serão excluídos.', {
+                    title: 'Retirar ' + row.name + '?', inputLabel: 'Justificativa', minLength: 3, maxLength: 1000,
+                    confirmLabel: 'Confirmar retirada', destructive: true
+                });
+                if (reason === null || !active || props.schoolId !== school || !can('diary.configure') || !state.components.some(item => item.id === row.id && item.version === version))
                     return;
                 await run(async () => {
-                    const result = await PigeAPI.post(base() + '/curriculum-components/' + row.id + '/remove', { version: row.version, reason: state.removalReason });
+                    const result = await PigeAPI.post(base() + '/curriculum-components/' + row.id + '/remove', { version, reason });
                     if (state.componentEditing?.id === row.id)
                         resetComponent();
-                    state.removalTarget = null;
-                    state.removalReason = '';
                     await loadBase();
                     state.notice = result.action === 'retired' ? 'Componente desativado. Os vínculos históricos foram preservados.' : 'Componente sem vínculos removido.';
                 });
@@ -975,9 +1190,9 @@ var PigeDiary;
                 state.teacherSearch = '';
                 resetTeacherSearch();
             }
-            function configureTeacher(d) {
+            async function configureTeacher(d) {
                 if (pilot) {
-                    go('new-diary');
+                    await go('new-diary');
                     if (state.page !== 'new-diary')
                         return;
                 }
@@ -1028,7 +1243,7 @@ var PigeDiary;
                     await loadBase();
                     await loadDiary(diary);
                     if (pilot) {
-                        navigatePage('diaries', false);
+                        navigatePage('diaries');
                         syncLink();
                     }
                     else
@@ -1092,13 +1307,14 @@ var PigeDiary;
                     state.notice = editing ? 'Planejamento atualizado.' : 'Planejamento registrado.';
                 });
             }
-            function resetLesson() { state.lessonRemoval = false; state.lessonRemovalReason = ''; state.lessonEditing = null; state.lessonValues = {}; state.lessonForm = emptyLesson(); }
-            function editLesson(row) {
-                if (pilot && state.page !== 'diaries' && !navigatePage('diaries'))
-                    return;
+            function resetLesson() { state.lessonEditing = null; state.lessonValues = {}; state.lessonForm = emptyLesson(); }
+            async function editLesson(row) {
+                if (pilot && state.page !== 'diaries') {
+                    await go('diaries');
+                    if (state.page !== 'diaries')
+                        return;
+                }
                 syncLink();
-                state.lessonRemoval = false;
-                state.lessonRemovalReason = '';
                 state.lessonEditing = row;
                 state.lessonValues = editableValues(row, 'lesson');
                 const { academic_period_id, lesson_date, lesson_count, content, skills, methodology, activities, homework, notes } = row;
@@ -1124,10 +1340,17 @@ var PigeDiary;
             }
             async function removeLesson() {
                 const diary = state.selected, lesson = state.lessonEditing;
-                if (!diary || !lesson || !state.lessonRemoval || state.lessonRemovalReason.trim().length < 3)
+                if (!diary || !lesson || state.busy || diary.status !== 'open' || !can('diary.write'))
+                    return;
+                const school = props.schoolId, version = lesson.version;
+                const reason = await PigeDialogs.prompt('Somente aulas sem chamada e sem fechamento anterior podem ser removidas.', {
+                    title: 'Remover aula de ' + date(lesson.lesson_date) + '?', inputLabel: 'Justificativa', minLength: 3, maxLength: 1000,
+                    confirmLabel: 'Confirmar remoção da aula', destructive: true
+                });
+                if (reason === null || !active || props.schoolId !== school || state.selected !== diary || diary.status !== 'open' || !can('diary.write') || state.lessonEditing !== lesson || lesson.version !== version)
                     return;
                 await run(async () => {
-                    await PigeAPI.post(base() + '/diaries/' + diary.id + '/lessons/' + lesson.id + '/remove', { version: lesson.version, reason: state.lessonRemovalReason });
+                    await PigeAPI.post(base() + '/diaries/' + diary.id + '/lessons/' + lesson.id + '/remove', { version, reason });
                     resetLesson();
                     await loadDiary(diary);
                     state.notice = 'Aula removida do diário.';
@@ -1150,8 +1373,15 @@ var PigeDiary;
                     if (row.attendance && !row.attendance.status)
                         row.attendance.status = 'present';
             }
-            function closeAttendance() {
-                if (changedAttendance.value.length && !window.confirm('Descartar as alterações desta chamada?'))
+            async function confirmDiscardAttendance() {
+                const lesson = state.selectedLesson, selected = state.selected;
+                const accepted = await PigeDialogs.confirm('As presenças, faltas e justificativas em edição serão descartadas.', {
+                    title: 'Descartar as alterações desta chamada?', confirmLabel: 'Descartar alterações', destructive: true
+                });
+                return accepted && active && state.selectedLesson === lesson && state.selected === selected;
+            }
+            async function closeAttendance() {
+                if (changedAttendance.value.length && !await confirmDiscardAttendance())
                     return false;
                 state.selectedLesson = null;
                 state.attendance = [];
@@ -1159,7 +1389,7 @@ var PigeDiary;
                 return true;
             }
             async function openAttendance(lesson) {
-                if (!state.selected || (state.selectedLesson && !closeAttendance()))
+                if (!state.selected || (state.selectedLesson && changedAttendance.value.length && !await confirmDiscardAttendance()))
                     return;
                 await run(async () => { await fetchAttendance(lesson); focusHeading('diary-attendance-heading'); });
             }
@@ -1279,7 +1509,7 @@ var PigeDiary;
                     q.set('academic_period_id', state.reportPeriod); if (state.reportType === 'student_record' && state.reportEnrollment)
                     q.set('enrollment_id', state.reportEnrollment); const query = q.toString(); return PigeAPI.download(base() + '/diaries/' + state.selected.id + '/reports/' + state.reportType + '.pdf' + (query ? '?' + query : ''), 'diario-' + state.reportType + '.pdf'); }); }
             let handled;
-            function openRequestedDiary() {
+            async function openRequestedDiary() {
                 const request = props.requestedDiary;
                 if (!request || handled === request || state.busy || (request.tab === 'materials' && !materialsAllowed()))
                     return;
@@ -1287,21 +1517,25 @@ var PigeDiary;
                 if (!diary)
                     return;
                 handled = request;
+                if (state.selected?.id !== diary.id) {
+                    await selectDiary(diary, request.discardApproved === true);
+                    if (!active || props.requestedDiary !== request || state.selected?.id !== diary.id)
+                        return;
+                }
+                else if (!request.discardApproved && workspaceDirty.value && state.page !== request.tab && !await confirmLeave())
+                    return;
                 if (pilot) {
-                    navigatePage(request.tab || 'diaries', false);
+                    navigatePage(request.tab || 'diaries');
                     syncLink();
                 }
                 else
                     state.tab = request.tab === 'attendance' ? 'diaries' : request.tab || 'diaries';
-                const loaded = state.selected?.id !== diary.id ? selectDiary(diary) : Promise.resolve();
                 if (request.tab === 'attendance')
-                    void loaded.then(() => focusHeading('diary-lessons-heading'));
+                    focusHeading('diary-lessons-heading');
             }
             Vue.watch(() => props.requestedDiary, openRequestedDiary);
             Vue.watch(() => state.busy, openRequestedDiary);
             Vue.onMounted(async () => {
-                if (tracksDrafts)
-                    window.addEventListener('beforeunload', beforeUnload);
                 await load();
                 if (pilot && state.page === 'catalog')
                     await run(catalogList);
@@ -1323,8 +1557,7 @@ var PigeDiary;
                         syncLink();
                 }
             });
-            Vue.onUnmounted(() => { if (tracksDrafts)
-                window.removeEventListener('beforeunload', beforeUnload); });
+            Vue.onUnmounted(() => { active = false; });
             return { props, state, workspaceDirty, existingDiary, matchingAssignments, configureTeacher, syncDiaryAssignment, resetTeacherSearch, searchTeachers, compositionDirty, setComposition, restorableFields, restoreField, addField, moveField, saveFields, editComponent, resetComponent, removeComponent, editLesson, resetLesson, removeLesson, editPlan, resetPlan, storedFields, markPendingPresent, pendingAttendance, changedAttendance, closeAttendance, periodsFor, loadCalendar, saveCalendar, pilot, catalog, catalogImpact, suggest, decide, lessons, filterPeriod, save, navigation, activeGroup, filteredDiaries, pageLink, go, show, chooseAnother, markDraft, publishMaterial, printMaterial, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, editAssessment, cancelAssessmentEdit, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, resumeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
         } };
 })(PigeDiary || (PigeDiary = {}));
@@ -1610,10 +1843,22 @@ var PigePortalProtocols;
             const base = '/' + props.area + '/schools/' + encodeURIComponent(props.schoolId) + '/protocols';
             const path = (id) => base + '/' + encodeURIComponent(id);
             const controller = new AbortController();
-            let active = true, optionsVersion = 0, clientKey = '', lastPayload = '', lastFile = null;
+            let active = true, waitingForDiscard = false, optionsVersion = 0, clientKey = '', lastPayload = '', lastFile = null;
             function reset() { s.form = blank(); s.fileVersion++; clientKey = ''; lastPayload = ''; lastFile = null; }
             function displayError(e) { return e instanceof Error ? e.message : 'Não foi possível concluir a solicitação.'; }
-            function discard() { return !dirty() || window.confirm('Descartar o texto e o anexo que ainda não foram enviados?'); }
+            async function discard() {
+                if (waitingForDiscard)
+                    return false;
+                waitingForDiscard = true;
+                const form = s.form, view = s.view, ticket = s.ticket?.id;
+                const { subject, category, channel, message, file } = form;
+                const approved = await PigeDialogs.confirm('O texto, o anexo e as alterações ainda não enviados serão descartados.', {
+                    title: 'Descartar a edição do protocolo?', confirmLabel: 'Descartar edição', cancelLabel: 'Voltar', destructive: true
+                });
+                waitingForDiscard = false;
+                return approved && active && !s.busy && s.form === form && s.view === view && s.ticket?.id === ticket &&
+                    subject === form.subject && category === form.category && channel === form.channel && message === form.message && file === form.file;
+            }
             function focusTitle() { void Vue.nextTick(() => { if (active)
                 document.getElementById('portal-protocol-title')?.focus(); }); }
             async function run(work) {
@@ -1682,7 +1927,7 @@ var PigePortalProtocols;
                 return 'https://wa.me/' + line + '?' + new URLSearchParams({ text: 'Olá, quero falar sobre o protocolo ' + s.ticket.number }).toString();
             });
             async function list(page = 1, search = false) {
-                if (s.busy || !discard())
+                if (s.busy || !active || (dirty() && !await discard()))
                     return;
                 const term = search ? s.query.trim() : s.term;
                 await run(async () => {
@@ -1711,7 +1956,7 @@ var PigePortalProtocols;
                 return; reset(); s.view = 'new'; s.ticket = null; s.error = ''; s.notice = ''; focusTitle(); }
             function showTicket(data) { reset(); s.ticket = data; s.form.channel = data.preferred_channel; s.view = 'detail'; }
             async function open(id) {
-                if (s.busy || !discard())
+                if (s.busy || !active || (dirty() && !await discard()))
                     return;
                 await run(async () => { const data = await props.request(path(id), { signal: controller.signal }); if (active) {
                     showTicket(data);
@@ -1790,7 +2035,8 @@ var PigePortalProtocols;
                     await run(() => props.download(path(ticket.id) + '/attachments/' + encodeURIComponent(file.id), file.name));
             }
             Vue.onMounted(() => { void options(); void list(); });
-            Vue.onUnmounted(() => { active = false; controller.abort(); reset(); });
+            Vue.onUnmounted(() => { active = false; if (waitingForDiscard)
+                PigeDialogs.cancelPending(); controller.abort(); reset(); });
             return { s, props, availableCategories, categories, statuses, channels, closed, dirty, date, options, saveOpeningChannel, whatsappUrl, list, showNew, open, chooseFile, copyNumber, send, changeChannel, attachment, chat: PigeSupport.status, openChat: PigeSupport.openChat };
         } };
 })(PigePortalProtocols || (PigePortalProtocols = {}));
@@ -1912,49 +2158,11 @@ var PigePortalMail;
 /** Interação da faixa de guias compartilhada pelos portais da escola. */
 var PigePortalTabs;
 (function (PigePortalTabs) {
-    let dismissClose;
-    function cancelClose() { dismissClose?.(); }
+    function cancelClose() { PigeDialogs.cancelPending(); }
     PigePortalTabs.cancelClose = cancelClose;
     function confirmClose(home, drafts) {
-        if (dismissClose)
-            return Promise.resolve(false);
-        const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-        const host = document.createElement('div');
-        document.body.appendChild(host);
-        return new Promise(resolve => {
-            function finish(accepted) {
-                if (dismissClose !== cancel)
-                    return;
-                dismissClose = undefined;
-                dialog.close();
-                app.unmount();
-                host.remove();
-                if (opener?.isConnected)
-                    opener.focus({ preventScroll: true });
-                resolve(accepted);
-            }
-            const cancel = () => finish(false);
-            const app = Vue.createApp({ render: PigeRenders.confirmTabs, setup: () => ({ home, drafts, finish }) });
-            app.mount(host);
-            const dialog = host.querySelector('dialog');
-            dialog.addEventListener('keydown', event => {
-                if (event.key !== 'Tab')
-                    return;
-                const buttons = dialog.querySelectorAll('button');
-                const first = buttons[0], last = buttons[buttons.length - 1];
-                if (event.shiftKey && document.activeElement === first) {
-                    event.preventDefault();
-                    last.focus();
-                }
-                if (!event.shiftKey && document.activeElement === last) {
-                    event.preventDefault();
-                    first.focus();
-                }
-            });
-            dismissClose = cancel;
-            dialog.showModal();
-            dialog.querySelector('[data-work-close-back]')?.focus({ preventScroll: true });
-        });
+        const text = 'A guia ' + home + ' permanecerá aberta. As outras guias serão fechadas. Alterações e preenchimentos ainda não salvos nessas guias serão descartados. Os dados já salvos serão preservados.';
+        return PigeDialogs.confirm(text + (drafts.length ? '\n\nConfira antes de fechar · ' + drafts.join(', ') + '.' : ''), { title: 'Fechar as outras guias?', cancelLabel: 'Voltar', confirmLabel: 'Fechar outras guias', destructive: true });
     }
     PigePortalTabs.confirmClose = confirmClose;
     function reveal() {
@@ -2010,10 +2218,11 @@ var PigeTeacher;
         requestedDiary: undefined, section: 'overview', tabs: ['overview'], sidebarCollapsed: savedSidebar(), menuOpen: false,
         news: [], newsPage: 1, newsTotal: 0, week: today(), agenda: null });
     const rail = PigeSidebarRail.use(() => s.sidebarCollapsed);
-    let loadedSchoolId = '';
+    let loadedSchoolId = '', sessionVersion = 0;
     function clear() {
+        sessionVersion++;
+        PigeDialogs.cancelPending();
         rail.close();
-        PigePortalTabs.cancelClose();
         loadedSchoolId = '';
         mail.clear();
         PigeAPI.clear();
@@ -2058,6 +2267,8 @@ var PigeTeacher;
             s.agenda = data;
     }
     async function school(id) {
+        sessionVersion++;
+        PigeDialogs.cancelPending();
         rail.close();
         if (s.schoolId && s.schoolId !== id)
             PigeDiary.clearPilotContext(s.schoolId);
@@ -2110,7 +2321,7 @@ var PigeTeacher;
                 await enter(data);
         });
     }
-    async function logout() { if (canLeaveSchool())
+    async function logout() { if (await canLeaveSchool('Sair do portal?', 'Sair'))
         await run(async () => { await PigeAPI.post('/auth/logout', {}); clear(); }); }
     async function start() {
         await PigeInstitution.load();
@@ -2126,13 +2337,12 @@ var PigeTeacher;
             s.ready = true;
         }
     }
-    function selectSchool(event) {
-        const select = event.target;
-        if (!canLeaveSchool()) {
-            select.value = s.schoolId;
+    async function selectSchool(event) {
+        const select = event.target, target = select.value;
+        select.value = s.schoolId;
+        if (!await canLeaveSchool('Trocar de instituição?', 'Trocar de instituição') || !s.schools.some(item => item.id === target))
             return;
-        }
-        void run(() => school(select.value));
+        await run(() => school(target));
     }
     async function publications(page = 1) {
         const id = s.schoolId;
@@ -2197,6 +2407,8 @@ var PigeTeacher;
     function navigate(section, focusHeading = true) {
         if (s.busy || !available(section) || unavailable(section))
             return;
+        if (section !== s.section)
+            PigeDialogs.cancelPending();
         rail.close();
         if (section !== 'diary' && location.hash === '#diario')
             history.replaceState(history.state, '', location.pathname + location.search);
@@ -2214,23 +2426,40 @@ var PigeTeacher;
     }
     function supportDraft() { return Boolean(document.querySelector('#teacher-protocols [data-workspace-dirty="true"]')); }
     function supportBusy() { return Boolean(document.querySelector('#teacher-protocols [aria-busy="true"]')); }
-    function canLeaveSchool() {
-        if (supportBusy() || !canDiscardDiary())
+    function diaryBusy() { return Boolean(document.querySelector('#teacher-diary [aria-busy="true"]')); }
+    function diaryDraft() { return Boolean(document.querySelector('#teacher-diary [data-workspace-dirty="true"]')); }
+    function workspaceKey() { return JSON.stringify([sessionVersion, s.schoolId, s.user?.id, s.section, s.tabs, s.requestedDiary]); }
+    async function canLeaveSchool(heading, action) {
+        if (s.busy || supportBusy() || diaryBusy())
             return false;
-        return !supportDraft() || window.confirm('Descartar a mensagem de atendimento que ainda não foi enviada?');
+        const warnings = [];
+        if (diaryDraft())
+            warnings.push('As alterações do diário ainda não foram salvas.');
+        if (supportDraft())
+            warnings.push('A mensagem de atendimento ainda não foi enviada.');
+        if (s.tabs.includes('webmail'))
+            warnings.push('Confira se as mensagens em edição foram salvas em Rascunhos.');
+        if (!warnings.length)
+            return true;
+        const previous = workspaceKey();
+        const approved = await PigeDialogs.confirm(warnings.join(' '), { title: heading, confirmLabel: action, cancelLabel: 'Voltar', destructive: true });
+        return approved && previous === workspaceKey() && !s.busy && !supportBusy() && !diaryBusy();
     }
-    function canDiscardDiary() {
-        if (document.querySelector('#teacher-diary [aria-busy="true"]'))
-            return false;
-        return !document.querySelector('#teacher-diary [data-workspace-dirty="true"]') ||
-            window.confirm('Descartar as alterações do diário que ainda não foram salvas?');
-    }
-    function openDiary(id, tab) {
-        if (s.busy || !available('diary') || !s.agenda?.diaries.some(d => d.id === id))
+    async function openDiary(id, tab) {
+        const allowed = () => !s.busy && !diaryBusy() && available('diary') && s.agenda?.diaries.some(d => d.id === id) && (tab !== 'materials' || available('materials'));
+        if (!allowed())
             return;
-        if ((tab === 'materials' && !available('materials')) || !canDiscardDiary())
-            return;
-        s.requestedDiary = { id, tab };
+        let discardApproved = false;
+        if (diaryDraft()) {
+            const previous = workspaceKey();
+            const approved = await PigeDialogs.confirm('As alterações do diário que ainda não foram salvas serão descartadas.', {
+                title: 'Continuar para a rotina do diário?', confirmLabel: 'Continuar', cancelLabel: 'Voltar', destructive: true
+            });
+            if (!approved || previous !== workspaceKey() || !allowed())
+                return;
+            discardApproved = true;
+        }
+        s.requestedDiary = discardApproved ? { id, tab, discardApproved: true } : { id, tab };
         navigate('diary', false);
     }
     async function closeTabs(section) {
@@ -2245,14 +2474,16 @@ var PigeTeacher;
             return;
         const supportWarning = closingSupport && supportDraft() ? ' A mensagem de atendimento ainda não enviada será descartada.' : '';
         const closingMail = s.tabs.includes('webmail') && (!section || section === 'webmail');
+        const previousContext = workspaceKey();
         if (section) {
             const diaryWarning = dirty ? ' As alterações do diário que ainda não foram salvas serão descartadas.' : '';
             const mailWarning = closingMail ? ' Confira se as mensagens em edição foram salvas em Rascunhos.' : '';
-            if ((dirty || closingMail || supportWarning) && !window.confirm('Fechar a guia ' + title(section) + '?' + diaryWarning + mailWarning + supportWarning))
+            if ((dirty || closingMail || supportWarning) && !await PigeDialogs.confirm((diaryWarning + mailWarning + supportWarning).trim(), {
+                title: 'Fechar a guia ' + title(section) + '?', confirmLabel: 'Fechar guia', cancelLabel: 'Voltar', destructive: true
+            }))
                 return;
         }
         else {
-            const school = s.schoolId, user = s.user;
             const pending = [];
             if (dirty)
                 pending.push('alterações no diário de classe');
@@ -2262,10 +2493,9 @@ var PigeTeacher;
                 pending.push('mensagens em edição no E-mail');
             if (!await PigePortalTabs.confirmClose(title('overview'), pending))
                 return;
-            if (school !== s.schoolId || user !== s.user || s.busy || (closingSupport && supportBusy()) ||
-                (closingDiary && document.querySelector('#teacher-diary [aria-busy="true"]')))
-                return;
         }
+        if (previousContext !== workspaceKey() || s.busy || (closingSupport && supportBusy()) || (closingDiary && diaryBusy()))
+            return;
         const previous = s.section;
         s.tabs = section ? s.tabs.filter(id => id !== section) : ['overview'];
         if (closingDiary)

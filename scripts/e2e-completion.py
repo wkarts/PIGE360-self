@@ -115,9 +115,13 @@ try:
         admin.get_by_role('button',name='Atualizar histórico',exact=True).click()
         recovery=admin.get_by_role('button',name='Conciliar e retomar',exact=True)
         expect(recovery).to_be_visible()
-        admin.once('dialog',lambda dialog:dialog.dismiss());recovery.click()
+        recovery.click()
+        recovery_dialog=admin.get_by_role('dialog',name='Retomar envio do backup?')
+        expect(recovery_dialog).to_be_visible()
+        recovery_dialog.get_by_role('button',name='Voltar',exact=True).click()
         assert next(b for b in client.get('/api/v1/backups',headers=headers).json()['items'] if b['id']==legacy_id)['remote_status']=='sending'
-        admin.once('dialog',lambda dialog:dialog.accept());recovery.click()
+        recovery.click()
+        recovery_dialog.get_by_role('button',name='Conciliar e retomar',exact=True).click()
         expect(recovery).to_have_count(0)
         assert next(b for b in client.get('/api/v1/backups',headers=headers).json()['items'] if b['id']==legacy_id)['remote_status']=='queued'
         record('Envio legado parado reaparece na UI, cancelar preserva estado e confirmar enfileira uma única recuperação')
@@ -158,8 +162,8 @@ try:
             unchanged=client.get(public_path)
             assert unchanged.status_code==before.status_code
             if before.status_code==200:assert unchanged.json()==before.json()
-            admin.once('dialog',lambda dialog:dialog.accept())
             admin.get_by_role('button',name='Publicar site',exact=True).click()
+            admin.get_by_role('dialog',name='Site institucional').get_by_role('button',name='Publicar site',exact=True).click()
             expect(admin.get_by_text('Site publicado com sucesso.',exact=True)).to_be_visible()
             site.goto(SITE);expect(site.get_by_role('heading',name='Aprender muda o nosso horizonte.',exact=True)).to_be_visible()
             assert 'Conteúdo privado não deve aparecer' not in site.content()
@@ -187,7 +191,10 @@ try:
         call('PATCH','/document-templates/'+template['id'],{'version':template['version'],
             'name':template['name'],'kind':template['kind'],'academic_year_id':year['id'],
             'require_signature':True,'body':'Contrato corrigido de {{aluno.nome}} com {{escola.nome}}.'})
-        admin.goto(URL+'/#/online');admin.reload();admin.locator('.x-record',has_text='Aluno de possibilidades').click()
+        admin.goto(URL+'/#/online')
+        expect(admin.get_by_role('button',name='Inscrições recebidas',exact=True)).to_be_visible()
+        admin.reload()
+        admin.locator('.x-record',has_text='Aluno de possibilidades').click()
         admin.get_by_text('Atualizar versão ou trocar modelo',exact=True).click()
         admin.get_by_label('Justificativa da alteração do contrato',exact=True).fill('Correção sintética de conteúdo contratual aprovada pela Direção.')
         admin.get_by_role('button',name='Vincular nova revisão do contrato',exact=True).click()
@@ -214,7 +221,10 @@ try:
         r=client.post(base+f"/issued-documents/{issued['id']}/validate-signature",headers=headers,
             data={'signer_cpf':CPF,'validation_reference':'SYNTHETIC-E2E-001'},files={'report':('relatorio.pdf',blank_pdf(),'application/pdf')});assert r.is_success,r.text
         r=client.put(base+'/signing-certificate/a1',headers=headers,data={'password':'senha-teste'},files={'file':('escola.p12',school_pfx)});assert r.is_success,r.text
-        admin.goto(URL+'/#/online');admin.reload();admin.locator('.x-record',has_text='Aluno de possibilidades').click()
+        admin.goto(URL+'/#/online')
+        expect(admin.get_by_role('button',name='Inscrições recebidas',exact=True)).to_be_visible()
+        admin.reload()
+        admin.locator('.x-record',has_text='Aluno de possibilidades').click()
         admin.get_by_role('button',name='4 · Efetivação',exact=True).click()
         admin.get_by_label('Parecer para a efetivação',exact=True).fill('Conferência sintética final com pagamento e assinatura do responsável.')
         admin.get_by_role('button',name='Efetivar matrícula e emitir comprovante',exact=True).click()

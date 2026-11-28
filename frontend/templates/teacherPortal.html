@@ -29,10 +29,10 @@
       <div class="family-sidebar-scroll">
         <nav aria-label="Página inicial"><button type="button" title="Visão geral" aria-label="Visão geral" :aria-current="s.section==='overview'?'page':undefined" @click="navigate('overview')"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#dashboard"/></svg><span>Visão geral</span></button></nav>
         <div v-for="group in sidebarGroups()" :key="group.id" class="portal-rail-group">
-          <button v-if="rail.enabled()" type="button" class="portal-rail-trigger" data-rail-trigger
+          <button v-show="rail.enabled()" type="button" class="portal-rail-trigger" data-rail-trigger
             :aria-label="group.label" :title="group.label" :aria-controls="group.id" :aria-expanded="rail.state.active===group.id"
             :class="{active:group.items.some(item=>item.id===s.section)}"><svg class="ui-icon" aria-hidden="true"><use :href="'/ui-icons.svg#'+group.icon"/></svg></button>
-          <p v-else class="family-nav-label">{{group.label}}</p>
+          <p v-show="!rail.enabled()" class="family-nav-label">{{group.label}}</p>
           <nav :id="group.id" :aria-label="group.label" class="sidebar-flyout" :popover="rail.enabled()?'manual':undefined"
             :data-rail-open="rail.enabled() && rail.state.active===group.id?'':undefined" v-show="!rail.enabled() || rail.state.active===group.id">
             <strong v-if="rail.enabled()" class="sidebar-flyout-title">{{group.label}}</strong>

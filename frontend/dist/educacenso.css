@@ -1,0 +1,63 @@
+.educacenso-workspace{max-width:100%;min-width:0}
+.educacenso-controls{display:grid;gap:1rem;min-width:0;padding:0;margin:0;border:0}
+.educacenso-workspace .panel{min-width:0;margin:0;padding:clamp(1rem,2vw,1.6rem)}
+.educacenso-workspace h2,.educacenso-workspace h3,.educacenso-workspace h4{margin:0;color:var(--ink,#172a3d)}
+.educacenso-workspace h2{font-size:clamp(1.25rem,2vw,1.55rem)}
+.educacenso-workspace h3{font-size:1.1rem}
+.educacenso-workspace a{color:var(--primary,#006d77);text-decoration:underline;text-underline-offset:.18em}
+.educacenso-workspace p{margin:.4rem 0 .65rem;color:var(--muted,#526475);overflow-wrap:anywhere}
+.censo-header,.censo-heading,.censo-search-controls,.censo-selected,.censo-records li,.censo-student-heading{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+.censo-header label{flex:0 1 19rem}
+.educacenso-workspace label{display:grid;gap:.35rem;font-weight:600;min-width:0;font-size:.875rem}
+.educacenso-workspace input,.educacenso-workspace select,.educacenso-workspace textarea{display:block;width:100%;min-width:0;max-width:100%;box-sizing:border-box}
+.educacenso-workspace input:not([type=file]),.educacenso-workspace select,.educacenso-workspace textarea{min-height:44px;padding:10px 12px;border:1px solid var(--border,#cbd5df);border-radius:9px;background:var(--surface,#fff);color:var(--ink,#172a3d);font:inherit;font-weight:400}
+.educacenso-workspace textarea{resize:vertical}
+.educacenso-workspace input[type=file]{min-height:44px;padding:.3rem 0;color:var(--ink,#172a3d);font:inherit}
+.educacenso-workspace input[type=file]::file-selector-button{min-height:36px;margin-inline-end:.5rem;padding:5px 10px;border:1px solid var(--border,#cbd5df);border-radius:7px;background:var(--surface,#fff);font:inherit;color:inherit;cursor:pointer}
+.educacenso-workspace button,.educacenso-workspace a,.educacenso-workspace summary{overflow-wrap:anywhere}
+.censo-tabs,.censo-segment,.censo-actions{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem}
+.censo-tabs{border-bottom:1px solid var(--line,#d7e0e7);gap:.25rem}
+.censo-tabs button,.censo-segment button,.censo-danger{border:1px solid transparent;border-radius:.45rem;background:transparent;color:var(--primary,#006d77);font:inherit;font-weight:600;padding:.55rem .75rem;min-height:42px;cursor:pointer}
+.censo-tabs button[aria-current]{border-radius:.45rem .45rem 0 0;border-bottom:3px solid var(--primary,#006d77);background:var(--surface,#fff)}
+.censo-segment button{border-color:var(--line,#d5dfe7)}
+.censo-segment button[aria-pressed=true],.censo-selected{background:var(--accent-soft,#eff6f6)}
+.censo-segment button[aria-pressed=true]{border-color:var(--primary,#006d77);color:var(--primary,#006d77)}
+.censo-fields,.censo-data{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:.8rem 1rem}
+.censo-fields,.censo-search,.censo-students,.censo-evidence,.censo-segment,.censo-actions,.censo-records,.censo-guidance ul{margin:.85rem 0}
+.censo-search,.censo-students>li{padding:.9rem;border:1px solid var(--line,#dbe3e9);border-radius:.65rem}
+.censo-search-controls{align-items:end;justify-content:start}
+.censo-search-controls label{flex:1 1 18rem;max-width:30rem}
+.censo-selected{margin:-.9rem;padding:.9rem;border-radius:.6rem}
+.censo-selected>div,.censo-records li>div,.censo-evidence,.educacenso-editor{display:grid;gap:.35rem;min-width:0}
+.censo-selected small,.censo-records small,.censo-data dt,.censo-student-heading span{color:var(--muted,#516475);font-size:.82rem}
+.censo-selected strong,.censo-records strong,.censo-student-heading strong,.censo-data dd{overflow-wrap:anywhere}
+.censo-records,.censo-students{list-style:none;padding:0}
+.censo-records li{padding:.65rem 0;border-bottom:1px solid var(--line,#dbe3e9);overflow-wrap:anywhere}
+.censo-records li:last-child{border:0}
+.censo-students{display:grid;grid-template-columns:minmax(0,1fr);gap:.75rem}
+.censo-students>li,.educacenso-editor>*{min-width:0}
+.educacenso-workspace .alert{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;min-width:0;overflow-wrap:anywhere}
+.censo-student-heading{align-items:baseline;flex-wrap:wrap;gap:.25rem 1rem}
+.censo-data{margin:.7rem 0;gap:.7rem}
+.censo-data dd{margin:.15rem 0 0;font-weight:600}
+.censo-data dd small{display:block;margin-top:.25rem;color:var(--muted,#516475);font-size:.8rem;font-weight:400}
+.censo-badge{display:inline-block;white-space:nowrap;padding:.3rem .55rem;border:1px solid var(--line,#dbe3e9);border-radius:.4rem;font-size:.8rem}
+.censo-danger{color:#922e36;border-color:#ddc2c5}
+.educacenso-workspace button:disabled{opacity:.62;cursor:default}
+.educacenso-workspace :focus-visible{outline:2px solid var(--primary,#006d77);outline-offset:2px}
+.educacenso-workspace code,.educacenso-workspace dd{overflow-wrap:anywhere}
+.educacenso-workspace details{margin-top:.7rem}
+.educacenso-workspace details code{display:block;margin:.5rem 0}
+.educacenso-editor{border-top:1px solid var(--line,#dbe3e9);padding-top:.85rem;margin-top:.65rem;gap:.65rem}
+.censo-evidence{max-width:40rem;gap:.75rem}
+.censo-notice{border-inline-start:3px solid var(--primary,#006d77);padding:.5rem .75rem;background:var(--surface,#fff)}
+@media(max-width:650px){
+  .educacenso-workspace input:not([type=file]),.educacenso-workspace select,.educacenso-workspace textarea{font-size:16px}
+  .censo-header,.censo-heading,.censo-search-controls,.censo-selected,.censo-records li{align-items:stretch;flex-direction:column;gap:.5rem}
+  .censo-header label,.censo-search-controls label{flex:auto;max-width:none}
+  .educacenso-workspace .alert{display:grid;grid-template-columns:minmax(0,1fr);justify-items:start}
+  .educacenso-workspace .btn{max-width:100%;white-space:normal}
+  .censo-badge,.censo-search-controls button,.censo-records button,.censo-selected button{align-self:flex-start}
+  .censo-actions{gap:.45rem}
+  .censo-fields,.censo-data{grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr))}
+}

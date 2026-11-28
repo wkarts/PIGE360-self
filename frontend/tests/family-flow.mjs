@@ -31,6 +31,27 @@ function text(v){return nodes(v).map(n=>typeof n.children==='string'?n.children:
 const student=(id,financial=true)=>({id,name:'Aluno '+id,number:'001',financial_authorized:financial,enrollments:[{id:'enr-'+id,number:'M1',class_name:'Turma A',year_name:'2027',status:'active'}],documents:[{id:'doc-'+id,type_name:'Autorização',status:'pending',file_id:null}]});
 const account={id:'guardian',name:'Responsável Teste',role:'guardian',school_ids:['school-a','school-b']};
 {
+ const {ctx,sandbox}=fixture();
+ ctx.s.account=account;ctx.s.schoolId='school-a';ctx.s.studentId='a';ctx.s.students=[student('a')];
+ const authorization={id:'auth-1',version:3,status:'ACTIVE',frequency:'MONTHLY',cycles:[]};
+ const pix=ctx.autoPix,posts=[];
+ sandbox.fetch=async(url,options)=>{if(options.method==='POST')posts.push({url,body:JSON.parse(options.body)});
+   return Response.json({authorization,can_enroll:false});};
+ pix.open('charge-1');await tick();
+ let decide,questions=0;
+ sandbox.PigeDialogs.confirm=(_message,options)=>{
+   assert.equal(options.destructive,true);questions++;
+   return new Promise(resolve=>{decide=resolve;});
+ };
+ const cancelled=pix.cancel();await pix.cancel();
+ assert.equal(questions,1);decide(false);await cancelled;assert.equal(posts.length,0);
+ const revoked=pix.cancel();ctx.s.students[0].financial_authorized=false;decide(true);await revoked;assert.equal(posts.length,0);
+ ctx.s.students[0].financial_authorized=true;
+ const stale=pix.cancel();pix.open('charge-2');decide(true);await stale;await tick();assert.equal(posts.length,0);
+ const confirmed=pix.cancel();decide(true);await confirmed;
+ assert.deepEqual(posts,[{url:'/api/v1/family/students/a/charges/charge-2/pix-automatic/cancel',body:{version:3}}]);
+}
+{
  const {ctx,sandbox,supportCalls}=fixture();
  ctx.s.ready=true;
  await sandbox.Vue.nextTick();
@@ -384,3 +405,41 @@ console.log('Portal da família: navegação e histórico por vínculo, adesão 
  assert.equal(ctx.documentsPanel.data,null);assert.equal(ctx.documentsPanel.chargeId,'');
  const count=calls.length;await ctx.showChargeDocuments(crm);assert.equal(calls.length,count);
 }
+
+// Decisões assíncronas sobre rascunhos ficam vinculadas ao aluno, à guia e à sessão que as iniciaram.
+{
+ const {ctx,sandbox}=fixture();
+ Object.assign(ctx.s,{account,schoolId:'school-a',students:[student('a',false),student('b',false)],studentId:'a',tabs:['overview','absences'],section:'absences'});
+ ctx.schoolwork.reason='Rascunho da família';
+ let answer;
+ sandbox.PigeDialogs.confirm=(_msg,options)=>{assert.equal(options.cancelLabel,'Voltar');return new Promise(resolve=>{answer=resolve;});};
+ const input={value:'b'};
+ const cancel=ctx.selectStudent({currentTarget:input});
+ assert.equal(input.value,'a');assert.equal(ctx.s.studentId,'a');answer(false);await cancel;
+ assert.equal(ctx.s.studentId,'a');assert.equal(ctx.schoolwork.reason,'Rascunho da família');
+ let assigned='';sandbox.location.assign=url=>{assigned=url;};
+ let prevented=false;const external=ctx.openRegistration({button:0,preventDefault(){prevented=true;}});
+ assert.ok(prevented);answer(false);await external;assert.equal(assigned,'');
+ const modified=ctx.openRegistration({button:0,ctrlKey:true,preventDefault(){throw new Error('Gesto nativo do navegador interceptado');}});
+ await modified;assert.equal(assigned,'');
+ const oldTab=ctx.closeTabs('absences');
+ ctx.s.account={...account,id:'outro'};answer(true);await oldTab;
+ assert.ok(ctx.s.tabs.includes('absences'));assert.equal(ctx.schoolwork.reason,'Rascunho da família');
+ const close=ctx.closeTabs('absences');answer(true);await close;
+ assert.deepEqual(Array.from(ctx.s.tabs),['overview']);assert.equal(ctx.schoolwork.reason,'');
+}
+{
+ const {ctx,sandbox}=fixture('/professor');
+ Object.assign(ctx.s,{user:{id:'docente',role:'teacher',teacher_routines:['diary'],permissions:['diary.read']},schoolId:'school-a',agenda:{diaries:[{id:'a'}]},tabs:['overview','diary']});
+ sandbox.document.querySelector=selector=>selector.includes('teacher-diary')&&selector.includes('dirty')?{}:null;
+ let answer;
+ sandbox.PigeDialogs.confirm=()=>new Promise(resolve=>{answer=resolve;});
+ const pending=ctx.openDiary('a','planning');assert.equal(ctx.s.requestedDiary,undefined);
+ ctx.s.user={...ctx.s.user,teacher_routines:[]};answer(true);await pending;
+ assert.equal(ctx.s.requestedDiary,undefined,'A rotina revogada durante a confirmação não é aberta');
+ const close=ctx.closeTabs('diary');answer(false);await close;assert.ok(ctx.s.tabs.includes('diary'));
+ ctx.s.user={...ctx.s.user,teacher_routines:['diary']};
+ const accepted=ctx.openDiary('a','planning');answer(true);await accepted;
+ assert.deepEqual(JSON.parse(JSON.stringify(ctx.s.requestedDiary)),{id:'a',tab:'planning',discardApproved:true});
+}
+console.log('Diálogos dos portais: cancelamento preserva o rascunho e confirmação vencida não troca o vínculo.');

@@ -1,44 +1,115 @@
-<section class="panel x-card" aria-label="Educacenso">
-  <h2>Educacenso</h2><p>{{props.schoolName}}</p>
-  <div v-if="state.error" role="alert" class="alert error">{{state.error}}</div>
-  <fieldset class="portal-fieldset" :disabled="state.busy">
-    <label>Ambiente do lote<select v-model="state.environment" @change="changeEnvironment"><option value="treinamento">Treinamento</option><option value="producao">Preparação da declaração oficial</option></select></label>
-    <p>Confira a declaração existente antes da migração. Um envio pode substituir dados já declarados. A exportação exige leiaute e domínios validados para o ano e a etapa.</p>
-    <div class="tabs"><button @click="state.tab='prepare'">Dados a declarar</button><button @click="state.tab='history'">Histórico</button></div>
-    <template v-if="state.tab==='prepare'">
-      <form @submit.prevent="preview" class="x-form" @change="reset">
-        <label>Etapa<select v-model="state.stage"><option value="matricula_inicial">Matrícula Inicial</option><option value="situacao_aluno">Situação do Aluno</option></select></label>
-        <label>Ano letivo<select v-model="state.year" @change="state.group=''" required><option v-for="year in state.years" :key="year.id" :value="year.id">{{year.name}}</option></select></label>
-        <label>Data de referência<input type="date" v-model="state.day" required></label>
-        <label>Turma<select v-model="state.group"><option value="">Todas as turmas do ano</option><option v-for="g in state.groups.filter(g=>g.academic_year_id===state.year)" :key="g.id" :value="g.id">{{g.name}}</option></select></label>
-        <button class="btn btn-primary">Validar prévia</button>
+<section class="educacenso-workspace" aria-label="Preparação do Educacenso" :data-workspace-dirty="editDirty || !!state.file" :aria-busy="state.busy">
+  <fieldset :disabled="state.busy" class="educacenso-controls">
+    <header class="panel censo-header">
+      <div><h2>Preparação da coleta</h2><p>Confira os dados de {{props.schoolName}} na data de referência e guarde as revisões da declaração.</p></div>
+      <label>Ambiente do lote<select v-model="state.environment" :disabled="!!state.editing || !!state.file" @change="changeEnvironment"><option value="treinamento">Treinamento</option><option value="producao">Preparação da declaração oficial</option></select></label>
+    </header>
+    <nav class="censo-tabs" aria-label="Etapas de preparação">
+      <button type="button" :aria-current="state.tab==='prepare'?'page':null" :disabled="!!state.editing || !!state.file" @click="openTab('prepare')">Dados a declarar</button>
+      <button type="button" :aria-current="state.tab==='history'?'page':null" :disabled="!!state.editing || !!state.file" @click="openTab('history')">Histórico</button>
+      <button v-if="state.draft" type="button" :aria-current="state.tab==='detail'?'page':null" @click="openTab('detail')">Rascunho</button>
+    </nav>
+    <div v-if="(state.error||state.conflict) && !state.editing" class="alert error" role="alert">{{state.error||'Atualize o rascunho para conferir a revisão atual.'}} <button v-if="state.conflict && state.draft" type="button" class="btn btn-secondary" @click="reloadDraft">Atualizar rascunho</button></div>
+    <p v-if="state.notice" class="censo-notice" role="status">{{state.notice}}</p>
+    <section class="panel censo-panel" v-if="state.tab==='prepare'">
+      <h3>Seleção da coleta</h3>
+      <form @submit.prevent="preview">
+        <div class="censo-fields">
+          <label>Etapa<select v-model="state.stage" @change="resetFilters"><option value="matricula_inicial">Matrícula Inicial</option><option value="situacao_aluno">Situação do Aluno</option></select></label>
+          <label>Ano letivo<select v-model="state.year" required @change="yearChanged"><option value="" disabled>Selecione o ano</option><option v-for="year in state.years" :key="year.id" :value="year.id">{{year.name}}</option></select></label>
+          <label>Data de referência<input type="date" v-model="state.day" required :min="currentYear?.starts_on" :max="currentYear?.ends_on" @input="resetFilters"></label>
+          <label>Turma<select v-model="state.group" @change="resetFilters"><option value="">Todas as turmas do ano</option><option v-for="group in state.groups.filter(g=>g.academic_year_id===state.year)" :key="group.id" :value="group.id">{{group.name}}</option></select></label>
+          <label>Abrangência<select v-model="state.scope" @change="resetFilters"><option value="school">Escola ou turma</option><option value="single">Um aluno</option></select></label>
+        </div>
+        <section v-if="state.scope==='single'" class="censo-search" aria-label="Seleção individual">
+          <template v-if="!state.chosen">
+            <div class="censo-search-controls"><label>Buscar aluno ou matrícula<input type="search" maxlength="180" v-model="state.q" placeholder="Nome, matrícula ou código Inep" @input="resetSearch" @keydown.enter.prevent="search()"></label><button type="button" class="btn btn-secondary" @click="search()">Buscar aluno</button></div>
+            <template v-if="state.searched">
+              <p role="status">{{state.total===0?'Nenhuma matrícula encontrada para esses filtros.':state.total+' matrícula(s) encontrada(s).'}}</p>
+              <ul class="censo-records">
+                <li v-for="row in state.results" :key="row.enrollment_id"><div><strong>{{nameOf(row)}}</strong><small>{{fmtClass(row)}} · Matrícula {{row.enrollment_number||'sem número'}}</small></div><button type="button" class="btn btn-secondary" :aria-label="'Selecionar '+nameOf(row)+' · '+(row.enrollment_number||'sem número')" @click="choose(row)">Selecionar</button></li>
+              </ul>
+              <nav v-if="state.total>25" class="censo-actions" aria-label="Páginas da busca de matrículas"><button type="button" class="btn btn-secondary" :disabled="state.searchOffset===0" @click="search(state.searchOffset-25)">Anterior</button><span>{{state.searchOffset+1}}–{{state.searchOffset+state.results.length}} de {{state.total}}</span><button type="button" class="btn btn-secondary" :disabled="state.searchOffset+25>=state.total" @click="search(state.searchOffset+25)">Próxima</button></nav>
+            </template>
+          </template>
+          <div v-else class="censo-selected"><div><small>Matrícula selecionada</small><strong>{{nameOf(state.chosen)}}</strong><span>{{fmtClass(state.chosen)}} · {{state.chosen.enrollment_number||'Sem número de matrícula'}}</span></div><button type="button" class="btn btn-secondary" @click="resetFilters">Trocar aluno</button></div>
+        </section>
+        <button class="btn btn-primary" type="submit" :disabled="!state.year||!state.day||(state.scope==='single'&&!state.chosen)">Validar prévia</button>
       </form>
-    </template>
-    <template v-if="state.tab==='history'">
+    </section>
+
+    <section class="panel censo-panel" v-if="state.tab==='history'">
       <h3>Histórico de rascunhos</h3>
+      <div class="censo-segment" aria-label="Situação do rascunho"><button type="button" :aria-pressed="!state.archived" @click="historyType(false)">Rascunhos ativos</button><button type="button" :aria-pressed="state.archived" @click="historyType(true)">Arquivados</button></div>
       <p v-if="!state.history.length">Nenhum rascunho nesta página.</p>
-      <div class="x-list"><button class="x-record" v-for="item in state.history" :key="item.id" @click="open(item.id)">{{stageLabel(item.stage)}} · {{item.reference_date}} · {{item.digest.slice(0,12)}}</button></div>
-      <button :disabled="state.offset===0" @click="page(-50)">Anterior</button><button :disabled="state.history.length!==50" @click="page(50)">Próxima</button>
-    </template>
-    <template v-if="(state.tab==='prepare' && state.preview) || (state.tab==='detail' && state.draft)">
-      <section v-for="snap in [state.tab==='detail'?state.draft.snapshot:state.preview]" :key="state.tab">
-        <h3>{{state.tab==='detail'?'Rascunho do lote':'Prévia da seleção'}}</h3>
-        <p v-if="snap.replacement_rule==='substitui_declaracao_da_escola'">Nesta coleta, a importação substitui a declaração da escola. Confira a cobertura de todos os alunos antes de enviar pelo Educacenso.</p>
+      <ul class="censo-records"><li v-for="item in state.history" :key="item.id"><div><strong>{{stageLabel(item.stage)}}</strong><small>{{dateLabel(item.reference_date)}} · Revisão {{item.version}}</small></div><button type="button" class="btn btn-secondary" :aria-label="'Abrir rascunho de '+stageLabel(item.stage)+' de '+dateLabel(item.reference_date)+' · '+item.digest.slice(0,8)" @click="open(item.id)">Abrir rascunho</button></li></ul>
+      <nav v-if="state.offset||state.history.length===50" class="censo-actions" aria-label="Páginas do histórico"><button type="button" class="btn btn-secondary" :disabled="state.offset===0" @click="page(-50)">Anterior</button><button type="button" class="btn btn-secondary" :disabled="state.history.length!==50" @click="page(50)">Próxima</button></nav>
+    </section>
+
+    <template v-if="snapshot">
+      <section class="panel censo-panel">
+        <header class="censo-heading"><div><h3>{{state.tab==='detail'?'Rascunho do lote':'Prévia da seleção'}}</h3><p>{{stageLabel(state.tab==='detail'?state.draft.stage:state.stage)}} · {{dateLabel(state.tab==='detail'?state.draft.reference_date:state.day)}} · {{rows.length}} {{rows.length===1?'matrícula':'matrículas'}}</p></div><span v-if="state.tab==='detail'" class="censo-badge">{{state.draft.status==='arquivado'?'Arquivado':'Rascunho'}} · revisão {{state.draft.version}}</span></header>
+        <p v-if="!rows.length">Nenhuma matrícula nesta seleção.</p>
+        <ul class="censo-students">
+          <li v-for="row in rows.slice(0,state.visibleRows)" :key="row.enrollment_id">
+            <div class="censo-student-heading"><strong>{{nameOf(row)}}</strong><span>{{fmtClass(row)}}</span></div>
+            <dl class="censo-data">
+              <div><dt>Código do aluno</dt><dd>{{row.student_number||'Não informado'}}</dd></div>
+              <div><dt>Matrícula</dt><dd>{{row.enrollment_number||'Não informada'}}</dd></div>
+              <div><dt>Situação na data</dt><dd>{{statusLabel(row.local_status)}}</dd></div>
+              <template v-if="(state.draft && state.tab==='detail'?state.draft.stage:state.stage)==='matricula_inicial'">
+                <div><dt>Nome na declaração</dt><dd>{{declaredName(row)}}</dd></div>
+                <div><dt>Código Inep na declaração</dt><dd>{{declaredField(row,'student_inep_code')||'Não informado'}}<small v-if="(row.student_inep_code||'')!==declaredField(row,'student_inep_code')">No cadastro: {{row.student_inep_code||'Não informado'}}</small></dd></div>
+                <div><dt>Data de nascimento na declaração</dt><dd>{{dateLabel(declaredField(row,'birth_date'))}}<small v-if="(row.birth_date||'')!==declaredField(row,'birth_date')">No cadastro: {{dateLabel(row.birth_date)}}</small></dd></div>
+              </template>
+              <div v-else><dt>Situação na declaração</dt><dd>{{row.declaration?.status||'Não informada'}}</dd></div>
+            </dl>
+            <div v-if="state.tab==='detail'" class="censo-actions"><button type="button" class="btn btn-secondary" @click="studentFile(row)">Baixar ficha do aluno</button>
+              <template v-if="editable() && !state.editing && !state.file"><button type="button" class="btn btn-secondary" :aria-label="'Editar dados de '+nameOf(row)" @click="edit(row)">Editar dados</button><button type="button" class="censo-danger" :aria-label="'Retirar '+nameOf(row)+' do rascunho'" @click="remove(row)">Retirar do rascunho</button></template>
+            </div>
+            <form v-if="state.editing===row.enrollment_id" class="educacenso-editor" @submit.prevent="updateRow">
+              <h4>Ajuste da declaração</h4><p>O ajuste vale para esta revisão do rascunho.</p>
+              <label>{{state.draft.stage==='matricula_inicial'?'Nome na declaração':'Situação na declaração'}}<input v-model="state.editValue" :list="state.draft.stage==='situacao_aluno'?'censo-situacoes-'+row.enrollment_id:null" :maxlength="state.draft.stage==='matricula_inicial'?200:80" required></label>
+              <template v-if="state.draft.stage==='situacao_aluno'">
+                <datalist :id="'censo-situacoes-'+row.enrollment_id"><option>Aprovado</option><option>Reprovado</option><option>Transferido</option><option>Deixou de frequentar</option><option>Falecido</option><option>Sem movimentação</option></datalist>
+                <p>Informe o rendimento ou o movimento aplicável à etapa de ensino. <a href="https://www.gov.br/inep/pt-br/areas-de-atuacao/pesquisas-estatisticas-e-indicadores/censo-escolar/orientacoes/situacao-do-aluno" target="_blank" rel="noopener noreferrer">Orientações do Inep para a segunda etapa ↗</a></p>
+              </template>
+              <div class="censo-fields" v-if="state.draft.stage==='matricula_inicial'">
+                <label>Código Inep na declaração<input v-model="state.editInep" maxlength="32"></label>
+                <label>Data de nascimento na declaração<input type="date" v-model="state.editBirth" :max="state.draft.reference_date"></label>
+              </div>
+              <label>Motivo do ajuste<textarea v-model="state.editReason" minlength="5" maxlength="1000" rows="2" required></textarea></label>
+              <div v-if="state.error||state.conflict" role="alert" class="alert error">{{state.error||'Atualize o rascunho para conferir a revisão atual.'}} <button v-if="state.conflict" type="button" class="btn btn-secondary" @click="reloadDraft">Atualizar rascunho</button></div>
+              <div class="censo-actions"><button type="submit" class="btn btn-primary" :disabled="state.conflict">Salvar ajuste</button><button type="button" class="btn btn-secondary" @click="cancelEdit">Cancelar edição</button></div>
+            </form>
+          </li>
+        </ul>
+        <button v-if="state.visibleRows<rows.length" type="button" class="btn btn-secondary" @click="state.visibleRows+=25">Mostrar mais 25 matrículas</button>
+        <button v-if="state.tab==='prepare'" type="button" class="btn btn-primary" @click="save">Guardar rascunho</button>
+      </section>
+      <section class="panel censo-panel censo-guidance">
+        <h3>Conferência para o Inep</h3><p>A prévia e os arquivos baixados servem à conferência local. A exportação oficial depende da homologação do leiaute e dos domínios para o ano e a etapa.</p>
+        <p v-if="snapshot.replacement_rule==='substitui_declaracao_da_escola'">Nesta coleta, a importação substitui a declaração da escola. Confira a cobertura de todos os alunos antes do envio pelo Educacenso.</p>
         <p v-else>Regra de substituição pendente de confirmação para este ano e etapa.</p>
-        <p>{{snap.rows.length}} matrícula(s) na data de referência.</p>
-        <ul><li v-for="block in snap.blocks" :key="block">{{reasons[block]||block}}</li></ul>
-        <a :href="snap.official_source" target="_blank" rel="noopener noreferrer">Consultar orientações oficiais do Inep</a>
-        <details><summary>Conferir matrículas e turmas</summary><table><thead><tr><th>Matrícula (ID local)</th><th>Turma</th><th>Situação local</th></tr></thead><tbody>
-          <tr v-for="row in snap.rows.slice(0,state.visibleRows)" :key="row.enrollment_id"><td>{{row.enrollment_id}}</td><td>{{state.groups.find(g=>g.id===row.class_group_id)?.name||row.class_group_id}}</td><td>{{row.local_status}}</td></tr>
-        </tbody></table><button v-if="state.visibleRows<snap.rows.length" @click="state.visibleRows+=25">Mostrar mais 25</button></details>
+        <ul v-if="snapshot.blocks.length"><li v-for="block in snapshot.blocks" :key="block">{{reasons[block]||block}}</li></ul>
+        <a :href="snapshot.official_source" target="_blank" rel="noopener noreferrer">Consultar orientações oficiais do Inep ↗</a>
       </section>
-      <button class="btn btn-primary" v-if="state.tab==='prepare'" @click="save">Guardar rascunho</button>
-      <section v-else><p>{{stageLabel(state.draft.stage)}} · {{state.draft.reference_date}}</p><p>SHA-256 <code>{{state.draft.digest}}</code></p>
-        <button @click="diagnostic">Baixar diagnóstico local (JSON)</button>
-        <h3>Retornos e comprovantes anexados</h3><p>Os anexos ficam disponíveis para conferência manual. Anexar um retorno não confirma a aceitação pelo Inep.</p>
-        <form @submit.prevent="attach" class="x-form"><label v-if="state.draft.snapshot.return_statuses?.length">Situação informada pelo operador conforme o retorno<select v-model="state.reportedStatus"><option value="">Somente anexar</option><option v-for="status in state.draft.snapshot.return_statuses" :key="status">{{status}}</option></select></label><label>Arquivo de evidência (até 4 MiB)<input type="file" :key="state.draft.id+':'+(state.draft.evidence||[]).length" @change="fileChanged" required></label><button class="btn btn-secondary" :disabled="!state.file">Anexar evidência</button></form>
-        <div class="x-list"><button v-for="item in state.draft.evidence" :key="item.id" @click="download(item)">Baixar evidência {{item.reported_status||''}} · {{item.digest.slice(0,12)}}</button></div>
-      </section>
+      <template v-if="state.tab==='detail'">
+        <section class="panel censo-panel"><h3>Revisões do rascunho</h3>
+          <div class="censo-actions"><button type="button" class="btn btn-secondary" @click="diagnostic()">Baixar diagnóstico local (JSON)</button><button v-if="editable()" type="button" class="censo-danger" :disabled="!!state.editing || !!state.file" @click="remove()">Arquivar rascunho</button></div>
+          <ol class="censo-records"><li v-for="rev in state.revisions" :key="rev.version"><div><strong>Revisão {{rev.version}} · {{dateLabel(rev.created_at)}}</strong><small>{{rev.reason}}</small></div><button type="button" class="btn btn-secondary" :aria-label="'Baixar JSON da revisão '+rev.version" @click="diagnostic(rev.version)">Baixar JSON</button></li></ol>
+          <details><summary>Identificador de integridade (SHA-256)</summary><code>{{state.draft.digest}}</code></details>
+        </section>
+        <section class="panel censo-panel"><h3>Retornos e comprovantes anexados</h3><p>Registre o retorno recebido para conferência da Secretaria. A aceitação é informada pelo Inep.</p>
+          <form v-if="editable()" class="censo-evidence" @submit.prevent="attach">
+            <label v-if="state.draft.snapshot.return_statuses?.length">Situação informada pelo operador conforme o retorno<select v-model="state.reportedStatus" :disabled="!!state.editing"><option value="">Somente anexar</option><option v-for="status in state.draft.snapshot.return_statuses" :key="status">{{status}}</option></select></label>
+            <label>Arquivo de evidência (até 4 MiB)<input type="file" :disabled="!!state.editing" :key="state.draft.id+':'+state.draft.version+':'+state.fileKey+':'+(state.draft.evidence||[]).length" @change="fileChanged" required></label>
+            <div class="censo-actions"><button type="submit" class="btn btn-secondary" :disabled="!state.file||!!state.editing">Anexar evidência</button><button v-if="state.file" type="button" class="btn btn-secondary" @click="clearFile">Limpar arquivo</button></div>
+          </form>
+          <p v-if="!state.draft.evidence?.length">Nenhuma evidência anexada.</p>
+          <ul class="censo-records"><li v-for="item in state.draft.evidence" :key="item.id"><button type="button" class="btn btn-secondary" @click="download(item)">Baixar evidência {{item.reported_status||''}} · {{item.digest.slice(0,12)}}</button></li></ul>
+        </section>
+      </template>
     </template>
   </fieldset>
 </section>

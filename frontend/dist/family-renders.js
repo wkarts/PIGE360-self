@@ -223,24 +223,18 @@ var _Vue=Vue; var PigeRenders={familyPortal:function render(_ctx, _cache) {
               return (_openBlock(), _createElementBlock("div", {
                 key: group.id,
                 class: "portal-rail-group"
-              }, [(rail.enabled())
-                ? (_openBlock(), _createElementBlock("button", {
-                    key: 0,
-                    type: "button",
-                    class: _normalizeClass(["portal-rail-trigger", {active:group.items.some(item=>item.id===s.section)}]),
-                    "data-rail-trigger": "",
-                    "aria-label": group.label,
-                    title: group.label,
-                    "aria-controls": group.id,
-                    "aria-expanded": rail.state.active===group.id
-                  }, [(_openBlock(), _createElementBlock("svg", {
-                    class: "ui-icon",
-                    "aria-hidden": "true"
-                  }, [_createElementVNode("use", { href: '/ui-icons.svg#'+group.icon }, null, 8, ["href"])]))], 10, ["aria-label", "title", "aria-controls", "aria-expanded"]))
-                : (_openBlock(), _createElementBlock("p", {
-                    key: 1,
-                    class: "family-nav-label"
-                  }, _toDisplayString(group.label), 1)), _withDirectives(_createElementVNode("nav", {
+              }, [_withDirectives(_createElementVNode("button", {
+                type: "button",
+                class: _normalizeClass(["portal-rail-trigger", {active:group.items.some(item=>item.id===s.section)}]),
+                "data-rail-trigger": "",
+                "aria-label": group.label,
+                title: group.label,
+                "aria-controls": group.id,
+                "aria-expanded": rail.state.active===group.id
+              }, [(_openBlock(), _createElementBlock("svg", {
+                class: "ui-icon",
+                "aria-hidden": "true"
+              }, [_createElementVNode("use", { href: '/ui-icons.svg#'+group.icon }, null, 8, ["href"])]))], 10, ["aria-label", "title", "aria-controls", "aria-expanded"]), [[_vShow, rail.enabled()]]), _withDirectives(_createElementVNode("p", { class: "family-nav-label" }, _toDisplayString(group.label), 513), [[_vShow, !rail.enabled()]]), _withDirectives(_createElementVNode("nav", {
                 id: group.id,
                 "aria-label": group.label,
                 class: "sidebar-flyout",
@@ -256,12 +250,13 @@ var _Vue=Vue; var PigeRenders={familyPortal:function render(_ctx, _cache) {
                   ? (_openBlock(), _createElementBlock("a", {
                       key: 0,
                       href: "/online",
+                      onClick: openRegistration,
                       title: item.label,
                       "aria-label": item.label
                     }, [(_openBlock(), _createElementBlock("svg", {
                       class: "ui-icon",
                       "aria-hidden": "true"
-                    }, [_createElementVNode("use", { href: '/ui-icons.svg#'+item.icon }, null, 8, ["href"])])), _createElementVNode("span", null, _toDisplayString(item.label) + " ↗", 1)], 8, ["title", "aria-label"]))
+                    }, [_createElementVNode("use", { href: '/ui-icons.svg#'+item.icon }, null, 8, ["href"])])), _createElementVNode("span", null, _toDisplayString(item.label) + " ↗", 1)], 8, ["onClick", "title", "aria-label"]))
                   : (_openBlock(), _createElementBlock("button", {
                       key: 1,
                       type: "button",
@@ -1077,28 +1072,13 @@ var _Vue=Vue; var PigeRenders={familyPortal:function render(_ctx, _cache) {
                                                                   onClick: autoPix.refresh
                                                                 }, "Atualizar situação", 8, ["disabled", "onClick"]),
                                                                 (['CREATED','ACTIVE'].includes(autoPix.state.view.authorization.status))
-                                                                  ? (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [(!autoPix.state.confirmCancel)
-                                                                      ? (_openBlock(), _createElementBlock("button", {
-                                                                          key: 0,
-                                                                          type: "button",
-                                                                          class: "btn btn-secondary",
-                                                                          onClick: $event => (autoPix.state.confirmCancel=true)
-                                                                        }, "Cancelar autorização", 8, ["onClick"]))
-                                                                      : (_openBlock(), _createElementBlock("div", { key: 1 }, [
-                                                                          _createElementVNode("p", null, "Deseja interromper os próximos débitos? Os pagamentos já enviados dependem de confirmação bancária."),
-                                                                          _createElementVNode("button", {
-                                                                            type: "button",
-                                                                            class: "btn btn-secondary",
-                                                                            disabled: autoPix.state.busy,
-                                                                            onClick: autoPix.cancel
-                                                                          }, "Confirmar cancelamento", 8, ["disabled", "onClick"]),
-                                                                          _createTextVNode(),
-                                                                          _createElementVNode("button", {
-                                                                            type: "button",
-                                                                            class: "btn btn-secondary",
-                                                                            onClick: $event => (autoPix.state.confirmCancel=false)
-                                                                          }, "Voltar", 8, ["onClick"])
-                                                                        ]))], 64))
+                                                                  ? (_openBlock(), _createElementBlock("button", {
+                                                                      key: 2,
+                                                                      type: "button",
+                                                                      class: "btn btn-secondary",
+                                                                      disabled: autoPix.state.busy || autoPix.state.confirmCancel,
+                                                                      onClick: autoPix.cancel
+                                                                    }, "Cancelar autorização", 8, ["disabled", "onClick"]))
                                                                   : _createCommentVNode("", true)
                                                               ], 64))
                                                             : (!autoPix.state.view.can_enroll)
@@ -1940,33 +1920,57 @@ var _Vue=Vue; var PigeRenders={familyPortal:function render(_ctx, _cache) {
         : _createCommentVNode("", true)
     ], 8, ["aria-busy", "data-workspace-dirty"]))
   }
-},confirmTabs:function render(_ctx, _cache) {
+},actionDialog:function render(_ctx, _cache) {
   with (_ctx) {
-    const { createElementVNode: _createElementVNode, toDisplayString: _toDisplayString, createTextVNode: _createTextVNode, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, withModifiers: _withModifiers } = _Vue
+    const { toDisplayString: _toDisplayString, createElementVNode: _createElementVNode, vModelText: _vModelText, withModifiers: _withModifiers, withKeys: _withKeys, withDirectives: _withDirectives, createTextVNode: _createTextVNode, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, normalizeClass: _normalizeClass } = _Vue
 
     return (_openBlock(), _createElementBlock("dialog", {
       class: "work-close-dialog",
-      "aria-labelledby": "work-close-heading",
-      "aria-describedby": "work-close-description",
+      "aria-labelledby": "pige-dialog-heading",
+      "aria-describedby": "pige-dialog-message",
       onCancel: _withModifiers($event => (finish(false)), ["prevent"]),
       onClose: $event => (finish(false))
-    }, [_createElementVNode("header", null, [_createElementVNode("h2", { id: "work-close-heading" }, "Fechar as outras guias?"), _createElementVNode("button", {
+    }, [_createElementVNode("header", null, [_createElementVNode("h2", { id: "pige-dialog-heading" }, _toDisplayString(title), 1), _createElementVNode("button", {
       type: "button",
       class: "work-close-dismiss",
       "aria-label": "Fechar aviso",
       onClick: $event => (finish(false))
-    }, "×", 8, ["onClick"])]), _createElementVNode("div", { id: "work-close-description" }, [_createElementVNode("p", null, "A guia " + _toDisplayString(home) + " permanecerá aberta. As outras guias serão fechadas. Alterações e preenchimentos ainda não salvos nessas guias serão descartados. Os dados já salvos serão preservados.", 1), (drafts.length)
-      ? (_openBlock(), _createElementBlock("p", { key: 0 }, [_createElementVNode("strong", null, "Confira antes de fechar"), _createTextVNode(" · " + _toDisplayString(drafts.join(', ')) + ".", 1)]))
-      : _createCommentVNode("", true)]), _createElementVNode("footer", null, [_createElementVNode("button", {
-      type: "button",
-      class: "btn btn-secondary",
-      "data-work-close-back": "",
-      autofocus: "",
-      onClick: $event => (finish(false))
-    }, "Voltar", 8, ["onClick"]), _createElementVNode("button", {
-      type: "button",
-      class: "btn work-close-confirm",
-      onClick: $event => (finish(true))
-    }, "Fechar outras guias", 8, ["onClick"])])], 40, ["onCancel", "onClose"]))
+    }, "×", 8, ["onClick"])]), _createElementVNode("form", {
+      novalidate: "",
+      onSubmit: _withModifiers($event => (finish(true)), ["prevent"])
+    }, [_createElementVNode("div", { class: "pige-dialog-body" }, [_createElementVNode("p", { id: "pige-dialog-message" }, _toDisplayString(message), 1), (kind==='prompt')
+      ? (_openBlock(), _createElementBlock("label", {
+          key: 0,
+          class: "pige-dialog-input"
+        }, [_createTextVNode(_toDisplayString(inputLabel) + " ", 1), _withDirectives(_createElementVNode("textarea", {
+          "onUpdate:modelValue": $event => ((state.value) = $event),
+          rows: "3",
+          minlength: minimum || undefined,
+          maxlength: maximum,
+          required: minimum>0,
+          "aria-invalid": state.error ? 'true' : undefined,
+          "aria-describedby": state.error ? 'pige-dialog-error' : undefined,
+          onInput: $event => (state.error=''),
+          onKeydown: [_withKeys(_withModifiers($event => (finish(true)), ["ctrl","prevent"]), ["enter"]), _withKeys(_withModifiers($event => (finish(true)), ["meta","prevent"]), ["enter"])]
+        }, null, 40, ["onUpdate:modelValue", "minlength", "maxlength", "required", "aria-invalid", "aria-describedby", "onInput", "onKeydown"]), [[_vModelText, state.value]])]))
+      : _createCommentVNode("", true), (state.error)
+      ? (_openBlock(), _createElementBlock("p", {
+          key: 1,
+          id: "pige-dialog-error",
+          class: "pige-dialog-error",
+          role: "alert"
+        }, _toDisplayString(state.error), 1))
+      : _createCommentVNode("", true)]), _createElementVNode("footer", null, [(kind!=='alert')
+      ? (_openBlock(), _createElementBlock("button", {
+          key: 0,
+          type: "button",
+          class: "btn btn-secondary",
+          "data-dialog-back": "",
+          onClick: $event => (finish(false))
+        }, _toDisplayString(cancelLabel), 9, ["onClick"]))
+      : _createCommentVNode("", true), _createElementVNode("button", {
+      type: "submit",
+      class: _normalizeClass(["btn", destructive?'work-close-confirm':'btn-primary'])
+    }, _toDisplayString(confirmLabel), 3)])], 40, ["onSubmit"])], 40, ["onCancel", "onClose"]))
   }
 }};

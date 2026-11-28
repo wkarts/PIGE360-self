@@ -1,4 +1,4 @@
-<section class="contracts" aria-label="Modelos e documentos escolares">
+<section class="contracts" :data-workspace-dirty="editorDirty() || state.draftDirty" :aria-busy="state.busy" aria-label="Modelos e documentos escolares">
   <div v-if="state.error" class="alert error" role="alert">{{state.error}}</div>
   <div v-if="state.notice" class="alert success" role="status">{{state.notice}}</div>
   <div class="panel x-card contract-intro">
@@ -84,7 +84,7 @@
       <div v-if="state.enrollmentChoices.length && !state.enrollment" class="contract-results"><button v-for="enrollment in state.enrollmentChoices" :key="enrollment.id" type="button" @click="chooseEnrollment(enrollment)"><strong>{{enrollment.student_name}}</strong><small>{{enrollment.number}} · {{enrollment.year_name}} · {{enrollment.status}}</small></button></div>
     </section>
     <section v-if="state.enrollment" class="panel x-card">
-      <h3>2 · Selecionar modelo válido</h3><label class="field">Modelo<select v-model="state.templateId" @change="selectTemplate"><option value="">Selecione um documento</option><option v-for="template in state.applicable" :key="template.id" :value="template.id">{{template.name}} · versão {{template.version}}</option></select></label>
+      <h3>2 · Selecionar modelo válido</h3><label class="field">Modelo<select :value="state.templateId" @change="selectTemplate"><option value="">Selecione um documento</option><option v-for="template in state.applicable" :key="template.id" :value="template.id">{{template.name}} · versão {{template.version}}</option></select></label>
       <p v-if="!state.applicable.length" class="alert info spaced">Não há modelos ativos válidos para esta matrícula. Cadastre um modelo para o período na aba Modelos.</p>
     </section>
     <section v-if="state.enrollment && state.templateId" class="panel x-card">

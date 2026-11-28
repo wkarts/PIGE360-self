@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Exercita a combinação de Diário, catálogo e Educacenso em serviços descartáveis."""
+import json
 import os
+import re
 from contextlib import contextmanager
 from pathlib import Path
 import shutil
@@ -11,6 +13,7 @@ import tempfile
 import time
 
 import httpx
+from pypdf import PdfReader
 from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,6 +41,136 @@ def server(env, port):
     finally:
         proc.terminate()
         proc.wait(timeout=10)
+
+
+def individual_census(page, census, http, token, school_id, other_school_id):
+    """Confere a declaração local de um aluno e o histórico sem contatar o INEP."""
+    headers = {'Authorization': 'Bearer '+token, 'X-School-ID': school_id}
+    path = '/api/v1/schools/'+school_id
+    def read(route):
+        result=http.get(path+route, headers=headers)
+        result.raise_for_status()
+        return result.json()
+    def create(route, data):
+        result=http.post(path+route, headers=headers, json=data)
+        result.raise_for_status()
+        return result.json()
+    year=read('/academic-years')[0]
+    unit=read('/units')[0]
+    grade=create('/grades', {'name':'8º ano de treinamento'})
+    shift=create('/shifts', {'name':'Manhã de treinamento'})
+    group=create('/class-groups', {'name':'Turma de demonstração', 'unit_id':unit['id'], 'grade_id':grade['id'],
+                                   'shift_id':shift['id'], 'academic_year_id':year['id'], 'capacity':10})
+    pupils=[]
+    for first in ('Clara','Lucas'):
+        name=first+' Almeida de Teste'
+        pupil=create('/students', {'person':{'name':name, 'birth_date':'2013-04-25'}})
+        enrollment=create('/enrollments', {'student_id':pupil['id'], 'class_group_id':group['id'], 'enrolled_on':'2026-02-02'})
+        pupils.append((name,pupil,enrollment))
+    name, pupil, enrollment = pupils[0]
+    alternate=pupils[1][0]
+    screen_dir=os.getenv('PIGE_CENSUS_SCREENSHOTS')
+    if screen_dir:
+        Path(screen_dir).mkdir(parents=True,exist_ok=True)
+
+    census.get_by_role('button', name='Dados a declarar').click()
+    census.get_by_label('Data de referência').fill('2026-06-01')
+    census.get_by_label('Abrangência').select_option(label='Um aluno')
+    census.get_by_label('Buscar aluno ou matrícula').fill('Almeida')
+    census.get_by_role('button', name='Buscar aluno',exact=True).click()
+    expect(census.get_by_role('button', name=re.compile('Selecionar '+alternate))).to_be_visible()
+    census.get_by_role('button', name=re.compile('Selecionar '+name)).click()
+    census.get_by_role('button', name='Validar prévia').click()
+    with page.expect_response(lambda response: response.url.split('?')[0].endswith('/educacenso/drafts') and response.request.method=='POST') as created:
+        census.get_by_role('button', name='Guardar rascunho').click()
+    assert created.value.ok, created.value.text()
+    saved=created.value.json()
+    current='/educacenso/drafts/'+saved['id']
+    assert [row['enrollment_id'] for row in saved['snapshot']['rows']]==[enrollment['id']]
+    assert not saved['snapshot']['official_export_enabled']
+    edit=census.get_by_role('button', name=re.compile('Editar dados de '+name))
+    expect(edit).to_be_visible()
+    for width in (1440,390,320):
+        page.set_viewport_size({'width':width,'height':900})
+        expect(edit).to_be_visible()
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1'), width
+        if screen_dir:
+            edit.scroll_into_view_if_needed()
+            page.screenshot(path=str(Path(screen_dir)/f'educacenso-individual-{width}.png'))
+            if width==1440:
+                card=census.locator('section.panel').filter(has=page.get_by_role('heading',name='Rascunho do lote',exact=True))
+                card.screenshot(path=str(Path(screen_dir)/'educacenso-guia.png'))
+    edit.click()
+    corrected='Clara Almeida de Teste Escolar'
+    census.get_by_label('Nome na declaração').fill(corrected)
+    census.get_by_label('Código Inep na declaração').fill('000000000123')
+    census.get_by_label('Data de nascimento na declaração').fill('2013-04-26')
+    census.get_by_label('Motivo do ajuste').fill('Conferência do nome na declaração local de treinamento.')
+    with page.expect_response(lambda response: '/rows/' in response.url and response.request.method=='PATCH') as edited:
+        census.get_by_role('button',name='Salvar ajuste').click()
+    assert edited.value.ok,edited.value.text()
+    detail=read(current)
+    declaration=detail['snapshot']['rows'][0]['declaration']
+    assert (declaration['student_name'],declaration['student_inep_code'],declaration['birth_date'])==(corrected,'000000000123','2013-04-26')
+    original=read('/students/'+pupil['id'])
+    assert original['person']['name']==name and original['person']['birth_date']=='2013-04-25' and not original.get('inep_code')
+    with page.expect_download() as form_pdf:
+        census.get_by_role('button',name='Baixar ficha do aluno').click()
+    pages=PdfReader(form_pdf.value.path()).pages
+    pdf_text=' '.join(page.extract_text() or '' for page in pages)
+    assert corrected in pdf_text and enrollment['number'] in pdf_text and alternate not in pdf_text
+    remove=census.get_by_role('button', name=re.compile('Retirar .* do rascunho'))
+    remove.click()
+    prompt=page.get_by_role('dialog')
+    expect(prompt).to_be_visible()
+    prompt.get_by_role('button', name=re.compile('Voltar|Cancelar')).click()
+    assert len(read(current)['snapshot']['rows'])==1
+    remove.click()
+    prompt.get_by_label('Motivo',exact=False).fill('Matrícula retirada para revisão pela secretaria.')
+    with page.expect_response(lambda response: '/rows/' in response.url and response.request.method=='DELETE') as removed:
+        prompt.get_by_role('button',name=re.compile('Retirar')).click()
+    assert removed.value.ok,removed.value.text()
+    expect(remove).to_have_count(0)
+    assert not read(current)['snapshot']['rows']
+    with page.expect_download() as revision_json:
+        census.get_by_role('button',name='Baixar JSON da revisão 1').click()
+    previous=json.loads(Path(revision_json.value.path()).read_bytes())
+    assert previous['rows'][0]['enrollment_id']==enrollment['id']
+    other=http.get('/api/v1/schools/'+other_school_id+current,headers={**headers,'X-School-ID':other_school_id})
+    assert other.status_code==404
+    assert http.get(path+current,headers=headers,params={'environment':'producao'}).status_code==404
+    census.get_by_role('button',name='Arquivar rascunho',exact=True).click()
+    prompt.get_by_label('Motivo',exact=False).fill('Treinamento encerrado pelo operador.')
+    with page.expect_response(lambda response: '/archive' in response.url and response.request.method=='POST') as archive:
+        prompt.get_by_role('button',name=re.compile('Arquivar')).click()
+    assert archive.value.ok,archive.value.text()
+    census.get_by_role('button',name='Histórico',exact=True).click()
+    census.get_by_role('button',name='Arquivados',exact=True).click()
+    census.get_by_role('button',name=re.compile('Matrícula Inicial')).click()
+    expect(census.get_by_text('Treinamento encerrado pelo operador.',exact=False).first).to_be_visible()
+    assert not read(current)['snapshot']['rows']
+
+    census.get_by_role('button',name='Dados a declarar').click()
+    census.get_by_role('combobox',name=re.compile('^Etapa')).select_option(label='Situação do Aluno')
+    census.get_by_label('Abrangência').select_option(label='Um aluno')
+    census.get_by_label('Buscar aluno ou matrícula').fill(pupils[1][2]['number'])
+    census.get_by_role('button',name='Buscar aluno',exact=True).click()
+    census.get_by_role('button',name=re.compile('Selecionar '+alternate)).click()
+    census.get_by_role('button',name='Validar prévia').click()
+    with page.expect_response(lambda response: response.url.split('?')[0].endswith('/educacenso/drafts') and response.request.method=='POST') as second:
+        census.get_by_role('button',name='Guardar rascunho').click()
+    assert second.value.ok,second.value.text()
+    second_id=second.value.json()['id']
+    census.get_by_role('button',name=re.compile('Editar dados de '+alternate)).click()
+    census.get_by_label('Situação na declaração').fill('Transferência em conferência')
+    census.get_by_label('Motivo do ajuste').fill('Correspondência com o retorno escolar em treinamento.')
+    with page.expect_response(lambda response: '/rows/' in response.url and response.request.method=='PATCH') as edited:
+        census.get_by_role('button',name='Salvar ajuste').click()
+    assert edited.value.ok,edited.value.text()
+    row=read('/educacenso/drafts/'+second_id)['snapshot']['rows'][0]
+    assert row['enrollment_id']==pupils[1][2]['id'] and row['declaration']['status']=='Transferência em conferência'
+    assert read('/enrollments/'+pupils[1][2]['id'])['status']==pupils[1][2]['status']
+    page.set_viewport_size({'width':1280,'height':900})
 
 
 def main():
@@ -71,7 +204,10 @@ def main():
                 page = browser.new_page(viewport={'width':1280,'height':900})
                 errors = []
                 page.on('pageerror', lambda exc: errors.append(str(exc)))
-                page.on('dialog', lambda dialog: dialog.accept())
+                def unexpected_prompt(dialog):
+                    errors.append('Diálogo nativo inesperado: '+dialog.type)
+                    dialog.dismiss()
+                page.on('dialog',unexpected_prompt)
                 page.goto(url+'/#/settings')
                 page.get_by_label('E-mail', exact=True).fill(setup['admin_email'])
                 page.get_by_label('Senha', exact=True).fill(password)
@@ -134,16 +270,18 @@ def main():
                 expect(catalog.get_by_text('Rascunho aguardando decisão.')).to_be_visible()
                 catalog.get_by_label('Justificativa da decisão').fill('Aprovada para a turma de teste')
                 catalog.get_by_role('button', name='Publicar componente').click()
+                page.get_by_role('dialog',name='Componente curricular').get_by_role('button',name='Publicar componente',exact=True).click()
                 expect(catalog.get_by_role('status')).to_have_text('Decisão registrada no histórico do componente.')
                 catalog.get_by_label('Componente para conferência').select_option(label='Oficina sintética')
                 catalog.get_by_label('Justificativa da decisão').fill('Retirada ao encerrar o piloto')
                 catalog.get_by_role('button', name='Desativar componente').click()
+                page.get_by_role('dialog',name='Componente curricular').get_by_role('button',name='Desativar componente',exact=True).click()
                 expect(catalog.get_by_label('Componente para conferência')).to_have_value('')
                 page.get_by_role('link', name='Educacenso', exact=True).click()
-                census = page.get_by_role('region', name='Educacenso', exact=True)
+                census = page.get_by_role('region', name='Preparação do Educacenso', exact=True)
                 census.get_by_label('Data de referência').fill('2026-06-01')
                 census.get_by_role('button', name='Validar prévia').click()
-                expect(census.get_by_text('Nenhuma matrícula na seleção.')).to_be_visible()
+                expect(census.get_by_text('Nenhuma matrícula nesta seleção.')).to_be_visible()
                 census.get_by_role('button', name='Guardar rascunho').click()
                 census.locator('input[type=file]').set_input_files(
                     {'name':'retorno.txt','mimeType':'text/plain','buffer':b'retorno sintetico sem parser'})
@@ -154,6 +292,7 @@ def main():
                 census.get_by_role('button', name='Histórico').click()
                 census.get_by_role('button', name='Matrícula Inicial', exact=False).click()
                 expect(census.get_by_role('heading', name='Rascunho do lote')).to_be_visible()
+                individual_census(page, census, http, token, sid, other['id'])
                 page.get_by_role('link', name='Instituição', exact=True).click()
                 page.get_by_role('button', name='Editar dados').click()
                 expect(diary_option).to_be_checked()

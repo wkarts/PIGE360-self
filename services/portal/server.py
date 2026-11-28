@@ -18,7 +18,7 @@ PUBLIC=os.environ.get('PORTAL_PUBLIC_URL','').rstrip('/')
 INTERNAL_TOKEN=os.environ.get('PORTAL_INTERNAL_TOKEN','')
 STATIC=Path(os.environ.get('FRONTEND_PATH','/portal/public')).resolve()
 MAX_BODY=20*1024*1024
-ASSETS={'teacher.js','teacher.css','auth.css','ui-icons.svg','family.js','family.css','portal.js','family-renders.js','teacher-renders.js','renders.js','app.css','institution-layout.css','portal.css','community.css','mfa.css','assist.css','camera.css','diagnostic-client.js','first-access.js','first-access.html','favicon.svg','icons/icon-192.png','icons/icon-512.png','vendor/vue-3.5.13.global.prod.js'}
+ASSETS={'teacher.js','teacher.css','auth.css','ui-icons.svg','family.js','family.css','portal.js','family-renders.js','teacher-renders.js','renders.js','app.css','institution-layout.css','portal.css','community.css','mfa.css','assist.css','camera.css','diagnostic-client.js','first-access.js', 'form-validation.js','first-access.html','favicon.svg','icons/icon-192.png','icons/icon-512.png','vendor/vue-3.5.13.global.prod.js'}
 
 
 TEACHER_ONLY = os.environ.get('PORTAL_SURFACE', '') == 'teacher'
@@ -222,7 +222,7 @@ class Handler(BaseHTTPRequestHandler):
         name = routes.get(path.rstrip('/') or '/', path.lstrip('/'))
         teacher_files = {'professor.html', 'teacher.js', 'teacher-renders.js', 'teacher.css', 'guia/professor.webp'}
         shared_files = {'auth.css', 'app.css', 'family.css', 'portal.css', 'institution-layout.css', 'mfa.css',
-                        'ui-icons.svg', 'renders.js', 'vendor/vue-3.5.13.global.prod.js', 'favicon.svg', 'first-access.html', 'first-access.js'}
+                        'ui-icons.svg', 'renders.js', 'vendor/vue-3.5.13.global.prod.js', 'favicon.svg', 'first-access.html', 'first-access.js', 'form-validation.js'}
         files = teacher_files | shared_files if TEACHER_ONLY else (ASSETS | {'family.html', 'online.html'}) - teacher_files
         if name not in files:
             return self.respond(404, b'Not found')

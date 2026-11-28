@@ -84,12 +84,7 @@
           </form>
           <div class="x-list"><div v-for="c in state.components" :key="c.id" class="x-record"><strong>{{c.name}}</strong><span>{{c.code||'Sem código'}} · {{c.workload_hours||0}}h · {{c.active?'Ativo':'Inativo'}}</span>
             <div v-if="c.active" class="actions"><button class="btn btn-secondary" :aria-label="'Editar '+c.name" @click="editComponent(c)">Editar</button>
-              <button class="btn btn-secondary" :aria-label="'Retirar '+c.name" @click="state.removalTarget=c;state.removalReason=''">Retirar</button></div></div></div>
-          <form v-if="state.removalTarget" class="x-form" @submit.prevent="save(removeComponent)"><h3>Retirar {{state.removalTarget.name}}</h3>
-            <p>Componentes vinculados a registros serão desativados. Componentes sem vínculos serão excluídos.</p>
-            <label>Justificativa<textarea v-model="state.removalReason" required minlength="3" maxlength="1000"></textarea></label>
-            <div class="actions"><button class="btn btn-primary">Confirmar retirada</button><button type="button" class="btn btn-secondary" @click="state.removalTarget=null">Cancelar</button></div>
-          </form>
+              <button class="btn btn-secondary" :aria-label="'Retirar '+c.name" @click="removeComponent(c)">Retirar</button></div></div></div>
         </section>
       </div>
 
@@ -219,13 +214,7 @@
               <textarea v-else v-model="state.lessonValues[field.id]" maxlength="4000" rows="2"></textarea></label>
             <div class="actions"><button class="btn btn-primary">{{state.lessonEditing?'Salvar alterações da aula':'Registrar aula'}}</button>
               <button v-if="state.lessonEditing" type="button" class="btn btn-secondary" @click="resetLesson">Cancelar edição</button>
-              <button v-if="state.lessonEditing" type="button" class="btn btn-secondary" @click="state.lessonRemoval=true">Remover aula</button></div>
-          </form>
-          <form v-if="state.lessonRemoval && state.lessonEditing" class="x-form" @submit.prevent="save(removeLesson)">
-            <h3>Remover aula de {{date(state.lessonEditing.lesson_date)}}</h3><p>Somente aulas sem chamada e sem fechamento anterior podem ser removidas.</p>
-            <label>Justificativa<textarea v-model="state.lessonRemovalReason" required minlength="3" maxlength="1000"></textarea></label>
-            <div class="actions"><button class="btn btn-primary">Confirmar remoção da aula</button>
-              <button type="button" class="btn btn-secondary" @click="state.lessonRemoval=false;state.lessonRemovalReason=''">Cancelar remoção</button></div>
+              <button v-if="state.lessonEditing" type="button" class="btn btn-secondary" @click="removeLesson">Remover aula</button></div>
           </form>
         </section>
 

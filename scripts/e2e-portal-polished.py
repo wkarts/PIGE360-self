@@ -351,7 +351,7 @@ try:
         assert lesson_change.value.ok and lesson_change.value.json()['content']=='Revisão do registro provisório'
         workspace.get_by_role('button',name='Editar aula de 02/02/2027',exact=True).click()
         lesson.get_by_role('button',name='Remover aula',exact=True).click()
-        removal = workspace.locator('form').filter(has=teacher_page.get_by_role('heading',name='Remover aula de 02/02/2027'))
+        removal = teacher_page.get_by_role('dialog',name='Remover aula de 02/02/2027?',exact=True)
         removal.get_by_label('Justificativa').fill('Data lançada por engano antes de iniciar a chamada.')
         with teacher_page.expect_response(lambda r: r.url.endswith('/remove') and r.request.method=='POST') as lesson_removed:
             removal.get_by_role('button',name='Confirmar remoção da aula').click()
@@ -713,9 +713,16 @@ try:
         familyPage.get_by_role('button', name='Recolher menu lateral', exact=True).click()
         expect(familyPage.get_by_role('button', name='Expandir menu lateral', exact=True)).to_be_visible()
         familyPage.wait_for_function('limit => document.getElementById("family-navigation").getBoundingClientRect().width < limit', arg=sidebar_width*.75)
+        # Verifique os ícones do trilho antes de forçar uma recarga da página.
+        # Recarregar durante a leitura do SVG cancela a requisição no Chromium.
+        rail_icons = family_sidebar.locator('[data-rail-trigger]:visible svg:first-of-type use')
+        assert rail_icons.count() > 0
+        familyPage.wait_for_load_state('networkidle')
+        assert rail_icons.evaluate_all('icons => icons.every(icon => icon.getBBox().width > 0)')
         familyPage.reload()
         familyPage.get_by_role('button', name='Expandir menu lateral', exact=True).click()
         record('Aluno vê seu cadastro e atalhos de boletim e atividades; navegação financeira segue seu vínculo e a barra lateral conserva a preferência.')
+        familyPage.wait_for_load_state('networkidle')
         familyPage.reload();expect(familyPage.locator('#family-title')).to_have_text('Visão geral')
         expect(familyPage.get_by_role('heading',name='Olá, Lucas.',exact=True)).to_be_visible()
         family_nav('Atividades')
@@ -781,6 +788,14 @@ try:
         family_nav('Justificativas de ausência')
         familyPage.get_by_label('Data da ausência').fill('2027-02-01')
         familyPage.get_by_label('Motivo',exact=True).fill('Justificativa fictícia de teste')
+        # Um único fechamento com rascunho também usa o diálogo da escola.
+        single_tab = familyPage.get_by_role('button', name='Fechar guia Justificativas de ausência', exact=True)
+        single_tab.click()
+        leave = familyPage.get_by_role('dialog', name='Fechar a guia Justificativas de ausência?')
+        expect(leave.get_by_role('button',name='Voltar')).to_be_focused()
+        leave.get_by_role('button',name='Voltar').click()
+        expect(familyPage.get_by_label('Motivo',exact=True)).to_have_value('Justificativa fictícia de teste')
+        expect(single_tab).to_be_focused()
         # Alternar mantém o formulário. O único descarte ocorre após confirmação.
         tabs = familyPage.get_by_role('tablist', name='Tarefas abertas')
         absence_tab = tabs.get_by_role('tab', name='Justificativas de ausência', exact=True)

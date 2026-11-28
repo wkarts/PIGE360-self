@@ -12,18 +12,19 @@ function setup(area,props={}){
   const app={},calls=[],files=[],clipboard=[];
   let mounted,unmounted;
   const win={console,navigator:{clipboard:{writeText:async value=>clipboard.push(value)}},location:{search:'',pathname:'/'},URL,URLSearchParams,AbortController,FormData,Headers,Intl,crypto:webcrypto,
-    document:{getElementById(){},querySelector:()=>null,createElement:()=>({})},addEventListener(){},confirm:()=>false};
+    document:{getElementById(){},querySelector:()=>null,createElement:()=>({})},addEventListener(){}};
   win.window=win;win.localStorage={getItem:()=>null};vm.createContext(win);
   for(const f of ['vendor/vue-3.5.13.global.prod.js',area+'-renders.js'])vm.runInContext(fs.readFileSync(dist+f,'utf8'),win);
   Object.assign(win.Vue,{createApp:opts=>({mount(){Object.assign(app,opts);}}),onMounted:fn=>{mounted=fn;},onUnmounted:fn=>{unmounted=fn;}});
   vm.runInContext(fs.readFileSync(dist+area+'.js','utf8'),win);
   let handler=async path=>path.endsWith('/options')?{channels:['portal','email','whatsapp'],whatsapp_contact:'5571999999901',max_attachment_mb:3,opening_channel:'portal'}:
     path.includes('?')?{items:[row],page:1,page_size:5,total:1}:ticket;
+  win.PigeDialogs.confirm=async()=>false;
   const component=app.components['portal-protocols'];
   assert.ok(component);
   const ctx=component.setup({area,schoolId:'escola',...props,request:async(path,opts)=>{calls.push({path,opts});return handler(path,opts);},download:async(...args)=>files.push(args)});
   const render=()=>{const actual=win.Vue.reactive(ctx);return component.render.call(actual,actual,[]);};
-  return {ctx,calls,files,clipboard,mount:mounted,close:unmounted,render,setHandler:fn=>handler=fn};
+  return {ctx,calls,files,clipboard,dialogs:win.PigeDialogs,mount:mounted,close:unmounted,render,setHandler:fn=>handler=fn};
 }
 const labels=node=>node&&typeof node==='object'?(Array.isArray(node.children)?node.children.map(labels).join(' '):node.children||''):'';
 for(const area of ['family','teacher']){
@@ -69,3 +70,16 @@ for(const area of ['family','teacher']){
   assert.equal(f.ctx.s.ticket,null,'uma resposta atrasada não preenche o contexto desmontado');
 }
 console.log('Atendimento nos dois portais: histórico, reenvio idempotente, anexos, categorias, canais, encerramento e troca de contexto conferidos.');
+
+{
+  const f=setup('family',{studentId:'aluno',academic:true});
+  f.ctx.showNew();f.ctx.s.form.subject='Edição';f.ctx.s.form.message='Rascunho em andamento.';
+  let answer;
+  f.dialogs.confirm=(_message,options)=>{assert.equal(options.confirmLabel,'Descartar edição');return new Promise(resolve=>{answer=resolve;});};
+  const original=f.ctx.list();
+  assert.equal(f.ctx.s.view,'new');assert.equal(f.calls.length,0);
+  f.ctx.s.form.message='Nova versão do rascunho.';answer(true);await original;
+  assert.equal(f.ctx.s.view,'new');assert.equal(f.calls.length,0,'Uma decisão anterior não descarta uma edição mais recente');
+  const changed=f.ctx.list();f.close();answer(true);await changed;
+  assert.equal(f.calls.length,0,'A confirmação de uma aba desmontada não busca dados do protocolo');
+}

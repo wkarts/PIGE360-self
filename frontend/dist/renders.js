@@ -1188,17 +1188,13 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                     return (_openBlock(), _createElementBlock("p", null, _toDisplayString(warning), 1))
                   }), 256))]))
                 }), 256)),
-                _createElementVNode("label", { class: "x-check" }, [_withDirectives(_createElementVNode("input", {
-                  type: "checkbox",
-                  "onUpdate:modelValue": $event => ((s.confirmed) = $event)
-                }, null, 8, ["onUpdate:modelValue"]), [[_vModelCheckbox, s.confirmed]]), _createTextVNode("Conferi a seleção e autorizo criar as matrículas em preparação")]),
                 _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
                   class: "btn",
                   onClick: $event => (s.step=1)
                 }, "Voltar", 8, ["onClick"]), _createElementVNode("button", {
                   class: "btn btn-primary",
                   onClick: confirm,
-                  disabled: s.plan.blocked>0||!s.confirmed
+                  disabled: s.plan.blocked>0||s.busy
                 }, "Confirmar matrículas", 8, ["onClick", "disabled"])])
               ], 64))
             : _createCommentVNode("", true), (s.step>=3&&s.batch)
@@ -1270,7 +1266,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                             _createElementVNode("label", null, [_createTextVNode("Forma de cobrança"), _withDirectives(_createElementVNode("select", {
                               "onUpdate:modelValue": $event => ((s.collectionMode) = $event),
                               disabled: s.financialSaved
-                            }, [_createElementVNode("option", { value: "manual" }, "Controle interno"), _createTextVNode("Provedor bancário configurado")], 8, ["onUpdate:modelValue", "disabled"]), [[_vModelSelect, s.collectionMode]])]),
+                            }, [_createElementVNode("option", { value: "manual" }, "Controle interno"), _createElementVNode("option", { value: "provider" }, "Provedor bancário configurado")], 8, ["onUpdate:modelValue", "disabled"]), [[_vModelSelect, s.collectionMode]])]),
                             (s.collectionMode==='provider')
                               ? (_openBlock(), _createElementBlock("label", { key: 0 }, [_createTextVNode("Meio bancário"), _withDirectives(_createElementVNode("select", {
                                   "onUpdate:modelValue": $event => ((s.billingType) = $event),
@@ -2399,8 +2395,14 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                                     key: 1,
                                     href: "#/educacenso",
                                     class: _normalizeClass({active:state.page==='educacenso'}),
-                                    onClick: _withModifiers($event => (navigate('educacenso')), ["prevent"])
-                                  }, "Educacenso", 10, ["onClick"]))
+                                    "aria-current": state.page==='educacenso'?'page':undefined,
+                                    onClick: _withModifiers($event => (navigate('educacenso')), ["prevent"]),
+                                    title: "Educacenso"
+                                  }, [(_openBlock(), _createElementBlock("svg", {
+                                    class: "nav-icon",
+                                    "aria-hidden": "true",
+                                    focusable: "false"
+                                  }, [_createElementVNode("use", { href: "/ui-icons.svg#educacenso" })])), _createElementVNode("span", { class: "nav-label" }, "Educacenso")], 10, ["aria-current", "onClick"]))
                                 : _createCommentVNode("", true),
                               (can('connect.manage'))
                                 ? (_openBlock(), _createElementBlock("a", {
@@ -2678,7 +2680,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
               _createElementVNode("button", {
                 type: "button",
                 class: "icon-button",
-                onClick: logout,
+                onClick: requestLogout,
                 title: "Sair",
                 "aria-label": "Sair"
               }, [(_openBlock(), _createElementBlock("svg", {
@@ -5814,21 +5816,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                   onSubmit: _withModifiers($event => (saveModal()), ["prevent"]),
                   class: "modal-form",
                   novalidate: ""
-                }, [(state.discardChanges)
-                  ? (_openBlock(), _createElementBlock("div", {
-                      key: 0,
-                      class: "discard-banner",
-                      role: "alert"
-                    }, [_createElementVNode("span", null, "Existem alterações não salvas. Deseja descartá-las?"), _createElementVNode("button", {
-                      type: "button",
-                      class: "btn btn-secondary",
-                      onClick: $event => (state.discardChanges=false)
-                    }, "Continuar editando", 8, ["onClick"]), _createElementVNode("button", {
-                      type: "button",
-                      class: "btn btn-danger",
-                      onClick: $event => (closeModal(true))
-                    }, "Descartar alterações", 8, ["onClick"])]))
-                  : _createCommentVNode("", true), _createElementVNode("div", { class: _normalizeClass(["modal-workspace", {sectioned:modalSections().length>1 && !isEnrollmentForm(),'enrollment-workspace':isEnrollmentForm()}]) }, [(modalSections().length>1 && !isEnrollmentForm())
+                }, [_createElementVNode("div", { class: _normalizeClass(["modal-workspace", {sectioned:modalSections().length>1 && !isEnrollmentForm(),'enrollment-workspace':isEnrollmentForm()}]) }, [(modalSections().length>1 && !isEnrollmentForm())
                   ? (_openBlock(), _createElementBlock("nav", {
                       key: 0,
                       class: "form-section-nav",
@@ -8578,24 +8566,18 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
               return (_openBlock(), _createElementBlock("div", {
                 key: group.id,
                 class: "portal-rail-group"
-              }, [(rail.enabled())
-                ? (_openBlock(), _createElementBlock("button", {
-                    key: 0,
-                    type: "button",
-                    class: _normalizeClass(["portal-rail-trigger", {active:group.items.some(item=>item.id===s.section)}]),
-                    "data-rail-trigger": "",
-                    "aria-label": group.label,
-                    title: group.label,
-                    "aria-controls": group.id,
-                    "aria-expanded": rail.state.active===group.id
-                  }, [(_openBlock(), _createElementBlock("svg", {
-                    class: "ui-icon",
-                    "aria-hidden": "true"
-                  }, [_createElementVNode("use", { href: '/ui-icons.svg#'+group.icon }, null, 8, ["href"])]))], 10, ["aria-label", "title", "aria-controls", "aria-expanded"]))
-                : (_openBlock(), _createElementBlock("p", {
-                    key: 1,
-                    class: "family-nav-label"
-                  }, _toDisplayString(group.label), 1)), _withDirectives(_createElementVNode("nav", {
+              }, [_withDirectives(_createElementVNode("button", {
+                type: "button",
+                class: _normalizeClass(["portal-rail-trigger", {active:group.items.some(item=>item.id===s.section)}]),
+                "data-rail-trigger": "",
+                "aria-label": group.label,
+                title: group.label,
+                "aria-controls": group.id,
+                "aria-expanded": rail.state.active===group.id
+              }, [(_openBlock(), _createElementBlock("svg", {
+                class: "ui-icon",
+                "aria-hidden": "true"
+              }, [_createElementVNode("use", { href: '/ui-icons.svg#'+group.icon }, null, 8, ["href"])]))], 10, ["aria-label", "title", "aria-controls", "aria-expanded"]), [[_vShow, rail.enabled()]]), _withDirectives(_createElementVNode("p", { class: "family-nav-label" }, _toDisplayString(group.label), 513), [[_vShow, !rail.enabled()]]), _withDirectives(_createElementVNode("nav", {
                 id: group.id,
                 "aria-label": group.label,
                 class: "sidebar-flyout",
@@ -8611,12 +8593,13 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                   ? (_openBlock(), _createElementBlock("a", {
                       key: 0,
                       href: "/online",
+                      onClick: openRegistration,
                       title: item.label,
                       "aria-label": item.label
                     }, [(_openBlock(), _createElementBlock("svg", {
                       class: "ui-icon",
                       "aria-hidden": "true"
-                    }, [_createElementVNode("use", { href: '/ui-icons.svg#'+item.icon }, null, 8, ["href"])])), _createElementVNode("span", null, _toDisplayString(item.label) + " ↗", 1)], 8, ["title", "aria-label"]))
+                    }, [_createElementVNode("use", { href: '/ui-icons.svg#'+item.icon }, null, 8, ["href"])])), _createElementVNode("span", null, _toDisplayString(item.label) + " ↗", 1)], 8, ["onClick", "title", "aria-label"]))
                   : (_openBlock(), _createElementBlock("button", {
                       key: 1,
                       type: "button",
@@ -9432,28 +9415,13 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                                                                   onClick: autoPix.refresh
                                                                 }, "Atualizar situação", 8, ["disabled", "onClick"]),
                                                                 (['CREATED','ACTIVE'].includes(autoPix.state.view.authorization.status))
-                                                                  ? (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [(!autoPix.state.confirmCancel)
-                                                                      ? (_openBlock(), _createElementBlock("button", {
-                                                                          key: 0,
-                                                                          type: "button",
-                                                                          class: "btn btn-secondary",
-                                                                          onClick: $event => (autoPix.state.confirmCancel=true)
-                                                                        }, "Cancelar autorização", 8, ["onClick"]))
-                                                                      : (_openBlock(), _createElementBlock("div", { key: 1 }, [
-                                                                          _createElementVNode("p", null, "Deseja interromper os próximos débitos? Os pagamentos já enviados dependem de confirmação bancária."),
-                                                                          _createElementVNode("button", {
-                                                                            type: "button",
-                                                                            class: "btn btn-secondary",
-                                                                            disabled: autoPix.state.busy,
-                                                                            onClick: autoPix.cancel
-                                                                          }, "Confirmar cancelamento", 8, ["disabled", "onClick"]),
-                                                                          _createTextVNode(),
-                                                                          _createElementVNode("button", {
-                                                                            type: "button",
-                                                                            class: "btn btn-secondary",
-                                                                            onClick: $event => (autoPix.state.confirmCancel=false)
-                                                                          }, "Voltar", 8, ["onClick"])
-                                                                        ]))], 64))
+                                                                  ? (_openBlock(), _createElementBlock("button", {
+                                                                      key: 2,
+                                                                      type: "button",
+                                                                      class: "btn btn-secondary",
+                                                                      disabled: autoPix.state.busy || autoPix.state.confirmCancel,
+                                                                      onClick: autoPix.cancel
+                                                                    }, "Cancelar autorização", 8, ["disabled", "onClick"]))
                                                                   : _createCommentVNode("", true)
                                                               ], 64))
                                                             : (!autoPix.state.view.can_enroll)
@@ -9916,24 +9884,18 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
               return (_openBlock(), _createElementBlock("div", {
                 key: group.id,
                 class: "portal-rail-group"
-              }, [(rail.enabled())
-                ? (_openBlock(), _createElementBlock("button", {
-                    key: 0,
-                    type: "button",
-                    class: _normalizeClass(["portal-rail-trigger", {active:group.items.some(item=>item.id===s.section)}]),
-                    "data-rail-trigger": "",
-                    "aria-label": group.label,
-                    title: group.label,
-                    "aria-controls": group.id,
-                    "aria-expanded": rail.state.active===group.id
-                  }, [(_openBlock(), _createElementBlock("svg", {
-                    class: "ui-icon",
-                    "aria-hidden": "true"
-                  }, [_createElementVNode("use", { href: '/ui-icons.svg#'+group.icon }, null, 8, ["href"])]))], 10, ["aria-label", "title", "aria-controls", "aria-expanded"]))
-                : (_openBlock(), _createElementBlock("p", {
-                    key: 1,
-                    class: "family-nav-label"
-                  }, _toDisplayString(group.label), 1)), _withDirectives(_createElementVNode("nav", {
+              }, [_withDirectives(_createElementVNode("button", {
+                type: "button",
+                class: _normalizeClass(["portal-rail-trigger", {active:group.items.some(item=>item.id===s.section)}]),
+                "data-rail-trigger": "",
+                "aria-label": group.label,
+                title: group.label,
+                "aria-controls": group.id,
+                "aria-expanded": rail.state.active===group.id
+              }, [(_openBlock(), _createElementBlock("svg", {
+                class: "ui-icon",
+                "aria-hidden": "true"
+              }, [_createElementVNode("use", { href: '/ui-icons.svg#'+group.icon }, null, 8, ["href"])]))], 10, ["aria-label", "title", "aria-controls", "aria-expanded"]), [[_vShow, rail.enabled()]]), _withDirectives(_createElementVNode("p", { class: "family-nav-label" }, _toDisplayString(group.label), 513), [[_vShow, !rail.enabled()]]), _withDirectives(_createElementVNode("nav", {
                 id: group.id,
                 "aria-label": group.label,
                 class: "sidebar-flyout",
@@ -10684,34 +10646,58 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
         : _createCommentVNode("", true)
     ], 8, ["aria-busy", "data-workspace-dirty"]))
   }
-},confirmTabs:function render(_ctx, _cache) {
+},actionDialog:function render(_ctx, _cache) {
   with (_ctx) {
-    const { createElementVNode: _createElementVNode, toDisplayString: _toDisplayString, createTextVNode: _createTextVNode, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, withModifiers: _withModifiers } = _Vue
+    const { toDisplayString: _toDisplayString, createElementVNode: _createElementVNode, vModelText: _vModelText, withModifiers: _withModifiers, withKeys: _withKeys, withDirectives: _withDirectives, createTextVNode: _createTextVNode, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, normalizeClass: _normalizeClass } = _Vue
 
     return (_openBlock(), _createElementBlock("dialog", {
       class: "work-close-dialog",
-      "aria-labelledby": "work-close-heading",
-      "aria-describedby": "work-close-description",
+      "aria-labelledby": "pige-dialog-heading",
+      "aria-describedby": "pige-dialog-message",
       onCancel: _withModifiers($event => (finish(false)), ["prevent"]),
       onClose: $event => (finish(false))
-    }, [_createElementVNode("header", null, [_createElementVNode("h2", { id: "work-close-heading" }, "Fechar as outras guias?"), _createElementVNode("button", {
+    }, [_createElementVNode("header", null, [_createElementVNode("h2", { id: "pige-dialog-heading" }, _toDisplayString(title), 1), _createElementVNode("button", {
       type: "button",
       class: "work-close-dismiss",
       "aria-label": "Fechar aviso",
       onClick: $event => (finish(false))
-    }, "×", 8, ["onClick"])]), _createElementVNode("div", { id: "work-close-description" }, [_createElementVNode("p", null, "A guia " + _toDisplayString(home) + " permanecerá aberta. As outras guias serão fechadas. Alterações e preenchimentos ainda não salvos nessas guias serão descartados. Os dados já salvos serão preservados.", 1), (drafts.length)
-      ? (_openBlock(), _createElementBlock("p", { key: 0 }, [_createElementVNode("strong", null, "Confira antes de fechar"), _createTextVNode(" · " + _toDisplayString(drafts.join(', ')) + ".", 1)]))
-      : _createCommentVNode("", true)]), _createElementVNode("footer", null, [_createElementVNode("button", {
-      type: "button",
-      class: "btn btn-secondary",
-      "data-work-close-back": "",
-      autofocus: "",
-      onClick: $event => (finish(false))
-    }, "Voltar", 8, ["onClick"]), _createElementVNode("button", {
-      type: "button",
-      class: "btn work-close-confirm",
-      onClick: $event => (finish(true))
-    }, "Fechar outras guias", 8, ["onClick"])])], 40, ["onCancel", "onClose"]))
+    }, "×", 8, ["onClick"])]), _createElementVNode("form", {
+      novalidate: "",
+      onSubmit: _withModifiers($event => (finish(true)), ["prevent"])
+    }, [_createElementVNode("div", { class: "pige-dialog-body" }, [_createElementVNode("p", { id: "pige-dialog-message" }, _toDisplayString(message), 1), (kind==='prompt')
+      ? (_openBlock(), _createElementBlock("label", {
+          key: 0,
+          class: "pige-dialog-input"
+        }, [_createTextVNode(_toDisplayString(inputLabel) + " ", 1), _withDirectives(_createElementVNode("textarea", {
+          "onUpdate:modelValue": $event => ((state.value) = $event),
+          rows: "3",
+          minlength: minimum || undefined,
+          maxlength: maximum,
+          required: minimum>0,
+          "aria-invalid": state.error ? 'true' : undefined,
+          "aria-describedby": state.error ? 'pige-dialog-error' : undefined,
+          onInput: $event => (state.error=''),
+          onKeydown: [_withKeys(_withModifiers($event => (finish(true)), ["ctrl","prevent"]), ["enter"]), _withKeys(_withModifiers($event => (finish(true)), ["meta","prevent"]), ["enter"])]
+        }, null, 40, ["onUpdate:modelValue", "minlength", "maxlength", "required", "aria-invalid", "aria-describedby", "onInput", "onKeydown"]), [[_vModelText, state.value]])]))
+      : _createCommentVNode("", true), (state.error)
+      ? (_openBlock(), _createElementBlock("p", {
+          key: 1,
+          id: "pige-dialog-error",
+          class: "pige-dialog-error",
+          role: "alert"
+        }, _toDisplayString(state.error), 1))
+      : _createCommentVNode("", true)]), _createElementVNode("footer", null, [(kind!=='alert')
+      ? (_openBlock(), _createElementBlock("button", {
+          key: 0,
+          type: "button",
+          class: "btn btn-secondary",
+          "data-dialog-back": "",
+          onClick: $event => (finish(false))
+        }, _toDisplayString(cancelLabel), 9, ["onClick"]))
+      : _createCommentVNode("", true), _createElementVNode("button", {
+      type: "submit",
+      class: _normalizeClass(["btn", destructive?'work-close-confirm':'btn-primary'])
+    }, _toDisplayString(confirmLabel), 3)])], 40, ["onSubmit"])], 40, ["onCancel", "onClose"]))
   }
 },expansion:function render(_ctx, _cache) {
   with (_ctx) {
@@ -11908,21 +11894,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
             }, "×", 8, ["disabled", "onClick"])]), _createElementVNode("form", {
               class: "modal-form",
               onSubmit: _withModifiers(createCharge, ["prevent"])
-            }, [(s.discardCharge)
-              ? (_openBlock(), _createElementBlock("div", {
-                  key: 0,
-                  class: "discard-banner",
-                  role: "alert"
-                }, [_createElementVNode("span", null, "Existem alterações não salvas nesta cobrança."), _createElementVNode("button", {
-                  type: "button",
-                  class: "btn btn-secondary",
-                  onClick: $event => (s.discardCharge=false)
-                }, "Continuar editando", 8, ["onClick"]), _createElementVNode("button", {
-                  type: "button",
-                  class: "btn btn-danger",
-                  onClick: $event => (closeCharge(true))
-                }, "Descartar alterações", 8, ["onClick"])]))
-              : _createCommentVNode("", true), _createElementVNode("div", { class: "modal-workspace" }, [_createElementVNode("div", { class: "modal-body" }, [(s.error)
+            }, [_createElementVNode("div", { class: "modal-workspace" }, [_createElementVNode("div", { class: "modal-body" }, [(s.error)
               ? (_openBlock(), _createElementBlock("div", {
                   key: 0,
                   class: "alert error",
@@ -12339,33 +12311,12 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                     key: 0,
                     class: "panel x-card",
                     "aria-label": "Revisão de vínculos do WhatsApp"
-                  }, [_createElementVNode("h3", null, "Vínculo anterior precisa de revisão"), _createElementVNode("p", null, "O vínculo antigo não permite identificar uma única instituição responsável. Remova os vínculos desta instituição e depois vincule a instância pelo nome na instituição responsável."), (!s.connectLegacyConfirm)
-                    ? (_openBlock(), _createElementBlock("button", {
-                        key: 0,
-                        type: "button",
-                        class: "btn btn-secondary",
-                        onClick: $event => (s.connectLegacyConfirm=true),
-                        disabled: s.busy
-                      }, "Revisar vínculo anterior", 8, ["onClick", "disabled"]))
-                    : (_openBlock(), _createElementBlock("form", {
-                        key: 1,
-                        class: "x-form",
-                        onSubmit: _withModifiers(connectReleaseLegacy, ["prevent"])
-                      }, [_createElementVNode("label", null, [_createTextVNode("Motivo da desvinculação"), _withDirectives(_createElementVNode("textarea", {
-                        "onUpdate:modelValue": $event => ((s.connectLegacyReason) = $event),
-                        minlength: "5",
-                        maxlength: "1000",
-                        rows: "2",
-                        required: ""
-                      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.connectLegacyReason]])]), _createElementVNode("p", { class: "muted" }, "Apenas os vínculos desta instituição serão removidos. A instância no WhatsApp e os vínculos de outras instituições serão preservados."), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
-                        type: "button",
-                        class: "btn btn-secondary",
-                        onClick: $event => (s.connectLegacyConfirm=false),
-                        disabled: s.busy
-                      }, "Cancelar", 8, ["onClick", "disabled"]), _createElementVNode("button", {
-                        class: "btn btn-danger",
-                        disabled: s.busy||s.connectLegacyReason.trim().length<5
-                      }, "Confirmar desvinculação", 8, ["disabled"])])], 40, ["onSubmit"]))]))
+                  }, [_createElementVNode("h3", null, "Vínculo anterior precisa de revisão"), _createElementVNode("p", null, "O vínculo antigo não permite identificar uma única instituição responsável. Remova os vínculos desta instituição e depois vincule a instância pelo nome na instituição responsável."), _createElementVNode("button", {
+                    type: "button",
+                    class: "btn btn-secondary",
+                    onClick: connectReleaseLegacy,
+                    disabled: s.busy
+                  }, "Revisar vínculo anterior", 8, ["onClick", "disabled"])]))
                 : _createCommentVNode("", true),
               (s.connectInventoryLoaded)
                 ? (_openBlock(), _createElementBlock("section", {
@@ -14443,85 +14394,60 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
               ? (_openBlock(), _createElementBlock("section", {
                   key: 1,
                   class: "panel x-card"
+                }, [_createElementVNode("h2", {
+                  id: "diary-component-heading",
+                  tabindex: "-1"
+                }, "Componentes curriculares"), _createElementVNode("form", {
+                  class: "x-form",
+                  onSubmit: _withModifiers($event => (save(createComponent)), ["prevent"])
                 }, [
-                  _createElementVNode("h2", {
-                    id: "diary-component-heading",
-                    tabindex: "-1"
-                  }, "Componentes curriculares"),
-                  _createElementVNode("form", {
-                    class: "x-form",
-                    onSubmit: _withModifiers($event => (save(createComponent)), ["prevent"])
-                  }, [
-                    _createElementVNode("label", null, [_createTextVNode("Nome"), _withDirectives(_createElementVNode("input", {
-                      "onUpdate:modelValue": $event => ((state.componentForm.name) = $event),
-                      required: "",
-                      maxlength: "120",
-                      placeholder: "Ex.: Língua Portuguesa"
-                    }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.componentForm.name]])]),
-                    _createElementVNode("label", null, [_createTextVNode("Código"), _withDirectives(_createElementVNode("input", {
-                      "onUpdate:modelValue": $event => ((state.componentForm.code) = $event),
-                      maxlength: "40"
-                    }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.componentForm.code]])]),
-                    _createElementVNode("label", null, [_createTextVNode("Carga horária"), _withDirectives(_createElementVNode("input", {
-                      type: "number",
-                      min: "0",
-                      "onUpdate:modelValue": $event => ((state.componentForm.workload_hours) = $event)
-                    }, null, 8, ["onUpdate:modelValue"]), [[
-                      _vModelText,
-                      state.componentForm.workload_hours,
-                      void 0,
-                      { number: true }
-                    ]])]),
-                    _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", { class: "btn btn-primary" }, _toDisplayString(state.componentEditing?'Salvar alterações':'Criar componente'), 1), (state.componentEditing)
-                      ? (_openBlock(), _createElementBlock("button", {
-                          key: 0,
-                          type: "button",
-                          class: "btn btn-secondary",
-                          onClick: resetComponent
-                        }, "Cancelar edição", 8, ["onClick"]))
-                      : _createCommentVNode("", true)])
-                  ], 40, ["onSubmit"]),
-                  _createElementVNode("div", { class: "x-list" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.components, (c) => {
-                    return (_openBlock(), _createElementBlock("div", {
-                      key: c.id,
-                      class: "x-record"
-                    }, [_createElementVNode("strong", null, _toDisplayString(c.name), 1), _createElementVNode("span", null, _toDisplayString(c.code||'Sem código') + " · " + _toDisplayString(c.workload_hours||0) + "h · " + _toDisplayString(c.active?'Ativo':'Inativo'), 1), (c.active)
-                      ? (_openBlock(), _createElementBlock("div", {
-                          key: 0,
-                          class: "actions"
-                        }, [_createElementVNode("button", {
-                          class: "btn btn-secondary",
-                          "aria-label": 'Editar '+c.name,
-                          onClick: $event => (editComponent(c))
-                        }, "Editar", 8, ["aria-label", "onClick"]), _createElementVNode("button", {
-                          class: "btn btn-secondary",
-                          "aria-label": 'Retirar '+c.name,
-                          onClick: $event => {state.removalTarget=c;state.removalReason=''}
-                        }, "Retirar", 8, ["aria-label", "onClick"])]))
-                      : _createCommentVNode("", true)]))
-                  }), 128))]),
-                  (state.removalTarget)
-                    ? (_openBlock(), _createElementBlock("form", {
+                  _createElementVNode("label", null, [_createTextVNode("Nome"), _withDirectives(_createElementVNode("input", {
+                    "onUpdate:modelValue": $event => ((state.componentForm.name) = $event),
+                    required: "",
+                    maxlength: "120",
+                    placeholder: "Ex.: Língua Portuguesa"
+                  }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.componentForm.name]])]),
+                  _createElementVNode("label", null, [_createTextVNode("Código"), _withDirectives(_createElementVNode("input", {
+                    "onUpdate:modelValue": $event => ((state.componentForm.code) = $event),
+                    maxlength: "40"
+                  }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.componentForm.code]])]),
+                  _createElementVNode("label", null, [_createTextVNode("Carga horária"), _withDirectives(_createElementVNode("input", {
+                    type: "number",
+                    min: "0",
+                    "onUpdate:modelValue": $event => ((state.componentForm.workload_hours) = $event)
+                  }, null, 8, ["onUpdate:modelValue"]), [[
+                    _vModelText,
+                    state.componentForm.workload_hours,
+                    void 0,
+                    { number: true }
+                  ]])]),
+                  _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", { class: "btn btn-primary" }, _toDisplayString(state.componentEditing?'Salvar alterações':'Criar componente'), 1), (state.componentEditing)
+                    ? (_openBlock(), _createElementBlock("button", {
                         key: 0,
-                        class: "x-form",
-                        onSubmit: _withModifiers($event => (save(removeComponent)), ["prevent"])
-                      }, [
-                        _createElementVNode("h3", null, "Retirar " + _toDisplayString(state.removalTarget.name), 1),
-                        _createElementVNode("p", null, "Componentes vinculados a registros serão desativados. Componentes sem vínculos serão excluídos."),
-                        _createElementVNode("label", null, [_createTextVNode("Justificativa"), _withDirectives(_createElementVNode("textarea", {
-                          "onUpdate:modelValue": $event => ((state.removalReason) = $event),
-                          required: "",
-                          minlength: "3",
-                          maxlength: "1000"
-                        }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.removalReason]])]),
-                        _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", { class: "btn btn-primary" }, "Confirmar retirada"), _createElementVNode("button", {
-                          type: "button",
-                          class: "btn btn-secondary",
-                          onClick: $event => (state.removalTarget=null)
-                        }, "Cancelar", 8, ["onClick"])])
-                      ], 40, ["onSubmit"]))
-                    : _createCommentVNode("", true)
-                ]))
+                        type: "button",
+                        class: "btn btn-secondary",
+                        onClick: resetComponent
+                      }, "Cancelar edição", 8, ["onClick"]))
+                    : _createCommentVNode("", true)])
+                ], 40, ["onSubmit"]), _createElementVNode("div", { class: "x-list" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.components, (c) => {
+                  return (_openBlock(), _createElementBlock("div", {
+                    key: c.id,
+                    class: "x-record"
+                  }, [_createElementVNode("strong", null, _toDisplayString(c.name), 1), _createElementVNode("span", null, _toDisplayString(c.code||'Sem código') + " · " + _toDisplayString(c.workload_hours||0) + "h · " + _toDisplayString(c.active?'Ativo':'Inativo'), 1), (c.active)
+                    ? (_openBlock(), _createElementBlock("div", {
+                        key: 0,
+                        class: "actions"
+                      }, [_createElementVNode("button", {
+                        class: "btn btn-secondary",
+                        "aria-label": 'Editar '+c.name,
+                        onClick: $event => (editComponent(c))
+                      }, "Editar", 8, ["aria-label", "onClick"]), _createElementVNode("button", {
+                        class: "btn btn-secondary",
+                        "aria-label": 'Retirar '+c.name,
+                        onClick: $event => (removeComponent(c))
+                      }, "Retirar", 8, ["aria-label", "onClick"])]))
+                    : _createCommentVNode("", true)]))
+                }), 128))])]))
               : _createCommentVNode("", true)]),
             (show('components'))
               ? (_openBlock(), _createElementBlock("section", {
@@ -15003,30 +14929,10 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                             key: 1,
                             type: "button",
                             class: "btn btn-secondary",
-                            onClick: $event => (state.lessonRemoval=true)
+                            onClick: removeLesson
                           }, "Remover aula", 8, ["onClick"]))
                         : _createCommentVNode("", true)])
-                    ], 40, ["onSubmit"]), (state.lessonRemoval && state.lessonEditing)
-                      ? (_openBlock(), _createElementBlock("form", {
-                          key: 0,
-                          class: "x-form",
-                          onSubmit: _withModifiers($event => (save(removeLesson)), ["prevent"])
-                        }, [
-                          _createElementVNode("h3", null, "Remover aula de " + _toDisplayString(date(state.lessonEditing.lesson_date)), 1),
-                          _createElementVNode("p", null, "Somente aulas sem chamada e sem fechamento anterior podem ser removidas."),
-                          _createElementVNode("label", null, [_createTextVNode("Justificativa"), _withDirectives(_createElementVNode("textarea", {
-                            "onUpdate:modelValue": $event => ((state.lessonRemovalReason) = $event),
-                            required: "",
-                            minlength: "3",
-                            maxlength: "1000"
-                          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.lessonRemovalReason]])]),
-                          _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", { class: "btn btn-primary" }, "Confirmar remoção da aula"), _createElementVNode("button", {
-                            type: "button",
-                            class: "btn btn-secondary",
-                            onClick: $event => {state.lessonRemoval=false;state.lessonRemovalReason=''}
-                          }, "Cancelar remoção", 8, ["onClick"])])
-                        ], 40, ["onSubmit"]))
-                      : _createCommentVNode("", true)]))
+                    ], 40, ["onSubmit"])]))
                   : _createCommentVNode("", true),
                 (show('diaries','attendance'))
                   ? (_openBlock(), _createElementBlock("section", {
@@ -15901,149 +15807,440 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
   }
 },educacenso:function render(_ctx, _cache) {
   with (_ctx) {
-    const { createElementVNode: _createElementVNode, toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, vModelSelect: _vModelSelect, withDirectives: _withDirectives, createTextVNode: _createTextVNode, renderList: _renderList, Fragment: _Fragment, vModelText: _vModelText, withModifiers: _withModifiers } = _Vue
+    const { createElementVNode: _createElementVNode, toDisplayString: _toDisplayString, vModelSelect: _vModelSelect, withDirectives: _withDirectives, createTextVNode: _createTextVNode, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, renderList: _renderList, Fragment: _Fragment, vModelText: _vModelText, withModifiers: _withModifiers, withKeys: _withKeys } = _Vue
 
     return (_openBlock(), _createElementBlock("section", {
-      class: "panel x-card",
-      "aria-label": "Educacenso"
+      class: "educacenso-workspace",
+      "aria-label": "Preparação do Educacenso",
+      "data-workspace-dirty": editDirty || !!state.file,
+      "aria-busy": state.busy
+    }, [_createElementVNode("fieldset", {
+      disabled: state.busy,
+      class: "educacenso-controls"
     }, [
-      _createElementVNode("h2", null, "Educacenso"),
-      _createElementVNode("p", null, _toDisplayString(props.schoolName), 1),
-      (state.error)
+      _createElementVNode("header", { class: "panel censo-header" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Preparação da coleta"), _createElementVNode("p", null, "Confira os dados de " + _toDisplayString(props.schoolName) + " na data de referência e guarde as revisões da declaração.", 1)]), _createElementVNode("label", null, [_createTextVNode("Ambiente do lote"), _withDirectives(_createElementVNode("select", {
+        "onUpdate:modelValue": $event => ((state.environment) = $event),
+        disabled: !!state.editing || !!state.file,
+        onChange: changeEnvironment
+      }, [_createElementVNode("option", { value: "treinamento" }, "Treinamento"), _createElementVNode("option", { value: "producao" }, "Preparação da declaração oficial")], 40, ["onUpdate:modelValue", "disabled", "onChange"]), [[_vModelSelect, state.environment]])])]),
+      _createElementVNode("nav", {
+        class: "censo-tabs",
+        "aria-label": "Etapas de preparação"
+      }, [_createElementVNode("button", {
+        type: "button",
+        "aria-current": state.tab==='prepare'?'page':null,
+        disabled: !!state.editing || !!state.file,
+        onClick: $event => (openTab('prepare'))
+      }, "Dados a declarar", 8, ["aria-current", "disabled", "onClick"]), _createElementVNode("button", {
+        type: "button",
+        "aria-current": state.tab==='history'?'page':null,
+        disabled: !!state.editing || !!state.file,
+        onClick: $event => (openTab('history'))
+      }, "Histórico", 8, ["aria-current", "disabled", "onClick"]), (state.draft)
+        ? (_openBlock(), _createElementBlock("button", {
+            key: 0,
+            type: "button",
+            "aria-current": state.tab==='detail'?'page':null,
+            onClick: $event => (openTab('detail'))
+          }, "Rascunho", 8, ["aria-current", "onClick"]))
+        : _createCommentVNode("", true)]),
+      ((state.error||state.conflict) && !state.editing)
         ? (_openBlock(), _createElementBlock("div", {
             key: 0,
-            role: "alert",
-            class: "alert error"
-          }, _toDisplayString(state.error), 1))
+            class: "alert error",
+            role: "alert"
+          }, [_createTextVNode(_toDisplayString(state.error||'Atualize o rascunho para conferir a revisão atual.') + " ", 1), (state.conflict && state.draft)
+            ? (_openBlock(), _createElementBlock("button", {
+                key: 0,
+                type: "button",
+                class: "btn btn-secondary",
+                onClick: reloadDraft
+              }, "Atualizar rascunho", 8, ["onClick"]))
+            : _createCommentVNode("", true)]))
         : _createCommentVNode("", true),
-      _createElementVNode("fieldset", {
-        class: "portal-fieldset",
-        disabled: state.busy
-      }, [
-        _createElementVNode("label", null, [_createTextVNode("Ambiente do lote"), _withDirectives(_createElementVNode("select", {
-          "onUpdate:modelValue": $event => ((state.environment) = $event),
-          onChange: changeEnvironment
-        }, [_createElementVNode("option", { value: "treinamento" }, "Treinamento"), _createElementVNode("option", { value: "producao" }, "Preparação da declaração oficial")], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.environment]])]),
-        _createElementVNode("p", null, "Confira a declaração existente antes da migração. Um envio pode substituir dados já declarados. A exportação exige leiaute e domínios validados para o ano e a etapa."),
-        _createElementVNode("div", { class: "tabs" }, [_createElementVNode("button", { onClick: $event => (state.tab='prepare') }, "Dados a declarar", 8, ["onClick"]), _createElementVNode("button", { onClick: $event => (state.tab='history') }, "Histórico", 8, ["onClick"])]),
-        (state.tab==='prepare')
-          ? (_openBlock(), _createElementBlock("form", {
-              key: 0,
-              onSubmit: _withModifiers(preview, ["prevent"]),
-              class: "x-form",
-              onChange: reset
-            }, [
-              _createElementVNode("label", null, [_createTextVNode("Etapa"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.stage) = $event) }, [_createElementVNode("option", { value: "matricula_inicial" }, "Matrícula Inicial"), _createElementVNode("option", { value: "situacao_aluno" }, "Situação do Aluno")], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.stage]])]),
-              _createElementVNode("label", null, [_createTextVNode("Ano letivo"), _withDirectives(_createElementVNode("select", {
-                "onUpdate:modelValue": $event => ((state.year) = $event),
-                onChange: $event => (state.group=''),
-                required: ""
-              }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.years, (year) => {
-                return (_openBlock(), _createElementBlock("option", {
-                  key: year.id,
-                  value: year.id
-                }, _toDisplayString(year.name), 9, ["value"]))
-              }), 128))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.year]])]),
-              _createElementVNode("label", null, [_createTextVNode("Data de referência"), _withDirectives(_createElementVNode("input", {
-                type: "date",
-                "onUpdate:modelValue": $event => ((state.day) = $event),
-                required: ""
-              }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.day]])]),
-              _createElementVNode("label", null, [_createTextVNode("Turma"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.group) = $event) }, [_createElementVNode("option", { value: "" }, "Todas as turmas do ano"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.groups.filter(g=>g.academic_year_id===state.year), (g) => {
-                return (_openBlock(), _createElementBlock("option", {
-                  key: g.id,
-                  value: g.id
-                }, _toDisplayString(g.name), 9, ["value"]))
-              }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.group]])]),
-              _createElementVNode("button", { class: "btn btn-primary" }, "Validar prévia")
-            ], 40, ["onSubmit", "onChange"]))
-          : _createCommentVNode("", true),
-        (state.tab==='history')
-          ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
-              _createElementVNode("h3", null, "Histórico de rascunhos"),
-              (!state.history.length)
-                ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Nenhum rascunho nesta página."))
-                : _createCommentVNode("", true),
-              _createElementVNode("div", { class: "x-list" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.history, (item) => {
-                return (_openBlock(), _createElementBlock("button", {
-                  class: "x-record",
-                  key: item.id,
-                  onClick: $event => (open(item.id))
-                }, _toDisplayString(stageLabel(item.stage)) + " · " + _toDisplayString(item.reference_date) + " · " + _toDisplayString(item.digest.slice(0,12)), 9, ["onClick"]))
-              }), 128))]),
-              _createElementVNode("button", {
-                disabled: state.offset===0,
-                onClick: $event => (page(-50))
-              }, "Anterior", 8, ["disabled", "onClick"]),
-              _createElementVNode("button", {
-                disabled: state.history.length!==50,
-                onClick: $event => (page(50))
-              }, "Próxima", 8, ["disabled", "onClick"])
-            ], 64))
-          : _createCommentVNode("", true),
-        ((state.tab==='prepare' && state.preview) || (state.tab==='detail' && state.draft))
-          ? (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList([state.tab==='detail'?state.draft.snapshot:state.preview], (snap) => {
-              return (_openBlock(), _createElementBlock("section", { key: state.tab }, [
-                _createElementVNode("h3", null, _toDisplayString(state.tab==='detail'?'Rascunho do lote':'Prévia da seleção'), 1),
-                (snap.replacement_rule==='substitui_declaracao_da_escola')
-                  ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Nesta coleta, a importação substitui a declaração da escola. Confira a cobertura de todos os alunos antes de enviar pelo Educacenso."))
-                  : (_openBlock(), _createElementBlock("p", { key: 1 }, "Regra de substituição pendente de confirmação para este ano e etapa.")),
-                _createElementVNode("p", null, _toDisplayString(snap.rows.length) + " matrícula(s) na data de referência.", 1),
-                _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(snap.blocks, (block) => {
-                  return (_openBlock(), _createElementBlock("li", { key: block }, _toDisplayString(reasons[block]||block), 1))
-                }), 128))]),
-                _createElementVNode("a", {
-                  href: snap.official_source,
-                  target: "_blank",
-                  rel: "noopener noreferrer"
-                }, "Consultar orientações oficiais do Inep", 8, ["href"]),
-                _createElementVNode("details", null, [_createElementVNode("summary", null, "Conferir matrículas e turmas"), _createElementVNode("table", null, [_createElementVNode("thead", null, [_createElementVNode("tr", null, [_createElementVNode("th", null, "Matrícula (ID local)"), _createElementVNode("th", null, "Turma"), _createElementVNode("th", null, "Situação local")])]), _createElementVNode("tbody", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(snap.rows.slice(0,state.visibleRows), (row) => {
-                  return (_openBlock(), _createElementBlock("tr", { key: row.enrollment_id }, [_createElementVNode("td", null, _toDisplayString(row.enrollment_id), 1), _createElementVNode("td", null, _toDisplayString(state.groups.find(g=>g.id===row.class_group_id)?.name||row.class_group_id), 1), _createElementVNode("td", null, _toDisplayString(row.local_status), 1)]))
-                }), 128))])]), (state.visibleRows<snap.rows.length)
-                  ? (_openBlock(), _createElementBlock("button", {
-                      key: 0,
-                      onClick: $event => (state.visibleRows+=25)
-                    }, "Mostrar mais 25", 8, ["onClick"]))
-                  : _createCommentVNode("", true)])
-              ]))
-            }), 128)), (state.tab==='prepare')
-              ? (_openBlock(), _createElementBlock("button", {
+      (state.notice)
+        ? (_openBlock(), _createElementBlock("p", {
+            key: 1,
+            class: "censo-notice",
+            role: "status"
+          }, _toDisplayString(state.notice), 1))
+        : _createCommentVNode("", true),
+      (state.tab==='prepare')
+        ? (_openBlock(), _createElementBlock("section", {
+            key: 2,
+            class: "panel censo-panel"
+          }, [_createElementVNode("h3", null, "Seleção da coleta"), _createElementVNode("form", { onSubmit: _withModifiers(preview, ["prevent"]) }, [_createElementVNode("div", { class: "censo-fields" }, [
+            _createElementVNode("label", null, [_createTextVNode("Etapa"), _withDirectives(_createElementVNode("select", {
+              "onUpdate:modelValue": $event => ((state.stage) = $event),
+              onChange: resetFilters
+            }, [_createElementVNode("option", { value: "matricula_inicial" }, "Matrícula Inicial"), _createElementVNode("option", { value: "situacao_aluno" }, "Situação do Aluno")], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.stage]])]),
+            _createElementVNode("label", null, [_createTextVNode("Ano letivo"), _withDirectives(_createElementVNode("select", {
+              "onUpdate:modelValue": $event => ((state.year) = $event),
+              required: "",
+              onChange: yearChanged
+            }, [_createElementVNode("option", {
+              value: "",
+              disabled: ""
+            }, "Selecione o ano"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.years, (year) => {
+              return (_openBlock(), _createElementBlock("option", {
+                key: year.id,
+                value: year.id
+              }, _toDisplayString(year.name), 9, ["value"]))
+            }), 128))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.year]])]),
+            _createElementVNode("label", null, [_createTextVNode("Data de referência"), _withDirectives(_createElementVNode("input", {
+              type: "date",
+              "onUpdate:modelValue": $event => ((state.day) = $event),
+              required: "",
+              min: currentYear?.starts_on,
+              max: currentYear?.ends_on,
+              onInput: resetFilters
+            }, null, 40, ["onUpdate:modelValue", "min", "max", "onInput"]), [[_vModelText, state.day]])]),
+            _createElementVNode("label", null, [_createTextVNode("Turma"), _withDirectives(_createElementVNode("select", {
+              "onUpdate:modelValue": $event => ((state.group) = $event),
+              onChange: resetFilters
+            }, [_createElementVNode("option", { value: "" }, "Todas as turmas do ano"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.groups.filter(g=>g.academic_year_id===state.year), (group) => {
+              return (_openBlock(), _createElementBlock("option", {
+                key: group.id,
+                value: group.id
+              }, _toDisplayString(group.name), 9, ["value"]))
+            }), 128))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.group]])]),
+            _createElementVNode("label", null, [_createTextVNode("Abrangência"), _withDirectives(_createElementVNode("select", {
+              "onUpdate:modelValue": $event => ((state.scope) = $event),
+              onChange: resetFilters
+            }, [_createElementVNode("option", { value: "school" }, "Escola ou turma"), _createElementVNode("option", { value: "single" }, "Um aluno")], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.scope]])])
+          ]), (state.scope==='single')
+            ? (_openBlock(), _createElementBlock("section", {
+                key: 0,
+                class: "censo-search",
+                "aria-label": "Seleção individual"
+              }, [(!state.chosen)
+                ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createElementVNode("div", { class: "censo-search-controls" }, [_createElementVNode("label", null, [_createTextVNode("Buscar aluno ou matrícula"), _withDirectives(_createElementVNode("input", {
+                    type: "search",
+                    maxlength: "180",
+                    "onUpdate:modelValue": $event => ((state.q) = $event),
+                    placeholder: "Nome, matrícula ou código Inep",
+                    onInput: resetSearch,
+                    onKeydown: _withKeys(_withModifiers($event => (search()), ["prevent"]), ["enter"])
+                  }, null, 40, ["onUpdate:modelValue", "onInput", "onKeydown"]), [[_vModelText, state.q]])]), _createElementVNode("button", {
+                    type: "button",
+                    class: "btn btn-secondary",
+                    onClick: $event => (search())
+                  }, "Buscar aluno", 8, ["onClick"])]), (state.searched)
+                    ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createElementVNode("p", { role: "status" }, _toDisplayString(state.total===0?'Nenhuma matrícula encontrada para esses filtros.':state.total+' matrícula(s) encontrada(s).'), 1), _createElementVNode("ul", { class: "censo-records" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.results, (row) => {
+                        return (_openBlock(), _createElementBlock("li", { key: row.enrollment_id }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(nameOf(row)), 1), _createElementVNode("small", null, _toDisplayString(fmtClass(row)) + " · Matrícula " + _toDisplayString(row.enrollment_number||'sem número'), 1)]), _createElementVNode("button", {
+                          type: "button",
+                          class: "btn btn-secondary",
+                          "aria-label": 'Selecionar '+nameOf(row)+' · '+(row.enrollment_number||'sem número'),
+                          onClick: $event => (choose(row))
+                        }, "Selecionar", 8, ["aria-label", "onClick"])]))
+                      }), 128))]), (state.total>25)
+                        ? (_openBlock(), _createElementBlock("nav", {
+                            key: 0,
+                            class: "censo-actions",
+                            "aria-label": "Páginas da busca de matrículas"
+                          }, [_createElementVNode("button", {
+                            type: "button",
+                            class: "btn btn-secondary",
+                            disabled: state.searchOffset===0,
+                            onClick: $event => (search(state.searchOffset-25))
+                          }, "Anterior", 8, ["disabled", "onClick"]), _createElementVNode("span", null, _toDisplayString(state.searchOffset+1) + "–" + _toDisplayString(state.searchOffset+state.results.length) + " de " + _toDisplayString(state.total), 1), _createElementVNode("button", {
+                            type: "button",
+                            class: "btn btn-secondary",
+                            disabled: state.searchOffset+25>=state.total,
+                            onClick: $event => (search(state.searchOffset+25))
+                          }, "Próxima", 8, ["disabled", "onClick"])]))
+                        : _createCommentVNode("", true)], 64))
+                    : _createCommentVNode("", true)], 64))
+                : (_openBlock(), _createElementBlock("div", {
+                    key: 1,
+                    class: "censo-selected"
+                  }, [_createElementVNode("div", null, [_createElementVNode("small", null, "Matrícula selecionada"), _createElementVNode("strong", null, _toDisplayString(nameOf(state.chosen)), 1), _createElementVNode("span", null, _toDisplayString(fmtClass(state.chosen)) + " · " + _toDisplayString(state.chosen.enrollment_number||'Sem número de matrícula'), 1)]), _createElementVNode("button", {
+                    type: "button",
+                    class: "btn btn-secondary",
+                    onClick: resetFilters
+                  }, "Trocar aluno", 8, ["onClick"])]))]))
+            : _createCommentVNode("", true), _createElementVNode("button", {
+            class: "btn btn-primary",
+            type: "submit",
+            disabled: !state.year||!state.day||(state.scope==='single'&&!state.chosen)
+          }, "Validar prévia", 8, ["disabled"])], 40, ["onSubmit"])]))
+        : _createCommentVNode("", true),
+      (state.tab==='history')
+        ? (_openBlock(), _createElementBlock("section", {
+            key: 3,
+            class: "panel censo-panel"
+          }, [
+            _createElementVNode("h3", null, "Histórico de rascunhos"),
+            _createElementVNode("div", {
+              class: "censo-segment",
+              "aria-label": "Situação do rascunho"
+            }, [_createElementVNode("button", {
+              type: "button",
+              "aria-pressed": !state.archived,
+              onClick: $event => (historyType(false))
+            }, "Rascunhos ativos", 8, ["aria-pressed", "onClick"]), _createElementVNode("button", {
+              type: "button",
+              "aria-pressed": state.archived,
+              onClick: $event => (historyType(true))
+            }, "Arquivados", 8, ["aria-pressed", "onClick"])]),
+            (!state.history.length)
+              ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Nenhum rascunho nesta página."))
+              : _createCommentVNode("", true),
+            _createElementVNode("ul", { class: "censo-records" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.history, (item) => {
+              return (_openBlock(), _createElementBlock("li", { key: item.id }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(stageLabel(item.stage)), 1), _createElementVNode("small", null, _toDisplayString(dateLabel(item.reference_date)) + " · Revisão " + _toDisplayString(item.version), 1)]), _createElementVNode("button", {
+                type: "button",
+                class: "btn btn-secondary",
+                "aria-label": 'Abrir rascunho de '+stageLabel(item.stage)+' de '+dateLabel(item.reference_date)+' · '+item.digest.slice(0,8),
+                onClick: $event => (open(item.id))
+              }, "Abrir rascunho", 8, ["aria-label", "onClick"])]))
+            }), 128))]),
+            (state.offset||state.history.length===50)
+              ? (_openBlock(), _createElementBlock("nav", {
+                  key: 1,
+                  class: "censo-actions",
+                  "aria-label": "Páginas do histórico"
+                }, [_createElementVNode("button", {
+                  type: "button",
+                  class: "btn btn-secondary",
+                  disabled: state.offset===0,
+                  onClick: $event => (page(-50))
+                }, "Anterior", 8, ["disabled", "onClick"]), _createElementVNode("button", {
+                  type: "button",
+                  class: "btn btn-secondary",
+                  disabled: state.history.length!==50,
+                  onClick: $event => (page(50))
+                }, "Próxima", 8, ["disabled", "onClick"])]))
+              : _createCommentVNode("", true)
+          ]))
+        : _createCommentVNode("", true),
+      snapshot
+        ? (_openBlock(), _createElementBlock(_Fragment, { key: 4 }, [_createElementVNode("section", { class: "panel censo-panel" }, [
+            _createElementVNode("header", { class: "censo-heading" }, [_createElementVNode("div", null, [_createElementVNode("h3", null, _toDisplayString(state.tab==='detail'?'Rascunho do lote':'Prévia da seleção'), 1), _createElementVNode("p", null, _toDisplayString(stageLabel(state.tab==='detail'?state.draft.stage:state.stage)) + " · " + _toDisplayString(dateLabel(state.tab==='detail'?state.draft.reference_date:state.day)) + " · " + _toDisplayString(rows.length) + " " + _toDisplayString(rows.length===1?'matrícula':'matrículas'), 1)]), (state.tab==='detail')
+              ? (_openBlock(), _createElementBlock("span", {
                   key: 0,
+                  class: "censo-badge"
+                }, _toDisplayString(state.draft.status==='arquivado'?'Arquivado':'Rascunho') + " · revisão " + _toDisplayString(state.draft.version), 1))
+              : _createCommentVNode("", true)]),
+            (!rows.length)
+              ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Nenhuma matrícula nesta seleção."))
+              : _createCommentVNode("", true),
+            _createElementVNode("ul", { class: "censo-students" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(rows.slice(0,state.visibleRows), (row) => {
+              return (_openBlock(), _createElementBlock("li", { key: row.enrollment_id }, [
+                _createElementVNode("div", { class: "censo-student-heading" }, [_createElementVNode("strong", null, _toDisplayString(nameOf(row)), 1), _createElementVNode("span", null, _toDisplayString(fmtClass(row)), 1)]),
+                _createElementVNode("dl", { class: "censo-data" }, [
+                  _createElementVNode("div", null, [_createElementVNode("dt", null, "Código do aluno"), _createElementVNode("dd", null, _toDisplayString(row.student_number||'Não informado'), 1)]),
+                  _createElementVNode("div", null, [_createElementVNode("dt", null, "Matrícula"), _createElementVNode("dd", null, _toDisplayString(row.enrollment_number||'Não informada'), 1)]),
+                  _createElementVNode("div", null, [_createElementVNode("dt", null, "Situação na data"), _createElementVNode("dd", null, _toDisplayString(statusLabel(row.local_status)), 1)]),
+                  ((state.draft && state.tab==='detail'?state.draft.stage:state.stage)==='matricula_inicial')
+                    ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createElementVNode("div", null, [_createElementVNode("dt", null, "Nome na declaração"), _createElementVNode("dd", null, _toDisplayString(declaredName(row)), 1)]), _createElementVNode("div", null, [_createElementVNode("dt", null, "Código Inep na declaração"), _createElementVNode("dd", null, [_createTextVNode(_toDisplayString(declaredField(row,'student_inep_code')||'Não informado'), 1), ((row.student_inep_code||'')!==declaredField(row,'student_inep_code'))
+                        ? (_openBlock(), _createElementBlock("small", { key: 0 }, "No cadastro: " + _toDisplayString(row.student_inep_code||'Não informado'), 1))
+                        : _createCommentVNode("", true)])]), _createElementVNode("div", null, [_createElementVNode("dt", null, "Data de nascimento na declaração"), _createElementVNode("dd", null, [_createTextVNode(_toDisplayString(dateLabel(declaredField(row,'birth_date'))), 1), ((row.birth_date||'')!==declaredField(row,'birth_date'))
+                        ? (_openBlock(), _createElementBlock("small", { key: 0 }, "No cadastro: " + _toDisplayString(dateLabel(row.birth_date)), 1))
+                        : _createCommentVNode("", true)])])], 64))
+                    : (_openBlock(), _createElementBlock("div", { key: 1 }, [_createElementVNode("dt", null, "Situação na declaração"), _createElementVNode("dd", null, _toDisplayString(row.declaration?.status||'Não informada'), 1)]))
+                ]),
+                (state.tab==='detail')
+                  ? (_openBlock(), _createElementBlock("div", {
+                      key: 0,
+                      class: "censo-actions"
+                    }, [_createElementVNode("button", {
+                      type: "button",
+                      class: "btn btn-secondary",
+                      onClick: $event => (studentFile(row))
+                    }, "Baixar ficha do aluno", 8, ["onClick"]), (editable() && !state.editing && !state.file)
+                      ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createElementVNode("button", {
+                          type: "button",
+                          class: "btn btn-secondary",
+                          "aria-label": 'Editar dados de '+nameOf(row),
+                          onClick: $event => (edit(row))
+                        }, "Editar dados", 8, ["aria-label", "onClick"]), _createElementVNode("button", {
+                          type: "button",
+                          class: "censo-danger",
+                          "aria-label": 'Retirar '+nameOf(row)+' do rascunho',
+                          onClick: $event => (remove(row))
+                        }, "Retirar do rascunho", 8, ["aria-label", "onClick"])], 64))
+                      : _createCommentVNode("", true)]))
+                  : _createCommentVNode("", true),
+                (state.editing===row.enrollment_id)
+                  ? (_openBlock(), _createElementBlock("form", {
+                      key: 1,
+                      class: "educacenso-editor",
+                      onSubmit: _withModifiers(updateRow, ["prevent"])
+                    }, [
+                      _createElementVNode("h4", null, "Ajuste da declaração"),
+                      _createElementVNode("p", null, "O ajuste vale para esta revisão do rascunho."),
+                      _createElementVNode("label", null, [_createTextVNode(_toDisplayString(state.draft.stage==='matricula_inicial'?'Nome na declaração':'Situação na declaração'), 1), _withDirectives(_createElementVNode("input", {
+                        "onUpdate:modelValue": $event => ((state.editValue) = $event),
+                        list: state.draft.stage==='situacao_aluno'?'censo-situacoes-'+row.enrollment_id:null,
+                        maxlength: state.draft.stage==='matricula_inicial'?200:80,
+                        required: ""
+                      }, null, 8, ["onUpdate:modelValue", "list", "maxlength"]), [[_vModelText, state.editValue]])]),
+                      (state.draft.stage==='situacao_aluno')
+                        ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createElementVNode("datalist", { id: 'censo-situacoes-'+row.enrollment_id }, [
+                            _createElementVNode("option", null, "Aprovado"),
+                            _createElementVNode("option", null, "Reprovado"),
+                            _createElementVNode("option", null, "Transferido"),
+                            _createElementVNode("option", null, "Deixou de frequentar"),
+                            _createElementVNode("option", null, "Falecido"),
+                            _createElementVNode("option", null, "Sem movimentação")
+                          ], 8, ["id"]), _createElementVNode("p", null, [_createTextVNode("Informe o rendimento ou o movimento aplicável à etapa de ensino. "), _createElementVNode("a", {
+                            href: "https://www.gov.br/inep/pt-br/areas-de-atuacao/pesquisas-estatisticas-e-indicadores/censo-escolar/orientacoes/situacao-do-aluno",
+                            target: "_blank",
+                            rel: "noopener noreferrer"
+                          }, "Orientações do Inep para a segunda etapa ↗")])], 64))
+                        : _createCommentVNode("", true),
+                      (state.draft.stage==='matricula_inicial')
+                        ? (_openBlock(), _createElementBlock("div", {
+                            key: 1,
+                            class: "censo-fields"
+                          }, [_createElementVNode("label", null, [_createTextVNode("Código Inep na declaração"), _withDirectives(_createElementVNode("input", {
+                            "onUpdate:modelValue": $event => ((state.editInep) = $event),
+                            maxlength: "32"
+                          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.editInep]])]), _createElementVNode("label", null, [_createTextVNode("Data de nascimento na declaração"), _withDirectives(_createElementVNode("input", {
+                            type: "date",
+                            "onUpdate:modelValue": $event => ((state.editBirth) = $event),
+                            max: state.draft.reference_date
+                          }, null, 8, ["onUpdate:modelValue", "max"]), [[_vModelText, state.editBirth]])])]))
+                        : _createCommentVNode("", true),
+                      _createElementVNode("label", null, [_createTextVNode("Motivo do ajuste"), _withDirectives(_createElementVNode("textarea", {
+                        "onUpdate:modelValue": $event => ((state.editReason) = $event),
+                        minlength: "5",
+                        maxlength: "1000",
+                        rows: "2",
+                        required: ""
+                      }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, state.editReason]])]),
+                      (state.error||state.conflict)
+                        ? (_openBlock(), _createElementBlock("div", {
+                            key: 2,
+                            role: "alert",
+                            class: "alert error"
+                          }, [_createTextVNode(_toDisplayString(state.error||'Atualize o rascunho para conferir a revisão atual.') + " ", 1), (state.conflict)
+                            ? (_openBlock(), _createElementBlock("button", {
+                                key: 0,
+                                type: "button",
+                                class: "btn btn-secondary",
+                                onClick: reloadDraft
+                              }, "Atualizar rascunho", 8, ["onClick"]))
+                            : _createCommentVNode("", true)]))
+                        : _createCommentVNode("", true),
+                      _createElementVNode("div", { class: "censo-actions" }, [_createElementVNode("button", {
+                        type: "submit",
+                        class: "btn btn-primary",
+                        disabled: state.conflict
+                      }, "Salvar ajuste", 8, ["disabled"]), _createElementVNode("button", {
+                        type: "button",
+                        class: "btn btn-secondary",
+                        onClick: cancelEdit
+                      }, "Cancelar edição", 8, ["onClick"])])
+                    ], 40, ["onSubmit"]))
+                  : _createCommentVNode("", true)
+              ]))
+            }), 128))]),
+            (state.visibleRows<rows.length)
+              ? (_openBlock(), _createElementBlock("button", {
+                  key: 1,
+                  type: "button",
+                  class: "btn btn-secondary",
+                  onClick: $event => (state.visibleRows+=25)
+                }, "Mostrar mais 25 matrículas", 8, ["onClick"]))
+              : _createCommentVNode("", true),
+            (state.tab==='prepare')
+              ? (_openBlock(), _createElementBlock("button", {
+                  key: 2,
+                  type: "button",
                   class: "btn btn-primary",
                   onClick: save
                 }, "Guardar rascunho", 8, ["onClick"]))
-              : (_openBlock(), _createElementBlock("section", { key: 1 }, [
-                  _createElementVNode("p", null, _toDisplayString(stageLabel(state.draft.stage)) + " · " + _toDisplayString(state.draft.reference_date), 1),
-                  _createElementVNode("p", null, [_createTextVNode("SHA-256 "), _createElementVNode("code", null, _toDisplayString(state.draft.digest), 1)]),
-                  _createElementVNode("button", { onClick: diagnostic }, "Baixar diagnóstico local (JSON)", 8, ["onClick"]),
-                  _createElementVNode("h3", null, "Retornos e comprovantes anexados"),
-                  _createElementVNode("p", null, "Os anexos ficam disponíveis para conferência manual. Anexar um retorno não confirma a aceitação pelo Inep."),
-                  _createElementVNode("form", {
-                    onSubmit: _withModifiers(attach, ["prevent"]),
-                    class: "x-form"
-                  }, [(state.draft.snapshot.return_statuses?.length)
-                    ? (_openBlock(), _createElementBlock("label", { key: 0 }, [_createTextVNode("Situação informada pelo operador conforme o retorno"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((state.reportedStatus) = $event) }, [_createElementVNode("option", { value: "" }, "Somente anexar"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.draft.snapshot.return_statuses, (status) => {
-                        return (_openBlock(), _createElementBlock("option", { key: status }, _toDisplayString(status), 1))
-                      }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, state.reportedStatus]])]))
-                    : _createCommentVNode("", true), _createElementVNode("label", null, [_createTextVNode("Arquivo de evidência (até 4 MiB)"), (_openBlock(), _createElementBlock("input", {
-                    type: "file",
-                    key: state.draft.id+':'+(state.draft.evidence||[]).length,
-                    onChange: fileChanged,
-                    required: ""
-                  }, null, 40, ["onChange"]))]), _createElementVNode("button", {
+              : _createCommentVNode("", true)
+          ]), _createElementVNode("section", { class: "panel censo-panel censo-guidance" }, [
+            _createElementVNode("h3", null, "Conferência para o Inep"),
+            _createElementVNode("p", null, "A prévia e os arquivos baixados servem à conferência local. A exportação oficial depende da homologação do leiaute e dos domínios para o ano e a etapa."),
+            (snapshot.replacement_rule==='substitui_declaracao_da_escola')
+              ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Nesta coleta, a importação substitui a declaração da escola. Confira a cobertura de todos os alunos antes do envio pelo Educacenso."))
+              : (_openBlock(), _createElementBlock("p", { key: 1 }, "Regra de substituição pendente de confirmação para este ano e etapa.")),
+            (snapshot.blocks.length)
+              ? (_openBlock(), _createElementBlock("ul", { key: 2 }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(snapshot.blocks, (block) => {
+                  return (_openBlock(), _createElementBlock("li", { key: block }, _toDisplayString(reasons[block]||block), 1))
+                }), 128))]))
+              : _createCommentVNode("", true),
+            _createElementVNode("a", {
+              href: snapshot.official_source,
+              target: "_blank",
+              rel: "noopener noreferrer"
+            }, "Consultar orientações oficiais do Inep ↗", 8, ["href"])
+          ]), (state.tab==='detail')
+            ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createElementVNode("section", { class: "panel censo-panel" }, [
+                _createElementVNode("h3", null, "Revisões do rascunho"),
+                _createElementVNode("div", { class: "censo-actions" }, [_createElementVNode("button", {
+                  type: "button",
+                  class: "btn btn-secondary",
+                  onClick: $event => (diagnostic())
+                }, "Baixar diagnóstico local (JSON)", 8, ["onClick"]), (editable())
+                  ? (_openBlock(), _createElementBlock("button", {
+                      key: 0,
+                      type: "button",
+                      class: "censo-danger",
+                      disabled: !!state.editing || !!state.file,
+                      onClick: $event => (remove())
+                    }, "Arquivar rascunho", 8, ["disabled", "onClick"]))
+                  : _createCommentVNode("", true)]),
+                _createElementVNode("ol", { class: "censo-records" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.revisions, (rev) => {
+                  return (_openBlock(), _createElementBlock("li", { key: rev.version }, [_createElementVNode("div", null, [_createElementVNode("strong", null, "Revisão " + _toDisplayString(rev.version) + " · " + _toDisplayString(dateLabel(rev.created_at)), 1), _createElementVNode("small", null, _toDisplayString(rev.reason), 1)]), _createElementVNode("button", {
+                    type: "button",
                     class: "btn btn-secondary",
-                    disabled: !state.file
-                  }, "Anexar evidência", 8, ["disabled"])], 40, ["onSubmit"]),
-                  _createElementVNode("div", { class: "x-list" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.draft.evidence, (item) => {
-                    return (_openBlock(), _createElementBlock("button", {
-                      key: item.id,
-                      onClick: $event => (download(item))
-                    }, "Baixar evidência " + _toDisplayString(item.reported_status||'') + " · " + _toDisplayString(item.digest.slice(0,12)), 9, ["onClick"]))
-                  }), 128))])
-                ]))], 64))
-          : _createCommentVNode("", true)
-      ], 8, ["disabled"])
-    ]))
+                    "aria-label": 'Baixar JSON da revisão '+rev.version,
+                    onClick: $event => (diagnostic(rev.version))
+                  }, "Baixar JSON", 8, ["aria-label", "onClick"])]))
+                }), 128))]),
+                _createElementVNode("details", null, [_createElementVNode("summary", null, "Identificador de integridade (SHA-256)"), _createElementVNode("code", null, _toDisplayString(state.draft.digest), 1)])
+              ]), _createElementVNode("section", { class: "panel censo-panel" }, [
+                _createElementVNode("h3", null, "Retornos e comprovantes anexados"),
+                _createElementVNode("p", null, "Registre o retorno recebido para conferência da Secretaria. A aceitação é informada pelo Inep."),
+                (editable())
+                  ? (_openBlock(), _createElementBlock("form", {
+                      key: 0,
+                      class: "censo-evidence",
+                      onSubmit: _withModifiers(attach, ["prevent"])
+                    }, [(state.draft.snapshot.return_statuses?.length)
+                      ? (_openBlock(), _createElementBlock("label", { key: 0 }, [_createTextVNode("Situação informada pelo operador conforme o retorno"), _withDirectives(_createElementVNode("select", {
+                          "onUpdate:modelValue": $event => ((state.reportedStatus) = $event),
+                          disabled: !!state.editing
+                        }, [_createElementVNode("option", { value: "" }, "Somente anexar"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.draft.snapshot.return_statuses, (status) => {
+                          return (_openBlock(), _createElementBlock("option", { key: status }, _toDisplayString(status), 1))
+                        }), 128))], 8, ["onUpdate:modelValue", "disabled"]), [[_vModelSelect, state.reportedStatus]])]))
+                      : _createCommentVNode("", true), _createElementVNode("label", null, [_createTextVNode("Arquivo de evidência (até 4 MiB)"), (_openBlock(), _createElementBlock("input", {
+                      type: "file",
+                      disabled: !!state.editing,
+                      key: state.draft.id+':'+state.draft.version+':'+state.fileKey+':'+(state.draft.evidence||[]).length,
+                      onChange: fileChanged,
+                      required: ""
+                    }, null, 40, ["disabled", "onChange"]))]), _createElementVNode("div", { class: "censo-actions" }, [_createElementVNode("button", {
+                      type: "submit",
+                      class: "btn btn-secondary",
+                      disabled: !state.file||!!state.editing
+                    }, "Anexar evidência", 8, ["disabled"]), (state.file)
+                      ? (_openBlock(), _createElementBlock("button", {
+                          key: 0,
+                          type: "button",
+                          class: "btn btn-secondary",
+                          onClick: clearFile
+                        }, "Limpar arquivo", 8, ["onClick"]))
+                      : _createCommentVNode("", true)])], 40, ["onSubmit"]))
+                  : _createCommentVNode("", true),
+                (!state.draft.evidence?.length)
+                  ? (_openBlock(), _createElementBlock("p", { key: 1 }, "Nenhuma evidência anexada."))
+                  : _createCommentVNode("", true),
+                _createElementVNode("ul", { class: "censo-records" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.draft.evidence, (item) => {
+                  return (_openBlock(), _createElementBlock("li", { key: item.id }, [_createElementVNode("button", {
+                    type: "button",
+                    class: "btn btn-secondary",
+                    onClick: $event => (download(item))
+                  }, "Baixar evidência " + _toDisplayString(item.reported_status||'') + " · " + _toDisplayString(item.digest.slice(0,12)), 9, ["onClick"])]))
+                }), 128))])
+              ])], 64))
+            : _createCommentVNode("", true)], 64))
+        : _createCommentVNode("", true)
+    ], 8, ["disabled"])], 8, ["data-workspace-dirty", "aria-busy"]))
   }
 },contracts:function render(_ctx, _cache) {
   with (_ctx) {
@@ -16054,6 +16251,8 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
 
     return (_openBlock(), _createElementBlock("section", {
       class: "contracts",
+      "data-workspace-dirty": editorDirty() || state.draftDirty,
+      "aria-busy": state.busy,
       "aria-label": "Modelos e documentos escolares"
     }, [
       (state.error)
@@ -16532,15 +16731,15 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
               ? (_openBlock(), _createElementBlock("section", {
                   key: 0,
                   class: "panel x-card"
-                }, [_createElementVNode("h3", null, "2 · Selecionar modelo válido"), _createElementVNode("label", { class: "field" }, [_createTextVNode("Modelo"), _withDirectives(_createElementVNode("select", {
-                  "onUpdate:modelValue": $event => ((state.templateId) = $event),
+                }, [_createElementVNode("h3", null, "2 · Selecionar modelo válido"), _createElementVNode("label", { class: "field" }, [_createTextVNode("Modelo"), _createElementVNode("select", {
+                  value: state.templateId,
                   onChange: selectTemplate
                 }, [_createElementVNode("option", { value: "" }, "Selecione um documento"), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.applicable, (template) => {
                   return (_openBlock(), _createElementBlock("option", {
                     key: template.id,
                     value: template.id
                   }, _toDisplayString(template.name) + " · versão " + _toDisplayString(template.version), 9, ["value"]))
-                }), 128))], 40, ["onUpdate:modelValue", "onChange"]), [[_vModelSelect, state.templateId]])]), (!state.applicable.length)
+                }), 128))], 40, ["value", "onChange"])]), (!state.applicable.length)
                   ? (_openBlock(), _createElementBlock("p", {
                       key: 0,
                       class: "alert info spaced"
@@ -16671,7 +16870,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                 "issued-id": issuedId
               }, null, 8, ["school-id", "permissions", "role", "enrollment-id", "issued-id"]))
             : _createCommentVNode("", true)
-    ]))
+    ], 8, ["data-workspace-dirty", "aria-busy"]))
   }
 },signing:function render(_ctx, _cache) {
   with (_ctx) {
@@ -16747,24 +16946,9 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                           type: "button",
                           class: "btn btn-secondary",
                           disabled: state.busy,
-                          onClick: $event => (state.removeCertificateOpen=true)
+                          onClick: removeCertificate
                         }, "Desativar certificado", 8, ["disabled", "onClick"]))
                       : _createCommentVNode("", true)])], 40, ["onSubmit"]))
-                  : _createCommentVNode("", true),
-                (state.removeCertificateOpen)
-                  ? (_openBlock(), _createElementBlock("div", {
-                      key: 3,
-                      class: "alert warning"
-                    }, [_createElementVNode("p", null, "Desativar o certificado para futuras assinaturas? Os documentos já assinados serão preservados."), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
-                      type: "button",
-                      class: "btn btn-secondary",
-                      onClick: $event => (state.removeCertificateOpen=false)
-                    }, "Manter certificado", 8, ["onClick"]), _createElementVNode("button", {
-                      type: "button",
-                      class: "btn btn-danger",
-                      disabled: state.busy,
-                      onClick: removeCertificate
-                    }, "Desativar", 8, ["disabled", "onClick"])])]))
                   : _createCommentVNode("", true),
                 _createElementVNode("p", { class: "small muted" }, "A substituição preserva os documentos já assinados. O certificado e a senha são enviados ao servidor apenas ao salvar; não são guardados no armazenamento deste navegador.")
               ]))
@@ -17760,15 +17944,9 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                 }), 128))])]))
               : _createCommentVNode("", true),
             _createElementVNode("p", { class: "small muted" }, "Cadastros existentes serão preservados. Revise as categorias acima antes de confirmar."),
-            _createElementVNode("label", null, [_createTextVNode("Digite IMPORTAR para confirmar"), _withDirectives(_createElementVNode("input", {
-              "onUpdate:modelValue": $event => ((state.confirmation) = $event),
-              disabled: state.busy,
-              maxlength: "20",
-              autocomplete: "off"
-            }, null, 8, ["onUpdate:modelValue", "disabled"]), [[_vModelText, state.confirmation]])]),
             _createElementVNode("button", {
               class: "btn btn-primary",
-              disabled: state.busy || !state.preview.can_apply || state.confirmation.trim().toUpperCase()!=='IMPORTAR',
+              disabled: state.busy || !state.preview.can_apply,
               onClick: apply
             }, _toDisplayString(state.busy?'Importando…':'Confirmar importação'), 9, ["disabled", "onClick"])
           ]))
@@ -18073,6 +18251,8 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
 
     return (_openBlock(), _createElementBlock("section", {
       class: "community-page",
+      "data-workspace-dirty": hasUnsavedChanges(),
+      "aria-busy": s.busy,
       "aria-label": "Notícias e agenda da escola"
     }, [
       (manage()&&!props.compact)
@@ -19385,20 +19565,6 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                   role: "alert"
                 }, _toDisplayString(s.error), 1))
               : _createCommentVNode("", true),
-            (s.discard)
-              ? (_openBlock(), _createElementBlock("div", {
-                  key: 1,
-                  class: "discard-banner"
-                }, [_createElementVNode("span", null, "Há alterações não salvas."), _createElementVNode("button", {
-                  type: "button",
-                  class: "btn btn-secondary",
-                  onClick: $event => (s.discard=false)
-                }, "Continuar editando", 8, ["onClick"]), _createElementVNode("button", {
-                  type: "button",
-                  class: "btn btn-danger",
-                  onClick: $event => (closeEditor(true))
-                }, "Descartar", 8, ["onClick"])]))
-              : _createCommentVNode("", true),
             _createElementVNode("nav", {
               class: "editor-steps",
               "aria-label": "Etapas da publicação"
@@ -19579,25 +19745,12 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                     }, "Ao confirmar, a notícia ou evento sai do mural e volta para os rascunhos. Para excluir, reabra o rascunho salvo."))
                   : _createCommentVNode("", true),
                 (canDeleteDraft())
-                  ? (_openBlock(), _createElementBlock("div", { key: 3 }, [(!s.deleteConfirm)
-                      ? (_openBlock(), _createElementBlock("button", {
-                          key: 0,
-                          type: "button",
-                          class: "btn btn-danger",
-                          onClick: $event => (s.deleteConfirm=true)
-                        }, "Excluir rascunho", 8, ["onClick"]))
-                      : (_openBlock(), _createElementBlock("div", {
-                          key: 1,
-                          class: "discard-banner"
-                        }, [_createElementVNode("span", null, "Excluir este rascunho definitivamente?"), _createElementVNode("button", {
-                          type: "button",
-                          class: "btn btn-secondary",
-                          onClick: $event => (s.deleteConfirm=false)
-                        }, "Voltar", 8, ["onClick"]), _createElementVNode("button", {
-                          type: "button",
-                          class: "btn btn-danger",
-                          onClick: remove
-                        }, "Confirmar exclusão", 8, ["onClick"])]))]))
+                  ? (_openBlock(), _createElementBlock("button", {
+                      key: 3,
+                      type: "button",
+                      class: "btn btn-danger",
+                      onClick: remove
+                    }, "Excluir rascunho", 8, ["onClick"]))
                   : _createCommentVNode("", true)
               ], 512), [[_vShow, s.editorStep==='publish']])
             ], 8, ["disabled"])
@@ -19641,7 +19794,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
             }, _toDisplayString(s.busy?'Salvando…':postSaveLabel()), 9, ["disabled"])
           ])], 40, ["onSubmit", "onInvalidCapture"])])], 8, ["onClick"]))
         : _createCommentVNode("", true)], 8, ["to"]))
-    ]))
+    ], 8, ["data-workspace-dirty", "aria-busy"]))
   }
 },news:function render(_ctx, _cache) {
   with (_ctx) {
@@ -20221,6 +20374,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
     return (_openBlock(), _createElementBlock("section", {
       class: "email-client",
       "aria-label": "E-mail",
+      "data-workspace-dirty": composeDirty(),
       "aria-busy": s.busy
     }, [
       _createElementVNode("header", { class: "email-page-heading" }, [_createElementVNode("div", null, [(s.account?.available)
@@ -20439,7 +20593,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
             }, "Conectar outra caixa", 8, ["onClick", "disabled"]), _createElementVNode("button", {
               class: "email-text-button",
               type: "button",
-              onClick: $event => (s.disconnectConfirm=true),
+              onClick: disconnect,
               disabled: s.busy
             }, "Desconectar", 8, ["onClick", "disabled"])])
           ], 2), _createElementVNode("section", {
@@ -20605,7 +20759,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                     ? (_openBlock(), _createElementBlock("button", {
                         key: 1,
                         type: "button",
-                        onClick: $event => (s.deleteConfirm=true),
+                        onClick: remove,
                         disabled: s.busy
                       }, "Excluir definitivamente", 8, ["onClick", "disabled"]))
                     : _createCommentVNode("", true),
@@ -20636,27 +20790,10 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                     : _createCommentVNode("", true),
                   _createElementVNode("time", null, _toDisplayString(date(s.selected.date,true)), 1)
                 ]),
-                (s.deleteConfirm)
-                  ? (_openBlock(), _createElementBlock("div", {
-                      key: 0,
-                      class: "email-confirm",
-                      role: "alert"
-                    }, [_createElementVNode("strong", null, "Excluir esta mensagem definitivamente?"), _createElementVNode("p", null, "Ela não poderá ser recuperada por esta aplicação."), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
-                      class: "btn btn-secondary",
-                      type: "button",
-                      onClick: $event => (s.deleteConfirm=false),
-                      disabled: s.busy
-                    }, "Cancelar", 8, ["onClick", "disabled"]), _createElementVNode("button", {
-                      class: "btn btn-danger",
-                      type: "button",
-                      onClick: remove,
-                      disabled: s.busy
-                    }, "Excluir definitivamente", 8, ["onClick", "disabled"])])]))
-                  : _createCommentVNode("", true),
                 _createElementVNode("div", { class: "email-message-text" }, _toDisplayString(s.selected.text||'Esta mensagem não contém texto para exibição.'), 1),
                 (s.selected.attachments?.length)
                   ? (_openBlock(), _createElementBlock("section", {
-                      key: 1,
+                      key: 0,
                       class: "email-attachments",
                       "aria-label": "Anexos"
                     }, [_createElementVNode("h4", null, "Anexos · " + _toDisplayString(s.selected.attachments.length), 1), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.selected.attachments, (attachment) => {
@@ -20728,29 +20865,12 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
             required: "",
             maxlength: "80",
             autocomplete: "off"
-          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.folderRename]])]), (s.folderDeleteConfirm)
-            ? (_openBlock(), _createElementBlock("div", {
-                key: 1,
-                class: "email-confirm",
-                role: "alert"
-              }, [_createElementVNode("strong", null, "Excluir esta pasta?"), _createElementVNode("p", null, "Apenas pastas vazias podem ser excluídas. Suas mensagens não serão apagadas por esta ação."), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
-                class: "btn btn-secondary",
-                type: "button",
-                onClick: $event => (s.folderDeleteConfirm=false),
-                disabled: s.busy
-              }, "Manter pasta", 8, ["onClick", "disabled"]), _createElementVNode("button", {
-                class: "btn btn-danger",
-                type: "button",
-                onClick: deleteFolder,
-                disabled: s.busy
-              }, "Excluir pasta vazia", 8, ["onClick", "disabled"])])]))
-            : (_openBlock(), _createElementBlock("button", {
-                key: 2,
-                class: "email-text-button",
-                type: "button",
-                onClick: $event => (s.folderDeleteConfirm=true),
-                disabled: s.busy
-              }, "Excluir pasta…", 8, ["onClick", "disabled"]))]), _createElementVNode("footer", { class: "modal-footer" }, [_createElementVNode("button", {
+          }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.folderRename]])]), _createElementVNode("button", {
+            class: "email-text-button",
+            type: "button",
+            onClick: deleteFolder,
+            disabled: s.busy
+          }, "Excluir pasta…", 8, ["onClick", "disabled"])]), _createElementVNode("footer", { class: "modal-footer" }, [_createElementVNode("button", {
             class: "btn btn-secondary",
             type: "button",
             onClick: $event => (s.folderEdit=false),
@@ -20761,45 +20881,9 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
             disabled: s.busy
           }, "Renomear pasta", 8, ["disabled"])])], 40, ["onSubmit"])])]))
         : _createCommentVNode("", true),
-      (s.disconnectConfirm)
-        ? (_openBlock(), _createElementBlock("div", {
-            key: 9,
-            class: "modal-backdrop",
-            onClick: _withModifiers($event => (s.disconnectConfirm=false), ["self"])
-          }, [_createElementVNode("section", {
-            class: "modal email-small-dialog",
-            role: "dialog",
-            "aria-modal": "true",
-            "aria-labelledby": "email-disconnect-title"
-          }, [_createElementVNode("header", { class: "modal-header" }, [_createElementVNode("h2", {
-            id: "email-disconnect-title",
-            "data-dialog-title": ""
-          }, "Desconectar e-mail?"), _createElementVNode("button", {
-            type: "button",
-            class: "email-icon-button",
-            "data-dialog-close": "",
-            onClick: $event => (s.disconnectConfirm=false),
-            "aria-label": "Fechar"
-          }, "×", 8, ["onClick"])]), _createElementVNode("div", { class: "modal-body" }, [(s.error)
-            ? (_openBlock(), _createElementBlock("p", {
-                key: 0,
-                class: "alert error",
-                role: "alert"
-              }, _toDisplayString(s.error), 1))
-            : _createCommentVNode("", true), _createElementVNode("p", null, "Suas mensagens serão mantidas. Para acessar esta caixa novamente, será necessário informar a senha do e-mail.")]), _createElementVNode("footer", { class: "modal-footer" }, [_createElementVNode("button", {
-            class: "btn btn-secondary",
-            type: "button",
-            onClick: $event => (s.disconnectConfirm=false)
-          }, "Cancelar", 8, ["onClick"]), _createElementVNode("button", {
-            class: "btn btn-primary",
-            type: "button",
-            onClick: disconnect,
-            disabled: s.busy
-          }, "Desconectar", 8, ["onClick", "disabled"])])])], 8, ["onClick"]))
-        : _createCommentVNode("", true),
       (s.showConnection)
         ? (_openBlock(), _createElementBlock("div", {
-            key: 10,
+            key: 9,
             class: "modal-backdrop",
             onClick: _withModifiers($event => (s.showConnection=false), ["self"])
           }, [_createElementVNode("section", {
@@ -20859,7 +20943,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
         : _createCommentVNode("", true),
       (s.showSettings)
         ? (_openBlock(), _createElementBlock("div", {
-            key: 11,
+            key: 10,
             class: "modal-backdrop"
           }, [_createElementVNode("section", {
             class: "modal email-small-dialog",
@@ -20919,7 +21003,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
         : _createCommentVNode("", true),
       (s.compose)
         ? (_openBlock(), _createElementBlock("div", {
-            key: 12,
+            key: 11,
             class: "modal-backdrop email-compose-backdrop"
           }, [_createElementVNode("section", {
             class: "modal email-compose",
@@ -20940,38 +21024,23 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
             class: "modal-form",
             onSubmit: _withModifiers(send, ["prevent"])
           }, [_createElementVNode("div", { class: "modal-body email-compose-body" }, [
-            (s.discard)
-              ? (_openBlock(), _createElementBlock("div", {
-                  key: 0,
-                  class: "email-confirm",
-                  role: "alert"
-                }, [_createElementVNode("strong", null, _toDisplayString(s.pendingPayload?'Fechar a mensagem?':'Descartar alterações?'), 1), _createElementVNode("p", null, _toDisplayString(s.pendingPayload?'A solicitação já foi registrada. Fechar não cancela o envio. Confira a pasta Enviados antes de enviar outra cópia.':'Salve o rascunho para continuar depois ou descarte o que foi alterado.'), 1), _createElementVNode("div", { class: "actions" }, [_createElementVNode("button", {
-                  class: "btn btn-secondary",
-                  type: "button",
-                  onClick: $event => (s.discard=false)
-                }, "Continuar aqui", 8, ["onClick"]), _createElementVNode("button", {
-                  class: "btn btn-danger",
-                  type: "button",
-                  onClick: $event => (closeCompose(true))
-                }, _toDisplayString(s.pendingPayload?'Fechar':'Descartar alterações'), 9, ["onClick"])])]))
-              : _createCommentVNode("", true),
             (s.composeNotice)
               ? (_openBlock(), _createElementBlock("p", {
-                  key: 1,
+                  key: 0,
                   class: "alert success",
                   role: "status"
                 }, _toDisplayString(s.composeNotice), 1))
               : _createCommentVNode("", true),
             (s.composeError)
               ? (_openBlock(), _createElementBlock("p", {
-                  key: 2,
+                  key: 1,
                   class: "alert error",
                   role: "alert"
                 }, _toDisplayString(s.composeError), 1))
               : _createCommentVNode("", true),
             (s.sendResult)
               ? (_openBlock(), _createElementBlock("div", {
-                  key: 3,
+                  key: 2,
                   class: _normalizeClass(["email-send-result", {'is-success':s.sendResult.status==='sent'}]),
                   role: "status"
                 }, [
@@ -21090,7 +21159,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                 disabled: s.busy
               }, "Fechar", 8, ["onClick", "disabled"])], 64))])], 40, ["onSubmit"])])]))
         : _createCommentVNode("", true)
-    ], 8, ["aria-busy"]))
+    ], 8, ["data-workspace-dirty", "aria-busy"]))
   }
 },lifecycle:function render(_ctx, _cache) {
   with (_ctx) {

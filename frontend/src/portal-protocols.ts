@@ -22,10 +22,21 @@ namespace PigePortalProtocols {
     const base='/'+props.area+'/schools/'+encodeURIComponent(props.schoolId)+'/protocols';
     const path=(id:string)=>base+'/'+encodeURIComponent(id);
     const controller=new AbortController();
-    let active=true,optionsVersion=0,clientKey='',lastPayload='',lastFile:File|null=null;
+    let active=true,waitingForDiscard=false,optionsVersion=0,clientKey='',lastPayload='',lastFile:File|null=null;
     function reset(){s.form=blank();s.fileVersion++;clientKey='';lastPayload='';lastFile=null;}
     function displayError(e:unknown){return e instanceof Error?e.message:'Não foi possível concluir a solicitação.';}
-    function discard(){return !dirty()||window.confirm('Descartar o texto e o anexo que ainda não foram enviados?');}
+    async function discard(){
+      if(waitingForDiscard)return false;
+      waitingForDiscard=true;
+      const form=s.form,view=s.view,ticket=s.ticket?.id;
+      const {subject,category,channel,message,file}=form;
+      const approved=await PigeDialogs.confirm('O texto, o anexo e as alterações ainda não enviados serão descartados.',{
+        title:'Descartar a edição do protocolo?',confirmLabel:'Descartar edição',cancelLabel:'Voltar',destructive:true
+      });
+      waitingForDiscard=false;
+      return approved && active && !s.busy && s.form===form && s.view===view && s.ticket?.id===ticket &&
+        subject===form.subject && category===form.category && channel===form.channel && message===form.message && file===form.file;
+    }
     function focusTitle(){void Vue.nextTick(()=>{if(active)document.getElementById('portal-protocol-title')?.focus();});}
     async function run(work:()=>Promise<void>){
       if(s.busy||!active)return;
@@ -66,7 +77,7 @@ namespace PigePortalProtocols {
       return 'https://wa.me/'+line+'?'+new URLSearchParams({text:'Olá, quero falar sobre o protocolo '+s.ticket.number}).toString();
     });
     async function list(page=1,search=false){
-      if(s.busy||!discard())return;
+      if(s.busy || !active || (dirty() && !await discard()))return;
       const term=search?s.query.trim():s.term;
       await run(async()=>{
         const params=new URLSearchParams({page:String(page)});
@@ -82,7 +93,7 @@ namespace PigePortalProtocols {
     function showNew(){if(s.busy || (props.area==='family'&&!props.studentId))return;reset();s.view='new';s.ticket=null;s.error='';s.notice='';focusTitle();}
     function showTicket(data:Ticket){reset();s.ticket=data;s.form.channel=data.preferred_channel;s.view='detail';}
     async function open(id:string){
-      if(s.busy||!discard())return;
+      if(s.busy || !active || (dirty() && !await discard()))return;
       await run(async()=>{const data=await props.request<Ticket>(path(id),{signal:controller.signal});if(active){showTicket(data);focusTitle();}});
     }
     function chooseFile(event:Event){s.form.file=(event.target as HTMLInputElement).files?.[0]||null;}
@@ -131,7 +142,7 @@ namespace PigePortalProtocols {
       if(ticket&&file)await run(()=>props.download(path(ticket.id)+'/attachments/'+encodeURIComponent(file.id),file.name));
     }
     Vue.onMounted(()=>{void options();void list();});
-    Vue.onUnmounted(()=>{active=false;controller.abort();reset();});
+    Vue.onUnmounted(()=>{active=false;if(waitingForDiscard)PigeDialogs.cancelPending();controller.abort();reset();});
     return {s,props,availableCategories,categories,statuses,channels,closed,dirty,date,options,saveOpeningChannel,whatsappUrl,list,showNew,open,chooseFile,copyNumber,send,changeChannel,attachment,chat:PigeSupport.status,openChat:PigeSupport.openChat};
   }};
 }

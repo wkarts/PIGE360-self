@@ -100,7 +100,7 @@ namespace PigeFamily {
   class SessionChanged extends Error {constructor(){super('A sessão mudou.');this.name='AbortError';}}
   function checkAuth(epoch:number):void{if(epoch!==authEpoch)throw new SessionChanged();}
   function invalidateAuth():void{authEpoch++;refreshing=null;}
-  function clearPrivate():void{rail.close();PigePortalTabs.cancelClose();generation++;s.tabs=[];savedFeeds.clear();postTrigger=null;clearRecentMaterials();mail.clear();autoPix.clear();cards.clear();clearChargeDocuments();feedGeneration++;clearSchoolwork();s.students=[];s.charges=[];s.financeTotal=0;s.financePage=1;s.financeOverdue=0;s.financeNote='';s.financeError='';s.financeLoaded=false;s.news=[];s.events=[];s.feedItems=[];s.feedTotal=0;s.feedPage=1;s.feedBusy=false;s.selectedPost=null;s.feedError='';s.feedQuery='';s.feedTerm='';s.overviewFeedError='';s.menuOpen=false;}
+  function clearPrivate():void{rail.close();PigeDialogs.cancelPending();generation++;s.tabs=[];savedFeeds.clear();postTrigger=null;clearRecentMaterials();mail.clear();autoPix.clear();cards.clear();clearChargeDocuments();feedGeneration++;clearSchoolwork();s.students=[];s.charges=[];s.financeTotal=0;s.financePage=1;s.financeOverdue=0;s.financeNote='';s.financeError='';s.financeLoaded=false;s.news=[];s.events=[];s.feedItems=[];s.feedTotal=0;s.feedPage=1;s.feedBusy=false;s.selectedPost=null;s.feedError='';s.feedQuery='';s.feedTerm='';s.overviewFeedError='';s.menuOpen=false;}
   async function raw(path:string,options:RequestInit={}):Promise<Response>{const headers=new Headers(options.headers);headers.set('X-CSRF-Protection','1');if(token)headers.set('Authorization','Bearer '+token);if(s.schoolId)headers.set('X-School-Id',s.schoolId);if(typeof options.body==='string')headers.set('Content-Type','application/json');return fetch('/api/v1'+path,{...options,headers,credentials:'same-origin',cache:'no-store'});}
   async function renew():Promise<void>{
     const epoch=authEpoch;
@@ -136,9 +136,8 @@ namespace PigeFamily {
   async function authenticated(data:Record<string,unknown>):Promise<void>{token=String(data.access_token||'');s.account=data.user as Account;s.password='';s.passwordVisible=false;s.schoolId=s.account.school_ids[0]||'';await load();}
   async function login():Promise<void>{if(s.busy)return;invalidateAuth();clearPrivate();token='';s.account=null;s.schoolId='';await run(async()=>{const result=await request<Record<string,unknown>>('/auth/login',{method:'POST',body:JSON.stringify({email:s.email,password:s.password})});s.password='';s.passwordVisible=false;if(await PigeMFA.accept(result))return;await authenticated(result);});}
   async function logout():Promise<void>{
-    if(s.busy)return;
-    if(isOpen('support') && workspaceBusy(['support']))return;
-    if(drafts(['support']).length && !window.confirm('Descartar a mensagem de atendimento ainda não enviada e sair?'))return;
+    if(workspaceBusy(s.tabs))return;
+    if((drafts(s.tabs).length || s.tabs.includes('webmail')) && !await canLeaveContext('Sair do portal?','Sair'))return;
     // Invalidate pending renewals before the logout network request, not after it.
     invalidateAuth();clearPrivate();
     await run(async()=>{try{await request('/auth/logout',{method:'POST'});}finally{token='';s.account=null;s.schoolId='';s.studentId='';s.section='overview';s.password='';s.passwordVisible=false;updateLocation();PigeMFA.clear();}});
@@ -201,7 +200,7 @@ namespace PigeFamily {
   const title=(name=s.section)=>studentView()&&name==='students'?'Meu cadastro':studentView()&&name==='academic'?'Minha vida escolar':titles[name]||titles.overview;
   const date=(value:string|null)=>{if(!value)return 'Data não informada';const d=new Date(value.length===10?value+'T12:00:00':value);return Number.isNaN(d.getTime())?'Data não informada':new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Bahia',day:'2-digit',month:'short',year:'numeric',...(value.length>10?{hour:'2-digit',minute:'2-digit'}:{})}).format(d);};
   const money=(value:string)=>Number(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
-  const autoPix=PigeAutoPix.use(request,()=>s.studentId);
+  const autoPix=PigeAutoPix.use(request,()=>student()?.financial_authorized?s.studentId:'');
   const cards=PigeFamilyCard.use(request,()=>s.studentId);
   const paymentSources={asaas:'Asaas',crm:'CRM',manual:'Lançamento da escola'};
   function chargeStatus(charge:FamilyCharge):string {
@@ -288,7 +287,7 @@ namespace PigeFamily {
     history[push?'pushState':'replaceState'](scope,'','/family?'+params);
   }
   function clearStudentWorkspace():void {
-    rail.close();
+    rail.close();PigeDialogs.cancelPending();
     generation++;feedGeneration++;clearRecentMaterials();autoPix.clear();cards.clear();clearChargeDocuments();clearSchoolwork();savedFeeds.clear();
     s.tabs=[];s.feedItems=[];s.feedTotal=0;s.feedBusy=false;s.feedPage=1;s.feedTerm='';s.feedQuery='';
     s.news=[];s.events=[];s.overviewFeedError='';s.selectedPost=null;s.feedError='';postTrigger=null;
@@ -302,24 +301,34 @@ namespace PigeFamily {
   }
   async function selectStudent(event:Event):Promise<void>{
     const input=event.currentTarget as HTMLSelectElement;
-    if(!canLeaveContext()){input.value=s.studentId;return;}
-    s.studentId=input.value;await changeStudent();
+    const target=input.value;
+    input.value=s.studentId;
+    if(!await canLeaveContext() || !s.students.some(item=>item.id===target))return;
+    s.studentId=target;await changeStudent();
   }
   async function chooseStudent(id:string):Promise<void>{
     if(s.busy)return;
     if(id!==s.studentId){
-      if(!canLeaveContext())return;
+      if(!await canLeaveContext() || !s.students.some(item=>item.id===id))return;
       s.studentId=id;await changeStudent();
+      if(s.studentId!==id || !s.account)return;
     }
     section('academic');
   }
   async function changeSchool():Promise<void>{if(s.busy)return;s.studentId='';s.section='overview';await run(load);updateLocation();}
   async function selectSchool(event:Event):Promise<void>{
     const input=event.currentTarget as HTMLSelectElement;
-    if(!canLeaveContext()){input.value=s.schoolId;return;}
-    s.schoolId=input.value;await changeSchool();
+    const target=input.value;
+    input.value=s.schoolId;
+    if(!await canLeaveContext() || !s.account?.school_ids.includes(target))return;
+    s.schoolId=target;await changeSchool();
   }
-  function refreshWorkspace():void{if(canLeaveContext())void run(load);}
+  async function openRegistration(e:MouseEvent):Promise<void>{
+    if(e.button!==0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)return;
+    e.preventDefault();
+    if(await canLeaveContext('Ir para inscrição e contratos?','Continuar'))window.location.assign('/online');
+  }
+  async function refreshWorkspace():Promise<void>{if(await canLeaveContext())await run(load);}
   async function download(path:string,filename:string):Promise<void>{const current=generation,selected=s.studentId;const r=await response(path);const blob=await r.blob();if(current!==generation||selected!==s.studentId)return;const url=URL.createObjectURL(blob);const a=window.document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   async function document(file:Document):Promise<void>{await run(()=>download('/family/students/'+s.studentId+'/documents/'+file.id,'documento-escolar'));}
   async function start():Promise<void>{await PigeInstitution.load();try{await renew();if(s.account){s.schoolId=s.account.school_ids[0]||'';await load();}}catch(e){if(s.account)s.error=e instanceof Error?e.message:'Não foi possível carregar seus dados.';}finally{s.ready=true;}}
@@ -380,7 +389,7 @@ namespace PigeFamily {
     rail.close();navigationVersion++;
     const name=allowedSection(requested),changed=s.section!==name;
     let cached=false;
-    if(changed){rememberFeed();feedGeneration++;s.selectedPost=null;postTrigger=null;}
+    if(changed){PigeDialogs.cancelPending();rememberFeed();feedGeneration++;s.selectedPost=null;postTrigger=null;}
     setActiveTab(name);closeMenu(false);
     if(changed && isFeed(name))cached=restoreFeed(name);
     schoolwork.requestedMaterial=name==='materials'?materialId:'';schoolwork.materialNotice='';
@@ -411,13 +420,18 @@ namespace PigeFamily {
   function workspaceBusy(tabs:string[]):boolean {
     return s.busy || (tabs.includes('support') && Boolean(window.document.querySelector?.('#family-protocols [aria-busy="true"]'))) || (tabs.includes('finance') && (autoPix.state.busy || cards.state.loading));
   }
-  function canLeaveContext():boolean {
+  function workspaceKey():string {
+    return JSON.stringify([authEpoch,generation,navigationVersion,s.account?.id,s.schoolId,s.studentId,s.section,s.tabs]);
+  }
+  async function canLeaveContext(heading='Fechar as guias deste contexto?',action='Continuar'):Promise<boolean> {
     if(workspaceBusy(s.tabs))return false;
-    const pending=drafts(s.tabs);
-    const mailOpen=s.tabs.includes('webmail');
-    if(!pending.length && !mailOpen)return true;
-    return window.confirm('Continuar e fechar as guias deste contexto?'+(pending.length?' Alterações ainda não salvas: '+pending.join(', ')+'.':'')+
-      (mailOpen?' Confira se as mensagens em edição foram salvas em Rascunhos.':''));
+    const pending=drafts(s.tabs),mail=s.tabs.includes('webmail');
+    if(!pending.length && !mail)return true;
+    const previous=workspaceKey();
+    const message=[pending.length?'As alterações em '+pending.join(' e ')+' ainda não foram salvas.':'',
+      mail?'Confira se as mensagens em edição foram salvas em Rascunhos.':''].filter(Boolean).join(' ');
+    const confirmed=await PigeDialogs.confirm(message,{title:heading,confirmLabel:action,cancelLabel:'Voltar',destructive:true});
+    return confirmed && previous===workspaceKey() && !workspaceBusy(s.tabs);
   }
   function forget(key:string):void {
     savedFeeds.delete(key);
@@ -434,16 +448,18 @@ namespace PigeFamily {
     const closing=key?[key]:s.tabs.slice(1);
     if(workspaceBusy(closing))return;
     const pending=drafts(closing),mailOpen=closing.includes('webmail');
+    const previous=workspaceKey();
     if(key){
-      if((pending.length || mailOpen) && !window.confirm('Fechar a guia '+title(key)+'?'+
-        (pending.length?' As alterações em '+pending.join(' e ')+' serão descartadas.':'')+
-        (mailOpen?' Confira se as mensagens em edição foram salvas em Rascunhos.':'')))return;
+      const warnings=[pending.length?'As alterações em '+pending.join(' e ')+' serão descartadas.':'',
+        mailOpen?'Confira se as mensagens em edição foram salvas em Rascunhos.':''].filter(Boolean);
+      if(warnings.length && !await PigeDialogs.confirm(warnings.join(' '),{
+        title:'Fechar a guia '+title(key)+'?',confirmLabel:'Fechar guia',cancelLabel:'Voltar',destructive:true
+      }))return;
     }else{
-      const account=s.account,school=s.schoolId,student=s.studentId;
       if(mailOpen)pending.push('mensagens em edição no E-mail');
       if(!await PigePortalTabs.confirmClose(title(home),pending))return;
-      if(account!==s.account || school!==s.schoolId || student!==s.studentId || workspaceBusy(closing))return;
     }
+    if(previous!==workspaceKey() || workspaceBusy(closing))return;
     if(closing.includes(s.section)){setView(home,'',false);updateLocation(true);}
     closing.forEach(forget);s.tabs=s.tabs.filter(id=>!closing.includes(id));focusTab();
   }
@@ -451,7 +467,9 @@ namespace PigeFamily {
     const key=PigePortalTabs.keyTarget(event,s.tabs,s.section);
     if(key){section(key,'',false);focusTab();}
   }
+  let historyRequest=0;
   async function popstate(event?:PopStateEvent):Promise<void>{
+    const request=++historyRequest;
     if(!s.account)return;
     const requested=routeSection(),id=new URLSearchParams(location.search).get('student');
     const ctx=event?.state;
@@ -460,7 +478,9 @@ namespace PigeFamily {
     }
     const changed=Boolean(id && id!==s.studentId && s.students.some(item=>item.id===id));
     if(changed && id){
-      if(!canLeaveContext()){updateLocation();return;}
+      const approved=await canLeaveContext();
+      if(request!==historyRequest)return;
+      if(!approved || !s.students.some(item=>item.id===id)){if(s.account)updateLocation();return;}
       clearStudentWorkspace();s.studentId=id;
       const current=++navigationVersion,scope=generation;
       await finance();
@@ -478,5 +498,5 @@ namespace PigeFamily {
     });
     Vue.onMounted(rail.mount);Vue.onUnmounted(rail.dispose);
     Vue.onUnmounted(PigeSupport.dispose);
-Vue.onMounted(()=>{window.addEventListener('popstate',popstate);window.document.addEventListener?.('visibilitychange',checkWhenVisible);window.addEventListener('keydown',menuKeys);window.addEventListener('resize',resized);PigeMFA.init(request,authenticated,logout);void start();});Vue.onUnmounted(()=>{window.removeEventListener('popstate',popstate);window.document.removeEventListener?.('visibilitychange',checkWhenVisible);window.removeEventListener('keydown',menuKeys);window.removeEventListener('resize',resized);});return{s,rail,sidebarGroups,chargeStatus,documentsPanel,paymentSources,paymentKinds,showChargeDocuments,copyChargeCode,closeTabs,tabKeys,isOpen,selectSchool,selectStudent,refreshWorkspace,recentMaterials,loadRecentMaterials,toggleSidebar,activeEnrollments,visibleMaterials,mail,autoPix,cards,schoolwork,loadSchoolwork,studentView,portalName,pickEvidence,submitAbsence,label,student,title,initials,date,money,pendingDocuments,finance,login,logout,changeSchool,changeStudent,chooseStudent,document,request,download,section,run,load,loadFeed,searchFeed,openPost,closePost,openMenu,closeMenu,mfa:PigeMFA,identity:PigeInstitution.state};}}).mount('#family');
+Vue.onMounted(()=>{window.addEventListener('popstate',popstate);window.document.addEventListener?.('visibilitychange',checkWhenVisible);window.addEventListener('keydown',menuKeys);window.addEventListener('resize',resized);PigeMFA.init(request,authenticated,logout);void start();});Vue.onUnmounted(()=>{window.removeEventListener('popstate',popstate);window.document.removeEventListener?.('visibilitychange',checkWhenVisible);window.removeEventListener('keydown',menuKeys);window.removeEventListener('resize',resized);});return{s,rail,openRegistration,sidebarGroups,chargeStatus,documentsPanel,paymentSources,paymentKinds,showChargeDocuments,copyChargeCode,closeTabs,tabKeys,isOpen,selectSchool,selectStudent,refreshWorkspace,recentMaterials,loadRecentMaterials,toggleSidebar,activeEnrollments,visibleMaterials,mail,autoPix,cards,schoolwork,loadSchoolwork,studentView,portalName,pickEvidence,submitAbsence,label,student,title,initials,date,money,pendingDocuments,finance,login,logout,changeSchool,changeStudent,chooseStudent,document,request,download,section,run,load,loadFeed,searchFeed,openPost,closePost,openMenu,closeMenu,mfa:PigeMFA,identity:PigeInstitution.state};}}).mount('#family');
 }

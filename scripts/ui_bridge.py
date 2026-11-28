@@ -73,6 +73,6 @@ window.fetch=async(input,options={})=>{
 ''')
     if campaign:
         page.add_script_tag(content='history.replaceState=()=>{}; window.__testCampaign='+json.dumps(campaign)+';')
-    for name in ['vendor/vue-3.5.13.global.prod.js','renders.js',entry+'.js']:
+    for name in ['vendor/vue-3.5.13.global.prod.js','renders.js','form-validation.js',entry+'.js']:
         page.add_script_tag(content=(root/'frontend/dist'/name).read_text())
     return client

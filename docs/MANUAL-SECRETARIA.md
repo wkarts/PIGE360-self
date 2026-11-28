@@ -18,6 +18,8 @@ No celular, toque em **Abrir menu**, escolha o grupo e a opção desejada. Para 
 
 As áreas abertas ficam nas guias do alto da tela. Selecione o nome da guia para retomar a tarefa ou o **×** ao lado desse nome para fechá-la. Para manter só a guia inicial, dê um duplo clique nela ou use **Fechar outras guias**, inclusive no celular. No aviso, selecione **Voltar** se ainda precisar salvar um lançamento. **Fechar outras guias** confirma o descarte dos rascunhos nas guias que serão fechadas.
 
+Quando a aplicação pedir confirmação, **Tab** percorre os botões do aviso. **Esc** ou **×** cancela a ação e devolve o foco ao controle que abriu o aviso. Ao enviar um formulário com campos inválidos, o primeiro campo a corrigir recebe o foco e uma mensagem explica o que preencher.
+
 ## Aluno e responsáveis
 
 Em Cadastro único, mantenha os dados pessoais da pessoa. CPF pode ficar vazio; um CPF informado é validado e não pode repetir dentro da escola. Em Alunos, informe pelo menos nome e nascimento. A matrícula do cadastro (AL-) é distinta do número do vínculo anual (MAT-).
@@ -112,6 +114,12 @@ No Asaas, o portal pode apresentar fatura, boleto ou Pix copia e cola. Pela inte
 ## Sem conexão
 
 A PWA não é um sistema de matrícula offline. Sem conexão, a interface avisa a indisponibilidade e não confirma a gravação. Dados já abertos podem permanecer temporariamente na memória da aba, mas não são persistidos pelo service worker. Ao sair, o estado de aplicação é limpo. Não use terminais compartilhados sem políticas de sessão e proteção do dispositivo.
+
+## Conferir uma matrícula no Educacenso
+
+Em **Educacenso → Dados a declarar**, escolha o ambiente, a etapa, o ano letivo e a data de referência. Em **Abrangência**, selecione **Um aluno**. Busque pelo nome ou número e confira a turma e a matrícula, especialmente quando houver nomes parecidos. Clique em **Validar prévia** e em **Guardar rascunho** depois da conferência.
+
+Em **Editar dados**, a etapa **Matrícula Inicial** permite ajustar o nome, o código Inep e a data de nascimento declarados. A etapa **Situação do Aluno** permite ajustar a situação. Informe o motivo e use **Salvar ajuste**. Retirar uma matrícula altera a composição desse rascunho. Arquivar encerra o trabalho nele e preserva a consulta pelo **Histórico** no ambiente correspondente. Use **Baixar ficha do aluno** para imprimir ou guardar o PDF daquela matrícula. Cada revisão tem um diagnóstico local em JSON. A secretaria continua responsável pelo procedimento oficial no INEP. [Ver exemplo de rascunho individual](../frontend/public/guia/educacenso-individual.webp)
 
 ## Guia dentro da aplicação
 

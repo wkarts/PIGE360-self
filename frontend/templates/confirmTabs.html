@@ -1,8 +1,0 @@
-<dialog class="work-close-dialog" aria-labelledby="work-close-heading" aria-describedby="work-close-description" @cancel.prevent="finish(false)" @close="finish(false)">
-  <header><h2 id="work-close-heading">Fechar as outras guias?</h2><button type="button" class="work-close-dismiss" aria-label="Fechar aviso" @click="finish(false)">×</button></header>
-  <div id="work-close-description">
-    <p>A guia {{home}} permanecerá aberta. As outras guias serão fechadas. Alterações e preenchimentos ainda não salvos nessas guias serão descartados. Os dados já salvos serão preservados.</p>
-    <p v-if="drafts.length"><strong>Confira antes de fechar</strong> · {{drafts.join(', ')}}.</p>
-  </div>
-  <footer><button type="button" class="btn btn-secondary" data-work-close-back autofocus @click="finish(false)">Voltar</button><button type="button" class="btn work-close-confirm" @click="finish(true)">Fechar outras guias</button></footer>
-</dialog>

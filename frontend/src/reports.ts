@@ -9,7 +9,8 @@ namespace PigeReports {
     const kit=Vue.reactive({prefs:null as Preferences|null,year:'',grade:'',group:'',offset:0,more:false,
       recipients:[] as Recipient[],notice:''});
     const settingsPath=()=>'/schools/'+props.schoolId+'/report-preferences';
-    let loadingPreferences=false;
+    let loadingPreferences=false,live=true;
+    Vue.onBeforeUnmount(()=>{live=false;});
     async function openKit(event:Event){
       if(!(event.currentTarget as HTMLDetailsElement).open || !props.canConfigure || kit.prefs || loadingPreferences)return;
       loadingPreferences=true;
@@ -52,8 +53,15 @@ namespace PigeReports {
       for(const item of kit.recipients.filter(item=>item.checked&&!item.last_revision))await signRecipient(item);
     });}
     async function reissue(item:Recipient){
-      if(!window.confirm('Emitir e assinar uma nova revisão do boletim de '+item.name+'?'))return;
-      await run(()=>signRecipient(item));
+      await run(async()=>{
+        const school=props.schoolId,revision=item.last_revision;
+        const available=()=>live&&props.canIssue&&props.canSign&&props.schoolId===school&&
+          Boolean(revision)&&item.last_revision===revision&&kit.recipients.includes(item);
+        if(!available())return;
+        const approved=await PigeDialogs.confirm('Emitir e assinar uma nova revisão do boletim de '+item.name+'?',
+          {title:'Assinar nova revisão do boletim',confirmLabel:'Emitir e assinar'});
+        if(approved&&available())await signRecipient(item);
+      });
     }
     const base=()=>'/schools/'+props.schoolId+'/reports';
     const modules=()=>Array.from(new Set(state.catalog.map(item=>item.module)));

@@ -19,13 +19,13 @@ namespace PigeTeacher {
   const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bahia'}).format(new Date());
   const s=Vue.reactive({ready:false,busy:false,error:'',email:'',password:'',passwordVisible:false,
     user:null as PigeAPI.User|null,schools:[] as {id:string;name:string}[],schoolId:'',
-    requestedDiary:undefined as {id:string;tab?:string}|undefined,section:'overview',tabs:['overview'],sidebarCollapsed:savedSidebar(),menuOpen:false,
+    requestedDiary:undefined as {id:string;tab?:string;discardApproved?:boolean}|undefined,section:'overview',tabs:['overview'],sidebarCollapsed:savedSidebar(),menuOpen:false,
     news:[] as {id:string;title:string;content:string;summary:string}[],newsPage:1,newsTotal:0,week:today(),agenda:null as Agenda|null});
   const rail=PigeSidebarRail.use(()=>s.sidebarCollapsed);
-  let loadedSchoolId='';
+  let loadedSchoolId='',sessionVersion=0;
   function clear(){
+    sessionVersion++;PigeDialogs.cancelPending();
     rail.close();
-    PigePortalTabs.cancelClose();
     loadedSchoolId='';mail.clear();PigeAPI.clear();PigeMFA.clear();s.user=null;s.schools=[];s.schoolId='';s.password='';s.passwordVisible=false;
     s.section='overview';s.tabs=['overview'];s.requestedDiary=undefined;s.menuOpen=false;s.news=[];s.agenda=null;s.week=today();s.error='';
   }
@@ -41,6 +41,7 @@ namespace PigeTeacher {
     if(id===s.schoolId && week===s.week)s.agenda=data;
   }
   async function school(id:string){
+    sessionVersion++;PigeDialogs.cancelPending();
     rail.close();
     if(s.schoolId && s.schoolId!==id)PigeDiary.clearPilotContext(s.schoolId);
     loadedSchoolId='';mail.clear();s.agenda=null;s.news=[];s.newsPage=1;s.newsTotal=0;
@@ -69,17 +70,18 @@ namespace PigeTeacher {
     const data=await PigeAPI.post<Record<string,unknown>>('/auth/login',{email:s.email,password});
     if(!await PigeMFA.accept(data))await enter(data as unknown as PigeAPI.SessionResponse);
   });}
-  async function logout(){if(canLeaveSchool())await run(async()=>{await PigeAPI.post('/auth/logout',{});clear();});}
+  async function logout(){if(await canLeaveSchool('Sair do portal?','Sair'))await run(async()=>{await PigeAPI.post('/auth/logout',{});clear();});}
   async function start(){
     await PigeInstitution.load();
     try{const session=await PigeAPI.refresh();await enter(session);}
     catch(e){if((e as {status?:number}).status!==401)s.error=(e as Error).message;}
     finally{s.ready=true;}
   }
-  function selectSchool(event:Event){
-    const select=event.target as HTMLSelectElement;
-    if(!canLeaveSchool()){select.value=s.schoolId;return;}
-    void run(()=>school(select.value));
+  async function selectSchool(event:Event){
+    const select=event.target as HTMLSelectElement,target=select.value;
+    select.value=s.schoolId;
+    if(!await canLeaveSchool('Trocar de instituição?','Trocar de instituição') || !s.schools.some(item=>item.id===target))return;
+    await run(()=>school(target));
   }
   async function publications(page=1){
     const id=s.schoolId;
@@ -134,6 +136,7 @@ namespace PigeTeacher {
   }
   function navigate(section:string,focusHeading=true){
     if(s.busy || !available(section) || unavailable(section))return;
+    if(section!==s.section)PigeDialogs.cancelPending();
     rail.close();
     if(section!=='diary' && location.hash==='#diario')history.replaceState(history.state,'',location.pathname+location.search);
     if(!s.tabs.includes(section))s.tabs.push(section);
@@ -144,19 +147,33 @@ namespace PigeTeacher {
   }
   function supportDraft(){return Boolean(document.querySelector('#teacher-protocols [data-workspace-dirty="true"]'));}
   function supportBusy(){return Boolean(document.querySelector('#teacher-protocols [aria-busy="true"]'));}
-  function canLeaveSchool():boolean {
-    if(supportBusy() || !canDiscardDiary())return false;
-    return !supportDraft() || window.confirm('Descartar a mensagem de atendimento que ainda não foi enviada?');
+  function diaryBusy(){return Boolean(document.querySelector('#teacher-diary [aria-busy="true"]'));}
+  function diaryDraft(){return Boolean(document.querySelector('#teacher-diary [data-workspace-dirty="true"]'));}
+  function workspaceKey(){return JSON.stringify([sessionVersion,s.schoolId,s.user?.id,s.section,s.tabs,s.requestedDiary]);}
+  async function canLeaveSchool(heading:string,action:string):Promise<boolean> {
+    if(s.busy || supportBusy() || diaryBusy())return false;
+    const warnings=[];
+    if(diaryDraft())warnings.push('As alterações do diário ainda não foram salvas.');
+    if(supportDraft())warnings.push('A mensagem de atendimento ainda não foi enviada.');
+    if(s.tabs.includes('webmail'))warnings.push('Confira se as mensagens em edição foram salvas em Rascunhos.');
+    if(!warnings.length)return true;
+    const previous=workspaceKey();
+    const approved=await PigeDialogs.confirm(warnings.join(' '),{title:heading,confirmLabel:action,cancelLabel:'Voltar',destructive:true});
+    return approved && previous===workspaceKey() && !s.busy && !supportBusy() && !diaryBusy();
   }
-  function canDiscardDiary():boolean {
-    if(document.querySelector('#teacher-diary [aria-busy="true"]'))return false;
-    return !document.querySelector('#teacher-diary [data-workspace-dirty="true"]') ||
-      window.confirm('Descartar as alterações do diário que ainda não foram salvas?');
-  }
-  function openDiary(id:string,tab:string){
-    if(s.busy || !available('diary') || !s.agenda?.diaries.some(d=>d.id===id))return;
-    if((tab==='materials' && !available('materials')) || !canDiscardDiary())return;
-    s.requestedDiary={id,tab};
+  async function openDiary(id:string,tab:string){
+    const allowed=()=>!s.busy && !diaryBusy() && available('diary') && s.agenda?.diaries.some(d=>d.id===id) && (tab!=='materials'||available('materials'));
+    if(!allowed())return;
+    let discardApproved=false;
+    if(diaryDraft()){
+      const previous=workspaceKey();
+      const approved=await PigeDialogs.confirm('As alterações do diário que ainda não foram salvas serão descartadas.',{
+        title:'Continuar para a rotina do diário?',confirmLabel:'Continuar',cancelLabel:'Voltar',destructive:true
+      });
+      if(!approved||previous!==workspaceKey()||!allowed())return;
+      discardApproved=true;
+    }
+    s.requestedDiary=discardApproved?{id,tab,discardApproved:true}:{id,tab};
     navigate('diary',false);
   }
   async function closeTabs(section?:string){
@@ -168,20 +185,21 @@ namespace PigeTeacher {
     if(closingSupport && supportBusy())return;
     const supportWarning=closingSupport&&supportDraft()?' A mensagem de atendimento ainda não enviada será descartada.':'';
     const closingMail=s.tabs.includes('webmail') && (!section || section==='webmail');
+    const previousContext=workspaceKey();
     if(section){
       const diaryWarning=dirty?' As alterações do diário que ainda não foram salvas serão descartadas.':'';
       const mailWarning=closingMail?' Confira se as mensagens em edição foram salvas em Rascunhos.':'';
-      if((dirty || closingMail || supportWarning) && !window.confirm('Fechar a guia '+title(section)+'?'+diaryWarning+mailWarning+supportWarning))return;
+      if((dirty || closingMail || supportWarning) && !await PigeDialogs.confirm((diaryWarning+mailWarning+supportWarning).trim(),{
+        title:'Fechar a guia '+title(section)+'?',confirmLabel:'Fechar guia',cancelLabel:'Voltar',destructive:true
+      }))return;
     }else{
-      const school=s.schoolId,user=s.user;
       const pending=[];
       if(dirty)pending.push('alterações no diário de classe');
       if(supportWarning)pending.push('mensagem de atendimento');
       if(closingMail)pending.push('mensagens em edição no E-mail');
       if(!await PigePortalTabs.confirmClose(title('overview'),pending))return;
-      if(school!==s.schoolId || user!==s.user || s.busy || (closingSupport&&supportBusy()) ||
-          (closingDiary&&document.querySelector('#teacher-diary [aria-busy="true"]')))return;
     }
+    if(previousContext!==workspaceKey() || s.busy || (closingSupport&&supportBusy()) || (closingDiary&&diaryBusy()))return;
     const previous=s.section;
     s.tabs=section?s.tabs.filter(id=>id!==section):['overview'];
     if(closingDiary)s.requestedDiary=undefined;
