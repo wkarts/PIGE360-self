@@ -1,13 +1,15 @@
 """Leitura familiar de cobranças existentes, com transportes bancários locais simulados."""
 import json
-from datetime import timedelta
+from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from app import crm_bridge as bridge, crm_bridge_external as external, models as m
 from app.crm_bridge_models import CRMBridgeRequest, CRMBridgeExternalRequest
 from app.db import SessionLocal, now
+from app.online_schemas import ChargeInput
 from app.portal_access import today
 from conftest import PASSWORD
 from test_crm_bridge import configured
@@ -17,6 +19,21 @@ from test_crm_bridge_invoices import queue as queue_invoice, receipt as invoice_
 from test_family_access_profiles import account
 from test_manual_banking import payload
 from test_online import bank, provider_mock, run_issue
+
+
+@pytest.mark.parametrize('kind',['PIX','BOLETO'])
+def test_due_date_uses_school_day_after_midnight_utc(monkeypatch, kind):
+    class LastHoursOfSchoolDay(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 11, 28, 1, 30, tzinfo=UTC).astimezone(tz)
+
+    monkeypatch.setattr('app.portal_access.datetime', LastHoursOfSchoolDay)
+    charge = dict(enrollment_id='enrollment', billing_type=kind, amount='120.15',
+                  description='Mensalidade', client_key=str(uuid4()), due_on='2026-11-27')
+    assert ChargeInput.model_validate(charge).due_on == date(2026, 11, 27)
+    with pytest.raises(ValidationError, match='vencimento atual ou futuro'):
+        ChargeInput.model_validate({**charge, 'due_on':'2026-11-26'})
 
 
 def family(api):
