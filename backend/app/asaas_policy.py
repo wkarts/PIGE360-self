@@ -53,6 +53,9 @@ class Policy(BaseModel):
     sync_lifecycle: bool = True
     sync_manual_settlement: bool = True
     cash_settlement_method: Literal['receive_in_cash', 'cancel'] = 'receive_in_cash'
+    periodic_reconciliation_enabled: bool = True
+    settled_review_days: int = Field(default=0, ge=0, le=365)
+    reconciliation_batch_size: int = Field(default=25, ge=1, le=100)
 
     @model_validator(mode='after')
     def valid_rates(self):
@@ -189,6 +192,11 @@ def save_settings(data: SettingsInput, db: DB, user: Actor, school: Scope, reque
         fail(409, 'Cadastre a conexão Asaas desta escola antes de salvar a política.')
     check_version(conn, data.version)
     settings = data.settings.model_dump(mode='json')
+    # Uma tela de configuração anterior pode salvar a política sem conhecer a revisão periódica.
+    current = (conn.config or {}).get('payment_policy') or {}
+    for field in ('periodic_reconciliation_enabled', 'settled_review_days', 'reconciliation_batch_size'):
+        if field not in data.settings.model_fields_set and field in current:
+            settings[field] = current[field]
     conn.config = {**(conn.config or {}), 'payment_policy': settings}
     conn.version += 1
     audit(db, request, user, 'asaas.payment_policy.updated', conn, school.id, {'version': conn.version})

@@ -24,7 +24,7 @@ from PIL import Image
 from . import models as m
 from .db import engine, now
 from .config import settings
-from .security import utc
+from .security import lock_school, utc
 from .integration_core import AsaasProvider, ConnectProvider, IntegrationFailure, unseal, enqueue
 from .connect_core import ConnectApiClient
 from .banking import apply_remote, queue_charge_sync, crm_issue_attempted
@@ -383,21 +383,40 @@ def process_connect_one():
                 db.commit()
 
 def schedule_reconciliations():
-    """Recupera webhooks perdidos sem repetir POST de cobrança; volume limitado."""
+    """Agenda consultas de pagamentos segundo a política de cada escola."""
+    from .asaas_policy import policy_for
+    from .asaas_auto_pix import schedule_periodic
     interval=settings().bank_reconcile_interval_seconds
+    at=now()
+    cutoff=at-timedelta(seconds=interval)
+    bucket=int(at.timestamp())//interval
     with Session(engine,expire_on_commit=False) as db:
-        cutoff=now()-timedelta(seconds=interval)
-        rows=list(db.scalars(select(m.BankCharge).join(m.IntegrationConnection).where(
-            m.IntegrationConnection.enabled.is_(True),
-            m.BankCharge.status.in_(['pending','overdue','confirmed','uncertain','refund_requested','disputed']),
-            (m.BankCharge.last_synced_at.is_(None))|(m.BankCharge.last_synced_at<cutoff)
-        ).order_by(m.BankCharge.last_synced_at.asc(),m.BankCharge.created_at).limit(25)))
-        from .asaas_auto_pix import schedule_periodic
         schedule_periodic(db,cutoff,interval)
-        for charge in rows:
-            key=f'bank-periodic:{charge.id}:{int(now().timestamp())//interval}'
-            queue_charge_sync(db,charge,key)
         db.commit()
+        accounts=db.execute(select(m.IntegrationConnection.school_id,m.IntegrationConnection.id).where(
+            m.IntegrationConnection.provider=='asaas',m.IntegrationConnection.enabled.is_(True)
+        ).order_by(m.IntegrationConnection.school_id)).all()
+        for school_id,connection_id in accounts:
+            lock_school(db,school_id)
+            account=db.get(m.IntegrationConnection,connection_id,populate_existing=True)
+            policy=policy_for(account)
+            if account and account.enabled and policy.periodic_reconciliation_enabled:
+                charge=m.BankCharge
+                eligible=charge.status.in_(['pending','overdue','confirmed','uncertain','refund_requested','disputed'])
+                if policy.settled_review_days:
+                    # A janela começa no recebimento registrado, e não na última consulta da API.
+                    settled=('received','received_external')
+                    recent=select(m.BankEvent.id).where(m.BankEvent.school_id==school_id,
+                        m.BankEvent.charge_id==charge.id,m.BankEvent.status.in_(settled),
+                        m.BankEvent.created_at>=at-timedelta(days=policy.settled_review_days)).exists()
+                    eligible=eligible|(charge.status.in_(settled)&recent)
+                rows=db.scalars(select(charge).where(charge.school_id==school_id,charge.connection_id==connection_id,charge.collection_mode=='provider',
+                    eligible,charge.last_synced_at.is_(None)|(charge.last_synced_at<cutoff)
+                ).order_by(charge.last_synced_at.asc().nulls_first(),charge.created_at,charge.id)
+                    .limit(policy.reconciliation_batch_size))
+                for row in rows:
+                    queue_charge_sync(db,row,f'bank-periodic:{row.id}:{bucket}')
+            db.commit()
 
 def process_next_queue(queues):
     """Avança a fila inicial a cada tentativa e executa até um trabalho no ciclo."""

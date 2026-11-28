@@ -166,13 +166,22 @@ assert.equal(writes.at(-1).url,base+'/monitor/charges/charge-1/refund');
 assert.equal(writes.at(-1).payload.amount,'33.00');
 
 const settings=view('settings',['integrations.manage']);
+let policyPayload;
 api.request=async(url,opts)=>{
   if(url.endsWith('/pix-automatic/settings'))return {enabled:false,version:4,additional_holidays:[]};
-  return {connection_id:'conn',version:opts?5:4,settings:{card_recurring_enabled:true}};
+  if(opts)policyPayload=JSON.parse(opts.body);
+  return {connection_id:'conn',version:opts?5:4,settings:policyPayload?.settings??{card_recurring_enabled:true,periodic_reconciliation_enabled:true,settled_review_days:0,reconciliation_batch_size:25}};
 };
 await settings.ctx.initialize();
 assert.ok(settings.render());
+const reviewFields=settings.ctx.policyGroups.find(group=>group.title==='Conciliação periódica').fields;
+assert.deepEqual(Array.from(reviewFields[1].slice(3)),['0','365']);
+assert.deepEqual(Array.from(reviewFields[2].slice(3)),['1','100']);
+Object.assign(settings.state.policy.settings,{periodic_reconciliation_enabled:false,settled_review_days:14,reconciliation_batch_size:8});
 await settings.ctx.savePolicy();
+assert.equal(policyPayload.settings.periodic_reconciliation_enabled,false);
+assert.equal(policyPayload.settings.settled_review_days,14);
+assert.equal(policyPayload.settings.reconciliation_batch_size,8);
 assert.equal(settings.state.settings.version,5);
 settings.state.holidays='01/01/2027';
 await settings.ctx.saveSettings();

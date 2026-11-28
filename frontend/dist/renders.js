@@ -927,10 +927,11 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                             key: 2,
                             type: "number",
                             "onUpdate:modelValue": $event => ((s.policy.settings[field[0]]) = $event),
-                            min: "0",
+                            min: field[3]||0,
+                            max: field[4],
                             step: field[2]==='integer'?'1':'0.01',
                             required: ""
-                          }, null, 8, ["onUpdate:modelValue", "step"])), [[_vModelText, s.policy.settings[field[0]]]])], 2))
+                          }, null, 8, ["onUpdate:modelValue", "min", "max", "step"])), [[_vModelText, s.policy.settings[field[0]]]])], 2))
                   }), 128))]), (group.title==='Ciclo da cobrança'&&s.policy.settings.sync_manual_settlement===false)
                     ? (_openBlock(), _createElementBlock("p", {
                         key: 0,
