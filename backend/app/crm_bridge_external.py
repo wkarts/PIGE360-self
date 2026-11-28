@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from . import models as m,crm_bridge as bridge
 from .common import audit
 from .crm_bridge_contract import ContractError,decode,encode
-from .crm_bridge_charge_contract import envelope,validate_receipt,PATHS,provider_for,bb_title
+from .crm_bridge_charge_contract import envelope,validate_receipt,PATHS,provider_for,bb_title,crm_receipt_payable
 from .crm_bridge_models import CRMBridgeRequest,CRMBridgeExternalRequest
 from .db import engine,uid
 from .security import Actor,DB,Scope,require,lock_school,scoped,fail
@@ -83,6 +83,13 @@ def accept(row,receipt,event,action):
     for key in ('origin_id','remote_id','payment_id'):
         if row.receipt.get(key) is not None and row.receipt[key]!=receipt[key]:raise ContractError('CHARGE_MAPPING_CHANGED')
     if receipt['instrument'] is not None and receipt['instrument']['billing_type']!=decode(row.raw_body.encode())['data']['billing_type']:raise ContractError('INSTRUMENT_TYPE_CHANGED')
+    if action == 'instruments':
+        row.payment_instrument = receipt['instrument']
+    elif row.payment_instrument is None:
+        # Conserva instrumentos já confirmados antes da migração.
+        row.payment_instrument = row.receipt.get('instrument')
+    if not crm_receipt_payable(receipt):
+        row.payment_instrument = None
     row.request_id=receipt['request_id'];row.receipt=receipt;row.status='observed';row.error_code=''
 
 

@@ -47,12 +47,15 @@ def test_approval_reserves_and_expiration_releases_without_worker(online):
     a=approve(o,submit(o,draft(o)))
     assert a['reservation']['status']=='held'
     assert o['api'].get('/class-groups')[0]['available']==0
+    dashboard=o['api'].get('/dashboard')
+    assert (dashboard['capacity'], dashboard['available']) == (1, 0)
     b=submit(o,draft(o))
     o['api'].post('/admissions/'+b['id']+'/approve',{'version':b['version'],
         'identity_confirmed':True,'reason':'Conferência da capacidade.'},409)
     expire(a)
     assert pc(o,'GET','/admissions/'+a['id'])['reservation']['status']=='expired'
     assert o['api'].get('/class-groups')[0]['available']==1
+    assert o['api'].get('/dashboard')['available'] == 1
     assert approve_sibling(o,b,a)['reservation']['status']=='held'
 
 
@@ -66,6 +69,7 @@ def test_timely_payment_survives_document_pending_and_is_not_counted_twice(onlin
     a=o['api'].post('/admissions/'+a['id']+'/finalize',{'version':a['version'],'reason':'Conferência final.'},200)
     assert a['status']=='enrolled' and a['reservation']['status']=='consumed'
     assert o['api'].get('/class-groups')[0]['occupied']==1
+    assert o['api'].get('/dashboard')['available'] == 0
 
 
 def test_late_payment_needs_explicit_capacity_review(online):

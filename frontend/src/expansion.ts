@@ -20,7 +20,8 @@ namespace PigeExpansion {
   interface BridgeRequest {schema_version:number;id:string;charge_id:string;connection_id:string;status:string;error_code:string;request_id:string|null;attempts:number;receipt:Record<string,unknown>}
   const connectConfig=():PigeOnline.ConnectConfig=>({base_url:'',instance:'',send_text_path:'',connection_state_path:'',api_key_header:'apikey',auth_scheme:'',number_field:'number',text_field:'text',message_id_path:'key.id',contract_confirmed:false});
   export const component={get components(){return {'asaas-panel':PigeAsaas.component,'contract-value-field':PigeContractFields.component,'signing-panel':PigeSigning.component};},props:['schoolId','page','permissions','role'],emits:['view-student'],render:PigeRenders.expansion,setup(props:Props,context?:{emit:(name:string,id:string)=>void}){
-    const s=Vue.reactive({bankTab:props.permissions.includes('banking.read')?'charges':props.permissions.includes('asaas.reports.read')?'reports':'monitor',identificationFooter:false,bridgeConfig:{enabled:false,base_url:'',issuer_id:'',account_id:'',environment:'sandbox'} as BridgeConfig,bridgeSecret:'',bridgeMessage:'',bridgeCharge:'',bridgeClient:'',bridgeInvoice:'',bridgePayer:'',bridgeBilling:'PIX',bridgeProvider:'asaas',bridgeBB:{payer_address:'',payer_district:'',payer_zip:'',payer_city:'',payer_state:'',species:'',acceptance:''},bridgeRecovery:{} as Record<string,string>,bridgeExternal:[] as BridgeExternal[],bridgeRequests:[] as BridgeRequest[],readiness:null as null|{ready:boolean;server_date:string;issues:{code:string;message:string}[];campaigns:{id:string;title:string;ready:boolean;reasons:string[]}[]},busy:false,error:'',notice:'',q:'',status:'',page:1,total:0,tab:'queue',rows:[] as Admission[],selected:null as Admission|null,campaigns:[] as Campaign[],campaignForm:emptyCampaign(),feeAccounts:[] as {id:string;environment:string}[],feeAccountsError:false,editingCampaign:false,groups:[] as PigeAPI.Row[],campaignYears:[] as PigeAPI.Row[],campaignUnits:[] as PigeAPI.Row[],admissionStage:'documents',contractDraftKey:'',contractDraftVersion:0,contractDraftDirty:false,finalReadiness:null as EnrollmentReadiness|null,contractTargetId:'',contractChangeReason:'',contractTemplates:[] as ContractTemplate[],contractFields:[] as {key:string;label:string;source:string}[],contractPreview:null as ContractPreview|null,contractValues:{} as Record<string,string>,contractPreviewStale:false,counts:{} as Record<string,number>,reason:'',action:'review',identity:false,existingStudent:'',existingGuardian:'',financialPerson:'',eligiblePayers:[] as {id:string;name:string}[],matchQ:'',studentMatchQ:'',guardianMatchQ:'',matchWarnings:[] as string[],matchNotice:'',matchError:'',matchTruncated:false,reviewPreset:'',studentMatches:[] as PigeAPI.Student[],guardianMatches:[] as PigeAPI.Row[],message:'',internal:false,charges:[] as Charge[],bankSummary:[] as {status:string;count:number;amount:string}[],bankDueFrom:'',bankDueTo:'',bankingStatus:null as BankingStatus|null,webhookEmail:'',showBankOperations:false,selectedCharge:null as Charge|null,bankEvents:[] as (PigeOnline.BankEvent&{details?:{amount?:string;paid_on?:string;reference?:string}})[],receiptForm:{amount:'',paid_on:'',payment_method:'cash',reference:'',client_key:PigeOnline.newId()},bankReason:'',chargeOpen:false,chargeInitial:'',discardCharge:false,chargeForm:{admission_id:'',enrollment_id:'',amount:'',due_on:'',description:'',collection_mode:'manual',billing_type:'MANUAL',client_key:PigeOnline.newId(),installment_count:1,use_recurring_card:false,required_for_enrollment:false},enrollmentQ:'',enrollmentMatches:[] as PigeAPI.Row[],connections:[] as PigeOnline.Connection[],jobs:[] as PigeOnline.Job[],jobTotal:0,jobPage:1,jobStatus:'',provider:'asaas',connectionForm:{version:undefined as number|undefined,enabled:false,environment:'sandbox',api_key:'',webhook_token:'',config:connectConfig()},editingConnection:false,connect:{configured:false,base_url:'',api_key_configured:false,instance_prefix:'PG360',host_policy:'base_url',effective_host:''},connectInstances:[] as ConnectInstance[],connectRemote:[] as RemoteConnectInstance[],connectInventoryLoaded:false,connectAdoptName:'',connectLegacyReview:false,connectLegacyConfirm:false,connectLegacyReason:'',connectUnits:[] as ConnectUnitPreference[],connectJobs:[] as ConnectJob[],connectJobTotal:0,connectJobPage:1,connectJobStatus:'',connectLabel:'',connectPrimary:false,connectCreatePhone:'',connectPhoneDrafts:{} as Record<string,string>,connectOperation:{instanceId:'',kind:''},connectQr:{instanceId:'',base64:'',code:'',pairingCode:'',pending:false,connected:false,kind:''} as ConnectQrDisplay});
+    const s=Vue.reactive({bankTab:props.permissions.includes('banking.read')?'charges':props.permissions.includes('asaas.reports.read')?'reports':'monitor',identificationFooter:false,bridgeConfig:{enabled:false,base_url:'',issuer_id:'',account_id:'',environment:'sandbox'} as BridgeConfig,bridgeSecret:'',bridgeMessage:'',bridgeCharge:'',bridgeClient:'',bridgeInvoice:'',bridgePayer:'',bridgeBilling:'PIX',bridgeProvider:'asaas',bridgeBB:{payer_address:'',payer_district:'',payer_zip:'',payer_city:'',payer_state:'',species:'',acceptance:''},bridgeRecovery:{} as Record<string,string>,bridgeExternal:[] as BridgeExternal[],bridgeRequests:[] as BridgeRequest[],readiness:null as null|{ready:boolean;server_date:string;issues:{code:string;message:string}[];campaigns:{id:string;title:string;ready:boolean;reasons:string[]}[]},busy:false,error:'',notice:'',q:'',status:'',page:1,total:0,tab:'queue',rows:[] as Admission[],selected:null as Admission|null,campaigns:[] as Campaign[],campaignForm:emptyCampaign(),feeAccounts:[] as {id:string;environment:string}[],feeAccountsError:false,editingCampaign:false,groups:[] as PigeAPI.Row[],campaignYears:[] as PigeAPI.Row[],campaignUnits:[] as PigeAPI.Row[],admissionStage:'documents',contractDraftKey:'',contractDraftVersion:0,contractDraftDirty:false,finalReadiness:null as EnrollmentReadiness|null,contractTargetId:'',contractChangeReason:'',contractTemplates:[] as ContractTemplate[],contractFields:[] as {key:string;label:string;source:string}[],contractPreview:null as ContractPreview|null,contractValues:{} as Record<string,string>,contractPreviewStale:false,counts:{} as Record<string,number>,reason:'',action:'review',identity:false,existingStudent:'',existingGuardian:'',financialPerson:'',eligiblePayers:[] as {id:string;name:string}[],matchQ:'',studentMatchQ:'',guardianMatchQ:'',matchWarnings:[] as string[],matchNotice:'',matchError:'',matchTruncated:false,reviewPreset:'',studentMatches:[] as PigeAPI.Student[],guardianMatches:[] as PigeAPI.Row[],message:'',internal:false,charges:[] as Charge[],bankSummary:[] as {status:string;count:number;amount:string}[],bankDueFrom:'',bankDueTo:'',bankingStatus:null as BankingStatus|null,webhookEmail:'',showBankOperations:false,selectedCharge:null as Charge|null,bankEvents:[] as (PigeOnline.BankEvent&{details?:{amount?:string;paid_on?:string;reference?:string}})[],receiptForm:{amount:'',paid_on:'',payment_method:'cash',reference:'',client_key:PigeOnline.newId()},bankReason:'',chargeOpen:false,chargeInitial:'',chargeForm:{admission_id:'',enrollment_id:'',amount:'',due_on:'',description:'',collection_mode:'manual',billing_type:'MANUAL',client_key:PigeOnline.newId(),installment_count:1,use_recurring_card:false,required_for_enrollment:false},enrollmentQ:'',enrollmentMatches:[] as PigeAPI.Row[],connections:[] as PigeOnline.Connection[],jobs:[] as PigeOnline.Job[],jobTotal:0,jobPage:1,jobStatus:'',provider:'asaas',connectionForm:{version:undefined as number|undefined,enabled:false,environment:'sandbox',api_key:'',webhook_token:'',config:connectConfig()},editingConnection:false,connect:{configured:false,base_url:'',api_key_configured:false,instance_prefix:'PG360',host_policy:'base_url',effective_host:''},connectInstances:[] as ConnectInstance[],connectRemote:[] as RemoteConnectInstance[],connectInventoryLoaded:false,connectAdoptName:'',connectLegacyReview:false,connectLegacyReason:'',connectUnits:[] as ConnectUnitPreference[],connectJobs:[] as ConnectJob[],connectJobTotal:0,connectJobPage:1,connectJobStatus:'',connectLabel:'',connectPrimary:false,connectCreatePhone:'',connectPhoneDrafts:{} as Record<string,string>,connectOperation:{instanceId:'',kind:''},connectQr:{instanceId:'',base64:'',code:'',pairingCode:'',pending:false,connected:false,kind:''} as ConnectQrDisplay});
+    let active=true;
     const draftDirty=()=>s.contractDraftDirty;
     if(props.page==='online')hasUnsavedChanges=draftDirty;
     const base=()=>'/schools/'+props.schoolId;
@@ -45,15 +46,54 @@ namespace PigeExpansion {
     function canChangeContract():boolean{return ['admin','direction'].includes(props.role||'')&&can('admissions.write')&&can('documents.generate')&&can('documents.read')&&s.selected?.status==='approved'&&['draft','cancelled'].includes(s.selected.enrollment?.status||'');}
     function admissionContractTemplates():ContractTemplate[]{const year=s.selected?.contract.academic_year_id;const today=new Date().toISOString().slice(0,10);return s.contractTemplates.filter(t=>isSigningContract(t)&&(!t.academic_year_id||t.academic_year_id===year)&&(!t.valid_from||t.valid_from<=today)&&(!t.valid_until||t.valid_until>=today));}
     function contractChoiceChanged():boolean{const target=admissionContractTemplates().find(t=>t.id===s.contractTargetId);return Boolean(target&&(target.id!==s.selected?.contract.template_id||target.version!==selectedContractVersion()));}
-    async function reloadContractTemplates():Promise<void>{await run(async()=>{s.contractTemplates=(await PigeAPI.request<{items:ContractTemplate[]}>(base()+'/document-templates?include_inactive=true')).items;s.selected=await PigeAPI.request<Admission>(base()+'/admissions/'+s.selected!.id);s.notice='Modelos e revisões atualizados. Confira a seleção antes de aplicar.';});}
-    async function changeContract(templateId:string,revision:number,reason:string):Promise<void>{const a=s.selected;if(!a)return;if(s.contractDraftDirty&&!window.confirm('Há preenchimentos ainda não salvos. Deseja trocar a revisão e descartar estas alterações?'))return;if(reason.trim().length<10)throw new Error('Informe uma justificativa de pelo menos 10 caracteres para a alteração do contrato.');await PigeAPI.post(base()+'/admissions/'+a.id+'/contract-revision',{version:a.version,template_id:templateId,template_version:revision,reason:reason.trim()});await openAdmission(a.id);const settings=document.querySelector('.admission-model-settings') as HTMLDetailsElement|null;if(settings)settings.open=false;s.reason='';s.notice='Nova revisão vinculada. Prepare e emita a via corrigida; a família deverá assinar novamente. O histórico anterior foi preservado.';}
+    async function reloadContractTemplates():Promise<void>{
+      await run(async()=>{
+        const admission=s.selected;
+        if(!admission)return;
+        s.contractTemplates=(await PigeAPI.request<{items:ContractTemplate[]}>(base()+'/document-templates?include_inactive=true')).items;
+        const fresh=await PigeAPI.request<Admission>(base()+'/admissions/'+admission.id);
+        if(!active)return;
+        if(contractChanged(admission,fresh)){
+          if(!await openAdmission(admission.id,fresh))return;
+        }else{s.selected=fresh;}
+        s.notice='Modelos e revisões atualizados. Confira a seleção antes de aplicar.';
+      });
+    }
+    async function changeContract(templateId:string,revision:number,reason:string):Promise<void>{
+      const a=s.selected;
+      if(!a)return;
+      if(reason.trim().length<10)throw new Error('Informe uma justificativa de pelo menos 10 caracteres para a alteração do contrato.');
+      if(s.contractDraftDirty && !await PigeDialogs.confirm(
+        'Os preenchimentos ainda não salvos na revisão atual serão descartados.',
+        {title:'Trocar a revisão do contrato?',confirmLabel:'Trocar revisão',cancelLabel:'Continuar editando',destructive:true}
+      ))return;
+      if(!active)return;
+      await PigeAPI.post(base()+'/admissions/'+a.id+'/contract-revision',{version:a.version,template_id:templateId,template_version:revision,reason:reason.trim()});
+      if(!active)return;
+      await openAdmission(a.id,undefined,true);
+      const settings=document.querySelector('.admission-model-settings') as HTMLDetailsElement|null;
+      if(settings)settings.open=false;
+      s.reason='';
+      s.notice='Nova revisão vinculada. Prepare e emita a via corrigida; a família deverá assinar novamente. O histórico anterior foi preservado.';
+    }
     async function applyContractChoice():Promise<void>{await run(async()=>{const target=admissionContractTemplates().find(t=>t.id===s.contractTargetId);if(!target)throw new Error('Selecione um modelo de contrato ativo e compatível com esta matrícula.');await changeContract(target.id,target.version,s.contractChangeReason);});}
     const contractHistoryPolicy=Vue.reactive({value:null as {allow_removal:boolean;can_manage:boolean}|null});
     async function loadContractHistoryPolicy():Promise<void>{await run(async()=>{contractHistoryPolicy.value=await PigeAPI.request(base()+'/contract-history/policy');});}
     async function setContractHistoryPolicy(allow:boolean):Promise<void>{if(!contractHistoryPolicy.value?.can_manage)return;await run(async()=>{contractHistoryPolicy.value=await PigeAPI.request(base()+'/contract-history/policy',{method:'PUT',body:JSON.stringify({allow_removal:allow})});});}
-    async function removeContractHistory(id:string):Promise<void>{const a=s.selected;if(!a||!contractHistoryPolicy.value?.can_manage||!contractHistoryPolicy.value.allow_removal)return;
-      const reason=window.prompt('Justifique a retirada da via sem assinatura do histórico (pelo menos 10 caracteres). Os registros de auditoria serão preservados.');
-      if(reason===null)return;await run(async()=>{if(reason.trim().length<10)throw new Error('Informe ao menos 10 caracteres para justificar a remoção.');await PigeAPI.post(base()+'/admissions/'+a.id+'/issued/'+id+'/remove-history',{reason});await openAdmission(a.id);s.notice='Via retirada do histórico operacional. A auditoria foi preservada.';});}
+    async function removeContractHistory(id:string):Promise<void>{
+      await run(async()=>{
+        const a=s.selected;
+        if(!a || !contractHistoryPolicy.value?.can_manage || !contractHistoryPolicy.value.allow_removal)return;
+        const reason=await PigeDialogs.prompt(
+          'Justifique a retirada desta via sem assinatura. O registro de auditoria será preservado.',
+          {title:'Retirar via do histórico?',confirmLabel:'Retirar via',inputLabel:'Justificativa da retirada',minLength:10,maxLength:1000,destructive:true}
+        );
+        if(reason===null || !active)return;
+        await PigeAPI.post(base()+'/admissions/'+a.id+'/issued/'+id+'/remove-history',{reason:reason.trim()});
+        await openAdmission(a.id);
+        s.notice='Via retirada do histórico operacional. A auditoria foi preservada.';
+      });
+    }
     async function downloadContractHistory(id:string):Promise<void>{await run(async()=>{const details=await PigeAPI.request<{file_id:string}>(base()+'/issued-documents/'+id+'/signatures');await PigeAPI.download(base()+'/files/'+details.file_id+'/download','contrato-historico.pdf');});}
     function contractStatus(status:unknown):string{return ({awaiting_school:'Aguardando emissão pela escola',company_signed:'Assinado pela escola · aguardando responsável',pending_validation:'Assinatura do responsável em revisão',verified:'Assinatura conferida',rejected:'Devolvido para correção',unsigned:'Sem assinatura'} as Record<string,string>)[str(status)]||str(status)||'—';}
     function contractPreviewKeys():string[]{const preview=s.contractPreview;return preview?Array.from(new Set([...Object.keys(preview.variables||{}),...(preview.missing_fields||[])])):[];}
@@ -66,7 +106,16 @@ namespace PigeExpansion {
     function contractGroupKeys(group:string,automatic=false):string[]{return contractPreviewKeys().filter(key=>PigeContractFields.group(key)===group&&contractAutomatic(key)===automatic);}
     async function refreshEnrollmentReadiness():Promise<void>{if(!s.selected)return;s.finalReadiness=await PigeAPI.request<EnrollmentReadiness>(base()+'/admissions/'+s.selected.id+'/readiness');}
     async function reloadContractRegistry():Promise<void>{await run(async()=>{const a=s.selected;if(!a?.enrollment_id||!a.contract?.template_id)return;const data={enrollment_id:a.enrollment_id,template_version:selectedContractVersion()};const fresh=await PigeAPI.post<ContractPreview>(base()+'/document-templates/'+a.contract.template_id+'/preview',data);s.contractValues=Object.fromEntries(Object.entries(s.contractValues).filter(([key])=>!fresh.field_meta?.[key]?.automatic));s.contractPreview=await PigeAPI.post<ContractPreview>(base()+'/document-templates/'+a.contract.template_id+'/preview',{...data,values:s.contractValues});s.contractPreviewStale=false;s.contractDraftDirty=true;s.notice='Dados cadastrais atualizados; campos manuais preservados. Salve o rascunho.';});}
-    function closeAdmission():void{if(s.contractDraftDirty&&!window.confirm('Existem alterações não salvas no contrato. Voltar à fila e descartar?'))return;s.selected=null;s.contractDraftDirty=false;s.contractDraftKey='';}
+    async function closeAdmission():Promise<void>{
+      await run(async()=>{
+        if(s.contractDraftDirty && !await PigeDialogs.confirm(
+          'Os preenchimentos do contrato ainda não salvos serão descartados ao voltar à fila.',
+          {title:'Voltar à fila de inscrições?',confirmLabel:'Descartar e voltar',cancelLabel:'Continuar editando',destructive:true}
+        ))return;
+        if(!active)return;
+        s.selected=null;s.contractDraftDirty=false;s.contractDraftKey='';
+      });
+    }
     function openStudentRegistry():void{if(!s.selected?.student_id)return;if(s.contractDraftDirty){s.error='Salve o rascunho do contrato antes de abrir o cadastro.';return;}context?.emit('view-student',s.selected.student_id);}
     async function refreshAdmissionStatus():Promise<void>{await run(async()=>{if(s.selected)await openAdmission(s.selected.id);});}
     function showReadinessStage(stage:string):void{s.admissionStage=['registry','documents','contract','finalize'].includes(stage)?stage:'finalize';if(stage==='charges'){const target=document.getElementById('admission-charges') as HTMLDetailsElement|null;if(target)target.open=true;}}
@@ -113,7 +162,20 @@ namespace PigeExpansion {
     async function connectInventory():Promise<void>{await run(async()=>{await refreshConnectInventory();s.notice='Inventário de instâncias do WhatsApp atualizado.';});}
     async function connectAdopt(remote:{name:string}):Promise<void>{await run(async()=>{const result=await PigeAPI.post<{instance?:ConnectInstance}>(base()+'/connect/instances/adopt',{instance_name:remote.name.trim(),primary:true});await refreshConnectAfterOperation(result.instance);try{await refreshConnectInventory();}catch(e){s.error='Instância vinculada, mas o inventário não pôde ser atualizado: '+(e instanceof Error?e.message:String(e));}s.connectAdoptName='';s.notice='Instância vinculada como preferencial desta instituição.';});}
     async function connectAdoptNamed():Promise<void>{if(!s.connectAdoptName.trim())return;await connectAdopt({name:s.connectAdoptName});}
-    async function connectReleaseLegacy():Promise<void>{await run(async()=>{if(!s.connectLegacyConfirm||s.connectLegacyReason.trim().length<5)throw new Error('Informe o motivo para remover os vínculos anteriores.');await PigeAPI.post(base()+'/connect/legacy-bindings/release',{reason:s.connectLegacyReason.trim()});s.connectLegacyConfirm=false;s.connectLegacyReason='';await connectLoad();s.notice='Vínculos anteriores desta instituição removidos. A instância e os vínculos de outras instituições foram preservados.';});}
+    async function connectReleaseLegacy():Promise<void>{
+      await run(async()=>{
+        if(!s.connectLegacyReview)return;
+        const reason=await PigeDialogs.prompt('Informe o motivo. Somente os vínculos desta instituição serão removidos. A instância e os vínculos de outras instituições serão preservados.',{
+          title:'Desvincular a conexão anterior?',inputLabel:'Motivo da desvinculação',initialValue:s.connectLegacyReason,
+          minLength:5,maxLength:1000,confirmLabel:'Confirmar desvinculação',destructive:true
+        });
+        if(reason===null || !active)return;
+        s.connectLegacyReason=reason;
+        await PigeAPI.post(base()+'/connect/legacy-bindings/release',{reason:reason.trim()});
+        s.connectLegacyReason='';await connectLoad();
+        s.notice='Vínculos anteriores desta instituição removidos. A instância e os vínculos de outras instituições foram preservados.';
+      });
+    }
     async function connectPrefer(instance:ConnectInstance):Promise<void>{await run(async()=>{await PigeAPI.post(base()+'/connect/instances/'+instance.id+'/prefer',{});await connectLoad();s.notice='Instância definida como preferencial desta escola.';});}
     async function connectPreferUnit(unit:ConnectUnitPreference,instanceId:string):Promise<void>{await run(async()=>{await PigeAPI.post(base()+'/connect/unit-preference',{unit_id:unit.id,instance_id:instanceId});await connectLoad();s.notice=instanceId?'Preferência da unidade atualizada.':'A unidade voltou a usar a preferência da escola.';});}
     async function connectRestart(instance:ConnectInstance):Promise<void>{await run(async()=>{await PigeAPI.post(base()+'/connect/instances/'+instance.id+'/restart',{});await connectLoad();s.notice='Reinício solicitado para a instância administrada pelo PIGE360.';});}
@@ -148,7 +210,20 @@ namespace PigeExpansion {
     }finally{s.connectOperation={instanceId:'',kind:''};}});}
     async function connectSavePhone(instance:ConnectInstance):Promise<void>{await run(async()=>{await PigeAPI.post(base()+'/connect/instances/'+instance.id+'/phone',{number:s.connectPhoneDrafts[instance.id]||''});await connectLoad();s.notice='Telefone da instância atualizado.';});}
     async function connectLogout(instance:ConnectInstance):Promise<void>{await run(async()=>{await PigeAPI.post(base()+'/connect/instances/'+instance.id+'/logout',{});clearConnectQr(instance.id);await connectLoad();s.notice='Instância deslogada. O cadastro remoto foi preservado.';});}
-    async function connectDelete(instance:ConnectInstance):Promise<void>{const remote=instance.managed_by_pige360;const prompt=remote?'Excluir a instância '+instance.name+' também no provedor de WhatsApp?':'Desvincular '+instance.name+' desta instalação sem excluir a instância remota?';if(!window.confirm(prompt))return;await run(async()=>{const result=await PigeAPI.request<{remote_deleted?:boolean}>(base()+'/connect/instances/'+instance.id,{method:'DELETE'});clearConnectQr(instance.id);await connectLoad();s.notice=result.remote_deleted?'Instância criada pelo PIGE360 excluída do provedor de WhatsApp.':'Vínculo local removido; a instância preexistente foi preservada no provedor de WhatsApp.';});}
+    async function connectDelete(instance:ConnectInstance):Promise<void>{
+      await run(async()=>{
+        const remote=instance.managed_by_pige360;
+        const message=remote?'A instância '+instance.name+' também será excluída no provedor de WhatsApp.':'A instância '+instance.name+' será desvinculada desta instalação e continuará disponível no provedor de WhatsApp.';
+        const accepted=await PigeDialogs.confirm(message,{
+          title:remote?'Excluir instância do WhatsApp?':'Desvincular instância do WhatsApp?',
+          confirmLabel:remote?'Excluir instância':'Desvincular',destructive:true
+        });
+        if(!accepted || !active)return;
+        const result=await PigeAPI.request<{remote_deleted?:boolean}>(base()+'/connect/instances/'+instance.id,{method:'DELETE'});
+        clearConnectQr(instance.id);await connectLoad();
+        s.notice=result.remote_deleted?'Instância criada pelo PIGE360 excluída do provedor de WhatsApp.':'Vínculo local removido; a instância preexistente foi preservada no provedor de WhatsApp.';
+      });
+    }
     async function connectTest():Promise<void>{await run(async()=>{const result=await PigeAPI.post<{message:string}>(base()+'/connect/test',{});s.notice=result.message;});}
     async function connectRetry(job:ConnectJob):Promise<void>{await run(async()=>{await PigeAPI.post(base()+'/connect/jobs/'+job.id+'/retry',{reason:s.reason});await connectJobs();s.notice='Mensagem devolvida à fila do WhatsApp.';});}
     async function load():Promise<void>{if(props.page==='online'){const [readiness,campaigns,groups,templates,fields,years,units]=await Promise.all([
@@ -164,7 +239,10 @@ namespace PigeExpansion {
     async function saveBridge():Promise<void>{await run(async()=>{const {id,secret_configured,...data}=s.bridgeConfig;await PigeAPI.request(base()+'/crm-bridge/configuration',{method:'PUT',body:JSON.stringify({...data,secret:s.bridgeSecret})});s.bridgeSecret='';await loadBridge();s.notice='Configuração da ponte salva. Cobranças nativas permanecem independentes.';});}
     async function testBridge():Promise<void>{await run(async()=>{const result=await PigeAPI.post<{message:string}>(base()+'/crm-bridge/connection-test',{});s.notice=result.message;});}
     async function issueExternal():Promise<void>{await run(async()=>{const payer=Number(s.bridgePayer);if(!Number.isSafeInteger(payer)||payer<1)throw new Error('Informe o ID existente conforme o provedor: cliente da fatura para BB, vínculo do pagador para Asaas.');await PigeAPI.post(base()+'/crm-bridge/charges',{invoice_request_id:s.bridgeInvoice,payer_id:payer,billing_type:s.bridgeBilling,provider:s.bridgeProvider,...(s.bridgeProvider==='banco_brasil'?{bb_title:s.bridgeBB}:{})});await loadBridge();s.notice='Emissão externa enfileirada uma única vez; resultado incerto não é reenviado automaticamente.';});}
-    async function externalCommand(row:BridgeExternal,action:string):Promise<void>{await run(async()=>{const data=action==='sync'?{recovery_id:row.provider==='banco_brasil'?'':s.bridgeRecovery[row.id]||''}:action==='reconcile'?{proof_id:row.receipt.proof_id}:{};if(action==='reconcile'&&!confirm('Registrar no CRM o recebimento integral comprovado por esta prova? Não altera a cobrança ou matrícula no PIGE.'))return;const result=await PigeAPI.post<BridgeExternal>(base()+'/crm-bridge/charges/'+row.id+'/'+action,data);await loadBridge();s.notice=result.last_command.status==='confirmed'?'Comando confirmado pelo CRM; PIGE não alterou pagamento ou matrícula.':'Resultado não confirmado. Consulte o estado antes de qualquer nova ação; não haverá repetição automática.';});}
+    async function externalCommand(row:BridgeExternal,action:string):Promise<void>{await run(async()=>{const data=action==='sync'?{recovery_id:row.provider==='banco_brasil'?'':s.bridgeRecovery[row.id]||''}:action==='reconcile'?{proof_id:row.receipt.proof_id}:{};if(action==='reconcile'){
+        const accepted=await PigeDialogs.confirm('O CRM registrará o recebimento integral comprovado por esta prova. A cobrança e a matrícula no PIGE permanecem como estão.',{title:'Registrar recebimento no CRM?',confirmLabel:'Registrar recebimento'});
+        if(!accepted || !active)return;
+      }const result=await PigeAPI.post<BridgeExternal>(base()+'/crm-bridge/charges/'+row.id+'/'+action,data);await loadBridge();s.notice=result.last_command.status==='confirmed'?'Comando confirmado pelo CRM; PIGE não alterou pagamento ou matrícula.':'Resultado não confirmado. Consulte o estado antes de qualquer nova ação; não haverá repetição automática.';});}
     async function queueBridge():Promise<void>{await run(async()=>{if(!s.bridgeConfig.id)throw new Error('Configure a ponte antes de solicitar.');const client=Number(s.bridgeClient);if(!Number.isSafeInteger(client)||client<1||client>2147483647)throw new Error('Informe o ID do cliente existente no CRM para esta cobrança.');await PigeAPI.post(base()+'/crm-bridge/invoices',{charge_id:s.bridgeCharge,connection_id:s.bridgeConfig.id,client_id:client});s.bridgeCharge='';s.bridgeClient='';await loadBridge();s.notice='Fatura local CRM solicitada. Não emite boleto/Pix nem efetua baixa acadêmica.';});}
     async function statusBridge(row:BridgeRequest):Promise<void>{await run(async()=>{await PigeAPI.post(base()+'/crm-bridge/requests/'+row.id+'/invoice-status',{});await loadBridge();s.notice='Estado remoto consultado sem emitir, reenviar ou baixar cobrança.';});}
     async function retryBridge(row:BridgeRequest):Promise<void>{await run(async()=>{await PigeAPI.post(base()+'/crm-bridge/requests/'+row.id+'/reconcile',{});await loadBridge();s.notice='Reenvio do mesmo evento solicitado para conciliação.';});}
@@ -199,10 +277,48 @@ namespace PigeExpansion {
       if(id)await PigeAPI.patch(base()+'/admission-campaigns/'+id,{...payload,version});else await PigeAPI.post(base()+'/admission-campaigns',payload);
       s.editingCampaign=false;await load();s.notice=data.active?'Processo salvo e publicado. O link está disponível na lista de processos.':'Processo salvo como rascunho. Publique quando estiver pronto para receber inscrições.';});}
     const reviewPresets=[{label:'Iniciar conferência',text:'Inscrição recebida para conferência dos dados, documentos e vínculos informados.'},{label:'Solicitar documento legível',text:'Solicitamos o reenvio do documento indicado em imagem completa e legível, sem cortes ou reflexos. Confira as pendências no portal.'},{label:'Solicitar correção cadastral',text:'Solicitamos a revisão dos dados indicados pela Secretaria e a confirmação das informações conforme os documentos oficiais.'},{label:'Lista de espera',text:'Inscrição mantida em lista de espera. A família será informada pelo portal quando houver nova atualização sobre a vaga.'},{label:'Documentação conferida',text:'Documento conferido pela Secretaria, com dados legíveis e compatíveis com a finalidade solicitada.'},{label:'Documento recusado',text:'O documento apresentado não permite concluir a conferência. Consulte a orientação da Secretaria e envie uma nova versão.'},{label:'Aprovação após conferência',text:'Identidade, documentos e legitimidade dos vínculos conferidos pela Secretaria. Inscrição aprovada para preparação da matrícula.'},{label:'Efetivação após conferência',text:'Requisitos da matrícula conferidos pela Secretaria. Solicitada a efetivação e a emissão do comprovante.'},{label:'Desistência informada',text:'Desistência informada pelo responsável e registrada pela Secretaria para encerramento da inscrição.'}];
-    function useReviewPreset():void{const preset=reviewPresets.find(p=>p.label===s.reviewPreset);if(preset&&(!s.reason||window.confirm('Substituir a justificativa atual pelo modelo selecionado?')))s.reason=preset.text;}
+    async function useReviewPreset():Promise<void>{
+      const preset=reviewPresets.find(item=>item.label===s.reviewPreset);
+      if(!preset)return;
+      await run(async()=>{
+        if(s.reason && !await PigeDialogs.confirm('O texto do modelo substituirá a justificativa que você preencheu.',{title:'Substituir a justificativa?',confirmLabel:'Usar modelo',cancelLabel:'Manter texto',destructive:true}))return;
+        if(active)s.reason=preset.text;
+      });
+    }
     async function loadMatches():Promise<void>{if(!s.selected||!can('students.read')||!can('people.read'))return;try{const result=await PigeAPI.request<{students:{items:PigeAPI.Student[];truncated:boolean};guardians:{items:PigeAPI.Row[];truncated:boolean};warnings:string[];notice:string}>(base()+'/admissions/'+s.selected.id+'/matches?'+new URLSearchParams({student_q:s.studentMatchQ,guardian_q:s.guardianMatchQ}));s.studentMatches=result.students.items;s.guardianMatches=result.guardians.items;s.matchWarnings=result.warnings;s.matchNotice=result.notice;s.matchTruncated=result.students.truncated||result.guardians.truncated;s.matchError='';}catch(e){s.matchError=e instanceof Error?e.message:String(e);}}
-    async function openAdmission(id:string):Promise<void>{const previous=s.selected;const changed=previous?.id!==id;if(changed&&s.contractDraftDirty&&!window.confirm('Há alterações no contrato ainda não salvas. Deseja trocar de inscrição?'))return;if(changed){s.reason='';s.message='';s.internal=false;s.matchQ='';s.studentMatchQ='';s.guardianMatchQ='';s.reviewPreset='';}s.selected=await PigeAPI.request<Admission>(base()+'/admissions/'+id);s.identity=false;s.studentMatches=[];s.guardianMatches=[];s.existingStudent='';s.existingGuardian='';s.financialPerson='';s.eligiblePayers=[];s.matchError='';s.matchWarnings=[];s.matchNotice='';s.matchTruncated=false;await loadMatches();s.contractTargetId=s.selected.contract?.template_id||'';s.contractChangeReason='';if(changed||previous?.contract?.template_id!==s.selected.contract?.template_id||previous?.contract?.template_version!==s.selected.contract?.template_version){s.contractPreview=null;s.contractValues={};s.contractPreviewStale=false;s.contractDraftKey='';s.contractDraftVersion=0;s.contractDraftDirty=false;s.admissionStage=s.selected.status==='approved'?(s.selected.contract?.required?'contract':'finalize'):s.selected.status==='enrolled'?'finalize':'documents';}s.charges=can('banking.read')?(await PigeAPI.request<PigeOnline.Page<Charge>>(base()+'/bank-charges?admission_id='+id)).items:[];if(!admissionActions().some(item=>item.value===s.action))s.action=admissionActions()[0]?.value||'';await refreshEnrollmentReadiness();}
-    async function view(id:string):Promise<void>{await run(()=>openAdmission(id));}
+    function contractChanged(previous:Admission|null,current:Admission):boolean{
+      return previous?.contract?.template_id!==current.contract?.template_id || previous?.contract?.template_version!==current.contract?.template_version;
+    }
+    async function openAdmission(id:string,fetched?:Admission,revisionConfirmed=false):Promise<boolean>{
+      if(!active)return false;
+      const previous=s.selected,changed=previous?.id!==id;
+      if(changed && s.contractDraftDirty && !await PigeDialogs.confirm(
+        'Os preenchimentos ainda não salvos do contrato serão descartados ao abrir a outra inscrição.',
+        {title:'Trocar de inscrição?',confirmLabel:'Trocar inscrição',cancelLabel:'Continuar editando',destructive:true}
+      ))return false;
+      if(!active)return false;
+      const current=fetched || await PigeAPI.request<Admission>(base()+'/admissions/'+id);
+      if(!active)return false;
+      const newRevision=contractChanged(previous,current);
+      if(!changed && newRevision && !revisionConfirmed && s.contractDraftDirty && !await PigeDialogs.confirm(
+        'A revisão vinculada mudou. Carregar a nova revisão descartará os preenchimentos que ainda não foram salvos.',
+        {title:'Carregar a nova revisão?',confirmLabel:'Carregar revisão',cancelLabel:'Continuar editando',destructive:true}
+      ))return false;
+      if(!active)return false;
+      if(changed){s.reason='';s.message='';s.internal=false;s.matchQ='';s.studentMatchQ='';s.guardianMatchQ='';s.reviewPreset='';}
+      s.selected=current;s.identity=false;s.studentMatches=[];s.guardianMatches=[];s.existingStudent='';s.existingGuardian='';s.financialPerson='';s.eligiblePayers=[];s.matchError='';s.matchWarnings=[];s.matchNotice='';s.matchTruncated=false;
+      s.contractTargetId=current.contract?.template_id||'';s.contractChangeReason='';
+      if(changed || newRevision){
+        s.contractPreview=null;s.contractValues={};s.contractPreviewStale=false;s.contractDraftKey='';s.contractDraftVersion=0;s.contractDraftDirty=false;
+        s.admissionStage=current.status==='approved'?(current.contract?.required?'contract':'finalize'):current.status==='enrolled'?'finalize':'documents';
+      }
+      await loadMatches();
+      s.charges=can('banking.read')?(await PigeAPI.request<PigeOnline.Page<Charge>>(base()+'/bank-charges?admission_id='+id)).items:[];
+      if(!admissionActions().some(item=>item.value===s.action))s.action=admissionActions()[0]?.value||'';
+      await refreshEnrollmentReadiness();
+      return true;
+    }
+    async function view(id:string):Promise<void>{await run(async()=>{await openAdmission(id);});}
     async function action():Promise<void>{await run(async()=>{const a=s.selected;if(!a)return;await PigeAPI.post(base()+'/admissions/'+a.id+'/actions',{version:a.version,action:s.action,reason:s.reason});await openAdmission(a.id);await queue();s.reason='';});}
     async function match():Promise<void>{await run(async()=>{s.existingStudent='';s.existingGuardian='';s.financialPerson='';s.eligiblePayers=[];await loadMatches();});}
     async function loadEligiblePayers():Promise<void>{
@@ -222,11 +338,15 @@ namespace PigeExpansion {
     async function message():Promise<void>{await run(async()=>{if(!s.selected)return;await PigeAPI.post(base()+'/admissions/'+s.selected.id+'/messages',{text:s.message,internal:s.internal});s.message='';await openAdmission(s.selected.id);});}
     async function whatsapp():Promise<void>{await run(async()=>{if(!s.selected)return;await PigeAPI.post(base()+'/connect/messages',{admission_id:s.selected.id,text:s.message,client_key:PigeOnline.newId()});s.message='';s.notice='Envio via WhatsApp enfileirado. Consulte o resultado na fila do WhatsApp.';});}
     async function download(path:string,name:string):Promise<void>{await run(()=>PigeAPI.download(base()+path,name));}
-    function newCharge(admissionId=''):void{s.chargeForm={admission_id:admissionId,enrollment_id:'',amount:'',due_on:new Date(Date.now()+7*86400000).toISOString().slice(0,10),description:admissionId?'Matrícula':'Mensalidade',collection_mode:'manual',billing_type:'MANUAL',client_key:PigeOnline.newId(),installment_count:1,use_recurring_card:false,required_for_enrollment:false};s.enrollmentMatches=[];s.chargeOpen=true;s.error='';s.discardCharge=false;s.chargeInitial=JSON.stringify(s.chargeForm);if(!s.bankingStatus)void run(bankHealth);}
-    function closeCharge(discard=false):void{
-      if(s.busy)return;
-      if(discard!==true&&JSON.stringify(s.chargeForm)!==s.chargeInitial){s.discardCharge=true;return;}
-      s.chargeOpen=false;s.discardCharge=false;
+    function newCharge(admissionId=''):void{s.chargeForm={admission_id:admissionId,enrollment_id:'',amount:'',due_on:new Date(Date.now()+7*86400000).toISOString().slice(0,10),description:admissionId?'Matrícula':'Mensalidade',collection_mode:'manual',billing_type:'MANUAL',client_key:PigeOnline.newId(),installment_count:1,use_recurring_card:false,required_for_enrollment:false};s.enrollmentMatches=[];s.chargeOpen=true;s.error='';s.chargeInitial=JSON.stringify(s.chargeForm);if(!s.bankingStatus)void run(bankHealth);}
+    async function closeCharge():Promise<void>{
+      await run(async()=>{
+        if(JSON.stringify(s.chargeForm)!==s.chargeInitial && !await PigeDialogs.confirm(
+          'Os dados preenchidos nesta cobrança serão descartados.',
+          {title:'Descartar a cobrança em edição?',confirmLabel:'Descartar alterações',cancelLabel:'Continuar editando',destructive:true}
+        ))return;
+        if(active)s.chargeOpen=false;
+      });
     }
     function chargeTotal():string{
       const amount=Number(s.chargeForm.amount),count=Number(s.chargeForm.installment_count);
@@ -249,9 +369,8 @@ namespace PigeExpansion {
     async function retry(job:PigeOnline.Job):Promise<void>{await run(async()=>{await PigeAPI.post(base()+'/integration-jobs/'+job.id+'/retry',{reason:s.reason});await jobs();});}
     async function copy(value:string):Promise<void>{await run(async()=>{await navigator.clipboard.writeText(value);s.notice='Copiado.';});}
     const connectionFor=(provider:string)=>s.connections.find(c=>c.provider===provider);
-    const warnUnsaved=(event:BeforeUnloadEvent)=>{if(s.contractDraftDirty){event.preventDefault();event.returnValue='';}};
-    Vue.onMounted(()=>{window.addEventListener('beforeunload',warnUnsaved);void run(load);});
-    Vue.onUnmounted(()=>{window.removeEventListener('beforeunload',warnUnsaved);if(hasUnsavedChanges===draftDirty)hasUnsavedChanges=()=>false;});
+    Vue.onMounted(()=>{void run(load);});
+    Vue.onUnmounted(()=>{active=false;if(hasUnsavedChanges===draftDirty)hasUnsavedChanges=()=>false;});
     return {dialogTarget:Vue.inject<HTMLElement|string>('school-dialog-host','body')||'body',s,props,closeAdmission,reloadContractRegistry,openStudentRegistry,contractFieldGroups:PigeContractFields.groups,contractFieldMeta,contractGroupKeys,setContractFieldValue,saveContractDraft,showReadinessStage,refreshAdmissionStatus,reviewPresets,useReviewPreset,saveBridge,testBridge,queueBridge,retryBridge,statusBridge,loadBridge,issueExternal,externalCommand,campaignSlug,campaignGroupLabel,campaignGroups,admissionActions,bankCards,bankPeriod,reconcileBank,bankError,bankOperation,activateBankWebhook,identity:PigeInstitution.state,changeCollectionMode,chargeMethod,chargeStatus,receiptMethods,receiptDate,receiveManualCharge,receiptPdf,closeCharge,chargeTotal,can,str,run,load,search,paginate,paginateJobs,newCampaign,editCampaign,saveCampaign,campaignYearId,changeCampaignYear,eligibleContractTemplates,templateName,selectedContractVersion,canChangeContract,admissionContractTemplates,contractChoiceChanged,reloadContractTemplates,applyContractChoice,downloadContractHistory,contractHistoryPolicy,loadContractHistoryPolicy,setContractHistoryPolicy,removeContractHistory,contractStatus,contractPreviewKeys,contractFieldLabel,contractValue,contractAutomatic,setContractValue,previewFrozenContract,previewFrozenPdf,issueFrozenContract,downloadSignedContract,view,action,match,approve,loadEligiblePayers,finalize,reviseContract,renewReservation,reviewDoc,message,whatsapp,download,newCharge,findEnrollments,createCharge,inspectCharge,chargeAction,configure,saveConnection,testConnection,retry,copy,connectionFor,jobs,connectLoad,connectJobs,connectInventory,connectAdopt,connectAdoptNamed,connectReleaseLegacy,connectPrefer,connectPreferUnit,connectRestart,connectCreate,connectSync,connectQr,connectPairingCode,connectSavePhone,connectLogout,connectDelete,connectTest,connectRetry,clearConnectQr,label:PigeOnline.label,date:PigeOnline.date,dateTime:PigeOnline.dateTime,money:PigeOnline.money,publicURL:PigeOnline.publicURL,safeLink:PigeOnline.safeLink,origin:location.origin,statuses:PigeOnline.statuses};
   }};
 }

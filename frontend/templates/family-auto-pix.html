@@ -19,10 +19,7 @@
         </template>
         <ul v-if="autoPix.state.view.authorization.cycles.length"><li v-for="c in autoPix.state.view.authorization.cycles" :key="c.id">{{c.due_on.split('-').reverse().join('/')}} · {{autoPix.money(c.amount)}} · {{autoPix.label(c.status)}}<span v-if="c.instruction_status"> · {{autoPix.label(c.instruction_status)}}</span></li></ul>
         <button type="button" class="btn btn-secondary" :disabled="autoPix.state.busy" @click="autoPix.refresh">Atualizar situação</button>
-        <template v-if="['CREATED','ACTIVE'].includes(autoPix.state.view.authorization.status)">
-          <button v-if="!autoPix.state.confirmCancel" type="button" class="btn btn-secondary" @click="autoPix.state.confirmCancel=true">Cancelar autorização</button>
-          <div v-else><p>Deseja interromper os próximos débitos? Os pagamentos já enviados dependem de confirmação bancária.</p><button type="button" class="btn btn-secondary" :disabled="autoPix.state.busy" @click="autoPix.cancel">Confirmar cancelamento</button> <button type="button" class="btn btn-secondary" @click="autoPix.state.confirmCancel=false">Voltar</button></div>
-        </template>
+        <button v-if="['CREATED','ACTIVE'].includes(autoPix.state.view.authorization.status)" type="button" class="btn btn-secondary" :disabled="autoPix.state.busy || autoPix.state.confirmCancel" @click="autoPix.cancel">Cancelar autorização</button>
       </template>
       <p v-else-if="!autoPix.state.view.can_enroll">Adesão indisponível para esta cobrança.</p>
     </template>

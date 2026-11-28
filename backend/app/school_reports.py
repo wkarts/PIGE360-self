@@ -78,7 +78,7 @@ def format_value(value, kind='text'):
 def render_table(school_name, title, columns, rows, *, summary=None, period='', filters=None,
                  notes=None, monthly=None, issuer='', db=None, sections=None, profile=None, photo=None, signatures=None, notes_title='Critérios de leitura',
                  module='Secretaria', circulation='Uso restrito aos destinatários autorizados', electronic_notice=False, status_summary=None, orientation='portrait', kit=False, layout='', report_color='', reserve_photo=False,
-                 report_family='', preview_copy=False):
+                 report_family='', preview_copy=False, signed_bulletin=False):
     """Relatório analítico: cabeçalhos repetidos, indicadores, filtros e paginação.
 
     Não utiliza o formulário de declarações, evitando blocos de assinatura e
@@ -111,6 +111,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
         pagesize = landscape(A4) if orientation == 'landscape' else A4
         page_width, page_height = pagesize
         compact = layout == 'compact_record'
+        bulletin = report_family == 'bulletins'
         margin = 13 * mm
         # Platypus mantém seis pontos de respiro em cada lado do frame.
         side = 59 * mm if layout == 'panel' else 0
@@ -133,6 +134,14 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
             styles['profile_detail'] = ParagraphStyle('RecordDetail', parent=styles['small'], textColor=banner_ink)
             styles['profile_caption'] = ParagraphStyle('RecordCaption', parent=styles['caption'], textColor=banner_ink)
         styles['numeric'] = ParagraphStyle('ReportNumeric', parent=styles['body'], alignment=TA_RIGHT)
+        if bulletin:
+            styles['section'] = ParagraphStyle('BulletinSection', parent=styles['section'], fontSize=10.5, leading=12, spaceAfter=0)
+            styles['group'] = ParagraphStyle('BulletinGroup', fontName=bold, fontSize=8.5, leading=10.5, alignment=TA_CENTER,
+                                              textColor=colors.HexColor(foreground(color)))
+            styles['measure'] = ParagraphStyle('BulletinMeasure', parent=styles['thead'], fontSize=8, alignment=TA_CENTER)
+            styles['result'] = ParagraphStyle('BulletinResult', parent=styles['body'], fontName=bold, alignment=TA_CENTER, textColor=accent)
+            styles['entry'] = ParagraphStyle('BulletinEntry', parent=styles['body'], alignment=TA_CENTER)
+            styles['profile_name'] = ParagraphStyle('BulletinName', parent=styles['section'], fontSize=14, leading=17)
         def p(value, style='body'):
             return Paragraph(escape(str(value if value is not None and value != '' else '-')).replace('\n', '<br/>'), styles[style])
         def column_widths(cols, records):
@@ -177,6 +186,47 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                                       ('TOPPADDING',(0,0),(0,0),2 if compact else 3), ('BOTTOMPADDING',(0,0),(0,0),2 if compact else 3)]))
             return band
 
+        def grouped_bulletin_table(section):
+            cols = section['columns']
+            groups = section['column_groups']
+            first = [''] * len(cols)
+            spans = []
+            offset = 0
+            for group in groups:
+                last = offset + group['span'] - 1
+                first[offset] = p(group['label'], 'group') if group['label'] else ''
+                if last > offset:
+                    spans.append(('SPAN', (offset, 0), (last, 0)))
+                if offset:
+                    spans.append(('LINEBEFORE', (offset, 0), (offset, -1), .4, border))
+                offset = last + 1
+            headers = [p(col['short_label'], 'thead' if i == 0 else 'measure') for i, col in enumerate(cols)]
+            values = [first, headers]
+            for row in section['rows']:
+                values.append([p(row[col['key']], 'body' if i == 0 else 'result' if col.get('metric') == 'grade' else 'entry')
+                               for i, col in enumerate(cols)])
+            # Preserve palavras inteiras nos títulos, conceitos e percentuais antes de distribuir o espaço livre.
+            minimum = []
+            for col in cols:
+                heading_words = col['short_label'].split()
+                head_width = max(pdfmetrics.stringWidth(word, bold, styles['measure'].fontSize) for word in heading_words)
+                font = bold if col.get('metric') == 'grade' else regular
+                words = (w for row in section['rows'] for w in str(row[col['key']]).split())
+                content_width = max((pdfmetrics.stringWidth(w, font, styles['body'].fontSize) for w in words), default=0)
+                minimum.append(max(head_width, min(content_width, 76)) + 7)
+            total_weight = sum(col['width'] for col in cols)
+            surplus = width - sum(minimum)
+            widths = ([base + surplus * col['width'] / total_weight for base, col in zip(minimum, cols)] if surplus >= 0
+                      else [width * base / sum(minimum) for base in minimum])
+            matrix = LongTable(values, colWidths=widths, repeatRows=2, splitInRow=1, rowSplitRange=(3, len(values)), hAlign='LEFT')
+            matrix.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), primary), ('BACKGROUND', (0, 1), (-1, 1), pale),
+                ('ROWBACKGROUNDS', (0, 2), (-1, -1), [colors.white, pale]),
+                ('LINEBELOW', (0, 1), (-1, -1), .3, border), ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 3), ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+                ('TOPPADDING', (0, 0), (-1, -1), 2.2), ('BOTTOMPADDING', (0, 0), (-1, -1), 2.2), *spans]))
+            return matrix
+
         def record_table(cols, records):
             # Tabelas extensas mantêm os campos de identificação em colunas. Os
             # demais atributos ficam identificados na mesma linha do registro.
@@ -197,7 +247,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
 
         stream = io.BytesIO()
         doc = SimpleDocTemplate(stream, pagesize=pagesize, leftMargin=margin+side, rightMargin=margin,
-                                topMargin=(38 if compact else 43) * mm, bottomMargin=(44 if compact else 37 if kit else 23) * mm, title=title, author=name)
+                                topMargin=(31 if bulletin else 38 if compact else 43) * mm, bottomMargin=(44 if compact else 35 if bulletin else 37 if kit else 23) * mm, title=title, author=name)
         parts = []
         if period:
             parts.append(p('Período: ' + period, 'small'))
@@ -209,12 +259,14 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
         if parts:
             parts.append(Spacer(1, 3 * mm))
         if profile and layout != 'panel':
-            content = [p(profile.get('name', ''), 'profile_name' if compact else 'section'), p(profile.get('detail', ''), 'profile_detail' if compact else 'small')]
+            content = [p(profile.get('name', ''), 'profile_name' if compact or bulletin else 'section'), p(profile.get('detail', ''), 'profile_detail' if compact else 'small')]
+            if bulletin and profile.get('details'):
+                content.append(p(profile['enrollment_label'], 'small'))
             banner_cells = [content]
             banner_widths = [width]
             if photo:
                 picture = ReportImage(io.BytesIO(photo))
-                picture._restrictSize(18 * mm, 19 * mm) if compact else picture._restrictSize(24 * mm, 28 * mm)
+                picture._restrictSize(18 * mm, 19 * mm) if compact or bulletin else picture._restrictSize(24 * mm, 28 * mm)
                 banner_cells.append(picture)
                 banner_widths = [width - 31 * mm, 31 * mm]
             elif reserve_photo:
@@ -223,7 +275,14 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
             if kit and len(banner_cells) == 2:
                 banner_cells.reverse()
                 banner_widths.reverse()
+            if bulletin and profile.get('details') and layout != 'journey':
+                details = profile['details']
+                for caption, value in details:
+                    banner_cells.append([p(caption, 'field'), p(value)])
+                banner_widths = [22*mm, width*.31] + [(width*.69-22*mm)/len(details)]*len(details)
             if layout == 'journey':
+                if profile.get('details'):
+                    content.append(p(' · '.join(v for _, v in profile['details'] if v), 'small'))
                 for caption, value in profile.get('facts', []):
                     banner_cells.append([p(caption, 'field'), p(value, 'value')])
                 banner_widths = [26*mm, width*.34] + [(width*.66-26*mm)/3]*3
@@ -282,6 +341,8 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                                       ('INNERGRID',(0,0),(len(group)-1,0),.4,border), ('LINEABOVE',(0,0),(len(group)-1,0),1,accent)]))
             return card
 
+        compact_card_height = 122
+
         def compact_data(section, available, *, full=False):
             # Cada campo mantém rótulo e valor na mesma célula. Campos maiores
             # usam a largura inteira, sem reduzir fonte ou cortar o conteúdo.
@@ -291,10 +352,13 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
             values.append([title] + [''] * (slots - 1))
             spans.append(('SPAN', (0, 0), (slots - 1, 0)))
             pending = []
+            split_long_value = False
             for key, value in section.get('fields', []):
                 value = value if value not in (None, '') else 'Não informado'
                 field = [p(key, 'field'), p(value)]
                 if field[1].wrap(available / slots - 12, 1000)[1] > 2 * styles['body'].leading:
+                    if full and field[1].wrap(available - 12, 1000)[1] > compact_card_height:
+                        split_long_value = True
                     if pending:
                         values.append(pending + [''] * (slots - len(pending)))
                         pending = []
@@ -307,8 +371,10 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                         pending = []
             if pending:
                 values.append(pending + [''] * (slots - len(pending)))
+            # Um campo extenso começa no espaço restante e continua na página
+            # seguinte, sem repetir o cabeçalho da seção na mesma página.
             card = Table(values, colWidths=[available / slots] * slots, hAlign='LEFT',
-                         repeatRows=1, splitByRow=1, splitInRow=1)
+                         repeatRows=1, splitByRow=not split_long_value, splitInRow=1)
             card.setStyle(TableStyle(spans + [
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'), ('BOX', (0, 0), (-1, -1), .5, border),
                 ('BACKGROUND', (0, 0), (-1, 0), pale), ('LINEBELOW', (0, 0), (-1, 0), .6, border),
@@ -343,7 +409,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
             for section in sections or []:
                 if section.get('fields'):
                     trial = compact_data(section, nominal_width)
-                    if trial.wrap(nominal_width, 1000)[1] <= 122:
+                    if trial.wrap(nominal_width, 1000)[1] <= compact_card_height:
                         group.append(section)
                         if len(group) == maximum:
                             flush()
@@ -366,6 +432,9 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
 
         if compact:
             compact_sections()
+            # O espaço entre seções não pode criar uma folha após o último registro.
+            if parts and isinstance(parts[-1], Spacer):
+                parts.pop()
         cards = []
         for index, section in enumerate((sections or []) if not compact else []):
             if layout == 'record' and section.get('fields') and not section.get('columns'):
@@ -374,7 +443,10 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                     parts.extend([form_cards(cards), Spacer(1, 3 * mm)])
                     cards = []
                 continue
-            parts.extend([CondPageBreak(18 * mm), section_heading(section['title'])])
+            heading = section_heading(section['title'])
+            if section.get('column_groups'):
+                heading.keepWithNext = True
+            parts.extend([CondPageBreak((20 if section.get('column_groups') else 10 if bulletin else 18) * mm), heading])
             if section.get('text'):
                 parts.append(p(section['text']))
             fields = section.get('fields', [])
@@ -388,8 +460,8 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                 parts.append(table(cells, [width / field_count] * field_count, False))
             if section.get('columns'):
                 cols = section['columns']
-                parts.append(record_table(cols, section['rows']))
-            parts.append(Spacer(1, 3 * mm))
+                parts.append(grouped_bulletin_table(section) if section.get('column_groups') else record_table(cols, section['rows']))
+            parts.append(Spacer(1, (2 if bulletin else 3) * mm))
         if signatures and not compact:
             cell_width = width / len(signatures)
             blocks = []
@@ -402,8 +474,8 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
             parts.append(KeepTogether([Spacer(1, 8 * mm), signature_table, Spacer(1, 2 * mm)]))
         if electronic_notice and not compact:
             parts.append(p('Documento gerado eletronicamente. Não contém assinatura digital.', 'small'))
-        if notes and not compact:
-            parts.append(Spacer(1, 3 * mm))
+        if notes and not compact and not bulletin:
+            parts.append(Spacer(1, (1 if bulletin else 3) * mm))
             if notes_title: parts.append(p(notes_title, 'section'))
             for note in notes:
                 parts.extend([p(note, 'small'), Spacer(1, 1.5 * mm)])
@@ -446,7 +518,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                 canvas.rect(0, page_height - 2*mm, page_width, 2*mm, stroke=0, fill=1)
             if layout == 'panel' and profile:
                 left = margin + 3*mm
-                top = page_height-47*mm
+                top = page_height-(35 if bulletin else 47)*mm
                 canvas.setFillColor(pale)
                 canvas.roundRect(margin,37*mm,side-3*mm,top-35*mm,2*mm,stroke=0,fill=1)
                 if photo:
@@ -456,15 +528,25 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                     canvas.setFillColor(muted)
                     canvas.drawString(left,top-15*mm,'Foto não cadastrada')
                 facts = [p(profile['name'],'value'), p(profile['detail'],'small'), Spacer(1,4*mm)]
+                if profile.get('details'):
+                    facts.append(p(profile['enrollment_label'], 'field'))
+                    for _, value in profile['details']:
+                        facts.append(p(value, 'small'))
+                    facts.append(Spacer(1,4*mm))
                 for caption, value in profile['facts']:
                     facts.extend([p(caption,'field'),p(value,'value'),Spacer(1,2*mm)])
                 box = KeepInFrame(side-10*mm, top-67*mm, facts, mode='shrink')
                 _, h = box.wrapOn(canvas,side-10*mm,top-67*mm)
                 box.drawOn(canvas,left,top-29*mm-h)
+            # O Painel destaca o timbre com a cor da instituição; o Percurso adota uma abertura editorial.
+            panel_cover = bulletin and layout == 'panel'
+            if panel_cover:
+                canvas.setFillColor(primary)
+                canvas.rect(0, page_height-28*mm, page_width, 28*mm, stroke=0, fill=1)
             canvas.setCreator(name)
             canvas._doc.info.producer = name
             top = page_height - 8 * mm
-            emblem = (18 if compact else 22) * mm
+            emblem = (17 if bulletin else 18 if compact else 22) * mm
             if logo_image:
                 canvas.drawImage(logo_image, margin, top-emblem, width=emblem, height=emblem,
                                  preserveAspectRatio=True, anchor='c', mask='auto')
@@ -475,22 +557,30 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                 canvas.setFillColor(accent)
                 canvas.setFont(bold, 18)
                 canvas.drawCentredString(margin+emblem/2, top-emblem/2-6, initials)
-            labels = [p(school_name, 'school')]
+            if panel_cover:
+                header_color = colors.HexColor(foreground(color))
+                panel_school = ParagraphStyle('PanelSchool', parent=styles['school'], textColor=header_color)
+                panel_detail = ParagraphStyle('PanelDetail', parent=styles['small'], textColor=header_color)
+            def header_text(value, style):
+                if panel_cover:
+                    return Paragraph(escape(value), panel_school if style == 'school' else panel_detail)
+                return p(value, style)
+            labels = [header_text(school_name, 'school')]
             if not kit and name.casefold() != school_name.casefold() and identity.get('logo_asset_id'):
                 labels.append(p(name, 'small'))
             if company:
                 legal = ' · '.join(filter(None, [company.name, 'CNPJ '+company.document if company.document else '']))
                 if legal and legal.casefold() != school_name.casefold():
-                    labels.append(p(legal, 'small'))
+                    labels.append(header_text(legal, 'small'))
             if school:
                 contact = ' · '.join(value for value in (
                     school.address or (company.address if company else ''),
                     school.phone or (company.phone if company else ''),
                     school.email or (company.email if company else '')) if value)
                 if contact:
-                    labels.append(p(contact, 'small'))
+                    labels.append(header_text(contact, 'small'))
             x = margin + emblem + 5*mm
-            available = page_width-margin-x
+            available = (page_width*.59 if bulletin else page_width-margin) - x
             heading = KeepInFrame(available, emblem, labels, mode='shrink')
             _, height = heading.wrapOn(canvas, available, emblem)
             heading.drawOn(canvas, x, top-emblem/2-height/2)
@@ -499,9 +589,21 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
             canvas.setLineWidth(1)
             canvas.line(margin, line_y, page_width-margin, line_y)
             # O título é repetido na capa e nas continuações; cabe em títulos longos.
-            title_block=KeepInFrame(page_width-2*margin,9*mm,[p(title,'heading')],mode='shrink')
-            title_block.wrapOn(canvas,page_width-2*margin,9*mm)
-            title_block.drawOn(canvas,margin,page_height-(37 if compact else 42)*mm)
+            if bulletin:
+                title_width = page_width*.37
+                title_font = 'Times-Bold' if layout == 'journey' and font_choice == 'inherit' and identity['font_family'] == 'system' else bold
+                heading_style = ParagraphStyle('BulletinTitle', parent=styles['heading'], fontName=title_font,
+                    alignment=TA_RIGHT, textColor=header_color if panel_cover else accent, spaceAfter=0)
+                edition_style = ParagraphStyle('BulletinLayout', parent=styles['small'], alignment=TA_RIGHT,
+                    textColor=header_color if panel_cover else muted)
+                title_block = KeepInFrame(title_width, emblem, [
+                    Paragraph('Boletim escolar', heading_style), Paragraph(escape(title.split(' · ')[-1]), edition_style)], mode='shrink')
+                _, heading_height = title_block.wrapOn(canvas, title_width, emblem)
+                title_block.drawOn(canvas, page_width-margin-title_width, top-emblem/2-heading_height/2)
+            else:
+                title_block=KeepInFrame(page_width-2*margin,9*mm,[p(title,'heading')],mode='shrink')
+                title_block.wrapOn(canvas,page_width-2*margin,9*mm)
+                title_block.drawOn(canvas,margin,page_height-(37 if compact else 42)*mm)
             canvas.restoreState()
         class NumberedCanvas(Canvas):
             def __init__(self, *args, **kwargs):
@@ -517,7 +619,25 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                     self.saveState()
                     if institutional_mark or preview_copy:
                         watermark(self)
-                    if kit and self._pageNumber == total:
+                    if bulletin and self._pageNumber == total:
+                        legend = KeepInFrame(page_width-2*margin, 6*mm, [p(n, 'small') for n in (notes or [])], mode='shrink')
+                        legend.wrapOn(self, page_width-2*margin, 6*mm)
+                        legend.drawOn(self, margin, 32*mm)
+                        left = margin
+                        if logo_image:
+                            self.drawImage(logo_image, left, 21*mm, width=11*mm, height=11*mm, preserveAspectRatio=True, mask='auto')
+                            left += 14*mm
+                        seal = KeepInFrame(page_width/2-margin-16*mm, 11*mm,
+                            [p(school_name, 'field'), p('Carimbo de identificação institucional', 'small')], mode='shrink')
+                        seal.wrapOn(self, page_width/2-margin-16*mm, 11*mm)
+                        seal.drawOn(self, left, 23*mm)
+                        self.setStrokeColor(border)
+                        self.line(page_width-margin-63*mm, 23*mm, page_width-margin, 23*mm)
+                        self.setFillColor(muted)
+                        self.setFont(regular, 7)
+                        status = 'assinatura digital no arquivo original' if signed_bulletin else 'via sem assinatura digital'
+                        self.drawRightString(page_width-margin, 20*mm, 'Assinatura da instituição · ' + status)
+                    elif kit and self._pageNumber == total:
                         self.setStrokeColor(accent)
                         self.rect(margin, 20*mm, 61*mm, 12*mm, fill=0, stroke=1)
                         label = KeepInFrame(57*mm, 11*mm, [p(school_name,'field'),p('Carimbo de identificação institucional','small')], mode='shrink')
@@ -550,11 +670,27 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                     self.line(margin, 19 * mm, page_width - margin, 19 * mm)
                     self.setFillColor(muted)
                     self.setFont(regular, 7.5)
-                    issued_label = ('Via de consulta · ' if preview_copy else '') + 'Emitido em ' + stamp + (' · ' + issuer if kit and issuer else '')
-                    self.drawString(margin, 14 * mm, issued_label[:110])
-                    self.drawRightString(page_width - margin, 14 * mm, f'Página {self._pageNumber} de {total}')
+                    if bulletin:
+                        issued_label = ('Prévia da Secretaria' if preview_copy else 'Boletim oficial' if signed_bulletin else 'Consulta de resultados publicados') + ' · ' + stamp
+                    else:
+                        issued_label = ('Via de consulta · ' if preview_copy else '') + 'Emitido em ' + stamp + (' · ' + issuer if kit and issuer else '')
+                    page_label = f'Página {self._pageNumber} de {total}'
+                    if compact:
+                        footer_width = page_width - 2*margin - self.stringWidth(page_label, regular, 7.5) - 4*mm
+                        issuer_block = KeepInFrame(footer_width, 6*mm, [p(issued_label, 'small')], mode='shrink')
+                        issuer_block.wrapOn(self, footer_width, 6*mm)
+                        issuer_block.drawOn(self, margin, 12.5*mm)
+                    else:
+                        self.drawString(margin, 14 * mm, issued_label[:110])
+                    self.drawRightString(page_width - margin, 14 * mm, page_label)
                     self.setFont(regular, 7)
-                    self.drawString(margin, 10 * mm, edition + ' · ' + module)
+                    if bulletin:
+                        reference = ' · '.join(filter(None, [profile['name'], profile.get('registration'), profile.get('enrollment_label')]))
+                        ref_box = KeepInFrame(page_width*.56-margin, 4*mm, [p(reference, 'small')], mode='shrink')
+                        ref_box.wrapOn(self, page_width*.56-margin, 4*mm)
+                        ref_box.drawOn(self, margin, 9*mm)
+                    else:
+                        self.drawString(margin, 10 * mm, edition + ' · ' + module)
                     self.drawRightString(page_width - margin, 10 * mm, circulation)
                     self.restoreState()
                     super().showPage()

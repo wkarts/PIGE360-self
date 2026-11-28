@@ -104,7 +104,12 @@ with SessionLocal.begin() as db:
             expect(page.locator('.x-charge code').filter(has_text='SINTETICA-A')).to_have_count(1)
             expect(page.locator('.x-charge code').filter(has_text='SINTETICA-B')).to_have_count(0)
             page.get_by_role('button', name='Revisar vínculo anterior', exact=True).click()
-            page.get_by_label('Motivo da desvinculação', exact=True).fill('A instância anterior pertence à Escola Beta.')
+            review = page.get_by_role('dialog', name='Desvincular a conexão anterior?')
+            expect(review).to_be_visible()
+            review.get_by_role('button', name='Voltar', exact=True).click()
+            expect(review).to_have_count(0)
+            page.get_by_role('button', name='Revisar vínculo anterior', exact=True).click()
+            review.get_by_label('Motivo da desvinculação', exact=True).fill('A instância anterior pertence à Escola Beta.')
             page.get_by_role('button', name='Confirmar desvinculação', exact=True).click()
             expect(page.get_by_role('heading', name='Vínculo anterior precisa de revisão')).to_have_count(0)
             assert client.get('/api/v1/schools/'+b['id']+'/connect', headers=headers).json()['legacy_binding_requires_review']

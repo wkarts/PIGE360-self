@@ -28,7 +28,7 @@ namespace PigeAutoPix {
     async function send(id:string,action='',body?:Record<string,unknown>):Promise<void> {
       if(!id || !student() || (state.busy && state.id===id))return;
       const sid=student(), current=++epoch;
-      state.id=id;state.busy=true;state.error='';
+      state.id=id;state.busy=true;state.error='';state.confirmCancel=false;
       try {
         const path='/family/students/'+encodeURIComponent(sid)+'/charges/'+encodeURIComponent(id)+'/pix-automatic';
         const view=await request<View>(path+(action?'/'+action:''),action?{method:'POST',body:JSON.stringify(body||{})}:{});
@@ -47,9 +47,19 @@ namespace PigeAutoPix {
       if(!v?.can_enroll || !state.accepted)return;
       return send(state.id,'enroll',{quote:v.quote,terms_version:v.terms_version,frequency:state.frequency,accepted:true});
     }
-    function cancel() {
-      if(!state.confirmCancel || !state.view?.authorization)return;
-      return send(state.id,'cancel',{version:state.view.authorization.version});
+    async function cancel():Promise<void> {
+      const authorization=state.view?.authorization;
+      if(!student() || state.busy || state.confirmCancel || !authorization || !['ACTIVE','CREATED'].includes(authorization.status))return;
+      const charge=state.id,sid=student(),current=epoch,version=authorization.version;
+      state.confirmCancel=true;
+      try {
+        const approved=await PigeDialogs.confirm('Os próximos débitos serão interrompidos. Pagamentos já enviados dependem de confirmação bancária.',
+          {title:'Cancelar autorização do Pix Automático?',confirmLabel:'Confirmar cancelamento',cancelLabel:'Manter autorização',destructive:true});
+        if(!approved || current!==epoch || sid!==student() || charge!==state.id || authorization!==state.view?.authorization ||
+          version!==authorization.version || !['ACTIVE','CREATED'].includes(authorization.status))return;
+        state.confirmCancel=false;
+        await send(charge,'cancel',{version});
+      } finally {if(current===epoch)state.confirmCancel=false;}
     }
     const label=(value:string)=>labels[value]||value;
     const money=(value:string)=>Number(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});

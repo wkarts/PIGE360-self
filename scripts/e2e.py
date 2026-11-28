@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """E2E real em Chromium. Usa banco e documentos descartáveis; nunca usa a instalação real."""
 from pathlib import Path
+from datetime import datetime, time as local_time, timedelta
+from zoneinfo import ZoneInfo
 import json, os, re, shutil, socket, subprocess, sys, tempfile, time
 from urllib.parse import urlsplit
 import httpx
@@ -215,7 +217,50 @@ try:
             with page.expect_download() as down:page.get_by_role('button',name='Baixar PDF',exact=True).click()
             down.value.save_as(str(OUT/'turma-exemplo.pdf'))
         checks.append('Relatório por turma com PDF')
-        nav('Visão geral');page.screenshot(path=str(OUT/'02-dashboard.png'),full_page=True)
+        zone=ZoneInfo('America/Bahia')
+        today=datetime.now(zone).date()
+        with httpx.Client(base_url=URL) as seed:
+            login=seed.post('/api/v1/auth/login',json={'email':'secretaria@example.com','password':'Test-Only-Secretaria-2026!'})
+            login.raise_for_status()
+            seed.headers['Authorization']='Bearer '+login.json()['access_token']
+            school_id=seed.get('/api/v1/schools').json()[0]['id']
+            school_url='/api/v1/schools/'+school_id
+            seed.post(school_url+'/community-posts',json={
+                'kind':'event','title':'Encontro de famílias do Ensino Fundamental','content':'Reunião pedagógica do período.',
+                'status':'published','audience':'authenticated','location':'Auditório',
+                'event_start':datetime.combine(today+timedelta(days=2),local_time(17,30),zone).isoformat()
+            }).raise_for_status()
+            seed.post(school_url+'/protocols',json={'kind':'Conferência de histórico escolar',
+                'due_on':(today+timedelta(days=1)).isoformat()}).raise_for_status()
+        nav('Visão geral')
+        overview=page.get_by_role('region',name='Painel da escola')
+        expect(overview.get_by_role('heading',name='Movimentação da escola')).to_be_visible()
+        period=overview.get_by_label('Período da movimentação')
+        period.select_option('30')
+        expect(overview.locator('.dash-feed')).to_contain_text('Matrícula efetivada')
+        overview.locator('.dash-feed button').filter(has_text='Matrícula efetivada').click()
+        expect(dialog().get_by_role('heading',name=re.compile('Matrícula MAT-'))).to_be_visible()
+        page.keyboard.press('Escape')
+        expect(dialog()).to_have_count(0)
+        expect(overview.locator('.dash-agenda')).to_contain_text('Encontro de famílias do Ensino Fundamental')
+        expect(overview.locator('.dash-agenda')).to_contain_text('17:30')
+        overview.locator('.dash-agenda button').filter(has_text='Conferência de histórico escolar').click()
+        expect(dialog()).to_contain_text('Conferência de histórico escolar')
+        page.keyboard.press('Escape')
+        expect(dialog()).to_have_count(0)
+        page.set_viewport_size({'width':1440,'height':1360})
+        overview.locator('.dash-head').scroll_into_view_if_needed()
+        overview.locator('.dash-head').evaluate("(el)=>{for(let p=el;p;p=p.parentElement)p.scrollTop=0;window.scrollTo(0,0);}")
+        page.screenshot(path=str(OUT/'02-dashboard.png'))
+        page.set_viewport_size({'width':320,'height':760})
+        expect(overview.get_by_role('heading',name='Agenda da escola')).to_be_visible()
+        assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+        overview.locator('.dash-head').scroll_into_view_if_needed()
+        page.screenshot(path=str(OUT/'02-dashboard-mobile.png'))
+        overview.locator('.dash-agenda').scroll_into_view_if_needed()
+        page.screenshot(path=str(OUT/'02-dashboard-agenda-mobile.png'))
+        page.set_viewport_size({'width':1440,'height':1000})
+        checks.append('Painel com movimentação por período, abertura da matrícula efetivada e agenda sem overflow em 320 px')
         if not BRIDGE:
             page.reload();expect(page.get_by_role('heading',name='Visão geral',exact=True)).to_be_visible();checks.append('Sessão restaurada por refresh após reload')
         nav('Alunos');page.get_by_role('button',name='Abrir ficha →').first.click();page.screenshot(path=str(OUT/'04-aluno.png'),full_page=True)

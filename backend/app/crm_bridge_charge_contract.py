@@ -65,3 +65,13 @@ def validate_receipt(value,event,action):
                 if not isinstance(instrument[key],str) or not re.fullmatch(pattern,instrument[key]):raise ContractError('INVALID_INSTRUMENT')
         else:raise ContractError('INVALID_INSTRUMENT')
     return value
+
+
+OPEN_PAYMENT_STATES = ('issued', 'pending', 'overdue', 'api_registered', 'api_query_observed')
+SETTLED_PAYMENT_STATES = ('confirmed', 'received', 'received_in_cash', 'paid', 'settled', 'api_settlement_observed')
+CANCELLED_PAYMENT_STATES = ('cancelled', 'canceled', 'deleted', 'api_cancelled_confirmed')
+
+
+def crm_receipt_payable(receipt):
+    return bool(receipt.get('status') in OPEN_PAYMENT_STATES and receipt.get('reconciliation_status') == 'not_reconciled'
+                and receipt.get('remote_id') and receipt.get('origin_id') and not receipt.get('payment_id'))

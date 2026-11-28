@@ -1,5 +1,11 @@
 /** Interação da faixa de guias compartilhada pelos portais da escola. */
 namespace PigePortalTabs {
+  export function cancelClose():void { PigeDialogs.cancelPending(); }
+  export function confirmClose(home:string,drafts:string[]):Promise<boolean> {
+    const text='A guia '+home+' permanecerá aberta. As outras guias serão fechadas. Alterações e preenchimentos ainda não salvos nessas guias serão descartados. Os dados já salvos serão preservados.';
+    return PigeDialogs.confirm(text+(drafts.length?'\n\nConfira antes de fechar · '+drafts.join(', ')+'.':''),
+      {title:'Fechar as outras guias?',cancelLabel:'Voltar',confirmLabel:'Fechar outras guias',destructive:true});
+  }
   export function reveal():void {
     void Vue.nextTick(()=>{
       const tab=window.document.querySelector<HTMLElement>('.work-tabs-list [role="tab"][aria-selected="true"]');

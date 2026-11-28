@@ -117,7 +117,7 @@ with tempfile.TemporaryDirectory(prefix='pige-email-client-') as temporary:
             expect(page.get_by_role('button', name='Projetos concluídos', exact=True)).to_be_visible()
             page.get_by_role('button', name='Gerenciar pasta', exact=True).click()
             page.get_by_role('button', name='Excluir pasta…', exact=True).click()
-            page.get_by_role('button', name='Excluir pasta vazia', exact=True).click()
+            page.get_by_role('dialog',name='Excluir esta pasta?').get_by_role('button', name='Excluir pasta vazia', exact=True).click()
             expect(page.get_by_role('button', name='Projetos concluídos', exact=True)).to_have_count(0)
             assert page.evaluate("calls.some(x=>x.method==='DELETE'&&x.url.includes('/folders/custom-renamed?confirm=true'))")
             record('Pastas pessoais podem ser criadas, renomeadas e excluídas com confirmação')

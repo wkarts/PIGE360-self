@@ -1,3 +1,4 @@
+from uuid import UUID
 import re
 from datetime import date
 from typing import Literal
@@ -327,6 +328,12 @@ class ProtocolInput(Input):
     description: str = Field(default='', max_length=4000)
     status: Literal['open','in_progress','waiting','completed','cancelled'] = 'open'
     due_on: date | None = None
+
+class ProtocolCreateInput(ProtocolInput):
+    requester_user_id: str | None = Field(default=None, max_length=36)
+    category: Literal['secretaria','pedagogico','financeiro','tecnico'] | None = None
+    client_key: UUID | None = None
+
 
 class SchoolInput(Input):
     educacenso_training: bool | None = None

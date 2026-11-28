@@ -150,11 +150,26 @@ try:
   expect(admin.get_by_label('UF da assinatura',exact=True)).to_have_js_property('tagName','SELECT')
   expect(admin.get_by_role('button',name='Conferir PDF timbrado',exact=True)).to_be_disabled()
   date_input.fill('2027-02-10');admin.get_by_label('Valor da parcela',exact=True).fill('950,00')
+  back_to_queue=admin.get_by_role('button',name='Voltar à fila',exact=False)
+  close_admission=admin.get_by_role('dialog',name='Voltar à fila de inscrições?')
+  back_to_queue.click()
+  expect(close_admission).to_be_visible()
+  close_admission.get_by_role('button',name='Continuar editando',exact=True).click()
+  expect(close_admission).to_have_count(0)
+  expect(date_input).to_have_value('2027-02-10')
+  expect(admin.get_by_label('Valor da parcela',exact=True)).to_have_value('950,00')
   admin.get_by_role('button',name='Salvar rascunho',exact=True).click()
   expect(admin.get_by_text('Rascunho salvo nesta matrícula e revisão.',exact=False)).to_be_visible()
   admin.reload();admin.locator('.x-record',has_text='Aluno Exemplo').click()
   admin.get_by_role('button',name='Preparar contrato',exact=True).click()
   expect(admin.get_by_label('Data da assinatura',exact=True)).to_have_value('2027-02-10')
+  expect(admin.get_by_label('Valor da parcela',exact=True)).to_have_value('950,00')
+  admin.get_by_label('Valor da parcela',exact=True).fill('975,00')
+  back_to_queue.click()
+  close_admission.get_by_role('button',name='Descartar e voltar',exact=True).click()
+  expect(close_admission).to_have_count(0)
+  admin.locator('.x-record',has_text='Aluno Exemplo').click()
+  admin.get_by_role('button',name='Preparar contrato',exact=True).click()
   expect(admin.get_by_label('Valor da parcela',exact=True)).to_have_value('950,00')
   with admin.expect_download() as download:
    admin.get_by_role('button',name='Conferir PDF timbrado',exact=True).click()
@@ -174,7 +189,7 @@ try:
   expect(admin.get_by_role('heading',name='Efetivação da matrícula',exact=True)).to_be_visible()
   expect(admin.get_by_role('button',name='Efetivar matrícula e emitir comprovante',exact=True)).to_be_disabled()
   assert not errors,errors
-  result={'status':'passed','checks':['Instância preexistente compartilhada selecionada sem integração legada','Botão WhatsApp disponível no fluxo da matrícula','Dois documentos anexados manualmente sem catálogo','Confirmação de código mantém inscrição aberta','Inscrição concluída pela interface com contato confirmado','Contrato vinculado na análise sem alterar campanha','Revisão atualizada pela interface após recarregar modelos','Troca para outro modelo v1 preserva três registros e permite baixar a via vigente','Obrigatoriedade configurada por variável no editor real','Rascunho retomado após recarregar a aplicação','Calendário e seletor UF conforme o campo','PDF real sem marcadores, rótulos vazios ou contratantes inventados','Efetivação mostra os requisitos restantes na mesma matrícula'],'responsive':responsive,'javascript_errors':errors,'browser':browser.version,'external_delivery':'Não executada; código sintético da fila usado na confirmação','database':'SQLite temporário'}
+  result={'status':'passed','checks':['Instância preexistente compartilhada selecionada sem integração legada','Botão WhatsApp disponível no fluxo da matrícula','Dois documentos anexados manualmente sem catálogo','Confirmação de código mantém inscrição aberta','Inscrição concluída pela interface com contato confirmado','Contrato vinculado na análise sem alterar campanha','Revisão atualizada pela interface após recarregar modelos','Troca para outro modelo v1 preserva três registros e permite baixar a via vigente','Obrigatoriedade configurada por variável no editor real','Rascunho retomado após recarregar a aplicação','Cancelar conserva os campos do contrato e descartar volta à fila sem alterar o rascunho salvo','Calendário e seletor UF conforme o campo','PDF real sem marcadores, rótulos vazios ou contratantes inventados','Efetivação mostra os requisitos restantes na mesma matrícula'],'responsive':responsive,'javascript_errors':errors,'browser':browser.version,'external_delivery':'Não executada; código sintético da fila usado na confirmação','database':'SQLite temporário'}
   (OUT/'results.json').write_text(json.dumps(result,ensure_ascii=False,indent=2));print(json.dumps(result,ensure_ascii=False));browser.close()
 finally:
  proc.terminate();proc.wait(timeout=10);log.close()

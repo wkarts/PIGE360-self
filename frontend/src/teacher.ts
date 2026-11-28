@@ -8,6 +8,7 @@ namespace PigeTeacher {
     {id:'diary',label:'Diário de classe',icon:'academic'},
     {id:'materials',label:'Atividades e trabalhos',icon:'documents'},
     {id:'news',label:'Avisos e publicações',icon:'bell'},
+    {id:'support',label:'Atendimento',icon:'school'},
     {id:'webmail',label:'E-mail',icon:'email'},
   ];
   const mail=PigePortalMail.use(PigeAPI.request);
@@ -18,10 +19,13 @@ namespace PigeTeacher {
   const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bahia'}).format(new Date());
   const s=Vue.reactive({ready:false,busy:false,error:'',email:'',password:'',passwordVisible:false,
     user:null as PigeAPI.User|null,schools:[] as {id:string;name:string}[],schoolId:'',
-    requestedDiary:undefined as {id:string;tab?:string}|undefined,section:'overview',tabs:['overview'],sidebarCollapsed:savedSidebar(),menuOpen:false,
+    requestedDiary:undefined as {id:string;tab?:string;discardApproved?:boolean}|undefined,section:'overview',tabs:['overview'],sidebarCollapsed:savedSidebar(),menuOpen:false,
     news:[] as {id:string;title:string;content:string;summary:string}[],newsPage:1,newsTotal:0,week:today(),agenda:null as Agenda|null});
-  let loadedSchoolId='';
+  const rail=PigeSidebarRail.use(()=>s.sidebarCollapsed);
+  let loadedSchoolId='',sessionVersion=0;
   function clear(){
+    sessionVersion++;PigeDialogs.cancelPending();
+    rail.close();
     loadedSchoolId='';mail.clear();PigeAPI.clear();PigeMFA.clear();s.user=null;s.schools=[];s.schoolId='';s.password='';s.passwordVisible=false;
     s.section='overview';s.tabs=['overview'];s.requestedDiary=undefined;s.menuOpen=false;s.news=[];s.agenda=null;s.week=today();s.error='';
   }
@@ -37,6 +41,8 @@ namespace PigeTeacher {
     if(id===s.schoolId && week===s.week)s.agenda=data;
   }
   async function school(id:string){
+    sessionVersion++;PigeDialogs.cancelPending();
+    rail.close();
     if(s.schoolId && s.schoolId!==id)PigeDiary.clearPilotContext(s.schoolId);
     loadedSchoolId='';mail.clear();s.agenda=null;s.news=[];s.newsPage=1;s.newsTotal=0;
     s.section='overview';s.tabs=['overview'];s.requestedDiary=undefined;s.schoolId=id;PigeAPI.setActiveSchool(id);
@@ -64,17 +70,18 @@ namespace PigeTeacher {
     const data=await PigeAPI.post<Record<string,unknown>>('/auth/login',{email:s.email,password});
     if(!await PigeMFA.accept(data))await enter(data as unknown as PigeAPI.SessionResponse);
   });}
-  async function logout(){if(canDiscardDiary())await run(async()=>{await PigeAPI.post('/auth/logout',{});clear();});}
+  async function logout(){if(await canLeaveSchool('Sair do portal?','Sair'))await run(async()=>{await PigeAPI.post('/auth/logout',{});clear();});}
   async function start(){
     await PigeInstitution.load();
     try{const session=await PigeAPI.refresh();await enter(session);}
     catch(e){if((e as {status?:number}).status!==401)s.error=(e as Error).message;}
     finally{s.ready=true;}
   }
-  function selectSchool(event:Event){
-    const select=event.target as HTMLSelectElement;
-    if(!canDiscardDiary()){select.value=s.schoolId;return;}
-    void run(()=>school(select.value));
+  async function selectSchool(event:Event){
+    const select=event.target as HTMLSelectElement,target=select.value;
+    select.value=s.schoolId;
+    if(!await canLeaveSchool('Trocar de instituição?','Trocar de instituição') || !s.schools.some(item=>item.id===target))return;
+    await run(()=>school(target));
   }
   async function publications(page=1){
     const id=s.schoolId;
@@ -86,6 +93,7 @@ namespace PigeTeacher {
   function available(section:string):boolean {
     if(section==='overview'||section==='help')return true;
     if(!s.schoolId || !s.user)return false;
+    if(section==='support')return true;
     const routines=s.user.teacher_routines;
     if(section==='webmail')return Boolean(routines?.includes('mail') && mail.state.available);
     if(routines)return routines.includes(section);
@@ -95,6 +103,13 @@ namespace PigeTeacher {
     return ['diary','materials'].includes(section) && !s.agenda?.diaries.length;
   }
   function navigation(){return pages.filter(item=>available(item.id));}
+  function sidebarGroups(){
+    const links=navigation();
+    return [
+      {id:'teacher-routine-menu',label:'Rotina docente',icon:'academic',items:links.filter(item=>['agenda','diary','materials'].includes(item.id))},
+      {id:'teacher-services-menu',label:'Comunicação',icon:'bell',items:links.filter(item=>['news','support','webmail'].includes(item.id))},
+    ].filter(group=>group.items.length);
+  }
   function title(section:string):string {
     return section==='help'?'Guia de uso':pages.find(item=>item.id===section)?.label || '';
   }
@@ -121,6 +136,8 @@ namespace PigeTeacher {
   }
   function navigate(section:string,focusHeading=true){
     if(s.busy || !available(section) || unavailable(section))return;
+    if(section!==s.section)PigeDialogs.cancelPending();
+    rail.close();
     if(section!=='diary' && location.hash==='#diario')history.replaceState(history.state,'',location.pathname+location.search);
     if(!s.tabs.includes(section))s.tabs.push(section);
     s.menuOpen=false;s.section=section;PigePortalTabs.reveal();
@@ -128,27 +145,61 @@ namespace PigeTeacher {
     if(section==='news')void run(()=>publications());
     if(section==='agenda')void run(agenda);
   }
-  function canDiscardDiary():boolean {
-    if(document.querySelector('#teacher-diary [aria-busy="true"]'))return false;
-    return !document.querySelector('#teacher-diary [data-workspace-dirty="true"]') ||
-      window.confirm('Descartar as alterações do diário que ainda não foram salvas?');
+  function supportDraft(){return Boolean(document.querySelector('#teacher-protocols [data-workspace-dirty="true"]'));}
+  function supportBusy(){return Boolean(document.querySelector('#teacher-protocols [aria-busy="true"]'));}
+  function diaryBusy(){return Boolean(document.querySelector('#teacher-diary [aria-busy="true"]'));}
+  function diaryDraft(){return Boolean(document.querySelector('#teacher-diary [data-workspace-dirty="true"]'));}
+  function workspaceKey(){return JSON.stringify([sessionVersion,s.schoolId,s.user?.id,s.section,s.tabs,s.requestedDiary]);}
+  async function canLeaveSchool(heading:string,action:string):Promise<boolean> {
+    if(s.busy || supportBusy() || diaryBusy())return false;
+    const warnings=[];
+    if(diaryDraft())warnings.push('As alterações do diário ainda não foram salvas.');
+    if(supportDraft())warnings.push('A mensagem de atendimento ainda não foi enviada.');
+    if(s.tabs.includes('webmail'))warnings.push('Confira se as mensagens em edição foram salvas em Rascunhos.');
+    if(!warnings.length)return true;
+    const previous=workspaceKey();
+    const approved=await PigeDialogs.confirm(warnings.join(' '),{title:heading,confirmLabel:action,cancelLabel:'Voltar',destructive:true});
+    return approved && previous===workspaceKey() && !s.busy && !supportBusy() && !diaryBusy();
   }
-  function openDiary(id:string,tab:string){
-    if(s.busy || !available('diary') || !s.agenda?.diaries.some(d=>d.id===id))return;
-    if((tab==='materials' && !available('materials')) || !canDiscardDiary())return;
-    s.requestedDiary={id,tab};
+  async function openDiary(id:string,tab:string){
+    const allowed=()=>!s.busy && !diaryBusy() && available('diary') && s.agenda?.diaries.some(d=>d.id===id) && (tab!=='materials'||available('materials'));
+    if(!allowed())return;
+    let discardApproved=false;
+    if(diaryDraft()){
+      const previous=workspaceKey();
+      const approved=await PigeDialogs.confirm('As alterações do diário que ainda não foram salvas serão descartadas.',{
+        title:'Continuar para a rotina do diário?',confirmLabel:'Continuar',cancelLabel:'Voltar',destructive:true
+      });
+      if(!approved||previous!==workspaceKey()||!allowed())return;
+      discardApproved=true;
+    }
+    s.requestedDiary=discardApproved?{id,tab,discardApproved:true}:{id,tab};
     navigate('diary',false);
   }
-  function closeTabs(section?:string){
+  async function closeTabs(section?:string){
     if(s.busy || section==='overview' || s.tabs.length<2)return;
     const closingDiary=s.tabs.includes('diary') && (!section || section==='diary');
     if(closingDiary && document.querySelector('#teacher-diary [aria-busy="true"]'))return;
     const dirty=closingDiary && document.querySelector('#teacher-diary [data-workspace-dirty="true"]');
+    const closingSupport=s.tabs.includes('support') && (!section || section==='support');
+    if(closingSupport && supportBusy())return;
+    const supportWarning=closingSupport&&supportDraft()?' A mensagem de atendimento ainda não enviada será descartada.':'';
     const closingMail=s.tabs.includes('webmail') && (!section || section==='webmail');
-    const message=section?'Fechar a guia '+title(section)+'?':'Fechar todas as outras guias e manter a Visão geral aberta?';
-    const diaryWarning=dirty?' As alterações do diário que ainda não foram salvas serão descartadas.':'';
-    const mailWarning=closingMail?' Confira se as mensagens em edição foram salvas em Rascunhos.':'';
-    if((!section || dirty || closingMail) && !window.confirm(message+diaryWarning+mailWarning))return;
+    const previousContext=workspaceKey();
+    if(section){
+      const diaryWarning=dirty?' As alterações do diário que ainda não foram salvas serão descartadas.':'';
+      const mailWarning=closingMail?' Confira se as mensagens em edição foram salvas em Rascunhos.':'';
+      if((dirty || closingMail || supportWarning) && !await PigeDialogs.confirm((diaryWarning+mailWarning+supportWarning).trim(),{
+        title:'Fechar a guia '+title(section)+'?',confirmLabel:'Fechar guia',cancelLabel:'Voltar',destructive:true
+      }))return;
+    }else{
+      const pending=[];
+      if(dirty)pending.push('alterações no diário de classe');
+      if(supportWarning)pending.push('mensagem de atendimento');
+      if(closingMail)pending.push('mensagens em edição no E-mail');
+      if(!await PigePortalTabs.confirmClose(title('overview'),pending))return;
+    }
+    if(previousContext!==workspaceKey() || s.busy || (closingSupport&&supportBusy()) || (closingDiary&&diaryBusy()))return;
     const previous=s.section;
     s.tabs=section?s.tabs.filter(id=>id!==section):['overview'];
     if(closingDiary)s.requestedDiary=undefined;
@@ -160,6 +211,7 @@ namespace PigeTeacher {
     if(key){navigate(key,false);focusTab();}
   }
   function toggleSidebar(){
+    rail.close();
     s.sidebarCollapsed=!s.sidebarCollapsed;PigePortalTabs.reveal();
     try{localStorage.setItem(sidebarKey,String(s.sidebarCollapsed));}catch{/* A escolha continua válida nesta janela. */}
   }
@@ -188,12 +240,14 @@ namespace PigeTeacher {
     const assignment=s.agenda?.assignments.find(item=>item.id===diary?.teacher_assignment_id);
     return [assignment?.class_name,diary?.component].filter(Boolean).join(' · ');
   }
-  Vue.createApp({render:PigeRenders.teacherPortal,components:{'school-diary':PigeDiary.component,'portal-mail':PigePortalMail.component},setup(){
+  Vue.createApp({render:PigeRenders.teacherPortal,components:{'portal-protocols':PigePortalProtocols.component,'school-diary':PigeDiary.component,'portal-mail':PigePortalMail.component},setup(){
+    Vue.watch(()=>[s.schoolId,s.user?.id,s.user?.permissions.join(','),s.user?.teacher_routines?.join(','),mail.state.available].join('|'),()=>rail.close());
     Vue.watch(()=>[s.ready,s.user?.id,s.user?.role,s.schoolId].join('|'),()=>{
       if(s.user&&s.schoolId)void PigeSupport.load(s.schoolId,'teacher_portal',s.user.id);
       else if(s.ready&&!s.user)void PigeSupport.load(undefined,'login');
       else PigeSupport.dispose();
     });
+    Vue.onMounted(rail.mount);Vue.onUnmounted(rail.dispose);
     Vue.onUnmounted(PigeSupport.dispose);
 
     Vue.onMounted(()=>{
@@ -202,6 +256,6 @@ namespace PigeTeacher {
       window.addEventListener('resize',()=>{if(innerWidth>800)s.menuOpen=false;PigePortalTabs.reveal();});
       void start();
     });
-    return {s,mail,available,unavailable,can,navigation,title,initials,metrics,openDiary,closeTabs,tabKeys,toggleSidebar,retry,pilotForSchool:PigeDiary.pilotForSchool,navigate,toggleMenu,menuKey,publications,identity:PigeInstitution.state,mfa:PigeMFA,login,logout,run,agenda,workspace,date,group,selectSchool};
+    return {s,rail,sidebarGroups,mail,download:PigeAPI.download,available,unavailable,can,navigation,title,initials,metrics,openDiary,closeTabs,tabKeys,toggleSidebar,retry,pilotForSchool:PigeDiary.pilotForSchool,navigate,toggleMenu,menuKey,publications,identity:PigeInstitution.state,mfa:PigeMFA,login,logout,run,agenda,workspace,date,group,selectSchool};
   }}).mount('#teacher');
 }

@@ -11,7 +11,7 @@ const sandbox={crypto,console,document:{createElement:()=>({}),querySelector:()=
   location:{hash:'',pathname:'/',origin:'http://test'},history:{replaceState(){}},localStorage:{getItem:()=>null,setItem(){}},
   URLSearchParams,URL,Intl,Headers,FormData,Blob,File,Event,CustomEvent,AbortController,AbortSignal,setTimeout,clearTimeout};
 sandbox.window=sandbox;
-sandbox.confirm=()=>true;
+sandbox.confirm=()=>{throw Error('O diálogo deve ser exibido no PIGE360.');};
 sandbox.addEventListener=()=>{};
 sandbox.fetch=()=>{throw new Error('Requisição de rede inesperada');};
 vm.createContext(sandbox);
@@ -22,6 +22,7 @@ sandbox.Vue.onMounted=()=>{};
 sandbox.Vue.onUnmounted=()=>{};
 sandbox.Vue.createApp=()=>({mount(){}});
 load('app.js');
+sandbox.PigeDialogs.confirm=async()=>true;
 
 const charge={id:'charge-1',description:'Mensalidade',amount:'100.00',status:'pending',version:2,collection_mode:'manual',billing_type:'MANUAL',due_on:'2027-02-01'};
 const base='/schools/escola%2Fum/banking/asaas';
@@ -112,7 +113,33 @@ refund.ctx.openCardRefund(plan,payments[0]);
 refund.state.cardRefund.reason='Acordo da escola';
 api.request=async()=>({items:[plan],total:1,page:1});
 api.post=async(url,payload)=>{writes.push({url,payload});return {status:'completed'};};
+// Aguardar o diálogo não pode fazer uma cobrança nem duplicar o envio.
+let answerDialog;
+let asks=0;
+sandbox.PigeDialogs.confirm=async(message,options)=>{
+  asks++;
+  assert.equal(options.confirmLabel,'Solicitar estorno');
+  assert.match(message,/200,20/);
+  return await new Promise(resolve=>{answerDialog=resolve;});
+};
+const countBeforeRefund=writes.length;
+const cancelled=refund.ctx.refundCard();
 await refund.ctx.refundCard();
+assert.equal(asks,1);
+answerDialog(false);
+await cancelled;
+assert.equal(writes.length,countBeforeRefund);
+assert.equal(refund.state.cardRefund.amount,'200.20');
+const lostAccess=refund.ctx.refundCard();
+refund.ctx.props.permissions=['banking.read'];
+answerDialog(true);
+await lostAccess;
+assert.equal(writes.length,countBeforeRefund);
+refund.ctx.props.permissions=['banking.read','asaas.monitor.read','asaas.refund'];
+const approved=refund.ctx.refundCard();
+answerDialog(true);
+await approved;
+assert.equal(writes.length,countBeforeRefund+1);
 assert.equal(writes.at(-1).url,base+'/cards/checkouts/card_1/refund');
 assert.equal(writes.at(-1).payload.amount,'200.20');
 assert.equal(writes.at(-1).payload.payment_id,'pay_1');
@@ -121,14 +148,40 @@ assert.equal(downloads.length,2,'Confirmação inicial do cartão não libera co
 await refund.ctx.cardReceipt(plan,payments[0]);
 assert.equal(downloads.at(-1).url,base+'/cards/checkouts/card_1/payments/pay_1/receipt.pdf');
 
+const bankCharge={...charge,collection_mode:'provider',billing_type:'PIX',remote_payment_id:'pay_teste',status:'received'};
+const bankRefund=view('charge',['asaas.refund','asaas.monitor.read'],bankCharge);
+bankRefund.state.refundAmount='33.00';
+bankRefund.state.refundReason='Ajuste solicitado';
+let approveCharge;
+sandbox.PigeDialogs.confirm=()=>new Promise(resolve=>{approveCharge=resolve;});
+const pendingRefund=bankRefund.ctx.refund();
+bankRefund.ctx.props.charge={...bankCharge,id:'outra-cobranca'};
+approveCharge(true);
+await pendingRefund;
+assert.equal(writes.length,countBeforeRefund+1,'Trocar de cobrança antes de confirmar invalida o estorno.');
+bankRefund.ctx.props.charge=bankCharge;
+sandbox.PigeDialogs.confirm=async()=>true;
+await bankRefund.ctx.refund();
+assert.equal(writes.at(-1).url,base+'/monitor/charges/charge-1/refund');
+assert.equal(writes.at(-1).payload.amount,'33.00');
+
 const settings=view('settings',['integrations.manage']);
+let policyPayload;
 api.request=async(url,opts)=>{
   if(url.endsWith('/pix-automatic/settings'))return {enabled:false,version:4,additional_holidays:[]};
-  return {connection_id:'conn',version:opts?5:4,settings:{card_recurring_enabled:true}};
+  if(opts)policyPayload=JSON.parse(opts.body);
+  return {connection_id:'conn',version:opts?5:4,settings:policyPayload?.settings??{card_recurring_enabled:true,periodic_reconciliation_enabled:true,settled_review_days:0,reconciliation_batch_size:25}};
 };
 await settings.ctx.initialize();
 assert.ok(settings.render());
+const reviewFields=settings.ctx.policyGroups.find(group=>group.title==='Conciliação periódica').fields;
+assert.deepEqual(Array.from(reviewFields[1].slice(3)),['0','365']);
+assert.deepEqual(Array.from(reviewFields[2].slice(3)),['1','100']);
+Object.assign(settings.state.policy.settings,{periodic_reconciliation_enabled:false,settled_review_days:14,reconciliation_batch_size:8});
 await settings.ctx.savePolicy();
+assert.equal(policyPayload.settings.periodic_reconciliation_enabled,false);
+assert.equal(policyPayload.settings.settled_review_days,14);
+assert.equal(policyPayload.settings.reconciliation_batch_size,8);
 assert.equal(settings.state.settings.version,5);
 settings.state.holidays='01/01/2027';
 await settings.ctx.saveSettings();

@@ -31,3 +31,175 @@ h1,h2,h3{font-family:var(--institution-font,inherit)}
   .account-summary { gap: 16px; }
   .account-photo { width: 64px; height: 64px; }
 }
+
+/* Navegação comum do gestor, da família e do professor. */
+:is(.workspace,.family-shell) > .sidebar-edge-toggle,
+.sidebar-flyout-title, .sidebar-brand-mark { display: none; }
+
+@media (width > 800px) {
+  .workspace, .family-shell {
+    --sidebar-width: 228px;
+    --sidebar-header-height: 78px;
+    --sidebar-active: color-mix(in srgb, var(--primary) 10%, var(--surface, #fff));
+  }
+  .workspace.sidebar-collapsed, .family-shell.family-shell-collapsed { --sidebar-width: 64px; }
+  :is(.workspace,.family-shell) > .sidebar-edge-toggle {
+    position: fixed;
+    inset: calc(var(--sidebar-header-height) / 2) auto auto var(--sidebar-width);
+    z-index: 41;
+    transform: translate(-50%, -50%);
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    background: transparent;
+    color: var(--ink);
+    border: 0;
+    border-radius: 50%;
+  }
+  .sidebar-edge-toggle::before {
+    content: '';
+    position: absolute;
+    inset: 7px;
+    border: 1px solid var(--border);
+    border-radius: inherit;
+    background: var(--surface, #fff);
+    box-shadow: 0 1px 4px #172b371a;
+  }
+  .sidebar-edge-toggle:is(:hover,:focus-visible)::before { border-color: var(--primary); }
+  :is(.workspace,.family-shell) > .sidebar-edge-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: -5px; }
+  :is(.workspace,.family-shell) > .sidebar-edge-toggle .ui-icon {
+    position: relative;
+    width: 16px;
+    height: 16px;
+    stroke-width: 2;
+    color: var(--ink);
+  }
+  .sidebar-edge-toggle[aria-expanded="false"] .ui-icon { transform: rotate(180deg); }
+
+  .workspace .sidebar-brand, .family-shell .family-sidebar-brand {
+    display: grid;
+    align-content: center;
+    align-items: center;
+    height: var(--sidebar-header-height);
+    flex: 0 0 var(--sidebar-header-height);
+    min-width: 0;
+    overflow: hidden;
+  }
+  :is(.workspace .sidebar-brand,.family-shell .family-sidebar-brand) > a {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+    text-align: start;
+    letter-spacing: normal;
+  }
+  :is(.workspace .sidebar-brand,.family-shell .family-sidebar-brand) img {
+    display: block;
+    flex: none;
+    width: 46px;
+    height: 52px;
+    max-width: 100%;
+    object-fit: contain;
+  }
+  :is(.workspace .sidebar-brand,.family-shell .family-sidebar-brand) img.sidebar-brand-wordmark {
+    width: auto;
+    max-width: min(100%, 166px);
+    height: auto;
+    max-height: 52px;
+  }
+  a:has(.sidebar-brand-wordmark) .sidebar-brand-details { display: none; }
+  .sidebar-brand-details { display: grid; gap: 4px; min-width: 0; }
+  :is(.workspace .sidebar-brand,.family-shell .family-sidebar-brand) .sidebar-brand-details strong {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    text-align: start;
+    font-size: 14px;
+    font-weight: 650;
+    line-height: 1.25;
+    color: var(--ink);
+  }
+  .family-shell .sidebar-brand-details small { font-size: 9px; line-height: 1.2; letter-spacing: .55px; }
+  :is(.workspace.sidebar-collapsed,.family-shell.family-shell-collapsed) :is(.sidebar-brand,.family-sidebar-brand) > a {
+    gap: 0;
+    justify-content: center;
+  }
+  :is(.workspace.sidebar-collapsed,.family-shell.family-shell-collapsed) :is(.sidebar-brand,.family-sidebar-brand) img {
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+  }
+  :is(.workspace.sidebar-collapsed,.family-shell.family-shell-collapsed) :is(.sidebar-brand-details,img.sidebar-brand-wordmark) { display: none; }
+  :is(.workspace.sidebar-collapsed,.family-shell.family-shell-collapsed) a:not(:has(img:not(.sidebar-brand-wordmark))) .sidebar-brand-mark {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    color: var(--primary);
+    background: var(--sidebar-active);
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
+
+  :is(.sidebar,.family-sidebar) .sidebar-flyout[data-rail-open] {
+    position: fixed;
+    inset: var(--rail-flyout-top,8px) auto auto var(--rail-flyout-left,68px);
+    display: grid;
+    align-content: start;
+    gap: 2px;
+    width: 264px;
+    max-width: calc(100vw - var(--rail-flyout-left,68px) - 8px);
+    max-height: calc(100dvh - 16px);
+    margin: 0;
+    padding: 6px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--ink);
+    background: var(--surface, #fff);
+    box-shadow: 0 8px 24px #142a4526, 0 2px 5px #142a4510;
+    z-index: 42;
+  }
+  .sidebar-flyout[data-rail-open]::backdrop { background: transparent; }
+  .sidebar-flyout[data-rail-open] > .sidebar-flyout-title {
+    display: block;
+    margin: 0;
+    padding: 10px 10px 8px;
+    text-align: start;
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+  :is(.workspace .sidebar,.family-shell .family-sidebar) .sidebar-flyout[data-rail-open] :is(a,button) {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 40px;
+    margin: 0;
+    padding: 8px 10px;
+    gap: 10px;
+    text-align: start;
+    font-size: 13px;
+  }
+  :is(.sidebar,.family-sidebar) :is(nav a,nav button,.nav-group-toggle,.portal-rail-trigger):focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+  }
+}
+
+@media (max-width: 800px) {
+  :is(.sidebar-brand,.family-sidebar-brand) a:has(img) .sidebar-brand-details strong { display: none; }
+  .family-sidebar-brand .sidebar-brand-details small { display: block; }
+}

@@ -7,6 +7,14 @@ import vm from 'node:vm';
 import {webcrypto as crypto} from "node:crypto";
 import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+// A mesma regra cobre os portais e a recuperação de acesso, que usa JavaScript próprio.
+for(const directory of ['src','public','templates']){
+  for(const file of fs.readdirSync(path.join(root,directory)).filter(file=>/\.(?:js|ts|html)$/.test(file))){
+    const source=fs.readFileSync(path.join(root,directory,file),'utf8');
+    assert.doesNotMatch(source,/\b(?:window|globalThis|self)\s*\.\s*(?:confirm|alert|prompt)\s*\(/,
+      directory+'/'+file+': use o diálogo de confirmação, aviso ou entrada do PIGE360.');
+  }
+}
 // Não aceitar fechamento de fieldset fora do formulário (compilador de produção pode tolerar HTML inválido).
 for(const filename of fs.readdirSync(path.join(root,'templates')).filter(name=>name.endsWith('.html'))) {
   let openFieldsets=0;
@@ -81,6 +89,76 @@ assert.deepEqual(Array.from(context.state.supportHub.enabled_areas),['online_enr
 context.closeModal(true);context.editSupportHub();await Promise.resolve();
 assert.deepEqual(Array.from(context.state.modal.form.enabled_areas),['online_enrollment','news'],'Cancelar e reabrir restaura as áreas salvas');
 context.closeModal(true);
+{
+ const api=sandbox.PigeAPI,originalRequest=api.request,originalPost=api.post;
+ const {state}=context,requests=[],replies=[],creations=[];
+ const protocol={id:'p1',version:2,number:'PRO-0001',kind:'Atendimento escolar',created_at:'2026-10-10T13:00:00Z',updated_at:'2026-10-10T14:00:00Z',requester_user_id:'u1',requester_name:'Nome do responsável',source:'family',category:'secretaria',status:'open',preferred_channel:'email',history:[
+  {id:'e1',visibility:'public',actor_name:'Responsável',message:'Preciso do histórico.',created_at:'2026-10-10T13:00:00Z'},
+  {id:'e2',action:'note',actor_name:'Secretaria',message:'Anotação da equipe.',created_at:'2026-10-10T14:00:00Z'}]};
+ const priorPage=state.page,priorRows=state.rows;
+ try{
+  state.page='protocols';
+  api.request=async(path,options)=>{
+   requests.push(path);
+   if(path.includes('/protocol-requesters?'))return {page:1,total:2,page_size:30,items:[{id:'teacher',name:'Docente',role:'teacher'},{id:'u1',name:'Responsável',role:'guardian'}]};
+   if(path.endsWith('/u1/students'))return {items:[{id:'pedag',name:'Acadêmico',academic_authorized:true,financial_authorized:false},{id:'fin',name:'Financeiro',academic_authorized:false,financial_authorized:true}]};
+   if(path.endsWith('/messages')){
+    assert.ok(options.body instanceof FormData);
+    replies.push({message:options.body.get('message'),key:options.body.get('client_key')});
+    if(replies.length===1)throw Error('Sem confirmação do envio.');
+    return protocol;
+   }
+   if(path.includes('/protocols?'))return {items:[protocol],total:1};
+   if(path.endsWith('/protocols/p1'))return protocol;
+   throw Error('Consulta inesperada '+path);
+  };
+  api.post=async(path,body)=>{assert.ok(path.endsWith('/protocols'));creations.push(body);return protocol;};
+  state.rows=[protocol];
+  assert.ok(nodes(render()).some(node=>node.type==='small' && node.children==='Aberto em 10/10/2026'));
+  assert.ok(nodes(render()).some(node=>node.type==='small' && typeof node.children==='string' && node.children.startsWith('Última atividade 10/10/2026')));
+  await context.viewProtocol('p1');
+  assert.equal(context.protocolEvents('internal').length,1);
+  assert.equal(context.protocolEvents('public').length,1);
+  assert.equal(context.protocolEvents('public')[0].message,'Preciso do histórico.');
+  assert.ok(nodes(render()).some(n=>n.type==='button'&&n.children==='Responder ao solicitante'));
+  const notices=()=>nodes(render()).filter(node=>node.type==='small'&&node.props?.class?.includes('protocol-notification'));
+  assert.equal(notices().length,0,'Protocolo sem job de aviso não apresenta estado de envio');
+  const event=state.modal.target.history[0];
+  for(const [status,expected] of Object.entries({pending:'Na fila de envio',retry:'Aguardando nova tentativa',processing:'Envio em andamento',completed:'Aceito pelo serviço de WhatsApp',failed:'Falha no envio',uncertain:'Envio sem confirmação do serviço'})){
+   event.notification={channel:'whatsapp',status};
+   assert.equal(notices().length,1,'O estado só aparece na mensagem que possui aviso');
+   assert.ok(notices()[0].children.includes(expected),status);
+  }
+  event.notification={channel:'email',status:'completed'};
+  assert.equal(notices()[0].children,'Aceito pelo serviço de e-mail');
+  event.notification=null;
+  assert.equal(notices().length,0);
+  context.replyProtocol();state.modal.form.message='  Vamos conferir.  ';
+  await context.saveModal();
+  assert.match(state.modal.error,/Sem confirmação do envio/);
+  await context.saveModal();
+  assert.deepEqual(replies[0],replies[1]);
+  assert.equal(replies[1].message,'Vamos conferir.');
+  assert.equal(state.modal.kind,'protocol-detail');
+  context.startPortalProtocol();
+  await context.searchProtocolRequesters();
+  await context.chooseProtocolRequester('u1');
+  state.modal.form.category='financeiro';context.syncProtocolStudent();
+  assert.equal(state.modal.form.student_id,'fin');
+  state.modal.form.category='pedagogico';context.syncProtocolStudent();
+  assert.equal(state.modal.form.student_id,'pedag');
+  await context.chooseProtocolRequester('teacher');
+  assert.equal(state.modal.form.student_id,'');
+  state.modal.form.kind='Orientação escolar';state.modal.form.description='Mensagem institucional.';
+  await context.saveModal();
+  assert.equal(creations.length,1);
+  assert.equal(creations[0].student_id,null);
+  assert.equal(creations[0].requester_user_id,'teacher');
+  assert.equal(creations[0].category,'pedagogico');
+  assert.ok(/^[\da-f-]{36}$/i.test(creations[0].client_key));
+  console.log('Protocolos: histórico público e interno, resposta idempotente e abertura autorizada por conta/vínculo OK.');
+ }finally{context.closeModal(true);state.page=priorPage;state.rows=priorRows;api.request=originalRequest;api.post=originalPost;}
+}
 await (await import('./person-record-flow.mjs')).testPersonRecords({context,sandbox,render,nodes});
 const originalObjectUrl=sandbox.PigeAPI.objectUrl;
 let activePhotos=0,maxActivePhotos=0;
@@ -114,6 +192,24 @@ assert.match(loginText(importRender()),/Escolher registros/);
 importContext.state.preview={can_apply:true,selected_record_count:2,destination:{school_name:'Escola de teste'},tables:[{name:'alunos',selected_rows:2,destination:'Alunos'}],issues:[],warnings:[]};
 assert.match(loginText(importRender()),/Confira antes de importar/);
 importContext.toggleTable('alunos');assert.equal(importContext.state.preview,null,'Mudar seleção invalida a confirmação');
+{
+ const props={schoolId:'school-test',catalogs:{},canIssue:true,canSign:true};
+ const reports=sandbox.PigeReports.component.setup(props);
+ reports.kit.recipients=[{id:'enrollment-1',name:'Aluno sintético',number:'M1',class_name:'Turma',last_revision:2}];
+ const item=reports.kit.recipients[0],post=sandbox.PigeAPI.post,confirmation=sandbox.PigeDialogs.confirm,writes=[];
+ let decide,questions=0;
+ sandbox.PigeDialogs.confirm=(_message,options)=>{assert.equal(options.confirmLabel,'Emitir e assinar');questions++;return new Promise(resolve=>{decide=resolve;});};
+ sandbox.PigeAPI.post=async(path)=>{writes.push(new URL(path,'https://app.test'));return {revision:3};};
+ const cancelled=reports.reissue(item);await reports.reissue(item);
+ assert.equal(questions,1);decide(false);await cancelled;assert.equal(writes.length,0);
+ const revoked=reports.reissue(item);props.canSign=false;decide(true);await revoked;assert.equal(writes.length,0);
+ props.canSign=true;
+ const approved=reports.reissue(item);decide(true);await approved;
+ assert.equal(writes.length,1);assert.equal(writes[0].pathname,'/schools/school-test/reports/bulletins/enrollment-1/issue');
+ assert.equal(writes[0].searchParams.get('expected_revision'),'2');assert.ok(writes[0].searchParams.get('operation'));
+ assert.equal(item.last_revision,3);
+ sandbox.PigeAPI.post=post;sandbox.PigeDialogs.confirm=confirmation;
+}
 const reportContext=sandbox.PigeReports.component.setup({schoolId:'school-test',catalogs:{}});
 reportContext.identity={display_name:'Instituição Sintética',logo_url:'/logo-escola',app_version:'0.0.1'};
 const reportRender=()=>sandbox.PigeRenders.reports.call(reportContext,reportContext,[]);
@@ -126,7 +222,8 @@ assert.match(loginText(reportRender()),/Uso restrito/);
 assert.ok(nodes(reportRender()).some(node=>node.type==='img' && node.props.src==='/logo-escola'));
 context.state.page='help';let guideTree=render();assert.match(loginText(guideTree),/Siga a ordem da rotina escolar/);assert.match(loginText(guideTree),/Cadastre cada pessoa uma vez/);
 const guidePermissions=context.state.user.permissions;
-context.state.user.permissions=[...guidePermissions,'users.manage','admissions.read','diary.configure','diary.read','enrollments.read'];
+context.state.user.permissions=[...guidePermissions,'users.manage','admissions.read','diary.configure','diary.read','enrollments.read','educacenso.manage'];
+assert.ok(context.state.guideChoices().some(topic=>topic.id==='census-individual'));
 for (const topic of context.state.guideChoices()) {
   context.state.guideSelection.topic=topic.id;
   const image=nodes(render()).find(node=>node.type==='img' && node.props?.src==='/guia/'+topic.image+'.webp');
@@ -135,7 +232,7 @@ for (const topic of context.state.guideChoices()) {
   assert.equal(bytes.toString('ascii',8,12),'WEBP');
 }
 context.state.user.permissions=['diary.read'];
-assert.ok(!context.state.guideChoices().some(item=>item.id==='users' || item.id==='diary'));
+assert.ok(!context.state.guideChoices().some(item=>['users','diary','census-individual'].includes(item.id)));
 assert.ok(context.state.guideChoices().some(item=>item.id==='teacher'));
 context.state.guideSelection.topic='users';
 assert.equal(context.state.currentGuide().id,'navigation');
@@ -250,6 +347,34 @@ await contractContext.issue();assert.equal(issueCalls,0,'Emissão bloqueada com 
 contractContext.setValue('financeiro.anuidade',{target:{value:'1200,00'}});
 assert.equal(contractContext.state.previewStale,true);
 await contractContext.preview();await contractContext.issue();assert.equal(issueCalls,1);assert.equal(downloadCalls,1);
+// A decisão pertence à mesma versão do modelo e da matrícula que abriu a confirmação.
+const originalContractDecision=sandbox.PigeDialogs.confirm;
+try{
+  contractContext.state.draft.name='Modelo com alteração';
+  const currentModel=contractContext.state.draft;
+  sandbox.PigeDialogs.confirm=async()=>false;
+  await contractContext.useBuiltin();
+  assert.equal(contractContext.state.draft,currentModel,'Cancelar mantém o modelo em edição e dispensa a consulta ao catálogo.');
+  let allowDiscard;
+  sandbox.PigeDialogs.confirm=()=>new Promise(resolve=>{allowDiscard=resolve;});
+  const closing=contractContext.cancelEdit();
+  currentModel.name='Uma revisão posterior';
+  allowDiscard(true);await closing;
+  assert.equal(contractContext.state.editing,true,'Uma edição posterior invalida a confirmação antiga.');
+
+  contractContext.state.draftDirty=true;
+  contractContext.state.templateId='template-1';
+  contractContext.state.applicable.push({...newTemplate,id:'template-2'});
+  const selector={value:'template-2'};
+  sandbox.PigeDialogs.confirm=async()=>false;
+  await contractContext.selectTemplate({target:selector});
+  assert.equal(selector.value,'template-1');
+  assert.equal(contractContext.state.draftDirty,true);
+  sandbox.PigeDialogs.confirm=async()=>true;
+  selector.value='template-2';await contractContext.selectTemplate({target:selector});
+  assert.equal(contractContext.state.templateId,'template-2');
+  assert.equal(contractContext.state.draftDirty,false);
+}finally{sandbox.PigeDialogs.confirm=originalContractDecision;}
 sandbox.PigeAPI.post=originalPost;sandbox.PigeAPI.request=originalRequest;sandbox.PigeAPI.download=originalDownload;
 console.log('Contracts smoke: JSON privado, vigência, campos pendentes e emissão conferidos OK.');
 
@@ -288,6 +413,21 @@ const p12=new File(['conteúdo de teste'],'escola.p12',{type:'application/x-pkcs
 signing.certificateChanged({target:{files:[p12]}});signing.state.certificatePassword='senha-de-teste';
 await signing.saveCertificate();assert.ok(receivedA1);assert.equal(signing.state.certificatePassword,'');
 signing.state.alerts.email_enabled=true;await signing.saveAlertPreferences();assert.ok(receivedPreferences);
+{
+ const permissions={...signingProps,mode:'certificate'},scoped=signingComponent.setup(permissions);
+ await scoped.load();
+ const confirmation=sandbox.PigeDialogs.confirm,request=sandbox.PigeAPI.request;
+ let decide,questions=0,deletions=0;
+ sandbox.PigeDialogs.confirm=(_message,options)=>{assert.equal(options.destructive,true);questions++;return new Promise(resolve=>{decide=resolve;});};
+ sandbox.PigeAPI.request=async(path,options={})=>{if(options.method==='DELETE'){deletions++;return {};}return request(path,options);};
+ const cancelled=scoped.removeCertificate();await scoped.removeCertificate();
+ assert.equal(questions,1);decide(false);await cancelled;assert.equal(deletions,0);
+ const revoked=scoped.removeCertificate();permissions.role='secretary';decide(true);await revoked;assert.equal(deletions,0);
+ permissions.role='admin';
+ const stale=scoped.removeCertificate();scoped.state.certificate.certificate_sha256='replacement';decide(true);await stale;assert.equal(deletions,0);
+ const approved=scoped.removeCertificate();decide(true);await approved;assert.equal(deletions,1);
+ sandbox.PigeDialogs.confirm=confirmation;sandbox.PigeAPI.request=request;
+}
 let firstRequest=signingRequests.length;
 const signatureQueue=signingComponent.setup({...signingProps,mode:'pending-signatures'});
 await signatureQueue.load();
@@ -375,6 +515,40 @@ expansion.s.selected=admission;
 await expansion.previewFrozenContract();assert.equal(frozenPreviewVersion,5);
 await expansion.issueFrozenContract();assert.equal(frozenIssueVersion,5);
 await expansion.finalize();assert.equal(finalizeCount,0,'Sem revisão verificada, a matrícula não pode ser efetivada');
+// A decisão é assíncrona. Uma segunda solicitação não pode reaproveitar a confirmação.
+const previousExpansionConfirm=sandbox.PigeDialogs.confirm,previousExpansionPrompt=sandbox.PigeDialogs.prompt;
+let resolveAdmissionDialog,admissionDialogCount=0,admissionDialogOpened=()=>{};
+sandbox.PigeDialogs.confirm=()=>{admissionDialogCount++;admissionDialogOpened();return new Promise(resolve=>{resolveAdmissionDialog=resolve;});};
+expansion.setContractFieldValue('financeiro.anuidade','Rascunho de teste');
+const closingAdmission=expansion.closeAdmission();
+await expansion.closeAdmission();assert.equal(admissionDialogCount,1);
+assert.equal(expansion.s.selected.id,admission.id);assert.equal(expansion.s.busy,true);
+resolveAdmissionDialog(false);await closingAdmission;
+assert.equal(expansion.s.contractDraftDirty,true);assert.equal(expansion.contractValue('financeiro.anuidade'),'Rascunho de teste');
+let requestedAdmission='';
+sandbox.PigeAPI.request=async path=>{requestedAdmission=path;if(path.endsWith('/readiness'))return{ready:false,checks:[]};return {...admission,contract:{...admission.contract,template_version:6}};};
+const switchAdmission=expansion.view('admission-2');
+resolveAdmissionDialog(false);await switchAdmission;assert.equal(requestedAdmission,'');
+const refreshDialog=new Promise(resolve=>{admissionDialogOpened=resolve;});
+const refreshExisting=expansion.refreshAdmissionStatus();
+await refreshDialog;
+resolveAdmissionDialog(false);await refreshExisting;
+assert.equal(expansion.s.selected.contract.template_version,5);assert.equal(expansion.s.contractDraftDirty,true);
+assert.equal(expansion.contractValue('financeiro.anuidade'),'Rascunho de teste');
+expansion.s.reason='Justificativa escrita pela equipe.';expansion.s.reviewPreset='Documentação conferida';
+const useModel=expansion.useReviewPreset();resolveAdmissionDialog(false);await useModel;
+assert.equal(expansion.s.reason,'Justificativa escrita pela equipe.');
+expansion.contractHistoryPolicy.value={can_manage:true,allow_removal:true};
+let resolveHistory,historyPromptCount=0,historyWrites=0;
+sandbox.PigeDialogs.prompt=(_message,options)=>{
+  historyPromptCount++;assert.equal(options.minLength,10);return new Promise(resolve=>{resolveHistory=resolve;});
+};
+sandbox.PigeAPI.post=async()=>{historyWrites++;return {};};
+const removing=expansion.removeContractHistory('issued-1');await expansion.removeContractHistory('issued-1');
+assert.equal(historyPromptCount,1);resolveHistory(null);await removing;assert.equal(historyWrites,0);
+const closeConfirmed=expansion.closeAdmission();resolveAdmissionDialog(true);await closeConfirmed;
+assert.equal(expansion.s.selected,null);assert.equal(expansion.s.contractDraftDirty,false);
+sandbox.PigeDialogs.confirm=previousExpansionConfirm;sandbox.PigeDialogs.prompt=previousExpansionPrompt;
 sandbox.PigeAPI.request=originalRequest;sandbox.PigeAPI.post=originalPost;sandbox.PigeAPI.patch=originalPatch;
 console.log('Campaign smoke: modelo do período, revisão congelada e bloqueio da matrícula OK.');
 

@@ -86,9 +86,19 @@ try:
             expect(page.get_by_role('heading',name='Confira antes de importar')).to_be_visible()
             expect(page.locator('.import-workspace').get_by_text('1 registro(s)',exact=True)).to_be_visible()
             page.screenshot(path=str(OUT/'01-importacao-seletiva.png'),full_page=True)
-            page.get_by_label('Digite IMPORTAR para confirmar').fill('IMPORTAR')
+            start_import=page.get_by_role('button',name='Confirmar importação',exact=True)
+            confirmation=page.get_by_role('dialog',name='Confirmar importação',exact=True)
+            start_import.click()
+            confirmation.get_by_role('button',name='Voltar').click()
+            start_import.click()
+            confirmation.get_by_label('Digite IMPORTAR para confirmar').fill('CANCELAR')
+            confirmation.get_by_role('button',name='Importar registros').click()
+            expect(page.get_by_text('Digite IMPORTAR para confirmar a operação.',exact=True)).to_be_visible()
+            assert not client.get(base+'/legacy-import/operations',headers=headers).json()
+            start_import.click()
+            confirmation.get_by_label('Digite IMPORTAR para confirmar').fill('IMPORTAR')
             with page.expect_response(lambda response:'/legacy-import/operations' in response.url and response.request.method=='POST') as queued:
-                page.get_by_role('button',name='Confirmar importação',exact=True).click()
+                confirmation.get_by_role('button',name='Importar registros',exact=True).click()
             assert queued.value.status==202,queued.value.text()
             operation_id=queued.value.json()['id']
             # The worker is a separate process; refresh must retain the pending operation.

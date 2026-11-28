@@ -183,7 +183,7 @@ def download(file_id: str, db: DB, user: Actor, school: Scope, request: Request)
     if obj.file_kind == 'educacenso_evidence':
         from .educacenso import authorize
         authorize(user, school)
-    if obj.file_kind == 'absence_evidence':
+    if obj.file_kind in ('absence_evidence','protocol_attachment'):
         require(user, 'protocols.read')
     if obj.file_kind == 'fiscal_xml':
         from .fiscal_signing import authorize_fiscal

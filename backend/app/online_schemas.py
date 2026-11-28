@@ -3,6 +3,7 @@ from decimal import Decimal
 import re
 from typing import Literal
 from pydantic import EmailStr, Field, field_validator, model_validator
+from .portal_access import today as school_today
 from .schemas import Input, PersonInput
 
 DEFAULT_GUARDIAN_INSTRUCTIONS = "Leia atentamente antes de iniciar a inscrição.\n\n1. Preencha os dados do aluno e do responsável exatamente como constam nos documentos oficiais.\n2. Informe e-mail e telefone atualizados, pois a instituição poderá utilizá-los para comunicações sobre a inscrição e a matrícula.\n3. Envie somente os documentos solicitados. Ao fotografar, enquadre o documento inteiro, com boa iluminação, sem reflexos e com os dados legíveis.\n4. Quando o sistema sugerir dados a partir da leitura de um documento, confira as informações antes de aplicá-las ao cadastro.\n5. Revise todos os dados antes de enviar a inscrição. Informações incompletas ou divergentes poderão exigir correção ou nova documentação.\n6. A inscrição online não garante vaga nem matrícula. A efetivação depende da análise da instituição, da disponibilidade de vaga e do cumprimento das etapas definidas para este processo.\n7. Acompanhe o andamento pelo Portal dos responsáveis e observe as mensagens, solicitações de ajuste, prazos e documentos pendentes.\n8. Em caso de dúvida ou dificuldade, entre em contato diretamente com a instituição pelos canais oficiais."
@@ -215,7 +216,7 @@ class ChargeInput(Input):
             raise ValueError('Selecione mensalidade interna para usar autorização de cartão por fatura.')
         if self.collection_mode == 'manual': self.billing_type = 'MANUAL'
         elif self.billing_type == 'MANUAL': raise ValueError('Selecione Pix ou boleto para emissão bancária.')
-        if self.collection_mode == 'provider' and self.due_on < date.today(): raise ValueError('Informe vencimento atual ou futuro para emissão bancária.')
+        if self.collection_mode == 'provider' and self.due_on < school_today(): raise ValueError('Informe vencimento atual ou futuro para emissão bancária.')
         if self.required_for_enrollment and self.installment_count > 1: raise ValueError('Pagamento obrigatório de matrícula deve ser avulso, separado das mensalidades.')
         if self.installment_count > 1 and len(self.client_key) > 70: raise ValueError('Chave de parcelamento: máximo 70 caracteres.')
         return self

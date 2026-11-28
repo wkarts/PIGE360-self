@@ -7,6 +7,7 @@ import httpx
 from playwright.sync_api import sync_playwright, expect
 from datetime import date, timedelta
 from qa.portal_access import accept_local_access_link, check_sogo_frame, check_teacher_layout, link_test_mailbox, start_sogo_fixture
+from qa.portal_protocols import check_portal_protocols
 ROOT=Path(__file__).resolve().parents[1]
 OUT=Path(os.getenv('PIGE_E2E_EVIDENCE_DIR',str(ROOT/'evidence/qa/online')));OUT.mkdir(parents=True,exist_ok=True)
 TEMP=Path(tempfile.mkdtemp(prefix='pige-online-e2e-'))
@@ -350,7 +351,7 @@ try:
         assert lesson_change.value.ok and lesson_change.value.json()['content']=='Revisão do registro provisório'
         workspace.get_by_role('button',name='Editar aula de 02/02/2027',exact=True).click()
         lesson.get_by_role('button',name='Remover aula',exact=True).click()
-        removal = workspace.locator('form').filter(has=teacher_page.get_by_role('heading',name='Remover aula de 02/02/2027'))
+        removal = teacher_page.get_by_role('dialog',name='Remover aula de 02/02/2027?',exact=True)
         removal.get_by_label('Justificativa').fill('Data lançada por engano antes de iniciar a chamada.')
         with teacher_page.expect_response(lambda r: r.url.endswith('/remove') and r.request.method=='POST') as lesson_removed:
             removal.get_by_role('button',name='Confirmar remoção da aula').click()
@@ -531,9 +532,10 @@ try:
         parent.get_by_role('button',name='Ativar acesso',exact=True).click()
         expect(parent.get_by_role('button',name='Revogar acesso',exact=True)).to_be_visible()
         parent.get_by_role('button',name=re.compile('^Boletim')).click()
-        expect(parent.get_by_role('table', name=re.compile('^Rendimento e frequência'))).to_contain_text('Matemática')
-        expect(parent.get_by_role('table', name=re.compile('^Rendimento e frequência'))).to_contain_text('8,5')
-        expect(parent.locator('.learning-workspace td[data-label="Frequência"]')).to_contain_text('100%')
+        report = parent.get_by_role('table', name=re.compile('^Rendimento e frequência'))
+        expect(report).to_contain_text('Matemática')
+        expect(report.locator('[data-metric="grade"]').first).to_contain_text('8,5')
+        expect(report.locator('[data-metric="frequency"]').first).to_contain_text(re.compile(r'100(?:[,.]0+)?%'))
         with parent.expect_download() as down:parent.get_by_role('button',name='Baixar boletim PDF',exact=True).click()
         down.value.save_as(str(OUT/'boletim-escolar.pdf'))
         parent.screenshot(path=str(OUT/'05-portal-boletim.png'),full_page=True)
@@ -711,9 +713,16 @@ try:
         familyPage.get_by_role('button', name='Recolher menu lateral', exact=True).click()
         expect(familyPage.get_by_role('button', name='Expandir menu lateral', exact=True)).to_be_visible()
         familyPage.wait_for_function('limit => document.getElementById("family-navigation").getBoundingClientRect().width < limit', arg=sidebar_width*.75)
+        # Verifique os ícones do trilho antes de forçar uma recarga da página.
+        # Recarregar durante a leitura do SVG cancela a requisição no Chromium.
+        rail_icons = family_sidebar.locator('[data-rail-trigger]:visible svg:first-of-type use')
+        assert rail_icons.count() > 0
+        familyPage.wait_for_load_state('networkidle')
+        assert rail_icons.evaluate_all('icons => icons.every(icon => icon.getBBox().width > 0)')
         familyPage.reload()
         familyPage.get_by_role('button', name='Expandir menu lateral', exact=True).click()
         record('Aluno vê seu cadastro e atalhos de boletim e atividades; navegação financeira segue seu vínculo e a barra lateral conserva a preferência.')
+        familyPage.wait_for_load_state('networkidle')
         familyPage.reload();expect(familyPage.locator('#family-title')).to_have_text('Visão geral')
         expect(familyPage.get_by_role('heading',name='Olá, Lucas.',exact=True)).to_be_visible()
         family_nav('Atividades')
@@ -779,24 +788,31 @@ try:
         family_nav('Justificativas de ausência')
         familyPage.get_by_label('Data da ausência').fill('2027-02-01')
         familyPage.get_by_label('Motivo',exact=True).fill('Justificativa fictícia de teste')
+        # Um único fechamento com rascunho também usa o diálogo da escola.
+        single_tab = familyPage.get_by_role('button', name='Fechar guia Justificativas de ausência', exact=True)
+        single_tab.click()
+        leave = familyPage.get_by_role('dialog', name='Fechar a guia Justificativas de ausência?')
+        expect(leave.get_by_role('button',name='Voltar')).to_be_focused()
+        leave.get_by_role('button',name='Voltar').click()
+        expect(familyPage.get_by_label('Motivo',exact=True)).to_have_value('Justificativa fictícia de teste')
+        expect(single_tab).to_be_focused()
         # Alternar mantém o formulário. O único descarte ocorre após confirmação.
         tabs = familyPage.get_by_role('tablist', name='Tarefas abertas')
         absence_tab = tabs.get_by_role('tab', name='Justificativas de ausência', exact=True)
         overview_tab = tabs.get_by_role('tab', name='Visão geral', exact=True)
         overview_tab.click()
-        prompts = []
-        def cancel_close(dialog):
-            prompts.append(dialog.message)
-            dialog.dismiss()
-        familyPage.once('dialog', cancel_close)
+        confirmation = familyPage.get_by_role('dialog', name='Fechar as outras guias?')
         overview_tab.dblclick()
+        expect(confirmation).to_contain_text('justificativa de ausência')
+        expect(confirmation.get_by_role('button', name='Voltar')).to_be_focused()
+        confirmation.get_by_role('button', name='Voltar').click()
         expect(absence_tab).to_be_visible()
-        assert prompts and re.search(r'rascunho|alteraç|não salv', prompts[-1], re.I), prompts
+        expect(overview_tab).to_be_focused()
         absence_tab.click()
         expect(familyPage.get_by_label('Motivo',exact=True)).to_have_value('Justificativa fictícia de teste')
         overview_tab.click()
-        familyPage.once('dialog',lambda dialog:dialog.accept())
         familyPage.get_by_role('button',name='Fechar outras guias',exact=True).click()
+        confirmation.get_by_role('button',name='Fechar outras guias',exact=True).click()
         expect(tabs.get_by_role('tab')).to_have_count(1)
         family_nav('Justificativas de ausência')
         expect(familyPage.get_by_label('Motivo',exact=True)).to_have_value('')
@@ -833,13 +849,11 @@ try:
         manager_diary = manager.locator('.diary-workspace')
         manager_diary.get_by_role('button', name=re.compile(r'^Mover .+ para baixo')).first.click()
         expect(manager_diary).to_have_attribute('data-workspace-dirty', 'true')
-        warnings = []
-        def keep_draft(dialog):
-            warnings.append(dialog.message)
-            dialog.dismiss()
-        manager.once('dialog', keep_draft)
         manager.get_by_role('button', name='Fechar outras guias', exact=True).click()
-        assert len(warnings) == 1 and 'Diário Escolar' in warnings[0] and 'não salvas' in warnings[0], warnings
+        manager_confirmation = manager.get_by_role('dialog', name='Fechar as outras guias?')
+        expect(manager_confirmation).to_contain_text('Diário Escolar')
+        expect(manager_confirmation).to_contain_text('ainda não salvos')
+        manager_confirmation.get_by_role('button', name='Voltar').click()
         expect(manager_diary).to_be_visible()
         manager_diary.get_by_role('button', name='Descartar alterações na composição').click()
         expect(manager_diary).to_have_attribute('data-workspace-dirty', 'false')
@@ -911,6 +925,10 @@ try:
         reopened=direction_post('/reopen',reopening)
         assert reopened['diary']['status']=='open' and reopened['revision']['reason']==reopening['reason']
         record('API: Professor impedido de reabrir; Direção reabre com justificativa registrada.')
+        check_portal_protocols(browser=browser,clerk=clerk,student_page=studentPage,guardian_page=familyPage,
+            manager_url=URL,family_url=PORTAL_URL,teacher_url=TEACHER_URL,school=school,student_id=student_id,
+            sibling_id=sibling['id'],teacher=teacher,password=password,client=client,admin=headers,base=base,
+            root=ROOT,env=env,database=TEMP/'e2e.db',sample=sample,output=OUT,record=record)
         assert not failed_requests,failed_requests
         assert not bad_responses,bad_responses
         assert not errors,errors

@@ -1,0 +1,67 @@
+<section class="panel family-detail-panel portal-protocols" aria-label="Atendimento do colégio" :aria-busy="s.busy" :data-workspace-dirty="dirty()?'true':undefined">
+  <header class="portal-protocols-heading">
+    <div>
+      <h2 id="portal-protocol-title" tabindex="-1">{{s.view==='list'?'Fale com o colégio':s.view==='new'?'Novo protocolo':s.ticket?.subject}}</h2>
+      <p v-if="s.view==='list'">Abra uma solicitação ou acompanhe o retorno da escola pelo número do protocolo.</p>
+      <p v-if="s.ticket"><strong>{{s.ticket.number}}</strong> · {{statuses[s.ticket.status]||s.ticket.status}} · {{categories[s.ticket.category]||s.ticket.category}}</p>
+    </div>
+    <div class="actions">
+      <button v-if="s.view==='list' && (props.area==='teacher' || props.studentId)" type="button" class="btn btn-primary" :disabled="s.busy" @click="showNew">Novo protocolo</button>
+      <button v-else-if="s.view!=='list'" type="button" class="btn btn-secondary" :disabled="s.busy" @click="list(s.page)">Voltar aos protocolos</button>
+      <button v-if="chat.canOpen" type="button" class="btn btn-secondary" @click="openChat">Abrir chat da escola</button>
+    </div>
+  </header>
+  <div v-if="chat.canOpen && s.ticket && !closed()" class="portal-ticket-handoff">
+    <p>No chat da escola, informe {{s.ticket.number}}. Para registrar uma mensagem no histórico deste protocolo, use Enviar resposta.</p>
+    <button type="button" class="link-button" @click="copyNumber">Copiar número do protocolo</button>
+  </div>
+  <p v-if="s.busy" role="status">Aguarde, atualizando o atendimento…</p>
+  <p v-if="s.error" class="alert error" role="alert">{{s.error}}</p>
+  <p v-if="s.notice" class="alert success" role="status">{{s.notice}}</p>
+  <template v-if="s.view==='list'">
+    <form class="family-feed-search" @submit.prevent="list(1,true)"><label class="field">Número do protocolo<input type="search" v-model="s.query" maxlength="100" placeholder="PRO-" :disabled="s.busy"></label><button class="btn btn-secondary" :disabled="s.busy">Buscar</button></form>
+    <h3>Meus protocolos</h3>
+    <ul v-if="s.items.length" class="portal-ticket-list"><li v-for="item in s.items" :key="item.id">
+      <div><strong>{{item.number}}</strong><button type="button" class="link-button" :aria-label="'Abrir '+item.number+' · '+item.subject" @click="open(item.id)" :disabled="s.busy">{{item.subject}}</button></div>
+      <p>{{statuses[item.status]||item.status}} · {{categories[item.category]||item.category}}<small>Atualizado em {{date(item.updated_at)}}</small></p>
+    </li></ul>
+    <p v-else-if="!s.busy&&!s.error" class="family-empty">{{s.term?'Nenhum protocolo encontrado para esse número.':'Você ainda não tem protocolos neste contexto.'}}</p>
+    <nav v-if="s.total>s.pageSize" class="family-pagination" aria-label="Páginas de protocolos"><button class="btn btn-secondary" :disabled="s.busy||s.page<=1" @click="list(s.page-1)">Anterior</button><span>Página {{s.page}} de {{Math.ceil(s.total/s.pageSize)}}</span><button class="btn btn-secondary" :disabled="s.busy||s.page*s.pageSize>=s.total" @click="list(s.page+1)">Próxima</button></nav>
+    <section v-if="s.options.opening_channel" class="portal-opening-channel">
+      <h3>Avisos de novos protocolos abertos pela escola</h3>
+      <form class="family-feed-search" @submit.prevent="saveOpeningChannel">
+        <label class="field">Quando a Secretaria abrir um atendimento para mim<select v-model="s.openingChannel" :disabled="s.busy"><option v-for="key in s.options.channels" :key="key" :value="key">{{key==='portal'?'Somente no portal':channels[key]}}</option></select></label>
+        <button type="submit" class="btn btn-secondary" :disabled="s.busy">Salvar preferência de abertura</button>
+      </form>
+    </section>
+  </template>
+  <template v-if="s.view==='detail' && s.ticket">
+    <div class="portal-protocols-heading"><h3>Histórico do protocolo</h3><button class="btn btn-secondary" type="button" @click="open(s.ticket.id)" :disabled="s.busy">Atualizar histórico</button></div>
+    <ol class="portal-ticket-history"><li v-for="entry in s.ticket.history" :key="entry.id">
+      <header><strong>{{entry.author==='you'?'Você':'Escola'}}</strong><time :datetime="entry.created_at">{{date(entry.created_at)}}</time></header>
+      <p>{{entry.message}}</p>
+      <button v-if="entry.attachment" type="button" class="link-button" :disabled="s.busy" @click="attachment(entry.attachment)">Baixar anexo · {{entry.attachment.name}}</button>
+    </li></ol>
+  </template>
+  <p v-if="s.optionsError" class="alert" role="status">Preferências de contato indisponíveis. O atendimento pelo portal continua disponível. <button type="button" class="link-button" @click="options">Tentar novamente</button></p>
+  <form v-if="s.view==='new'||(s.view==='detail'&&!closed())" class="portal-ticket-form" @submit.prevent="send">
+    <fieldset :disabled="s.busy"><legend>{{s.view==='new'?'Dados da solicitação':'Responder ao colégio'}}</legend>
+      <template v-if="s.view==='new'">
+        <label class="field">Categoria<select v-model="s.form.category" required><option v-for="key in availableCategories" :key="key" :value="key">{{categories[key]}}</option></select></label>
+        <label class="field">Assunto<input type="text" v-model="s.form.subject" minlength="2" maxlength="120" required></label>
+        <label v-if="s.options.channels.length>1" class="field">Preferência de avisos<select v-model="s.form.channel"><option v-for="key in s.options.channels" :key="key" :value="key">{{channels[key]}}</option></select></label>
+      </template>
+      <label class="field">{{s.view==='new'?'Mensagem':'Sua resposta'}}<textarea v-model="s.form.message" rows="4" minlength="3" maxlength="4000" required></textarea></label>
+      <label class="field">Anexo (opcional)<input :key="s.fileVersion" type="file" accept="application/pdf,image/png,image/jpeg" @change="chooseFile"><small>PDF, JPG ou PNG<span v-if="s.options.max_attachment_mb"> de até {{s.options.max_attachment_mb}} MB</span>.</small></label>
+      <button type="submit" class="btn btn-primary">{{s.view==='new'?'Abrir protocolo':'Enviar resposta'}}</button>
+    </fieldset>
+  </form>
+  <p v-else-if="s.view==='detail'&&closed()" class="muted">Este protocolo foi encerrado. Seu histórico continua disponível para consulta.</p>
+  <section v-if="s.ticket && !closed() && (s.options.channels.length>1 || s.ticket.preferred_channel!=='portal' || whatsappUrl)" class="portal-ticket-channels" aria-label="Canais de contato">
+    <form v-if="!closed() && (s.options.channels.length>1 || s.ticket.preferred_channel!=='portal')" class="family-feed-search" @submit.prevent="changeChannel">
+      <label class="field">Preferência de avisos<select v-model="s.form.channel" :disabled="s.busy"><option v-if="!s.options.channels.includes(s.ticket.preferred_channel)" :value="s.ticket.preferred_channel" disabled>{{channels[s.ticket.preferred_channel]}} (indisponível)</option><option v-for="key in s.options.channels" :key="key" :value="key">{{channels[key]}}</option></select></label>
+      <button class="btn btn-secondary" :disabled="s.busy||s.form.channel===s.ticket.preferred_channel">Salvar preferência</button>
+    </form>
+    <a v-if="whatsappUrl" class="btn btn-secondary" :href="whatsappUrl" target="_blank" rel="noopener noreferrer">Continuar pelo WhatsApp</a>
+  </section>
+</section>

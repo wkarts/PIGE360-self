@@ -1,5 +1,4 @@
 #teacher { min-height: 100dvh; }
-.teacher-shell .family-header { padding-inline-start: 12px; }
 .teacher-shell .family-header-school select { width: 100%; max-width: 28rem; color: var(--ink); }
 .teacher-shell .family-sidebar .family-nav-label { margin: 0; }
 .teacher-shell .family-sidebar nav button:disabled { opacity: .6; }
@@ -33,7 +32,7 @@
 .teacher-guide-content img { max-width: 100%; height: auto; }
 .teacher-guide-content figcaption { color: var(--muted); font-size: .8rem; margin-top: .4rem; }
 @media (max-width: 800px) {
-  .teacher-shell .family-header { gap: 8px; }
+  .teacher-shell .family-header { gap: 8px; padding-inline-start: 12px; }
   .teacher-tabs :is([role=tab],.work-tab-close,.teacher-close-others) { min-height: 44px; }
   .teacher-tabs .work-tab-close { min-width: 32px; }
   .teacher-content .diary-workspace .x-grid { grid-template-columns: minmax(0,1fr); }

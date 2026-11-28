@@ -1,0 +1,18 @@
+<dialog class="work-close-dialog" aria-labelledby="pige-dialog-heading" aria-describedby="pige-dialog-message" @cancel.prevent="finish(false)" @close="finish(false)">
+  <header><h2 id="pige-dialog-heading">{{title}}</h2><button type="button" class="work-close-dismiss" aria-label="Fechar aviso" @click="finish(false)">×</button></header>
+  <form novalidate @submit.prevent="finish(true)">
+    <div class="pige-dialog-body">
+      <p id="pige-dialog-message">{{message}}</p>
+      <label v-if="kind==='prompt'" class="pige-dialog-input">
+        {{inputLabel}}
+        <textarea v-model="state.value" rows="3" :minlength="minimum || undefined" :maxlength="maximum" :required="minimum>0"
+          :aria-invalid="state.error ? 'true' : undefined" :aria-describedby="state.error ? 'pige-dialog-error' : undefined" @input="state.error=''" @keydown.ctrl.enter.prevent="finish(true)" @keydown.meta.enter.prevent="finish(true)"></textarea>
+      </label>
+      <p v-if="state.error" id="pige-dialog-error" class="pige-dialog-error" role="alert">{{state.error}}</p>
+    </div>
+    <footer>
+      <button v-if="kind!=='alert'" type="button" class="btn btn-secondary" data-dialog-back @click="finish(false)">{{cancelLabel}}</button>
+      <button type="submit" class="btn" :class="destructive?'work-close-confirm':'btn-primary'">{{confirmLabel}}</button>
+    </footer>
+  </form>
+</dialog>
