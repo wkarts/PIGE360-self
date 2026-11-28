@@ -88,6 +88,7 @@ class School(Record, Base):
     address: Mapped[str] = mapped_column(String(400), default='')
     phone: Mapped[str] = mapped_column(String(32), default='')
     email: Mapped[str] = mapped_column(String(254), default='')
+    diary_entry_settings: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}", info={"legacy_internal": True})
     diary_catalog: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     document_policy: Mapped[str] = mapped_column(String(16), default='warn')
     active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -124,6 +125,7 @@ class SchoolAccess(Base):
     school_id: Mapped[str] = mapped_column(ForeignKey('schools.id'), primary_key=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
+    teacher_routines: Mapped[list[str] | None] = mapped_column(JSON(none_as_null=True))
     portability_granted: Mapped[bool] = mapped_column(Boolean,default=False,server_default='false')
     access_profile_id: Mapped[str | None] = mapped_column(ForeignKey('school_access_profiles.id'), index=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -581,3 +583,32 @@ class AbsenceSubmission(Base):
     file_id: Mapped[str | None] = mapped_column(ForeignKey('files.id'))
     fingerprint: Mapped[str] = mapped_column(String(64))
     __table_args__ = (UniqueConstraint('author_id', 'client_key'),)
+
+
+class AsaasNativeOperation(Record, Scoped, Base):
+    """Tentativa financeira da escola. O diário guarda apenas referências e recibo mínimo."""
+    __tablename__ = 'asaas_native_operations'
+    connection_id: Mapped[str] = mapped_column(ForeignKey('integration_connections.id'))
+    charge_id: Mapped[str | None] = mapped_column(ForeignKey('bank_charges.id'))
+    created_by: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    client_key: Mapped[str] = mapped_column(String(128))
+    kind: Mapped[str] = mapped_column(String(64))
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    issuance_channel: Mapped[str | None] = mapped_column(String(16))
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(16), default='processing')
+    remote_id: Mapped[str] = mapped_column(String(160), default='')
+    response: Mapped[dict] = mapped_column(JSON, default=dict)
+    error_code: Mapped[str] = mapped_column(String(80), default='')
+    __table_args__ = (
+        UniqueConstraint('school_id', 'client_key', name='uq_asaas_native_school_key'),
+        CheckConstraint("status IN ('processing','completed','failed','uncertain')", name='asaas_operation_status'),
+        Index('ix_asaas_native_school_created', 'school_id', 'created_at', 'id'),
+        Index('ix_asaas_native_remote', 'connection_id', 'remote_id'),
+        Index('uq_asaas_native_active_issuance', 'school_id', 'charge_id', unique=True,
+              postgresql_where=issuance_channel.is_not(None) & released_at.is_(None) & status.in_(['processing', 'completed', 'uncertain']),
+              sqlite_where=issuance_channel.is_not(None) & released_at.is_(None) & status.in_(['processing', 'completed', 'uncertain'])),
+        Index('uq_asaas_native_active_lifecycle', 'school_id', 'charge_id', unique=True,
+              postgresql_where=kind.in_(['adjust','cash_receipt','reactivate','refund']) & status.in_(['processing','uncertain']),
+              sqlite_where=kind.in_(['adjust','cash_receipt','reactivate','refund']) & status.in_(['processing','uncertain'])),
+    )

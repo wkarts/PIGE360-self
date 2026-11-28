@@ -78,7 +78,8 @@ def signature_context(db, account, admission_id, issued_id):
     if record.signature_status not in {'company_signed', 'rejected'}:
         fail(409, 'O contrato não está disponível para uma nova assinatura.')
     enrollment = db.get(m.Enrollment, admission.enrollment_id)
-    guardian = db.get(m.Person, enrollment.financial_person_id) if enrollment.financial_person_id else None
+    from .admission_parties import signer
+    guardian = signer(db, admission, enrollment)
     if not guardian or not guardian.cpf or guardian.cpf != account.cpf:
         fail(409, 'O CPF da conta precisa corresponder ao responsável da matrícula.')
     return record, _read_verified(latest_signed_file(db, record))

@@ -13,10 +13,11 @@ function fixture(path='/family',search=''){
   fetch:async(url,opts)=>{calls.push({url,opts});return new Response(JSON.stringify({}));}};
  sandbox.window=sandbox;sandbox.addEventListener=(type,fn)=>events[type]=fn;sandbox.removeEventListener=()=>{};
  vm.createContext(sandbox);
- for(const file of ['vendor/vue-3.5.13.global.prod.js','renders.js'])vm.runInContext(fs.readFileSync(root+'dist/'+file,'utf8'),sandbox);
+ const surface=path==='/professor'?'teacher':'family';
+ for(const file of ['vendor/vue-3.5.13.global.prod.js',surface+'-renders.js'])vm.runInContext(fs.readFileSync(root+'dist/'+file,'utf8'),sandbox);
  sandbox.Vue.onMounted=fn=>events.mounted=fn;sandbox.Vue.onUnmounted=()=>{};
  sandbox.Vue.createApp=options=>({mount(){apps.push(options);}});
- vm.runInContext(fs.readFileSync(root+'dist/family.js','utf8'),sandbox);
+ vm.runInContext(fs.readFileSync(root+'dist/'+surface+'.js','utf8'),sandbox);
  // O transporte privado e o SDK público têm ciclos independentes.
  const supportCalls=[];
  sandbox.PigeSupport.load=async(...args)=>{supportCalls.push(args);};
@@ -43,7 +44,7 @@ const account={id:'guardian',name:'Responsável Teste',role:'guardian',school_id
 }
 {
  const {ctx,render}=fixture();render();ctx.s.ready=true;let tree=render();
- assert.equal(nodes(tree).filter(n=>n.type==='form').length,1);assert.match(text(tree),/Acesse seu portal/);assert.match(text(tree),/secretaria da escola/);
+ assert.equal(nodes(tree).filter(n=>n.type==='form').length,1);assert.match(text(tree),/Acesse seu portal/);assert.ok(nodes(tree).some(n=>n.type==='a'&&n.props.href.includes('recuperar-senha')&&text(n)==='Esqueci minha senha'));
  assert.equal(nodes(tree).filter(n=>n.type==='input'&&n.props?.type==='password').length,1);
  ctx.s.passwordVisible=true;tree=render();assert.equal(nodes(tree).find(n=>n.props?.id==='family-password').props.type,'text');
  ctx.mfa.state.challenge='challenge';tree=render();assert.equal(nodes(tree).filter(n=>n.type==='form').length,0,'Login não concorre com desafio MFA');
@@ -56,7 +57,7 @@ const account={id:'guardian',name:'Responsável Teste',role:'guardian',school_id
   assert.equal(nodes(caption).some(n=>n.type==='select'),false,'Label explícito separado das opções');
  }
  for(const name of ['overview','students','academic','documents','finance','agenda','news','support']){ctx.s.section=name;tree=render();assert.ok(nodes(tree).find(n=>n.props?.id==='family-navigation'));assert.ok(nodes(tree).find(n=>n.props?.['aria-current']==='page'));}
- ctx.s.section='overview';ctx.s.students=[student('a',false)];assert.match(text(render()),/Restrito/);assert.doesNotMatch(text(render()),/98%|Mariana|Lucas/);
+ ctx.s.section='overview';ctx.s.students=[student('a',false)];assert.ok(!nodes(render()).some(n=>n.type==='button'&&/Financeiro|Consultar financeiro/.test(text(n))),'O painel não oferece ações de cobrança sem autorização');assert.doesNotMatch(text(render()),/98%|Mariana|Lucas/);
  ctx.s.financeError='falha';ctx.s.students=[student('a')];assert.match(text(render()),/Indisponível/);ctx.s.contextError=true;assert.match(text(render()),/Não foi possível carregar seu vínculo/);
 }
 {
@@ -132,3 +133,201 @@ console.log('Family auth epoch: delayed refresh cannot resurrect logout, overwri
  assert.deepEqual(focused,['family-menu-close'],'Fechamento obsoleto não captura foco após reabertura');
 }
 console.log('Family drawer: immediate visibility, deferred focus and rapid open/close guards OK.');
+
+{
+ const {ctx,render,sandbox}=fixture();
+ ctx.s.ready=true;ctx.s.account={...account,role:'student'};ctx.s.schoolId='school-a';
+ ctx.s.students=[{...student('a'),document_pendencies:[{document_type_id:'atest',name:'Atestado atual',status:'expired'}]}];
+ ctx.s.studentId='a';
+ assert.match(text(render()),/Portal do aluno/);
+ assert.doesNotMatch(text(render()),/Meus alunos|Portal da família|Justificativas de ausência/);
+ ctx.section('documents');
+ assert.match(text(render()),/Atestado atual/);
+ assert.match(text(render()),/Histórico de documentos/);
+ assert.equal(ctx.pendingDocuments().length,1);
+ ctx.s.students[0].document_pendencies=[];
+ assert.equal(ctx.pendingDocuments().length,0,'Histórico pendente não reabre a exigência atual');
+ delete ctx.s.students[0].document_pendencies;
+ assert.match(text(render()),/Consulta de pendências indisponível/);
+ assert.doesNotMatch(text(render()),/Nenhuma pendência documental registrada/);
+ ctx.s.account=account;
+ assert.match(text(render()),/Portal da família/);
+
+ let finish;
+ sandbox.fetch=()=>new Promise(resolve=>{finish=resolve;});
+ ctx.section('materials');await tick();
+ assert.match(text(render()),/Carregando atividades/);
+ assert.doesNotMatch(text(render()),/Nenhuma atividade/);
+ finish(new Response(JSON.stringify({detail:'Atividades indisponíveis'}),{status:503}));
+ await tick();
+ assert.match(text(render()),/Atividades indisponíveis/);
+ assert.doesNotMatch(text(render()),/Nenhuma atividade/);
+ const retry=ctx.loadSchoolwork();await tick();finish(new Response('[]'));await retry;
+ assert.match(text(render()),/Nenhuma atividade/);
+ assert.doesNotMatch(text(render()),/Atividades indisponíveis|Carregando atividades/);
+}
+
+{
+ const {ctx,sandbox,render}=fixture();ctx.s.ready=true;ctx.s.account=account;
+ ctx.s.schoolId='school-a';ctx.s.students=[student('a')];ctx.s.studentId='a';
+ sandbox.fetch=async url=>{
+  const page=new URL(url,'https://example.test').searchParams.get('page');
+  const status=page==='2'?'overdue':'pending';
+  return new Response(JSON.stringify({items:[{id:'item-'+page,description:'Mensalidade',due_on:'2026-05-01',amount:'120.00',status}],
+    total:31,overdue_count:1,note:'Cobranças da matrícula'}));
+ };
+ await ctx.finance();
+ assert.match(text(render()),/1 vencida\(s\)/,'O total de vencidas inclui as demais páginas');
+ ctx.section('finance');assert.match(text(render()),/Página 1 de 2/);
+ await ctx.finance(2);assert.match(text(render()),/Página 2 de 2/);
+ assert.match(text(render()),/Vencida/);
+ assert.equal(ctx.label('received_external'),'Recebido externamente');
+}
+
+
+{
+ const {ctx,sandbox}=fixture('/professor');
+ const focused=[];
+ sandbox.document.getElementById=id=>({focus(){focused.push(id);}});
+ ctx.s.menuOpen=true;
+ ctx.navigate('overview');
+ await sandbox.Vue.nextTick();
+ assert.equal(ctx.s.menuOpen,false);
+ assert.equal(focused.at(-1),'teacher-title','Selecionar seção no menu docente leva o foco ao título');
+}
+{
+ const {sandbox}=fixture(), requested=[], downloaded=[];
+ const term=(id,index)=>({period_id:id,period_name:index+'º Bimestre',order_index:index,starts_on:'2026-03-01',
+  class_group_id:'turma',class_label:'Turma A · Unidade Centro',grade_display:'0',result_label:'Consolidado',
+  attendance:{total:4,absent:1,justified_absence:0,unrecorded:0,percentage:75}});
+ const enrollment=(id,periods)=>({enrollment_id:id,number:id,status:id==='atual'?'active':'completed',class_name:'Turma A',year_name:'2026',bulletin_model:'panel',
+  subjects:[{diary_id:'diario',component_name:'Planejamento estratégico',periods}],official_editions:[],display_sections:[]});
+ const pupil={student_id:'aluno',student_name:'Aluno de teste',student_number:'001',school_name:'Escola A',
+  enrollments:[enrollment('anterior',[term('p1',1)]),enrollment('atual',[term('p1',1),term('p2',2)])]};
+ const component=sandbox.PigeLearning.component;
+ const ctx=component.setup({schoolId:'escola',request:async path=>{requested.push(path);return {students:[pupil],note:'Resultados publicados'};},
+  download:async path=>{downloaded.push(path);}});
+ await ctx.load();
+ assert.equal(ctx.state.enrollmentId,'atual','O boletim abre na matrícula ativa mesmo que o histórico venha primeiro');
+ ctx.state.groupId=ctx.periodGroups.value[1].id;
+ await ctx.load();
+ assert.equal(ctx.state.enrollmentId,'atual');
+ assert.equal(ctx.visibleGroups.value.length,1);
+ const view=sandbox.Vue.proxyRefs(ctx);
+ const html=component.render.call(view,view,[]);
+ const vnodes=nodes(html);
+ const cells=label=>vnodes.filter(v=>v.type==='td'&&v.props?.['data-label']===label).map(text);
+ assert.equal(cells('Nota / conceito')[0].trim(),'0');
+ assert.equal(cells('Frequência')[0].trim(),'75%');
+ assert.ok(vnodes.some(v=>v.type==='caption'&&text(v).includes('2º Bimestre')));
+ assert.ok(!vnodes.some(v=>v.type==='caption'&&text(v).includes('1º Bimestre')));
+ await ctx.download();
+ assert.equal(downloaded[0],'/profile/learning/aluno/report.pdf?enrollment_id=atual&school_id=escola');
+ assert.ok(requested.every(r=>r==='/profile/learning?school_id=escola'));
+}
+
+{
+ const {ctx,sandbox,render}=fixture();
+ ctx.s.ready=true;ctx.s.account=account;ctx.s.schoolId='school-a';ctx.s.studentId='s1';
+ ctx.s.students=[{...student('s1'),academic_authorized:false,enrollments:[],documents:[]}];
+ ctx.section('academic');
+ assert.equal(ctx.s.section,'finance');
+ const consent={checkout:{id:'ch-1',mode:'detached',status:'paid',quote:{charged_cents:15000},payments:[]},
+                authorization:null,can_authorize:true,terms_version:'v1',terms:'Autorizo débitos futuros.'};
+ const calls=[];
+ sandbox.fetch=async(url,opts)=>{calls.push([url,opts]);return new Response(JSON.stringify(consent));};
+ ctx.s.charges=[{id:'charge-1',description:'Mensalidade',status:'received',amount:'150.00',due_on:'2026-11-10',has_card_checkout:true}];
+ await ctx.cards.load('charge-1');assert.match(text(render()),/Autorizar débitos por título/);
+ assert.equal(calls.length,1);await ctx.cards.submit();assert.equal(calls.length,1);
+ ctx.cards.state.agreed=true;ctx.cards.state.until='2027-10-05';ctx.cards.state.limit='160.50';await ctx.cards.submit();
+ assert.equal(calls[1][0],'/api/v1/family/students/s1/charges/charge-1/cards/authorize');
+ assert.deepEqual(JSON.parse(calls[1][1].body),{terms_version:'v1',accepted:true,ends_on:'2027-10-05',limit_cents:16050});
+ assert.equal(ctx.cards.link('https://outra.example/checkoutSession/show?id=ch-1'),'');
+ assert.doesNotMatch(text(render()),/Justificativas de ausência/);
+}
+console.log('Financeiro familiar: pagador exclusivo, consentimento explícito, teto em centavos e checkout restrito ao Asaas OK.');
+
+for(const academic of [false,true]){
+ const {ctx,sandbox,events,render,history}=fixture('/family','?view=academic&student=s1');
+ const calls=[],button=caption=>nodes(render()).find(n=>n.type==='button'&&text(n).trim()===caption);
+ const selected={...student('s1'),academic_authorized:academic};
+ const charge={id:'fatura',description:'Mensalidade',status:'received',amount:'150.00',due_on:'2026-11-10',has_card_checkout:true};
+ const checkout={id:'checkout',mode:'detached',status:'paid',quote:{charged_cents:15000},payments:[]};
+ let active=false;
+ sandbox.PigeInstitution.load=async()=>{};
+ sandbox.PigeMFA.init=()=>{};
+ sandbox.fetch=async(url,opts={})=>{
+   calls.push([url,opts.method||'GET']);
+   let result;
+   if(url.endsWith('/auth/refresh'))result={access_token:'synthetic',user:account};
+   else if(url.endsWith('/family/context'))result={students:[selected],schools:[]};
+   else if(url.includes('/charges?'))result={items:[charge],page:1,page_size:30,total:1,overdue_count:0};
+   else if(url.endsWith('/cards/authorize')){active=true;result={active};}
+   else if(url.endsWith('/cards/revoke')){active=false;result={active};}
+   else if(url.endsWith('/cards'))result={checkout,can_authorize:!active,terms:'Aceito o limite e a validade.',terms_version:'v1',authorization:active?{active,ends_on:'2027-11-05',limit_cents:15000}:null};
+   else if(url.includes('/community-feed?'))result={items:[],total:0};
+   else throw new Error('Requisição inesperada '+url);
+   return new Response(JSON.stringify(result));
+ };
+ events.mounted();
+ for(let t=0;t<12&&!ctx.s.ready;t++)await tick();
+ assert.equal(ctx.s.ready,true);assert.equal(ctx.s.error,'');
+ if(academic){assert.equal(ctx.s.section,'academic');button('Financeiro').props.onClick();}
+ else{
+   assert.equal(ctx.s.section,'finance');
+   for(const name of ['academic','materials','absences','documents','news','agenda','students']){
+     sandbox.location.search='?view='+name+'&student=s1';await events.popstate();
+     assert.equal(ctx.s.section,'finance',name);assert.match(history.at(-1),/view=finance/);
+   }
+   assert.ok(!nodes(render()).some(n=>n.props?.['aria-label']==='Acompanhamento escolar'));
+   assert.ok(calls.every(([url])=>!/learning|materials|absences|documents|community-feed/.test(url)));
+   sandbox.location.search='?view=support&student=s1';await events.popstate();assert.equal(ctx.s.section,'support');
+   button('Financeiro').props.onClick();
+ }
+ await button('Consultar cartão desta cobrança').props.onClick();
+ assert.ok(button('Autorizar débitos por título').props.disabled);
+ ctx.cards.state.agreed=true;ctx.cards.state.until='2027-11-05';ctx.cards.state.limit='150.00';
+ const form=nodes(render()).find(n=>n.type==='form'&&text(n).includes('Autorizar débitos por título'));
+ await form.props.onSubmit({preventDefault(){}});
+ assert.ok(button('Revogar autorização').props.disabled);
+ ctx.cards.state.revoke=true;await button('Revogar autorização').props.onClick();
+ assert.ok(button('Autorizar débitos por título'));assert.ok(!button('Revogar autorização'));
+ assert.deepEqual(calls.filter(([,method])=>method==='POST').map(([url])=>url.split('/').at(-1)),['refresh','authorize','revoke']);
+}
+console.log('Portal da família: navegação e histórico por vínculo, adesão e revogação do cartão pela fatura.');
+
+// A síntese da turma carrega independentemente e nunca reaproveita o resultado de outro aluno.
+{
+ const {ctx,sandbox}=fixture();
+ const a=student('a',false),b=student('b',false);
+ ctx.s.account=account;ctx.s.schoolId='school-a';ctx.s.studentId=a.id;
+ let releaseA;
+ const summaries=[];
+ sandbox.fetch=async(url)=>{
+   if(url.endsWith('/family/context'))return Response.json({students:[a,b],schools:[]});
+   if(url.includes('/email/account'))return Response.json({available:false});
+   if(url.includes('/community-feed'))return Response.json({items:[],total:0});
+   if(url.endsWith('/materials?view=recent')){
+     summaries.push(url);
+     if(url.includes('/students/a/'))return new Promise(resolve=>releaseA=resolve);
+     return Response.json([{id:'demo-b',title:'Leitura',kind:'Orientação',created_at:'2026-11-27T15:00:00Z'}]);
+   }
+   if(url.endsWith('/materials'))return Response.json([{id:'demo-b',title:'Leitura',kind:'Orientação',body:'Texto para o aluno B'}]);
+   throw new Error('Consulta inesperada '+url);
+ };
+ await ctx.load();
+ assert.ok(releaseA);assert.equal(ctx.recentMaterials.loading,true);
+ assert.equal(ctx.s.contextError,false);
+ ctx.s.studentId=b.id;await ctx.changeStudent();await tick();
+ releaseA(Response.json([{id:'privado-a',title:'Somente A'}]));await tick();
+ assert.deepEqual(Array.from(ctx.recentMaterials.items,row=>row.id),['demo-b']);
+ const focused=[];
+ sandbox.document.getElementById=id=>({focus:()=>focused.push(id)});
+ ctx.schoolwork.filter='Outro título';
+ ctx.section('materials','demo-b');await tick();await sandbox.Vue.nextTick();
+ assert.equal(ctx.s.section,'materials');assert.equal(ctx.schoolwork.filter,'');
+ assert.equal(focused.at(-1),'material-demo-b');
+ ctx.s.section='overview';ctx.s.students=[{...b,academic_authorized:false,financial_authorized:true}];
+ await ctx.loadRecentMaterials();
+ assert.equal(summaries.length,2);assert.equal(ctx.recentMaterials.items.length,0);
+}

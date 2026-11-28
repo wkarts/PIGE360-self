@@ -93,9 +93,14 @@ def student_summary(db, student, school_id, include_documents=False):
 
 
 def teacher_context(db, user):
+    from .access_security import permissions_for, teacher_routines_for
     assignments = []
     for school_id in school_ids(db, user):
         school = allowed_school(db, user, school_id)
+        routines = teacher_routines_for(db, user, school.id)
+        permissions = permissions_for(user, db, school.id)
+        if not routines.intersection({'agenda', 'diary'}) or 'teacher.classes.read' not in permissions:
+            continue
         person = linked_person(db, user, school.id)
         assignment_owner = [m.TeacherAssignment.teacher_user_id == user.id]
         if person:
@@ -118,7 +123,7 @@ def teacher_context(db, user):
                 m.Enrollment.school_id == school.id,
                 m.Enrollment.class_group_id == assignment.class_group_id,
                 m.Enrollment.status.in_(['active', 'suspended']),
-            ).order_by(m.Person.name)).all()
+            ).order_by(m.Person.name)).all() if 'diary' in routines and 'teacher.students.read' in permissions else []
             assignments.append({
                 'id': assignment.id,
                 'school_id': school.id,
@@ -267,6 +272,17 @@ def create_teacher_assignment(data: s.TeacherAssignmentInput, db: DB, user: Acto
         person = scoped(db, m.Person, teacher.person_id, school.id)
     group = scoped(db, m.ClassGroup, data.class_group_id, school.id)
     validate_assignment_available(db, school.id, group, person or (db.get(m.Person, teacher.person_id) if teacher and teacher.person_id else None))
+    # O formulário pode ser reenviado após criar o vínculo e antes de gravar o diário.
+    if person and not teacher and data.active:
+        existing = db.scalars(select(m.TeacherAssignment).where(
+            m.TeacherAssignment.school_id == school.id, m.TeacherAssignment.teacher_person_id == person.id,
+            m.TeacherAssignment.class_group_id == group.id, m.TeacherAssignment.academic_year_id == group.academic_year_id,
+            m.TeacherAssignment.active.is_(True),
+        ).order_by(m.TeacherAssignment.created_at))
+        subject = data.subject_name.strip().casefold()
+        for assignment in existing:
+            if assignment.subject_name.strip().casefold() == subject:
+                return assignment_output(db, assignment)
     obj = m.TeacherAssignment(
         school_id=school.id,
         teacher_user_id=teacher.id if teacher else None,

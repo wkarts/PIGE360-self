@@ -28,6 +28,7 @@ def transport(monkeypatch,*,error=None):
         def send_message(message):
             calls.append(message)
             if error=='timeout':raise TimeoutError('secret socket details')
+            if error=='refused':raise smtplib.SMTPRecipientsRefused({str(message['To']):(550,b'secret refusal')})
             return {}
         yield SimpleNamespace(send_message=send_message)
     monkeypatch.setattr(n,'smtp_client',lambda row:SimpleNamespace(smtp=smtp))
@@ -66,7 +67,7 @@ def test_test_message_is_owned_deduplicated_and_worker_uses_school_smtp(api,monk
     assert not process_one(queued['job_id'])
 
 
-@pytest.mark.parametrize('error,status,code',[('auth','failed','EMAIL_AUTH'),('timeout','uncertain','EMAIL_NETWORK')])
+@pytest.mark.parametrize('error,status,code',[('auth','failed','EMAIL_AUTH'),('timeout','uncertain','EMAIL_NETWORK'),('refused','failed','SMTP_RECIPIENT_REFUSED')])
 def test_failure_is_safe_and_uncertain_sends_are_not_replayed(api,monkeypatch,error,status,code):
     configure(api);calls=transport(monkeypatch,error=error)
     job=api.post('/notification-email/test',{'client_key':'00000000-0000-4000-8000-000000000001'},202)
@@ -75,6 +76,28 @@ def test_failure_is_safe_and_uncertain_sends_are_not_replayed(api,monkeypatch,er
     assert result['status']==status and result['error_code']==code
     assert 'secret' not in str(result)
     assert not process_one(job['job_id'])
+
+
+def test_installation_smtp_recipient_refusal_is_visible_in_the_invitation(api, monkeypatch):
+    from app.config import settings
+    from test_continuity_operations import invite
+    @contextmanager
+    def refusing_smtp(*args, **kwargs):
+        def refuse(message):
+            raise smtplib.SMTPRecipientsRefused({str(message['To']): (550, b'secret refusal')})
+        yield SimpleNamespace(send_message=refuse)
+    config = settings()
+    for key, value in {'smtp_host':'smtp.example.com', 'smtp_from':'school@example.com',
+                       'smtp_username':'', 'smtp_security':'ssl'}.items():
+        monkeypatch.setattr(config, key, value)
+    monkeypatch.setattr(smtplib, 'SMTP_SSL', refusing_smtp)
+    user, _, job_id, _, _ = invite(api)
+    assert process_one(job_id)
+    invitation = next(item['invitation'] for item in api.get('/users') if item['id'] == user['id'])
+    assert invitation['delivery_status'] == 'failed'
+    assert invitation['delivery_label'] == 'Destinatário recusado pelo servidor SMTP'
+    assert invitation['error_code'] == 'SMTP_RECIPIENT_REFUSED'
+    assert invitation['can_resend'] and not process_one(job_id)
 
 
 def test_disabled_school_never_falls_back_to_installation(api,monkeypatch):

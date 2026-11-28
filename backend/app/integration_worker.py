@@ -13,8 +13,10 @@ import logging
 import smtplib
 import ssl
 import time
+from collections import deque
 from datetime import datetime, timedelta
 from email.message import EmailMessage
+from importlib import import_module
 from pathlib import Path
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -25,11 +27,11 @@ from .config import settings
 from .security import utc
 from .integration_core import AsaasProvider, ConnectProvider, IntegrationFailure, unseal, enqueue
 from .connect_core import ConnectApiClient
-from .banking import apply_remote, queue_charge_sync
+from .banking import apply_remote, queue_charge_sync, crm_issue_attempted
 
 LOG = logging.getLogger('pige360.worker')
 HEARTBEAT = Path('/tmp/pige360-worker-heartbeat')
-SAFE_KINDS = {'bank_sync', 'mailbox_provision', 'legacy_import'}
+SAFE_KINDS = {'asaas_card_sync', 'bank_sync', 'mailbox_provision', 'legacy_import'}
 
 def refresh_pix(db, charge, provider):
     if charge.billing_type != 'PIX' or charge.status not in ('pending', 'overdue'):
@@ -57,19 +59,39 @@ def customer_reference(charge):
     content = f'{charge.school_id}:{charge.payer_snapshot["cpf"]}'.encode()
     return 'pige360-payer:' + hmac.new(key, content, hashlib.sha256).hexdigest()
 
+def verify_recovered_customer(provider, charge, payment):
+    if charge.remote_customer_id:
+        return
+    expected = customer_reference(charge)
+    customer = provider.find('customers', expected)
+    cpf = ''.join(c for c in str((customer or {}).get('cpfCnpj') or '') if c.isdigit())
+    if (not customer or not customer.get('id') or customer.get('externalReference') != expected
+            or customer['id'] != payment.get('customer') or not cpf or cpf != charge.payer_snapshot.get('cpf')):
+        raise IntegrationFailure('BANK_CUSTOMER_REQUIRES_RECONCILIATION', uncertain=True)
+    charge.remote_customer_id = customer['id']
+
+
 def bank_job(db, job, payload, conn):
     charge = db.get(m.BankCharge, payload['charge_id'])
     if not charge or charge.school_id != job.school_id or charge.connection_id != conn.id:
         raise IntegrationFailure('CHARGE_SCOPE_MISMATCH')
+    from .asaas_auto_pix import holds_charge, local_cycle, process_job as process_auto_pix
+    if holds_charge(db, charge.id):
+        cycle = local_cycle(db,charge.id)
+        if job.kind == 'bank_sync':
+            return process_auto_pix(db,job,{'auth_id':cycle.authorization_id, 'cycle_id':cycle.id},conn)
+        raise IntegrationFailure('PIX_AUTO_CHARGE_RESERVED')
     provider = AsaasProvider(conn)
     if job.kind == 'bank_issue':
-        if charge.status == 'cancelled':
-            return ''
+        if charge.status in {'cancelled', 'received', 'received_external', 'refunded', 'partially_refunded', 'disputed', 'confirmed'}:
+            return charge.remote_payment_id or ''
         if charge.remote_payment_id:
             payment = provider.get_payment(charge.remote_payment_id)
         else:
             payment = provider.find('payments', charge.external_reference)
             if payment is None:
+                if crm_issue_attempted(db, charge):
+                    raise IntegrationFailure('CRM_EXTERNAL_ISSUE_REQUIRES_REVIEW', uncertain=True)
                 if charge.payment_attempted:
                     raise IntegrationFailure('PAYMENT_POST_REQUIRES_RECONCILIATION', uncertain=True)
                 if not charge.remote_customer_id:
@@ -92,6 +114,7 @@ def bank_job(db, job, payload, conn):
                 charge.payment_attempted = True
                 db.commit()
                 payment = provider.create_payment(charge)
+        verify_recovered_customer(provider, charge, payment)
         apply_remote(db, charge, payment, 'issue')
         db.commit()  # Resultado financeiro não depende da chamada secundária de QR Code.
         refresh_pix(db, charge, provider)
@@ -100,6 +123,7 @@ def bank_job(db, job, payload, conn):
         payment = provider.get_payment(charge.remote_payment_id) if charge.remote_payment_id else provider.find('payments', charge.external_reference)
         if payment is None:
             raise IntegrationFailure('REMOTE_PAYMENT_NOT_FOUND', uncertain=charge.payment_attempted)
+        verify_recovered_customer(provider, charge, payment)
         apply_remote(db, charge, payment, 'reconciliation')
         db.commit()
         refresh_pix(db, charge, provider)
@@ -143,6 +167,8 @@ def send_email(payload):
             if cfg.smtp_username: smtp.login(cfg.smtp_username, cfg.smtp_password)
             sending = True
             smtp.send_message(message)
+    except smtplib.SMTPRecipientsRefused:
+        raise IntegrationFailure('SMTP_RECIPIENT_REFUSED') from None
     except (OSError, smtplib.SMTPException):
         raise IntegrationFailure('SMTP_SEND_FAILED', uncertain=sending)
     return ''
@@ -154,6 +180,12 @@ def execute(db, job):
     conn = db.get(m.IntegrationConnection, job.connection_id) if job.connection_id else None
     if job.connection_id and (not conn or not conn.enabled or conn.school_id != job.school_id):
         raise IntegrationFailure('INTEGRATION_DISABLED')
+    if job.kind in {'pix_auto_cycle','pix_auto_sync'}:
+        from .asaas_auto_pix import process_job
+        return process_job(db,job,payload,conn)
+    if job.kind in {'asaas_card_sync','asaas_card_invoice'}:
+        from .asaas_cards import execute_job
+        return execute_job(db,job,payload)
     if job.kind.startswith('bank_'):
         if not conn or conn.provider != 'asaas': raise IntegrationFailure('BANK_NOT_CONFIGURED')
         return bank_job(db, job, payload, conn)
@@ -201,6 +233,9 @@ def recover_expired(db):
         row.error_code = 'WORKER_LEASE_EXPIRED'
         row.available_at = now() + timedelta(seconds=30)
         row.lease_until = None
+        if row.kind == 'asaas_card_invoice':
+            from .asaas_cards import reconcile_invoice_job
+            reconcile_invoice_job(db,row)
         if row.kind == 'backup_send':
             from .backup_delivery import sync_state
             sync_state(db,row)
@@ -252,7 +287,11 @@ def process_one(job_id=None):
                 db.rollback(); db.refresh(job)
                 job.status = 'failed' if job.kind in SAFE_KINDS else 'uncertain'
                 job.error_code = 'UNEXPECTED_WORKER_ERROR'
-                LOG.error('job=%s kind=%s code=%s', job.id, job.kind, job.error_code)
+                if job.kind != 'asaas_card_invoice':
+                    LOG.error('job=%s kind=%s code=%s', job.id, job.kind, job.error_code)
+            if job.kind == 'asaas_card_invoice' and job.status in ('failed','uncertain'):
+                from .asaas_cards import reconcile_invoice_job
+                reconcile_invoice_job(db,job)
             job.lease_until = None
             if job.kind == 'backup_send':
                 from .backup_delivery import sync_state
@@ -349,10 +388,26 @@ def schedule_reconciliations():
             m.BankCharge.status.in_(['pending','overdue','confirmed','uncertain','refund_requested','disputed']),
             (m.BankCharge.last_synced_at.is_(None))|(m.BankCharge.last_synced_at<cutoff)
         ).order_by(m.BankCharge.last_synced_at.asc(),m.BankCharge.created_at).limit(25)))
+        from .asaas_auto_pix import schedule_periodic
+        schedule_periodic(db,cutoff,interval)
         for charge in rows:
             key=f'bank-periodic:{charge.id}:{int(now().timestamp())//interval}'
             queue_charge_sync(db,charge,key)
         db.commit()
+
+def process_next_queue(queues):
+    """Avança a fila inicial a cada tentativa e executa até um trabalho no ciclo."""
+    for _ in range(len(queues)):
+        name, consume = queues[0]
+        queues.rotate(-1)
+        try:
+            if consume():
+                return True
+        except Exception:
+            emit('worker.queue_failed', service='worker', level='ERROR', code='WORKER_QUEUE_FAILED')
+            LOG.error('code=WORKER_QUEUE_FAILED queue=%s', name)
+    return False
+
 
 def main():
     from .queue_notifications import install, wait_for_integration
@@ -368,6 +423,13 @@ def main():
     emit('service.started',service='worker')
     done = 0
     next_reconcile = 0.0
+    queues = deque([
+        ('integrations', process_one),
+        ('connect', process_connect_one),
+        ('crm', lambda: import_module('.crm_bridge', __package__).process_one()),
+        ('crm_external', lambda: import_module('.crm_bridge_external', __package__).process_one()),
+        ('backup', lambda: import_module('.backups', __package__).process_one()),
+    ])
     while True:
         HEARTBEAT.touch()
         diagnostic_heartbeat('worker')
@@ -379,18 +441,7 @@ def main():
                     schedule_certificate_alerts(db)
                     db.commit()
                 next_reconcile=time.monotonic()+60
-            worked = process_one() or process_connect_one()
-            # Optional bridge faults must never prevent native banking/notifications.
-            try:
-                from .crm_bridge import process_one as process_crm_one
-                from .crm_bridge_external import process_one as process_crm_external_one
-                worked = process_crm_one() or worked
-                worked = process_crm_external_one() or worked
-            except Exception:
-                LOG.error('code=CRM_BRIDGE_WORKER_FAILED')
-            if not worked:
-                from .backups import process_one as process_backup_one
-                worked=process_backup_one()
+            worked = process_next_queue(queues)
         except Exception:
             emit('worker.loop_failed',service='worker',level='ERROR',code='WORKER_DATABASE_OR_CONFIGURATION_ERROR')
             LOG.error('code=WORKER_DATABASE_OR_CONFIGURATION_ERROR'); worked = False

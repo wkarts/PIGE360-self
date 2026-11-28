@@ -109,7 +109,10 @@ Não usar `down -v`. O código não executa deploy remoto nem modifica servidore
 
 ## Checkpoint local
 
+Use Node.js 22 no checkout. O empacotador compila a PWA em um diretório temporário com a versão solicitada e confere a impressão digital das raízes públicas ICP-Brasil.
+
 ```bash
+npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
 python3 scripts/ci/package.py --version 0.3.0 --commit COMMIT_COMPLETO --output /caminho/checkpoint.zip
 ```
 

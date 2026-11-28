@@ -1,9 +1,10 @@
 """Boletins publicados: leitura própria a partir de fechamentos imutáveis do Diário."""
 from collections import defaultdict
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from . import models as m
 from .school_reports import format_value
 from .common import audit
@@ -21,7 +22,7 @@ RESULT_LABELS = {
 }
 
 
-def own_profile_students(db, user, school_id=''):
+def own_profile_students(db, user, school_id='', *, financial=False):
     """Exige vínculo explícito: igualdade de e-mail nunca autoriza acesso pedagógico."""
     if user.role not in ('student', 'guardian'):
         fail(403, 'Este espaço é destinado a estudantes e responsáveis vinculados.')
@@ -47,13 +48,20 @@ def own_profile_students(db, user, school_id=''):
         return list(db.scalars(select(m.Student).where(
             m.Student.person_id == person.id, m.Student.school_id == person.school_id,
         )))
-    return list(db.scalars(select(m.Student).join(
-        m.GuardianLink, m.GuardianLink.student_id == m.Student.id,
-    ).where(
-        m.GuardianLink.person_id == person.id, m.GuardianLink.school_id == person.school_id,
-        m.GuardianLink.active.is_(True), m.GuardianLink.legal.is_(True),
-        m.Student.school_id == person.school_id,
-    )).unique())
+    link = m.GuardianLink
+    scope = link.legal.is_(True)
+    if financial:
+        from .banking import charge_for_payer
+        owns_charge = select(m.BankCharge.id).where(
+            m.BankCharge.school_id == person.school_id, m.BankCharge.enrollment_id == m.Enrollment.id,
+            charge_for_payer(person)).correlate(m.Enrollment).exists()
+        designated = select(m.Enrollment.id).where(
+            m.Enrollment.school_id == person.school_id, m.Enrollment.student_id == m.Student.id,
+            or_(m.Enrollment.financial_person_id == person.id, owns_charge)).correlate(m.Student).exists()
+        scope = link.financial.is_(True) & (link.legal.is_(True) | designated)
+    return list(db.scalars(select(m.Student).join(link, link.student_id == m.Student.id).where(
+        link.person_id == person.id, link.school_id == person.school_id, link.active.is_(True),
+        m.Student.school_id == person.school_id, scope)).unique())
 
 
 def own_portal_students(db, account):
@@ -104,7 +112,7 @@ def _period_data(snapshot, enrollment, period, closure, lessons_in_scope=None):
                   if counts['total'] and not counts['unrecorded'] and rule
                   and rule.get('justified_absence_counts_as_present') is not None else None)
     calculation = (result or {}).get('calculation') or {}
-    if calculation.get('attendance_percent') is not None:
+    if counts['total'] and not counts['unrecorded'] and calculation.get('attendance_percent') is not None:
         percentage = float(Decimal(str(calculation['attendance_percent'])).quantize(Decimal('.01'), rounding=ROUND_HALF_UP))
     recovery = (calculation.get('aggregation') or {}).get('recovery') or []
     opinions = [r['text'] for r in snapshot.get('opinions', []) if r.get('status') == 'final'
@@ -183,6 +191,7 @@ def learning_data(db, students):
             m.Enrollment.status != 'draft',
         ).order_by(m.Enrollment.enrolled_on.desc(), m.Enrollment.created_at.desc())))
         items = []
+        active_publications = {}
         for enrollment in enrollments:
             group = db.get(m.ClassGroup, enrollment.class_group_id)
             year = db.get(m.AcademicYear, enrollment.academic_year_id)
@@ -191,10 +200,10 @@ def learning_data(db, students):
                 m.AcademicPeriod.academic_year_id == enrollment.academic_year_id,
             ).order_by(m.AcademicPeriod.order_index, m.AcademicPeriod.starts_on)))
             class_ids = {enrollment.class_group_id}
-            moves = db.execute(select(m.EnrollmentEvent.created_at, m.EnrollmentEvent.before, m.EnrollmentEvent.after).where(
-                m.EnrollmentEvent.school_id == student.school_id,
-                m.EnrollmentEvent.enrollment_id == enrollment.id,
-                m.EnrollmentEvent.action == 'change_class').order_by(m.EnrollmentEvent.created_at.desc(), m.EnrollmentEvent.id.desc())).all()
+            events = list(db.scalars(select(m.EnrollmentEvent).where(
+                m.EnrollmentEvent.school_id == student.school_id, m.EnrollmentEvent.enrollment_id == enrollment.id)
+                .order_by(m.EnrollmentEvent.created_at.desc(), m.EnrollmentEvent.id.desc())))
+            moves = [(e.created_at, e.before, e.after) for e in events if e.action == 'change_class']
             for _, before, after in moves:
                 for state in (before, after):
                     if isinstance(state, dict) and state.get('class_group_id'):
@@ -202,12 +211,9 @@ def learning_data(db, students):
             def enrolled_for_lesson(lesson, diary):
                 if 'expected_enrollment_ids' in lesson:
                     return enrollment.id in lesson['expected_enrollment_ids']
-                origin = enrollment.class_group_id
-                for stamp, before, _ in moves:
-                    if stamp.date().isoformat() <= lesson['lesson_date']:
-                        break
-                    origin = (before or {}).get('class_group_id', origin)
-                return origin == diary.class_group_id
+                from .diary import _enrollment_state_on
+                state = _enrollment_state_on(db, enrollment, date.fromisoformat(lesson['lesson_date']), events)
+                return bool(state and state[0] in ('active', 'suspended') and state[1] == diary.class_group_id)
 
             diaries = list(db.scalars(select(m.SchoolDiary).where(
                 m.SchoolDiary.school_id == student.school_id,
@@ -224,7 +230,6 @@ def learning_data(db, students):
                 m.SchoolDiary.id.in_([d.id for d in diaries]), m.DiaryClosure.active.is_(False))).all())
             intervals = defaultdict(list)
             last_group, last_day = enrollment.class_group_id, year.ends_on
-            from datetime import timedelta
             for stamp, before, _ in moves:
                 day = stamp.date()
                 intervals[last_group].append((max(day, enrollment.enrolled_on), last_day))
@@ -244,25 +249,34 @@ def learning_data(db, students):
             component_names = dict(db.execute(select(m.CurriculumComponent.id, m.CurriculumComponent.name).where(
                 m.CurriculumComponent.school_id == student.school_id, m.CurriculumComponent.id.in_([d.component_id for d in diaries]))).all())
             subjects = []
+            active_publications[enrollment.id] = set()
             for diary in diaries:
                 closures = by_diary[diary.id]
                 published = []
+                annual = next((r for r in closures if r.academic_period_id is None), None)
+                period_sources = {r.academic_period_id: r for r in reversed(closures) if r.academic_period_id}
                 for period in periods:
-                    closure = next((row for row in closures
-                                    if row.academic_period_id in (None, period.id)), None)
+                    closure = period_sources.get(period.id) or annual
                     if not closure:
                         continue
                     snapshot = closure.snapshot or {}
-                    if not any(row.get('enrollment_id') == enrollment.id and row.get('student_id') == student.id for key in ('roster', 'attendance', 'period_results') for row in snapshot.get(key, [])):
+                    linked = any(r.get('enrollment_id') == enrollment.id and r.get('student_id') == student.id
+                                 for key in ('roster', 'attendance', 'period_results', 'opinions') for r in snapshot.get(key, []))
+                    if not linked and not any(enrollment.id in r.get('expected_enrollment_ids', [])
+                                              for r in snapshot.get('lessons', []) if r.get('academic_period_id') == period.id):
                         continue
                     eligible = {r['id'] for r in snapshot.get('lessons', []) if r.get('academic_period_id') == period.id
                                 and str(r.get('lesson_date', '')) >= enrollment.enrolled_on.isoformat()
                                 and enrolled_for_lesson(r, diary)}
                     personal = any(r.get('enrollment_id') == enrollment.id and r.get('student_id') == student.id
-                                   and r.get('academic_period_id') == period.id for key in ('period_results', 'opinions')
-                                   for r in snapshot.get(key, []))
+                                   and r.get('academic_period_id') == period.id and (key != 'opinions' or r.get('status') == 'final')
+                                   for key in ('period_results', 'opinions') for r in snapshot.get(key, []))
                     if not eligible and not personal:
                         continue
+                    active_publications[enrollment.id].add(closure.id)
+                    if annual:
+                        # Uma via oficial anterior pode referenciar o fechamento anual ainda vigente.
+                        active_publications[enrollment.id].add(annual.id)
                     # Nenhum resultado de outro estudante, anotação interna ou rascunho é serializado.
                     item = _period_data(snapshot, enrollment, period, closure, eligible)
                     origin = snapshot.get('diary') or {}
@@ -291,7 +305,7 @@ def learning_data(db, students):
                           'status': enrollment.status, 'class_calendars': calendars, 'grade_tables': grade_tables(subjects, group.name, calendars=calendars),
                           'subjects': sorted(subjects, key=lambda item: item['component_name'])})
         from .report_bulletins import published_editions, bulletin_sections
-        editions = published_editions(db, student, items)
+        editions = published_editions(db, student, items, active_publications)
         for item in items:
             item['display_sections'] = bulletin_sections([item], item['bulletin_model'])
             item['official_editions'] = editions[item['enrollment_id']]
@@ -307,7 +321,8 @@ def learning_data(db, students):
                 stream = BytesIO()
                 picture.convert('RGB').save(stream, format='JPEG')
                 thumbnail = 'data:image/jpeg;base64,' + base64.b64encode(stream.getvalue()).decode()
-        logo = 'data:image/png;base64,' + base64.b64encode(school.report_logo).decode() if school.report_logo else ''
+        from .report_preferences import school_logo_url
+        logo = school_logo_url(school)
         output.append({'report_logo': logo, 'report_font': (school.report_preferences or {}).get('font_family', 'inherit'), 'photo': thumbnail, 'student_id': student.id, 'student_name': (person.social_name or person.name) if person else '',
                        'student_number': student.number, 'school_id': student.school_id,
                        'school_name': school.name if school else '', 'enrollments': items})

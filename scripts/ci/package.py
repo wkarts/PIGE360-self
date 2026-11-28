@@ -3,24 +3,78 @@
 import argparse
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 import zipfile
+from ssl import PEM_cert_to_DER_cert
+
+TRUST_DIR = 'backend/app/trust/icp-brasil/'
+PUBLIC_ROOT = re.compile(re.escape(TRUST_DIR) + r'ICP-Brasilv[0-9]+\.pem')
+
+
+def verify_public_roots(files):
+    entries = json.loads(files[TRUST_DIR + 'manifest.json'])['certificates']
+    expected = {TRUST_DIR + entry['file']: entry['sha256_der'] for entry in entries}
+    present = {name for name in files if PUBLIC_ROOT.fullmatch(name)}
+    if not expected or len(entries) != len(expected) or present != expected.keys():
+        raise ValueError('Raízes ICP-Brasil do pacote divergentes do manifesto.')
+    for name, fingerprint in expected.items():
+        pem = files[name].decode('ascii').strip()
+        if not re.fullmatch(r'-----BEGIN CERTIFICATE-----\s+[A-Za-z0-9+/=\s]+-----END CERTIFICATE-----', pem):
+            raise ValueError('O arquivo deve conter um único certificado público: ' + name)
+        if sha256(PEM_cert_to_DER_cert(pem)).hexdigest() != fingerprint:
+            raise ValueError('Fingerprint divergente: ' + name)
+
+def build_distribution_frontend(root, files, version):
+    """Compila os arquivos do ZIP sem alterar o dist do checkout."""
+    # Os testes de build importam TypeScript pelo resolvedor de módulos Node.
+    # Um subdiretório temporário herda o node_modules instalado pelo npm ci.
+    with tempfile.TemporaryDirectory(prefix='.pige-package-', dir=root/'frontend') as folder:
+        staging = Path(folder)
+        for name, data in files.items():
+            if name.startswith('frontend/') or name == 'VERSION':
+                target = staging / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
+        env = {**os.environ, 'APP_VERSION': version}
+        compiler = (root / 'frontend/node_modules/typescript/bin/tsc').resolve()
+        if compiler.is_file():
+            env['TSC_BINARY'] = str(compiler)
+        subprocess.run(['node', 'frontend/build.mjs'], cwd=staging, env=env, check=True)
+        dist = staging / 'frontend/dist'
+        if json.loads((dist / 'build-info.json').read_text())['version'] != version:
+            raise ValueError('A versão compilada do frontend diverge da distribuição.')
+        for target in sorted(dist.rglob('*')):
+            if target.is_file():
+                files[target.relative_to(staging).as_posix()] = target.read_bytes()
+
 
 def package(root, output, version, commit, image=''):
+    if not re.fullmatch(r'(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?', version):
+        raise ValueError('Versão de distribuição inválida.')
     names=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
     files={}
     for name in filter(None,names):
         p=Path(name)
+        if name.startswith('frontend/dist/'):continue
         if any(part in ('.git','node_modules','.venv','__pycache__','reference','evidence','ci-evidence','checkpoints','release') for part in p.parts):continue
         if p.name.startswith('.env') and not p.name.endswith('.example'):continue
-        if p.suffix.lower() in ('.ttf','.otf','.woff','.woff2','.pem','.key','.p12','.pfx','.db'):continue
+        if p.suffix.lower() in ('.ttf','.otf','.woff','.woff2','.pem','.key','.p12','.pfx','.db') and not PUBLIC_ROOT.fullmatch(name):continue
         if name in ('SHA256SUMS','TREE.txt','MANIFEST.json','deploy/images.env','deploy/images.lock.json'):continue
         source=root/p
         if source.is_symlink():raise ValueError('Link simbólico não permitido no checkpoint: '+name)
         if not source.is_file():continue
-        files[name]=source.read_bytes()
+        data=source.read_bytes()
+        if p.name == 'Dockerfile':
+            data = re.sub(rb'(?m)^ARG APP_VERSION(?:=[^\r\n]*)?$', b'ARG APP_VERSION=' + version.encode('ascii'), data)
+        files[name]=data
+    verify_public_roots(files)
+    files['VERSION'] = (version + '\n').encode('ascii')
+    if 'frontend/build.mjs' in files:
+        build_distribution_frontend(root, files, version)
     lock_path=root/'ci-evidence/base-images.lock.json'
     if image and lock_path.is_file():
         lock=json.loads(lock_path.read_text())

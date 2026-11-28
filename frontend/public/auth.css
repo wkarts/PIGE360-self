@@ -57,9 +57,9 @@
 .auth-panel a:not(.btn) { text-decoration: underline; text-underline-offset: 3px; }
 .password-control { display: flex; align-items: stretch; border: 1px solid var(--border); border-radius: 10px; background: var(--surface, #fff); }
 .auth-form .password-control input { border: 0; box-shadow: none; flex: 1 1 auto; width: 0; background: transparent; }
-.password-control:focus-within { border-color: var(--primary); outline: 2px solid var(--primary); outline-offset: 2px; }
+.password-control:focus-within { border-color: var(--primary-readable, #005b63); outline: 2px solid var(--primary-readable, #005b63); outline-offset: 2px; }
 .password-control input:focus { outline: none; }
-.password-toggle { align-self: stretch; flex: 0 0 auto; min-width: 64px; padding: 8px 12px; border: 0; border-radius: 0 9px 9px 0; background: transparent; color: var(--primary); font-size: 12px; font-weight: 650; }
+.password-toggle { align-self: stretch; flex: 0 0 auto; min-width: 64px; padding: 8px 12px; border: 0; border-radius: 0 9px 9px 0; background: transparent; color: var(--primary-readable, #005b63); font-size: 12px; font-weight: 650; }
 .password-toggle:hover { background: var(--surface-subtle, #f3f7f7); }
 .auth-enrollment { width: 100%; max-width: 420px; border-top: 1px solid var(--border); margin-top: 28px; padding-top: 22px; }
 .auth-enrollment p { font-size: 13px; color: var(--muted); margin-bottom: 12px; }

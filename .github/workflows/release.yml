@@ -159,6 +159,14 @@ jobs:
           # O guard aceita um único ID; extrair o lock diretamente em ci-evidence.
           merge-multiple: true
           path: ci-evidence
+      - name: Preparar Node para compilar o ZIP de distribuição
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar o compilador fixado da distribuição
+        run: npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
       - name: Release, checkpoint e promoção por digest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

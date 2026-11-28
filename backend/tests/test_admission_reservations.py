@@ -130,3 +130,34 @@ def test_cancel_and_reactivate_preserve_online_history_and_reservation_rules(onl
     reactivated=o['api'].move(cancelled,'reactivate')
     assert reactivated['status']=='active'
     assert o['api'].get('/class-groups')[0]['occupied']==1
+
+
+def test_local_cancel_releases_fee_condition_before_reservation_expires(online):
+    policy(online)
+    admission = approve(online, submit(online, draft(online)))
+    paid, duplicate = bill(online, admission), bill(online, admission)
+    receive(online, paid)
+    path = '/admissions/' + admission['id']
+    api = online['api']
+    assert api.get(path)['reservation']['status'] == 'held'
+
+    reason = {'reason': 'Taxa obrigatória duplicada cancelada pela escola.'}
+    cancel = '/bank-charges/' + duplicate['id'] + '/cancel'
+    api.post(cancel, reason, 200)
+    updated = api.get(path)
+    assert updated['reservation']['status'] == 'paid'
+    api.post(cancel, reason, 200)
+    assert api.get(path)['version'] == updated['version']
+    expire(admission)
+    assert api.get('/class-groups')[0]['available'] == 0
+
+
+def test_new_required_fee_reopens_paid_reservation_for_review(online):
+    policy(online)
+    admission = approve(online, submit(online, draft(online)))
+    first = bill(online, admission)
+    receive(online, first)
+    path = '/admissions/' + admission['id']
+    assert online['api'].get(path)['reservation']['status'] == 'paid'
+    bill(online, admission)
+    assert online['api'].get(path)['reservation']['status'] == 'review'

@@ -10,6 +10,8 @@ from app.crm_bridge_models import CRMBridgeRequest, CRMBridgeObservation  # noqa
 from app.enrollment_batches import EnrollmentBatch  # noqa: F401
 from app.educacenso import Draft, Evidence  # noqa: F401
 from app.models import Base
+from app.asaas_auto_pix_models import PixAuthorization, PixCycle  # noqa: F401
+from app.asaas_card_models import CardCheckout, CardMandate  # noqa: F401
 from app.institution import InstitutionAsset, InstitutionIdentity  # noqa: F401 — metadados dos ativos públicos
 from app.contract_signatures import SchoolSigningCertificate, IssuedDocumentSignature  # noqa: F401
 from app.school_community import SchoolCommunityPost  # noqa: F401

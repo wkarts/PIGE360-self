@@ -1,0 +1,16 @@
+<div v-if="charge.has_card_checkout" class="family-attention">
+<button type="button" class="link-button" @click="cards.load(charge.id)">Consultar cartão desta cobrança</button>
+<template v-if="cards.state.charge===charge.id">
+<p v-if="cards.state.loading" role="status">Consultando cartão…</p><p v-if="cards.state.error" role="alert">{{cards.state.error}}</p>
+<template v-if="cards.state.view?.checkout">
+<p>Valor no cartão {{money(String(cards.state.view.checkout.quote.charged_cents/100))}}</p>
+<p v-if="cards.state.view.checkout.mode==='recurrent'">Assinatura hospedada no Asaas com início em {{date(cards.state.view.checkout.first_due)}} e término em {{date(cards.state.view.checkout.ends_on)}}.</p>
+<a v-if="cards.link(cards.state.view.checkout.checkout_url)" :href="cards.link(cards.state.view.checkout.checkout_url)" target="_blank" rel="noopener noreferrer">Abrir checkout seguro do Asaas</a>
+<div v-for="payment in cards.state.view.checkout.payments" :key="payment.id"><button v-if="payment.status==='RECEIVED'" type="button" class="link-button" @click="run(()=>download('/family/students/'+s.studentId+'/charges/'+charge.id+'/cards/receipts/'+payment.id+'.pdf','comprovante-cartao.pdf'))">Comprovante de {{money(String(payment.value))}}</button></div>
+<form v-if="cards.state.view.can_authorize" @submit.prevent="cards.submit(false)">
+<h3>Autorizar cartão para próximas mensalidades</h3><label>Limite por título (R$)<input v-model="cards.state.limit" type="number" min="0.01" step="0.01" required></label>
+<label>Autorização válida até<input v-model="cards.state.until" type="date" required></label><label><input type="checkbox" v-model="cards.state.agreed" required>{{cards.state.view.terms}}</label>
+<button class="btn" :disabled="cards.state.loading||!cards.state.agreed">Autorizar débitos por título</button></form>
+<div v-if="cards.state.view.authorization?.active"><p>Débitos autorizados até {{date(cards.state.view.authorization.ends_on)}}, com limite por título de {{money(String(cards.state.view.authorization.limit_cents/100))}}.</p>
+<label><input type="checkbox" v-model="cards.state.revoke">Quero revogar os débitos futuros</label><button class="btn" @click="cards.submit(true)" :disabled="cards.state.loading||!cards.state.revoke">Revogar autorização</button></div>
+</template></template></div>

@@ -2,8 +2,9 @@
 import hashlib
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from . import models as m
+from .lifecycle_models import filter_archived
 from .security import fail
 
 
@@ -11,14 +12,28 @@ def today():
     return datetime.now(ZoneInfo('America/Bahia')).date()
 
 
+def available_group_query(school_id):
+    group = m.ClassGroup
+    query = select(group).join(m.AcademicYear).join(m.Unit).join(m.Grade).join(m.Shift).where(
+        group.school_id == school_id, group.active.is_(True),
+        m.AcademicYear.school_id == school_id, m.AcademicYear.status == 'active',
+        m.Unit.school_id == school_id, m.Unit.active.is_(True),
+        m.Grade.school_id == school_id, m.Grade.active.is_(True),
+        m.Shift.school_id == school_id, m.Shift.active.is_(True),
+    )
+    for model in (group, m.AcademicYear, m.Unit, m.Grade, m.Shift):
+        query = filter_archived(query, model)
+    return query
+
+
 def offered_groups(db, campaign):
     if not campaign.class_group_ids:
         return []
-    return list(db.scalars(select(m.ClassGroup).join(m.AcademicYear).where(
-        m.ClassGroup.id.in_(campaign.class_group_ids),
-        m.ClassGroup.school_id == campaign.school_id,
-        m.ClassGroup.active.is_(True), m.AcademicYear.status == 'active',
-        m.AcademicYear.school_id == campaign.school_id)))
+    query = available_group_query(campaign.school_id).where(m.ClassGroup.id.in_(campaign.class_group_ids))
+    if campaign.academic_year_id:
+        query = query.where(m.ClassGroup.academic_year_id == campaign.academic_year_id)
+    available = {group.id: group for group in db.scalars(query)}
+    return [available[ident] for ident in campaign.class_group_ids if ident in available]
 
 
 def public_context(db):
@@ -82,6 +97,9 @@ def verified_guardian_contact_matches(account, person):
 
 def verified_guardian_links(db, account):
     """Legal student links confirmed by the portal account's verified identity."""
+    cpf = _digits(account.cpf)
+    if not cpf:
+        return []
     active_enrollments = select(m.Enrollment.student_id).where(
         m.Enrollment.school_id == account.school_id,
         m.Enrollment.status.in_(['active', 'suspended']),
@@ -98,6 +116,8 @@ def verified_guardian_links(db, account):
             m.Student.status == 'active',
             m.Student.id.in_(active_enrollments),
             m.Person.school_id == account.school_id,
+            # Cadastros legados podem conservar a máscara; confirme o contato e o CPF abaixo.
+            or_(m.Person.cpf == cpf, func.length(m.Person.cpf) > len(cpf)),
             m.Person.active.is_(True),
         )
         .order_by(m.Student.id, m.GuardianLink.id)
@@ -109,9 +129,10 @@ def verified_guardian_links(db, account):
     ]
 
 
-def active_portal_student_access(db, account):
+def active_portal_student_access(db, account, *, guardian_links=None):
     """Current opt-ins intersected with current legal links and verified contacts."""
-    eligible = {link.id: (student, person) for link, student, person in verified_guardian_links(db, account)}
+    links = verified_guardian_links(db, account) if guardian_links is None else guardian_links
+    eligible = {link.id: (student, person) for link, student, person in links}
     if not eligible:
         return []
     accesses = db.scalars(select(m.PortalStudentAccess).where(
@@ -134,7 +155,7 @@ def portal_diary_access_summary(db, account):
     eligible = verified_guardian_links(db, account)
     current_by_link = {
         access.guardian_link_id: access
-        for access, _student, _person in active_portal_student_access(db, account)
+        for access, _student, _person in active_portal_student_access(db, account, guardian_links=eligible)
     }
     consent_required = any(
         link.id not in current_by_link or
@@ -182,9 +203,7 @@ def portal_diary_access_summary(db, account):
 
 def readiness(db, school):
     day = today()
-    groups = list(db.scalars(select(m.ClassGroup).join(m.AcademicYear).where(
-        m.ClassGroup.school_id == school.id, m.ClassGroup.active.is_(True),
-        m.AcademicYear.status == 'active')))
+    groups = list(db.scalars(available_group_query(school.id)))
     years = list(db.scalars(select(m.AcademicYear.id).where(
         m.AcademicYear.school_id == school.id, m.AcademicYear.status == 'active')))
     campaigns = list(db.scalars(select(m.AdmissionCampaign).where(

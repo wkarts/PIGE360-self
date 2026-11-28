@@ -8,6 +8,7 @@ from fastapi.responses import Response
 from sqlalchemy import func, select, or_
 from . import models as m, schemas as s
 from .common import audit, number, output
+from .access_security import permissions_for
 from .db import now
 from .documents import checklist, render_pdf
 from .registry import occupancy, validate
@@ -61,14 +62,18 @@ def collect_pendencies(db, school_id, filters=None, student_limit=5000):
     types = db.scalars(select(m.DocumentType).where(m.DocumentType.school_id == school_id, m.DocumentType.active.is_(True), m.DocumentType.required.is_(True)).order_by(m.DocumentType.name)).all()
     if filters.get('document_type_id'):
         types = [t for t in types if t.id == filters['document_type_id']]
-    groups = {g.id:g for g in db.scalars(select(m.ClassGroup).where(m.ClassGroup.school_id == school_id))}
-    years = {y.id:y.name for y in db.scalars(select(m.AcademicYear).where(m.AcademicYear.school_id == school_id))}
     latest_enrollments, latest_docs = {}, {}
     if ids:
         for enrollment in db.scalars(select(m.Enrollment).where(*enrollment_conditions, m.Enrollment.student_id.in_(ids)).order_by(m.Enrollment.created_at.desc(), m.Enrollment.id.desc())):
             latest_enrollments.setdefault(enrollment.student_id, enrollment)
         for document in db.scalars(select(m.StudentDocument).where(m.StudentDocument.school_id == school_id, m.StudentDocument.student_id.in_(ids), m.StudentDocument.status != 'archived').order_by(m.StudentDocument.created_at.desc(), m.StudentDocument.id.desc())):
             latest_docs.setdefault((document.student_id, document.document_type_id), document)
+    group_ids = {enrollment.class_group_id for enrollment in latest_enrollments.values()}
+    year_ids = {enrollment.academic_year_id for enrollment in latest_enrollments.values()}
+    groups = {g.id: g for g in db.scalars(select(m.ClassGroup).where(
+        m.ClassGroup.school_id == school_id, m.ClassGroup.id.in_(group_ids)))} if group_ids else {}
+    years = dict(db.execute(select(m.AcademicYear.id, m.AcademicYear.name).where(
+        m.AcademicYear.school_id == school_id, m.AcademicYear.id.in_(year_ids))).all()) if year_ids else {}
     results = []
     for student, person in candidates:
         enrollment = latest_enrollments.get(student.id)
@@ -104,7 +109,10 @@ def dashboard(db: DB, user: Actor, school: Scope):
         return db.scalar(select(func.count()).select_from(model).where(model.school_id == school.id, *filters)) or 0
     groups = db.scalars(select(m.ClassGroup).join(m.AcademicYear, m.AcademicYear.id == m.ClassGroup.academic_year_id).where(m.ClassGroup.school_id == school.id, m.ClassGroup.active.is_(True), m.AcademicYear.status == 'active')).all()
     from .enrollments import enrollment_output
-    recent = db.scalars(select(m.Enrollment).where(m.Enrollment.school_id == school.id).order_by(m.Enrollment.created_at.desc()).limit(6)).all()
+    recent = []
+    if 'enrollments.read' in permissions_for(user, db, school.id):
+        recent = db.scalars(select(m.Enrollment).where(m.Enrollment.school_id == school.id)
+                            .order_by(m.Enrollment.created_at.desc()).limit(6)).all()
     return {'students': count(m.Student, m.Student.status == 'active'), 'enrollments': count(m.Enrollment, m.Enrollment.status == 'active'),
             'drafts': count(m.Enrollment, m.Enrollment.status == 'draft'), 'classes': len(groups),
             'available': sum(max(0, g.capacity - occupancy(db, g.id)) for g in groups),
@@ -257,7 +265,7 @@ def class_pdf(class_id: str, db: DB, user: Actor, school: Scope, request: Reques
     rows = [{**row, 'status':label(row['status'])} for row in data['items']]
     payload = render_table(school, 'Relação de alunos por turma',
         [col('student_number','Código'), col('name','Aluno',width=2.5), col('birth_date','Nascimento','date'), col('number','Matrícula'), col('status','Situação')],
-        rows, summary=[metric('total','Alunos na turma',len(rows))],
+        rows, report_family='management', summary=[metric('total','Alunos na turma',len(rows))],
         filters=[{'label':'Turma','value':group['name']},{'label':'Ano letivo','value':year.name}],
         notes=['Matrículas ativas e suspensas na data da emissão.'], issuer=user.name, db=db)
     audit(db, request, user, 'report.class_exported', school, school.id, {'class_group_id':class_id})
@@ -302,7 +310,7 @@ def pending_pdf(db: DB, user: Actor, school: Scope, request: Request, filters: P
     if filters.get('document_status'): selected_filters.append({'label':'Situação', 'value':STATE_LABELS[filters['document_status']]})
     content = render_table(school, 'Pendências documentais',
         [col('number','Código'), col('name','Aluno',width=2), col('class_name','Turma',width=1.2), col('year','Ano letivo'), col('document','Documento',width=1.5), col('status','Situação',width=1.3)],
-        rows, summary=[metric('students','Alunos com pendências',data['total']), metric('documents','Documentos pendentes',data['total_documents']), metric('scanned','Alunos verificados',data['scanned_students'])],
+        rows, report_family='management', summary=[metric('students','Alunos com pendências',data['total']), metric('documents','Documentos pendentes',data['total_documents']), metric('scanned','Alunos verificados',data['scanned_students'])],
         filters=selected_filters, notes=['Conferência dos documentos obrigatórios na data de emissão. Documentos recebidos ainda aguardam análise da Secretaria.'], issuer=user.name, db=db)
     audit(db, request, user, 'report.document_pendencies_exported', school, school.id, {'format':'pdf','count':data['total_documents']})
     return Response(content, media_type='application/pdf', headers={'Content-Disposition':'attachment; filename="pendencias-documentais.pdf"', 'Cache-Control':'no-store'})

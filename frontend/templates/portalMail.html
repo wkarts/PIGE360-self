@@ -1,0 +1,11 @@
+<section class="portal-mail panel" aria-label="E-mail institucional">
+  <div v-if="m.busy||m.opening" class="loading-strip" role="status">Abrindo a caixa institucional…</div>
+  <p v-if="m.error" class="alert error" role="alert">{{m.error}}</p>
+  <form v-if="m.needsPassword" class="portal-mail-connection" @submit.prevent="open(true)">
+    <h2>Conectar caixa institucional</h2><p>{{m.address}}</p>
+    <label class="field">Senha da caixa institucional<input type="password" v-model="m.password" required autocomplete="current-password" maxlength="512" :disabled="m.busy"></label>
+    <button class="btn btn-primary" :disabled="m.busy">Conectar caixa</button>
+  </form>
+  <button v-else-if="m.error" class="btn btn-secondary" type="button" @click="open()" :disabled="m.busy">Abrir caixa novamente</button>
+  <iframe v-show="!m.needsPassword&&!m.error" :src="frame.src" class="portal-mail-frame" title="Caixa de e-mail institucional" referrerpolicy="same-origin" @load="loaded"></iframe>
+</section>

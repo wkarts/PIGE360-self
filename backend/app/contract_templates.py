@@ -239,7 +239,7 @@ def _person_values(person, prefix: str) -> dict[str, str]:
     }
 
 
-def _context(db, school: m.School, enrollment: m.Enrollment | None) -> dict[str, str]:
+def _context(db, school: m.School, enrollment: m.Enrollment | None, signer_id=None) -> dict[str, str]:
     company = db.get(m.Company, school.company_id)
     school_name = identity_data(db)['display_name']
     result = {
@@ -280,6 +280,7 @@ def _context(db, school: m.School, enrollment: m.Enrollment | None) -> dict[str,
     ).order_by(m.GuardianLink.created_at, m.GuardianLink.id)).all()
     persons = {link.person_id: scoped(db, m.Person, link.person_id, school.id) for link in guardian_links}
     ordered = sorted(guardian_links, key=lambda link: (
+        bool(signer_id) and link.person_id != signer_id,
         link.person_id != enrollment.financial_person_id,
         not link.legal,
         not link.primary_contact,
@@ -331,18 +332,23 @@ def _render_with_context(db, school, template, enrollment, supplied, actor=None)
         require(actor,'students.read')
     if set(supplied) - available:
         fail(422, 'A requisição contém campos que não existem neste modelo.')
-    official = _context(db, school, enrollment)
+    admission = db.scalar(select(m.Admission).where(m.Admission.school_id == school.id, m.Admission.enrollment_id == enrollment.id)) if enrollment else None
+    signer_id = (admission.guardian_snapshot or {}).get('signer_person_id') if admission else None
+    if signer_id:
+        from .admission_parties import signer
+        if not signer(db, admission, enrollment):
+            fail(409, 'A Secretaria precisa conferir o vínculo legal e o CPF do titular signatário.')
+    official = _context(db, school, enrollment, signer_id)
     options = getattr(template, 'field_options', {}) or {}
     sources = {key: 'cadastro' for key, value in official.items() if value}
     # Only fill absent registry values from the snapshot actually approved for this enrollment.
     # Existing nonempty values are never overwritten or silently reconciled.
     if enrollment:
-        admission = db.scalar(select(m.Admission).where(m.Admission.school_id == school.id, m.Admission.enrollment_id == enrollment.id))
         if admission and admission.status in {'approved', 'enrolled'}:
             from types import SimpleNamespace
             for snapshot, prefix in [(admission.student_data, 'aluno'), (admission.guardian_snapshot, 'contratante1')]:
                 if not snapshot: continue
-                person = scoped(db, m.Person, scoped(db, m.Student, enrollment.student_id, school.id).person_id if prefix == 'aluno' else enrollment.financial_person_id, school.id) if (prefix == 'aluno' or enrollment.financial_person_id) else None
+                person = scoped(db, m.Person, scoped(db, m.Student, enrollment.student_id, school.id).person_id if prefix == 'aluno' else (signer_id or enrollment.financial_person_id), school.id) if (prefix == 'aluno' or signer_id or enrollment.financial_person_id) else None
                 if not person: continue
                 if snapshot.get('cpf') and person.cpf and snapshot['cpf'] != person.cpf: continue
                 if snapshot.get('name') and snapshot['name'].strip().casefold() != person.name.strip().casefold(): continue

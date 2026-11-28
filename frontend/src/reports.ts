@@ -3,11 +3,11 @@ namespace PigeReports {
   type Metric = {key:string;label:string;value:unknown;type:string};
   type Report = {module:string;school_name:string;generated_at:string;status_summary:{label:string;count:number}[];title:string;description:string;date_basis:string;period:{date_from:string;date_to:string;label:string};filters:{label:string;value:string}[];columns:{key:string;label:string;type:string}[];items:Record<string,unknown>[];total:number;page:number;page_size:number;summary:Metric[];monthly:{month:string;label:string;count:number;amount?:string}[];notes:string[]};
   export const component = {props:['schoolId','catalogs','identity','canConfigure','canIssue','canSign'],render:PigeRenders.reports,setup(props:{schoolId:string;canConfigure:boolean;canIssue:boolean;canSign:boolean;catalogs:Record<string,PigeAPI.Row[]>}) {
-    const state=Vue.reactive({busy:false,error:'',catalog:[] as Catalog[],kind:'enrollments',dateFrom:'',dateTo:'',preset:'last-three',academicYear:'',classGroup:'',unit:'',status:'',q:'',page:1,result:null as Report|null,appliedQuery:''});
-    type Preferences={bulletin:string;color:string;font_family:string;student:string;employee:string;teacher:string;version:number};
-    type Recipient={id:string;name:string;number:string;class_name:string;revision?:number;failure?:string;checked?:boolean};
+    const state=Vue.reactive({busy:false,error:'',reportLogo:'',catalog:[] as Catalog[],kind:'enrollments',dateFrom:'',dateTo:'',preset:'last-three',academicYear:'',classGroup:'',unit:'',status:'',q:'',page:1,result:null as Report|null,appliedQuery:''});
+    type Preferences={bulletin:string;color:string;font_family:string;student:string;employee:string;teacher:string;watermark_documents:string[];version:number};
+    type Recipient={id:string;name:string;number:string;class_name:string;revision?:number;last_revision?:number;operation?:string;failure?:string;checked?:boolean};
     const kit=Vue.reactive({prefs:null as Preferences|null,year:'',grade:'',group:'',offset:0,more:false,
-      operation:'',recipients:[] as Recipient[],notice:''});
+      recipients:[] as Recipient[],notice:''});
     const settingsPath=()=>'/schools/'+props.schoolId+'/report-preferences';
     let loadingPreferences=false;
     async function openKit(event:Event){
@@ -20,33 +20,41 @@ namespace PigeReports {
     async function saveLogo(event:Event){const input=event.target as HTMLInputElement;
       const file=input.files?.[0];if(!file||!kit.prefs)return;
       const body=new FormData();body.set('file',file);body.set('version',String(kit.prefs.version));
-      await run(async()=>{const saved=await PigeAPI.request<{version:number}>(settingsPath()+'/logo',{method:'PUT',body});
-        if(kit.prefs)kit.prefs.version=saved.version;kit.notice='Logotipo atualizado para esta escola.';});
+      await run(async()=>{const saved=await PigeAPI.request<{version:number;report_logo:string}>(settingsPath()+'/logo',{method:'PUT',body});
+        if(kit.prefs)kit.prefs.version=saved.version;state.reportLogo=saved.report_logo;kit.notice='Logotipo atualizado para esta escola.';});
       input.value='';
     }
     async function savePreferences(){await run(async()=>{
       kit.prefs=await PigeAPI.request<Preferences>(settingsPath(),{method:'PUT',body:JSON.stringify(kit.prefs)});
       kit.notice='Preferências salvas para as próximas emissões.';
     });}
-    function resetRecipients(){kit.recipients=[];kit.offset=0;kit.more=false;kit.notice='';kit.operation='';}
+    function resetRecipients(){kit.recipients=[];kit.offset=0;kit.more=false;kit.notice='';}
     async function findRecipients(offset=0){await run(async()=>{
       const params=new URLSearchParams({academic_year_id:kit.year,grade_id:kit.grade,class_group_id:kit.group,offset:String(offset)});
       const found=await PigeAPI.request<{items:Recipient[];more:boolean}>(base()+'/bulletins/enrollments?'+params);
       kit.recipients=found.items.map(item=>({...item,checked:false}));kit.offset=offset;kit.more=found.more;
-      kit.operation=crypto.randomUUID();kit.notice=found.items.length?'':'Nenhuma matrícula neste recorte.';
+      kit.notice=found.items.length?'':'Nenhuma matrícula neste recorte.';
     });}
     async function previewBulletin(item:Recipient){await run(async()=>{
       const q=new URLSearchParams();
       if(kit.prefs){q.set('model',kit.prefs.bulletin);q.set('color',kit.prefs.color);}
       await PigeAPI.download(base()+'/bulletins/'+item.id+'/preview.pdf?'+q,'previa-'+item.number+'.pdf');
     });}
+    async function signRecipient(item:Recipient){
+      item.operation ||= crypto.randomUUID();
+      const q=new URLSearchParams({operation:item.operation,expected_revision:String(item.last_revision || 0)});
+      try{
+        const result=await PigeAPI.post<{revision:number}>(base()+'/bulletins/'+item.id+'/issue?'+q,{});
+        item.revision=result.revision;item.last_revision=result.revision;item.checked=false;item.failure='';item.operation=undefined;
+      }catch(e){item.failure=e instanceof Error?e.message:'Emissão pendente';}
+    }
     async function issueSelected(){await run(async()=>{
-      for(const item of kit.recipients.filter(item=>item.checked&&!item.revision)){
-        try{const result=await PigeAPI.post<{revision:number}>(base()+'/bulletins/'+item.id+'/issue?operation='+kit.operation,{});
-          item.revision=result.revision;item.failure='';}
-        catch(e){item.failure=e instanceof Error?e.message:'Emissão pendente';}
-      }
+      for(const item of kit.recipients.filter(item=>item.checked&&!item.last_revision))await signRecipient(item);
     });}
+    async function reissue(item:Recipient){
+      if(!window.confirm('Emitir e assinar uma nova revisão do boletim de '+item.name+'?'))return;
+      await run(()=>signRecipient(item));
+    }
     const base=()=>'/schools/'+props.schoolId+'/reports';
     const modules=()=>Array.from(new Set(state.catalog.map(item=>item.module)));
     const issuedAt=(stamp:string)=>new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Bahia'}).format(new Date(stamp));
@@ -71,7 +79,7 @@ namespace PigeReports {
     function value(v:unknown,type:string):string {if(v===null||v===undefined||v==='')return '—';if(type==='currency')return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v));if(type==='date')return new Date(String(v).slice(0,10)+'T12:00:00Z').toLocaleDateString('pt-BR',{timeZone:'UTC'});if(type==='number'||type==='integer'||type==='percent')return Number(v).toLocaleString('pt-BR')+(type==='percent'?'%':'');return String(v);}
     const classes=()=> (props.catalogs['class-groups']||[]).filter(c=>(!state.academicYear||c.academic_year_id===state.academicYear)&&(!state.unit||c.unit_id===state.unit));
     const filterAllowed=(name:string)=>selected()?.filters?.includes(name)||false;
-    Vue.onMounted(()=>{period();void run(async()=>{const c=await PigeAPI.request<{items:Catalog[]}>(base()+'/catalog');state.catalog=c.items;if(!c.items.some(i=>i.id===state.kind))state.kind=c.items[0]?.id||'';});});
-    return{state,permissions:props,kit,openKit,saveLogo,savePreferences,resetRecipients,findRecipients,previewBulletin,issueSelected,selected,modules,issuedAt,period,changeKind,generate,download,value,classes,changed,filterAllowed,get catalogs(){return props.catalogs;}};
+    Vue.onMounted(()=>{period();void run(async()=>{const c=await PigeAPI.request<{items:Catalog[];report_logo:string}>(base()+'/catalog');state.catalog=c.items;state.reportLogo=c.report_logo;if(!c.items.some(i=>i.id===state.kind))state.kind=c.items[0]?.id||'';});});
+    return{state,permissions:props,kit,openKit,saveLogo,savePreferences,resetRecipients,findRecipients,previewBulletin,issueSelected,reissue,selected,modules,issuedAt,period,changeKind,generate,download,value,classes,changed,filterAllowed,get catalogs(){return props.catalogs;}};
   }};
 }

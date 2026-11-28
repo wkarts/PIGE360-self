@@ -3,9 +3,15 @@ namespace PigeDiary {
   type Diary=Row&{class_group_id:string;academic_year_id:string;component_id:string;teacher_assignment_id?:string|null;version:number;status:string;class_name:string;component_name:string;year_name:string;teacher_name:string;lessons?:Lesson[];roster?:Roster[]};
   type Lesson=Row&{lesson_date:string;lesson_count:number;content:string;academic_period_id?:string|null;skills:string;methodology:string;activities:string;homework:string;notes:string};
   type Roster={enrollment_id:string;student_id:string;number:string;name:string;enrollment_status:string;attendance?:{id?:string;version?:number;status:string;note:string}|null};
+  type EntryScope='lesson'|'plan';
+  type EntryField={id:string;label:string;scope:EntryScope};
+  type EntrySettings={version:number;fields:EntryField[];standard_columns:Record<string,string>;standard_labels?:Record<string,string>};
+  type StoredField={id:string;label:string;value:string;column?:string};
+  const emptyLesson=()=>({academic_period_id:'',lesson_date:today(),lesson_count:1,content:'',skills:'',methodology:'',activities:'',homework:'',notes:''});
+  const emptyPlan=(d?:Diary|null)=>({class_group_id:d?.class_group_id||'',component_id:d?.component_id||'',academic_period_id:'',teacher_assignment_id:d?.teacher_assignment_id||'',objectives:'',thematic_units:'',knowledge_objects:'',bncc_references:'',methodology:'',resources:'',assessment_strategy:'',notes:'',status:'draft'});
   type AssessmentResult={id?:string;version?:number;numeric_score:string|number|null;concept:string;note:string};
   type CommunicationRecipient={guardian_link_id:string;name:string;relationship:string;portal_account_count:number};
-  type Props={schoolId:string;schoolName?:string;catalogEnabled?:boolean;permissions:string[];teacherPortal?:boolean;requestedDiary?:{id:string;tab?:string}};
+  type Props={schoolId:string;schoolName?:string;catalogEnabled?:boolean;permissions:string[];teacherPortal?:boolean;allowMaterials?:boolean;requestedDiary?:{id:string;tab?:string}};
   const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bahia',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   interface DiaryPage {id:string; label:string; tab:string; permission?:string}
   interface DiaryGroup {label:string; pages:DiaryPage[]}
@@ -40,17 +46,21 @@ namespace PigeDiary {
     if(url.hash==='#diario')url.hash='';
     history.replaceState(history.state,'',url.pathname+url.search+url.hash);
   }
-  export const component={props:['schoolId','schoolName','catalogEnabled','permissions','teacherPortal','requestedDiary'],render:PigeRenders.diary,setup(props:Props){
+  export const component={props:['schoolId','schoolName','catalogEnabled','permissions','teacherPortal','allowMaterials','requestedDiary'],render:PigeRenders.diary,setup(props:Props){
     const state=Vue.reactive({
       busy:false,error:'',notice:'',tab:'diaries',page:'diaries',diaryFilter:'',lessonPeriod:'',dirty:false,
       diaries:[] as Diary[],selected:null as Diary|null,academicYears:[] as Row[],periods:[] as Row[],components:[] as Row[],groups:[] as Row[],assignments:[] as Row[],plans:[] as Row[],
       calendarIds:[] as string[],periodForm:{academic_year_id:'',class_group_id:'',name:'',starts_on:'',ends_on:'',order_index:1,active:true},
+      fields:{version:0,fields:[],standard_columns:{}} as EntrySettings,configFields:[] as EntryField[],configVersion:0,newFieldLabel:'',restoreFieldId:'',newFieldScope:'lesson' as EntryScope,
+      componentEditing:null as Row|null,removalTarget:null as Row|null,removalReason:'',
+      lessonRemoval:false,lessonRemovalReason:'',lessonEditing:null as Row|null,planEditing:null as Row|null,lessonValues:{} as Record<string,string>,planValues:{} as Record<string,string>,
+      attendanceBase:{} as Record<string,{status:string;note:string}>,
       componentForm:{name:'',code:'',workload_hours:0,active:true},
       diaryForm:{class_group_id:'',component_id:'',teacher_assignment_id:'',notes:''},
-      planForm:{class_group_id:'',component_id:'',academic_period_id:'',teacher_assignment_id:'',objectives:'',thematic_units:'',knowledge_objects:'',bncc_references:'',methodology:'',resources:'',assessment_strategy:'',notes:'',status:'draft'},
-      lessonForm:{academic_period_id:'',lesson_date:today(),lesson_count:1,content:'',skills:'',methodology:'',activities:'',homework:'',notes:''},
+      teacherSearch:'',teacherPersonId:'',teacherResults:[] as PigeAPI.TeacherProfile[],teacherSearched:false,
+      planForm:emptyPlan(),lessonForm:emptyLesson(),
       selectedLesson:null as Lesson|null,attendance:[] as Roster[],
-      assessments:[] as Row[],assessmentEditing:null as Row|null,selectedAssessment:null as Row|null,assessmentRoster:[] as (Roster&{result?:AssessmentResult|null})[],
+      assessments:[] as Row[],assessmentEditing:null as Row|null,selectedAssessment:null as Row|null,assessmentBaseline:'',assessmentRoster:[] as (Roster&{result?:AssessmentResult|null})[],
       assessmentForm:{academic_period_id:'',title:'',kind:'activity',assessment_date:today(),value_type:'numeric',max_score:'10',weight:'1',description:'',skills:'',status:'published'},
       opinions:[] as Row[],opinionForm:{academic_period_id:'',enrollment_id:'',text:'',status:'draft'},
       pedagogicalRecords:[] as Row[],pedagogicalForm:{enrollment_id:'',record_date:today(),kind:'observation',text:''},
@@ -101,8 +111,9 @@ namespace PigeDiary {
     }
     const initial=new URLSearchParams(location.search);
     const pilot=props.catalogEnabled===true || pilotForSchool(props.schoolId);
+    const materialsAllowed=()=>!props.teacherPortal || props.allowMaterials!==false;
     const navigation=Vue.computed(()=>groups.map(group=>({...group,pages:group.pages.filter(
-      page=>(!page.permission || can(page.permission)) && (page.id!=='catalog' || props.catalogEnabled===true)
+      page=>(page.id!=='materials' || materialsAllowed()) && (!page.permission || can(page.permission)) && (page.id!=='catalog' || props.catalogEnabled===true)
     )})).filter(group=>group.pages.length));
     const activeGroup=Vue.computed(()=>navigation.value.find(group=>group.pages.some(page=>page.id===state.page)));
     const filteredDiaries=Vue.computed(()=>{
@@ -144,16 +155,18 @@ namespace PigeDiary {
     }
     function show(...pages:string[]){return !pilot || pages.includes(state.page);}
     const draftPages=new Set<string>();
+    const tracksDrafts=pilot || props.teacherPortal===true;
+    const draftSection=()=>pilot?state.page:state.tab;
     async function save(action:()=>Promise<void>){
       if(state.busy)return;
-      const page=state.page;
+      const page=draftSection();
       await action();
       if(!state.error && state.notice){draftPages.delete(page);state.dirty=draftPages.size>0;}
     }
-    function beforeUnload(event:BeforeUnloadEvent){if(state.dirty){event.preventDefault();event.returnValue='';}}
+    function beforeUnload(event:BeforeUnloadEvent){if(workspaceDirty.value){event.preventDefault();event.returnValue='';}}
     function markDraft(event:Event){
-      if(pilot && (event.target as Element).closest('form,.x-form,td')){
-        draftPages.add(state.page);state.dirty=true;
+      if(tracksDrafts && (event.target as Element).closest('form,.x-form,td')){
+        draftPages.add(draftSection());state.dirty=true;
       }
     }
     function chooseAnother(){
@@ -163,7 +176,7 @@ namespace PigeDiary {
     if(pilot && !navigatePage(initial.get('guia')||'dashboard',false))navigatePage('dashboard',false);
     const str=(v:unknown)=>v==null?'':String(v);
     const date=(v:unknown)=>{const x=str(v);return x?new Intl.DateTimeFormat('pt-BR',{timeZone:'UTC'}).format(new Date(x.length===10?x+'T12:00:00Z':x)):'—';};
-    const labels:Record<string,string>={open:'Aberto',draft:'Rascunho',submitted:'Enviado',reviewed:'Revisado',closed:'Fechado',present:'Presente',absent:'Falta',justified_absence:'Falta justificada',active:'Ativo',suspended:'Suspenso',published:'Publicada',final:'Final',pending:'Pendente',calculated:'Calculado',below_minimum:'Abaixo da média',attendance_below_minimum:'Frequência abaixo do mínimo',opinion_pending:'Parecer pendente',concept:'Conceito',follow_up:'Acompanhamento',intervention:'Intervenção',recovery:'Recuperação',adaptation:'Adaptação',referral:'Encaminhamento',observation:'Observação',positive:'Positiva',pedagogical:'Pedagógica',behavioral:'Comportamental',safety:'Segurança',other:'Outra',resultados_avaliativos_pendentes:'Há notas pendentes',sem_resultado_aplicavel:'Sem resultado aplicável',chamada_pendente:'Chamada pendente',conceito_fora_da_escala:'Conceito fora da escala',peso_avaliativo_ausente:'Peso não definido',resultado_numerico_ausente:'Nota não informada',frequencia_abaixo_do_limite:'Frequência abaixo do mínimo',parecer_final_pendente:'Parecer final pendente'};
+    const labels:Record<string,string>={archived:'Arquivado',open:'Aberto',draft:'Rascunho',submitted:'Enviado',reviewed:'Revisado',closed:'Fechado',present:'Presente',absent:'Falta',justified_absence:'Falta justificada',active:'Ativo',suspended:'Suspenso',published:'Publicada',final:'Final',pending:'Pendente',calculated:'Calculado',below_minimum:'Abaixo da média',attendance_below_minimum:'Frequência abaixo do mínimo',opinion_pending:'Parecer pendente',concept:'Conceito',follow_up:'Acompanhamento',intervention:'Intervenção',recovery:'Recuperação',adaptation:'Adaptação',referral:'Encaminhamento',observation:'Observação',positive:'Positiva',pedagogical:'Pedagógica',behavioral:'Comportamental',safety:'Segurança',other:'Outra',resultados_avaliativos_pendentes:'Há notas pendentes',sem_resultado_aplicavel:'Sem resultado aplicável',chamada_pendente:'Chamada pendente',conceito_fora_da_escala:'Conceito fora da escala',peso_avaliativo_ausente:'Peso não definido',resultado_numerico_ausente:'Nota não informada',frequencia_abaixo_do_limite:'Frequência abaixo do mínimo',parecer_final_pendente:'Parecer final pendente'};
     const label=(v:unknown)=>labels[str(v)]||str(v)||'—';
     async function run(action:()=>Promise<void>){if(state.busy)return;state.busy=true;state.error='';state.notice='';try{await action();}catch(e){state.error=e instanceof Error?e.message:String(e);}finally{state.busy=false;}}
     async function loadBase(){const results=await Promise.all([
@@ -172,9 +185,12 @@ namespace PigeDiary {
       PigeAPI.request<Row[]>(base()+'/curriculum-components'),
       can('diary.configure')?PigeAPI.request<Row[]>(base()+'/academic-years'):Promise.resolve([] as Row[]),
       can('diary.configure')?PigeAPI.request<Row[]>(base()+'/class-groups'):Promise.resolve([] as Row[]),
-      can('diary.configure')?PigeAPI.request<Row[]>(base()+'/teacher-assignments'):Promise.resolve([] as Row[]),
-      PigeAPI.request<any>(base()+'/diary-dashboard')
+      can('diary.configure') && can('staff.assignments.read')?PigeAPI.request<Row[]>(base()+'/teacher-assignments'):Promise.resolve([] as Row[]),
+      PigeAPI.request<any>(base()+'/diary-dashboard'),
+      PigeAPI.request<EntrySettings>(base()+'/diary-entry-fields')
     ]);state.diaries=results[0] as Diary[];state.periods=results[1] as Row[];state.components=results[2] as Row[];state.academicYears=results[3] as Row[];state.groups=results[4] as Row[];state.assignments=results[5] as Row[];state.dashboard=results[6] as {items:Row[];totals:Row};
+      const current=results[7] as EntrySettings;
+      if(compositionDirty.value)state.fields=current;else setComposition(current);
       if(!state.periodForm.academic_year_id&&state.academicYears.length){const year=state.academicYears.find(x=>x.status==='active'||x.active)||state.academicYears[0];state.periodForm.academic_year_id=str(year.id);}
     }
     async function load(){await run(loadBase);}
@@ -186,7 +202,8 @@ namespace PigeDiary {
         PigeAPI.request<Row[]>(base()+'/curriculum-plans?class_group_id='+encodeURIComponent(d.class_group_id)+'&component_id='+encodeURIComponent(d.component_id)),
         PigeAPI.request<Row[]>(endpoint+'/assessments'),PigeAPI.request<Row[]>(endpoint+'/assessment-rules'),
         PigeAPI.request<Row[]>(endpoint+'/occurrences'),PigeAPI.request<Row[]>(endpoint+'/opinions'),
-        PigeAPI.request<Row[]>(endpoint+'/pedagogical-records'),PigeAPI.request<Row[]>(endpoint+'/communications'),PigeAPI.request<Row[]>(endpoint+'/materials')
+        PigeAPI.request<Row[]>(endpoint+'/pedagogical-records'),PigeAPI.request<Row[]>(endpoint+'/communications'),
+        materialsAllowed()?PigeAPI.request<Row[]>(endpoint+'/materials'):Promise.resolve([] as Row[])
       ]);
       const changed=state.selected?.id!==d.id;
       state.reopenPeriod='';state.selected=selected;state.summary=summary;state.history=history;state.plans=plans;
@@ -196,8 +213,7 @@ namespace PigeDiary {
       state.materials=materials;
       if(changed){
         state.materialForm={client_key:PigeOnline.newId(),kind:'Atividade',title:'',body:'',enrollment_id:''};
-        state.planForm={class_group_id:d.class_group_id,component_id:d.component_id,academic_period_id:'',teacher_assignment_id:d.teacher_assignment_id||'',objectives:'',thematic_units:'',knowledge_objects:'',bncc_references:'',methodology:'',resources:'',assessment_strategy:'',notes:'',status:'draft'};
-        state.lessonForm={academic_period_id:'',lesson_date:today(),lesson_count:1,content:'',skills:'',methodology:'',activities:'',homework:'',notes:''};
+        resetPlan();resetLesson();
         state.assessmentForm={academic_period_id:'',title:'',kind:'activity',assessment_date:today(),value_type:'numeric',max_score:'10',weight:'1',description:'',skills:'',status:'published'};
         state.opinionForm={academic_period_id:'',enrollment_id:'',text:'',status:'draft'};
         state.pedagogicalForm={enrollment_id:'',record_date:today(),kind:'observation',text:''};
@@ -232,12 +248,212 @@ namespace PigeDiary {
       if(!group)return;await PigeAPI.request(base()+'/class-groups/'+group.id+'/calendar',{method:'PUT',body:JSON.stringify({period_ids:state.calendarIds,version:group.version})});
       await loadBase();loadCalendar();state.notice='Calendário da turma atualizado.';});}
     async function createPeriod(){await run(async()=>{await PigeAPI.post(base()+'/academic-periods',state.periodForm);state.periodForm={class_group_id:state.periodForm.class_group_id,academic_year_id:state.periodForm.academic_year_id,name:'',starts_on:'',ends_on:'',order_index:state.periodForm.order_index+1,active:true};await loadBase();loadCalendar();state.notice='Período letivo criado.';});}
-    async function createComponent(){await run(async()=>{await PigeAPI.post(base()+'/curriculum-components',state.componentForm);state.componentForm={name:'',code:'',workload_hours:0,active:true};await loadBase();state.notice='Componente curricular criado.';});}
-    async function createDiary(){await run(async()=>{const body={...state.diaryForm,teacher_assignment_id:state.diaryForm.teacher_assignment_id||null};const d=await PigeAPI.post<Diary>(base()+'/diaries',body);state.diaryForm={class_group_id:'',component_id:'',teacher_assignment_id:'',notes:''};await loadBase();await loadDiary(d);if(pilot){navigatePage('diaries',false);syncLink();}else state.tab='diaries';state.notice='Diário aberto.';});}
-    async function createPlan(){if(!state.selected)return;await run(async()=>{const f=state.planForm;await PigeAPI.post(base()+'/curriculum-plans',{...f,academic_period_id:f.academic_period_id||null,teacher_assignment_id:f.teacher_assignment_id||null,bncc_references:f.bncc_references.split(/[\s,;]+/).map(x=>x.trim()).filter(Boolean)});state.plans=await PigeAPI.request<Row[]>(base()+'/curriculum-plans?class_group_id='+encodeURIComponent(state.selected!.class_group_id)+'&component_id='+encodeURIComponent(state.selected!.component_id));state.notice='Planejamento registrado.';});}
-    async function createLesson(){if(!state.selected)return;await run(async()=>{await PigeAPI.post(base()+'/diaries/'+state.selected!.id+'/lessons',{...state.lessonForm,academic_period_id:state.lessonForm.academic_period_id||null});state.lessonForm={academic_period_id:state.lessonForm.academic_period_id,lesson_date:today(),lesson_count:1,content:'',skills:'',methodology:'',activities:'',homework:'',notes:''};await loadDiary(state.selected!);state.notice='Aula registrada.';});}
-    async function openAttendance(lesson:Lesson){if(!state.selected)return;await run(async()=>{const result=await PigeAPI.request<{lesson:Lesson;roster:Roster[]}>(base()+'/diaries/'+state.selected!.id+'/lessons/'+lesson.id+'/attendance');state.selectedLesson=result.lesson;state.attendance=result.roster.map(r=>({...r,attendance:r.attendance||{status:'present',note:''}}));});}
-    async function saveAttendance(){if(!state.selected||!state.selectedLesson)return;await run(async()=>{await PigeAPI.request(base()+'/diaries/'+state.selected!.id+'/lessons/'+state.selectedLesson!.id+'/attendance',{method:'PUT',body:JSON.stringify({items:state.attendance.map(r=>({enrollment_id:r.enrollment_id,status:r.attendance?.status||'present',note:r.attendance?.note||'',version:r.attendance?.version??null}))})});state.notice='Chamada salva.';await loadDiary(state.selected!);});}
+    const compositionDirty=Vue.computed(()=>JSON.stringify(state.configFields)!==JSON.stringify(state.fields.fields));
+    function setComposition(settings:EntrySettings){
+      state.fields=settings;state.configVersion=settings.version;
+      state.configFields=settings.fields.map(field=>({...field}));
+    }
+    const restorableFields=Vue.computed(()=>Object.keys(state.fields.standard_columns).filter(
+      id=>!state.configFields.some(field=>field.id===id)));
+    function restoreField(){
+      const id=state.restoreFieldId;
+      if(!restorableFields.value.includes(id) || state.configFields.length>=40)return;
+      state.configFields.push({id,scope:id.startsWith('standard-plan-')?'plan':'lesson',label:state.fields.standard_labels?.[id]||''});
+      state.restoreFieldId='';
+    }
+    function addField(){
+      const label=state.newFieldLabel.trim();
+      if(label.length<2 || state.configFields.length>=40)return;
+      state.configFields.push({id:PigeOnline.newId(),label,scope:state.newFieldScope});
+      state.newFieldLabel='';
+    }
+    function moveField(index:number,offset:number){
+      const target=index+offset;
+      if(target<0 || target>=state.configFields.length)return;
+      const [field]=state.configFields.splice(index,1);
+      state.configFields.splice(target,0,field);
+    }
+    async function saveFields(){await run(async()=>{
+      const result=await PigeAPI.request<EntrySettings>(base()+'/diary-entry-fields',{method:'PUT',
+        body:JSON.stringify({version:state.configVersion,fields:state.configFields})});
+      setComposition(result);state.notice='Composição atualizada para esta escola.';
+    });}
+    function resetComponent(){
+      state.componentEditing=null;state.componentForm={name:'',code:'',workload_hours:0,active:true};
+    }
+    function editComponent(row:Row){
+      state.componentEditing=row;state.componentForm={name:str(row.name),code:str(row.code),workload_hours:Number(row.workload_hours),active:Boolean(row.active)};
+      focusHeading('diary-component-heading');
+    }
+    async function createComponent(){await run(async()=>{
+      const endpoint=base()+'/curriculum-components', editing=state.componentEditing;
+      if(editing)await PigeAPI.request(endpoint+'/'+editing.id,{method:'PATCH',body:JSON.stringify({...state.componentForm,version:editing.version})});
+      else await PigeAPI.post(endpoint,state.componentForm);
+      resetComponent();await loadBase();state.notice=editing?'Componente curricular atualizado.':'Componente curricular criado.';
+    });}
+    async function removeComponent(){const row=state.removalTarget;if(!row)return;await run(async()=>{
+      const result=await PigeAPI.post<{action:string}>(base()+'/curriculum-components/'+row.id+'/remove',
+        {version:row.version,reason:state.removalReason});
+      if(state.componentEditing?.id===row.id)resetComponent();
+      state.removalTarget=null;state.removalReason='';await loadBase();
+      state.notice=result.action==='retired'?'Componente desativado. Os vínculos históricos foram preservados.':'Componente sem vínculos removido.';
+    });}
+    const existingDiary=Vue.computed(()=>state.diaries.find(row=>row.class_group_id===state.diaryForm.class_group_id && row.component_id===state.diaryForm.component_id));
+    const selectedComponent=Vue.computed(()=>state.components.find(row=>row.id===state.diaryForm.component_id));
+    const matchingAssignments=Vue.computed(()=>{
+      const subject=str(selectedComponent.value?.name).trim().toLocaleLowerCase('pt-BR');
+      if(!subject)return [];
+      return state.assignments.filter(row=>row.active && row.class_group_id===state.diaryForm.class_group_id &&
+        (!str(row.subject_name).trim() || str(row.subject_name).trim().toLocaleLowerCase('pt-BR')===subject));
+    });
+    function resetTeacherSearch(){
+      state.teacherPersonId='';state.teacherResults=[];state.teacherSearched=false;
+    }
+    function syncDiaryAssignment(){
+      state.diaryForm.teacher_assignment_id=existingDiary.value?.teacher_assignment_id||'';
+      state.teacherSearch='';resetTeacherSearch();
+    }
+    function configureTeacher(d:Diary){
+      if(pilot){go('new-diary');if(state.page!=='new-diary')return;}else state.tab='setup';
+      state.diaryForm.class_group_id=d.class_group_id;state.diaryForm.component_id=d.component_id;
+      syncDiaryAssignment();focusHeading('diary-assignment-heading');
+    }
+    async function searchTeachers(){
+      const term=state.teacherSearch.trim();
+      if(term.length<2)return;
+      await run(async()=>{
+        resetTeacherSearch();
+        const result=await PigeAPI.request<PigeAPI.Page<PigeAPI.TeacherProfile>>(base()+'/teachers?q='+encodeURIComponent(term)+'&page_size=30');
+        if(state.teacherSearch.trim()===term){
+          state.teacherResults=result.items.filter(row=>row.person.active);
+          state.teacherSearched=true;
+        }
+      });
+    }
+    async function createDiary(){await run(async()=>{
+      const current=existingDiary.value;
+      const form=state.diaryForm;
+      let assignment=form.teacher_assignment_id||null;
+      if(state.teacherPersonId && selectedComponent.value){
+        const row=await PigeAPI.post<Row>(base()+'/teacher-assignments',{teacher_person_id:state.teacherPersonId,
+          class_group_id:form.class_group_id,subject_name:str(selectedComponent.value.name),active:true});
+        if(!state.assignments.some(item=>item.id===row.id))state.assignments.push(row);
+        assignment=row.id;form.teacher_assignment_id=row.id;resetTeacherSearch();
+      }
+      let diary:Diary;
+      if(current){
+        diary=await PigeAPI.request<Diary>(base()+'/diaries/'+current.id+'/teacher-assignment',
+          {method:'PUT',body:JSON.stringify({version:current.version,teacher_assignment_id:assignment})});
+      }else{
+        diary=await PigeAPI.post<Diary>(base()+'/diaries',{...form,teacher_assignment_id:assignment});
+      }
+      state.diaryForm={class_group_id:'',component_id:'',teacher_assignment_id:'',notes:''};
+      state.teacherSearch='';resetTeacherSearch();
+      await loadBase();await loadDiary(diary);
+      if(pilot){navigatePage('diaries',false);syncLink();}else state.tab='diaries';
+      state.notice=current?'Vínculo docente do diário atualizado.':'Diário aberto.';
+    });}
+    function focusHeading(id:string){
+      void Vue.nextTick(()=>document.getElementById?.(id)?.focus());
+    }
+    function storedFields(row:Row|null):StoredField[]{
+      if(!row)return [];
+      const fields:StoredField[]=Array.isArray(row.extra_fields)?row.extra_fields:[];
+      const items=fields.map(field=>{
+        const value=field.column?row[field.column]:field.value;
+        return {...field,value:Array.isArray(value)?value.join(', '):str(value)};
+      });
+      // Documentos anteriores à migração contêm apenas as colunas nativas.
+      const scope=row.lesson_date?'lesson':'plan';
+      for(const [id,column] of Object.entries(state.fields.standard_columns)){
+        if(!id.startsWith('standard-'+scope+'-') || items.some(field=>field.id===id) || !row[column])continue;
+        const value=row[column],label=state.fields.standard_labels?.[id];
+        if(label && (!Array.isArray(value) || value.length))items.push({id,column,label,value:Array.isArray(value)?value.join(', '):str(value)});
+      }
+      return items;
+    }
+    function editableValues(row:Row,scope:EntryScope){
+      const active=new Set(state.fields.fields.filter(field=>field.scope===scope).map(field=>field.id));
+      return Object.fromEntries(storedFields(row).filter(field=>!field.column && active.has(field.id)).map(field=>[field.id,field.value]));
+    }
+    function resetPlan(){
+      state.planEditing=null;state.planValues={};state.planForm=emptyPlan(state.selected);
+    }
+    function editPlan(row:Row){
+      resetPlan();state.planEditing=row;state.planValues=editableValues(row,'plan');
+      for(const key of Object.keys(state.planForm) as (keyof typeof state.planForm)[]){
+        state.planForm[key]=key==='bncc_references' && Array.isArray(row[key])?row[key].join(', '):str(row[key]);
+      }
+      focusHeading('diary-plan-heading');
+    }
+    async function createPlan(){if(!state.selected)return;await run(async()=>{
+      const f=state.planForm,editing=state.planEditing,endpoint=base()+'/curriculum-plans';
+      const body={...f,academic_period_id:f.academic_period_id||null,teacher_assignment_id:f.teacher_assignment_id||null,
+        bncc_references:f.bncc_references.split(/[\s,;]+/).filter(Boolean),field_values:state.planValues};
+      if(editing)await PigeAPI.request(endpoint+'/'+editing.id,{method:'PATCH',body:JSON.stringify({...body,version:editing.version})});
+      else await PigeAPI.post(endpoint,body);
+      state.plans=await PigeAPI.request<Row[]>(endpoint+'?class_group_id='+encodeURIComponent(f.class_group_id)+'&component_id='+encodeURIComponent(f.component_id));
+      resetPlan();state.notice=editing?'Planejamento atualizado.':'Planejamento registrado.';
+    });}
+    function resetLesson(){state.lessonRemoval=false;state.lessonRemovalReason='';state.lessonEditing=null;state.lessonValues={};state.lessonForm=emptyLesson();}
+    function editLesson(row:Lesson){
+      if(pilot && state.page!=='diaries' && !navigatePage('diaries'))return;
+      syncLink();state.lessonRemoval=false;state.lessonRemovalReason='';state.lessonEditing=row;state.lessonValues=editableValues(row,'lesson');
+      const {academic_period_id,lesson_date,lesson_count,content,skills,methodology,activities,homework,notes}=row;
+      state.lessonForm={academic_period_id:academic_period_id||'',lesson_date,lesson_count,content,skills,methodology,activities,homework,notes};
+      focusHeading('diary-lesson-heading');
+    }
+    async function createLesson(){if(!state.selected)return;await run(async()=>{
+      const endpoint=base()+'/diaries/'+state.selected!.id+'/lessons',editing=state.lessonEditing;
+      const body={...state.lessonForm,academic_period_id:state.lessonForm.academic_period_id||null,field_values:state.lessonValues};
+      if(editing)await PigeAPI.request(endpoint+'/'+editing.id,{method:'PATCH',body:JSON.stringify({...body,version:editing.version})});
+      else await PigeAPI.post(endpoint,body);
+      const period=state.lessonForm.academic_period_id;resetLesson();state.lessonForm.academic_period_id=period;
+      await loadDiary(state.selected!);state.notice=editing?'Aula atualizada.':'Aula registrada.';
+    });}
+    async function removeLesson(){
+      const diary=state.selected,lesson=state.lessonEditing;
+      if(!diary || !lesson || !state.lessonRemoval || state.lessonRemovalReason.trim().length<3)return;
+      await run(async()=>{
+        await PigeAPI.post(base()+'/diaries/'+diary.id+'/lessons/'+lesson.id+'/remove',
+          {version:lesson.version,reason:state.lessonRemovalReason});
+        resetLesson();await loadDiary(diary);state.notice='Aula removida do diário.';
+      });
+    }
+    function attendancePath(lesson:Lesson){return base()+'/diaries/'+state.selected!.id+'/lessons/'+lesson.id+'/attendance';}
+    async function fetchAttendance(lesson:Lesson){
+      const result=await PigeAPI.request<{lesson:Lesson;roster:Roster[]}>(attendancePath(lesson));
+      state.selectedLesson=result.lesson;
+      state.attendanceBase=Object.fromEntries(result.roster.map(r=>[r.enrollment_id,{status:r.attendance?.status||'',note:r.attendance?.note||''}]));
+      state.attendance=result.roster.map(r=>({...r,attendance:r.attendance||{status:'',note:''}}));
+    }
+    const changedAttendance=Vue.computed(()=>state.attendance.filter(r=>{
+      const previous=state.attendanceBase[r.enrollment_id],current=r.attendance;
+      return current?.status && (previous?.status!==current.status || previous?.note!==current.note);
+    }));
+    const pendingAttendance=Vue.computed(()=>state.attendance.filter(row=>!row.attendance?.status).length);
+    function markPendingPresent(){
+      for(const row of state.attendance)if(row.attendance && !row.attendance.status)row.attendance.status='present';
+    }
+    function closeAttendance(){
+      if(changedAttendance.value.length && !window.confirm('Descartar as alterações desta chamada?'))return false;
+      state.selectedLesson=null;state.attendance=[];state.attendanceBase={};return true;
+    }
+    async function openAttendance(lesson:Lesson){
+      if(!state.selected || (state.selectedLesson && !closeAttendance()))return;
+      await run(async()=>{await fetchAttendance(lesson);focusHeading('diary-attendance-heading');});
+    }
+    async function saveAttendance(){
+      const lesson=state.selectedLesson;if(!state.selected||!lesson||!changedAttendance.value.length)return;
+      await run(async()=>{
+        const items=changedAttendance.value.map(r=>({enrollment_id:r.enrollment_id,status:r.attendance!.status,note:r.attendance!.note,
+          version:r.attendance!.version??null,expected_empty:r.attendance!.version==null}));
+        await PigeAPI.request(attendancePath(lesson),{method:'PUT',body:JSON.stringify({items})});
+        await fetchAttendance(lesson);
+        state.summary=await PigeAPI.request<typeof state.summary>(base()+'/diaries/'+state.selected!.id+'/summary');
+        state.notice=items.length+' registro(s) de frequência salvo(s).';
+      });
+    }
     function editAssessment(assessment:Row){
       state.assessmentEditing=assessment;
       state.assessmentForm={academic_period_id:str(assessment.academic_period_id),title:str(assessment.title),kind:str(assessment.kind),assessment_date:str(assessment.assessment_date),value_type:str(assessment.value_type),max_score:str(assessment.max_score),weight:str(assessment.weight),description:str(assessment.description),skills:str(assessment.skills),status:str(assessment.status)};
@@ -261,7 +477,22 @@ namespace PigeDiary {
         state.notice=editing?'Avaliação atualizada. Consolide o período para atualizar o boletim.':'Avaliação criada.';
       });
     }
-    async function openAssessment(a:Row){if(!state.selected)return;await run(async()=>{const result=await PigeAPI.request<{instrument:Row;roster:(Roster&{result?:AssessmentResult|null})[]}>(base()+'/diaries/'+state.selected!.id+'/assessments/'+a.id+'/results');state.selectedAssessment=result.instrument;state.assessmentRoster=result.roster.map(r=>({...r,result:r.result||{numeric_score:null,concept:'',note:''}}));});}
+    function gradeValues():string {
+      return JSON.stringify(state.assessmentRoster.map(({enrollment_id,result})=>
+        [enrollment_id,str(result?.numeric_score),str(result?.concept),str(result?.note)]));
+    }
+    const workspaceDirty=Vue.computed(()=>state.dirty||compositionDirty.value||changedAttendance.value.length>0||
+      Boolean(state.selectedAssessment&&gradeValues()!==state.assessmentBaseline));
+    async function openAssessment(a:Row){
+      if(!state.selected)return;
+      await run(async()=>{
+        const result=await PigeAPI.request<{instrument:Row;roster:(Roster&{result?:AssessmentResult|null})[]}>(
+          base()+'/diaries/'+state.selected!.id+'/assessments/'+a.id+'/results');
+        state.selectedAssessment=result.instrument;
+        state.assessmentRoster=result.roster.map(r=>({...r,result:r.result||{numeric_score:null,concept:'',note:''}}));
+        state.assessmentBaseline=gradeValues();
+      });
+    }
     async function saveAssessmentResults(){
       if(!state.selected||!state.selectedAssessment)return;
       await run(async()=>{
@@ -281,6 +512,15 @@ namespace PigeDiary {
     async function submitDiary(){if(!state.selected)return;await run(async()=>{await PigeAPI.post(base()+'/diaries/'+state.selected!.id+'/submit',{version:state.selected!.version});await loadDiary(state.selected!);state.notice='Diário enviado para revisão.';});}
     async function reviewDiary(){if(!state.selected)return;await run(async()=>{await PigeAPI.post(base()+'/diaries/'+state.selected!.id+'/review',{version:state.selected!.version});await loadDiary(state.selected!);state.notice='Diário marcado como revisado.';});}
     async function closeDiary(){if(!state.selected)return;await run(async()=>{const period=Boolean(state.closePeriod);await PigeAPI.post(base()+'/diaries/'+state.selected!.id+'/close',{academic_period_id:state.closePeriod||null,reason:state.closeReason,version:state.selected!.version});await loadDiary(state.selected!);state.notice=period?'Período fechado.':'Diário fechado.';});}
+    async function resumeDiary(){
+      const diary = state.selected;
+      if (!diary) return;
+      await run(async()=>{
+        await PigeAPI.post(base()+'/diaries/'+diary.id+'/resume', {version:diary.version});
+        await loadDiary(diary);
+        state.notice='Lançamentos liberados nos períodos abertos.';
+      });
+    }
     async function reopenDiary(){if(!state.selected)return;await run(async()=>{await PigeAPI.post(base()+'/diaries/'+state.selected!.id+'/reopen',{academic_period_id:state.reopenPeriod||null,reason:state.reopenReason,version:state.selected!.version});state.reopenReason='';await loadDiary(state.selected!);state.notice='Diário reaberto com registro de retificação.';});}
     async function publishMaterial(){if(!state.selected)return;await run(async()=>{
       const path=base()+'/diaries/'+state.selected!.id+'/materials',draft=state.materialForm;
@@ -294,17 +534,18 @@ namespace PigeDiary {
     let handled:Props['requestedDiary'];
     function openRequestedDiary():void {
       const request=props.requestedDiary;
-      if(!request||handled===request||state.busy)return;
+      if(!request||handled===request||state.busy||(request.tab==='materials'&&!materialsAllowed()))return;
       const diary=state.diaries.find(item=>item.id===request.id);
       if(!diary)return;
       handled=request;
-      if(pilot){navigatePage(request.tab||'diaries',false);syncLink();}else state.tab=request.tab||'diaries';
-      if(state.selected?.id!==diary.id)void selectDiary(diary);
+      if(pilot){navigatePage(request.tab||'diaries',false);syncLink();}else state.tab=request.tab==='attendance'?'diaries':request.tab||'diaries';
+      const loaded=state.selected?.id!==diary.id?selectDiary(diary):Promise.resolve();
+      if(request.tab==='attendance')void loaded.then(()=>focusHeading('diary-lessons-heading'));
     }
     Vue.watch(()=>props.requestedDiary,openRequestedDiary);
     Vue.watch(()=>state.busy,openRequestedDiary);
     Vue.onMounted(async()=>{
-      if(pilot)window.addEventListener('beforeunload',beforeUnload);
+      if(tracksDrafts)window.addEventListener('beforeunload',beforeUnload);
       await load();
       if(pilot && state.page==='catalog')await run(catalogList);
       if(props.requestedDiary){openRequestedDiary();return;}
@@ -320,7 +561,7 @@ namespace PigeDiary {
         else syncLink();
       }
     });
-    Vue.onUnmounted(()=>{if(pilot)window.removeEventListener('beforeunload',beforeUnload);});
-    return{props,state,periodsFor,loadCalendar,saveCalendar,pilot,catalog,catalogImpact,suggest,decide,lessons,filterPeriod,save,navigation,activeGroup,filteredDiaries,pageLink,go,show,chooseAnother,markDraft,publishMaterial,printMaterial,can,str,date,label,load,selectDiary,loadCommunicationRecipients,communicationOccurrenceChanged,sendCommunication,createPeriod,createComponent,createDiary,createPlan,createLesson,openAttendance,saveAttendance,createAssessment,editAssessment,cancelAssessmentEdit,openAssessment,saveAssessmentResults,saveOpinion,createPedagogicalRecord,submitDiary,reviewDiary,closeDiary,reopenDiary,report,selectRulePeriod,saveAssessmentRule,loadPeriodResults,consolidatePeriod,saveOccurrence};
+    Vue.onUnmounted(()=>{if(tracksDrafts)window.removeEventListener('beforeunload',beforeUnload);});
+    return{props,state,workspaceDirty,existingDiary,matchingAssignments,configureTeacher,syncDiaryAssignment,resetTeacherSearch,searchTeachers,compositionDirty,setComposition,restorableFields,restoreField,addField,moveField,saveFields,editComponent,resetComponent,removeComponent,editLesson,resetLesson,removeLesson,editPlan,resetPlan,storedFields,markPendingPresent,pendingAttendance,changedAttendance,closeAttendance,periodsFor,loadCalendar,saveCalendar,pilot,catalog,catalogImpact,suggest,decide,lessons,filterPeriod,save,navigation,activeGroup,filteredDiaries,pageLink,go,show,chooseAnother,markDraft,publishMaterial,printMaterial,can,str,date,label,load,selectDiary,loadCommunicationRecipients,communicationOccurrenceChanged,sendCommunication,createPeriod,createComponent,createDiary,createPlan,createLesson,openAttendance,saveAttendance,createAssessment,editAssessment,cancelAssessmentEdit,openAssessment,saveAssessmentResults,saveOpinion,createPedagogicalRecord,submitDiary,reviewDiary,closeDiary,resumeDiary,reopenDiary,report,selectRulePeriod,saveAssessmentRule,loadPeriodResults,consolidatePeriod,saveOccurrence};
   }};
 }

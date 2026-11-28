@@ -54,7 +54,7 @@ def render_bulletin(db, student, info, enrollments, issuer, *, preview=None, sig
                          ('Faltas sem justificativa', str(sum(t['attendance']['absent'] for t in terms))),
                          ('Faltas justificadas', str(sum(t['attendance']['justified_absence'] for t in terms)))]}
     return render_table(school, MODEL_TITLES[model], [], [], sections=sections,
-        module='Escrituração escolar', profile=profile,
+        module='Escrituração escolar', profile=profile, report_family='bulletins', preview_copy=not signing,
         notes=['A = aulas · F = faltas sem justificativa · J = faltas justificadas · S = aulas sem chamada. O traço indica ausência de publicação para o componente.', NOTE],
         circulation='Uso restrito ao aluno e aos responsáveis autorizados', issuer=issuer, db=db, kit=True,
         layout=model, report_color=pref['color'], reserve_photo=True, photo=student_photo(db, school.id, person), orientation='landscape')
@@ -64,9 +64,9 @@ def publication_ids(enrollment):
     return sorted({p['publication_id'] for subject in enrollment['subjects'] for p in subject['periods']})
 
 
-def published_editions(db, student, enrollments):
+def published_editions(db, student, enrollments, active_sources=None):
     from sqlalchemy import select
-    valid = {e['enrollment_id']: set(publication_ids(e)) for e in enrollments}
+    valid = active_sources if active_sources is not None else {e['enrollment_id']: set(publication_ids(e)) for e in enrollments}
     result = {eid: [] for eid in valid}
     docs = db.scalars(select(m.IssuedDocument).where(m.IssuedDocument.school_id == student.school_id,
         m.IssuedDocument.student_id == student.id, m.IssuedDocument.enrollment_id.in_(valid),

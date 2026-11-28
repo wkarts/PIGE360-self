@@ -1,0 +1,30 @@
+<div v-if="charge.collection_mode==='provider' && charge.billing_type==='PIX'" class="x-form">
+  <button type="button" class="btn btn-secondary" :aria-expanded="autoPix.state.id===charge.id" @click="autoPix.open(charge.id)">Pix Automático</button>
+  <div v-if="autoPix.state.id===charge.id" class="x-form" aria-live="polite">
+    <p v-if="autoPix.state.busy" role="status">Consultando a cobrança…</p>
+    <div v-if="autoPix.state.error" role="alert"><p>{{autoPix.state.error}}</p><button type="button" class="btn btn-secondary" :disabled="autoPix.state.busy" @click="autoPix.reload">Consultar novamente</button></div>
+    <template v-if="autoPix.state.view">
+      <form v-if="autoPix.state.view.can_enroll" @submit.prevent="autoPix.enroll">
+        <p>Primeiro pagamento de <strong>{{autoPix.money(autoPix.state.view.amount)}}</strong></p>
+        <label>Frequência dos próximos débitos<select v-model="autoPix.state.frequency"><option v-for="(label,code) in autoPix.frequencies" :key="code" :value="code">{{label}}</option></select></label>
+        <label><input type="checkbox" v-model="autoPix.state.accepted"> {{autoPix.state.view.terms}}</label>
+        <button type="submit" class="btn btn-primary" :disabled="!autoPix.state.accepted || autoPix.state.busy">Gerar QR de adesão</button>
+      </form>
+      <template v-if="autoPix.state.view.authorization">
+        <p>Autorização <strong>{{autoPix.label(autoPix.state.view.authorization.status)}}</strong> · {{autoPix.frequencies[autoPix.state.view.authorization.frequency]}}</p>
+        <template v-if="autoPix.state.view.authorization.payload">
+          <img v-if="autoPix.state.view.authorization.encoded_image" :src="'data:image/png;base64,'+autoPix.state.view.authorization.encoded_image" width="160" height="160" alt="QR Pix da adesão">
+          <label>Pix copia e cola<textarea readonly :value="autoPix.state.view.authorization.payload" @focus="$event.target.select()"></textarea></label>
+          <p v-if="autoPix.state.view.authorization.expires_at">QR válido até {{new Date(autoPix.state.view.authorization.expires_at).toLocaleString('pt-BR')}}.</p>
+        </template>
+        <ul v-if="autoPix.state.view.authorization.cycles.length"><li v-for="c in autoPix.state.view.authorization.cycles" :key="c.id">{{c.due_on.split('-').reverse().join('/')}} · {{autoPix.money(c.amount)}} · {{autoPix.label(c.status)}}<span v-if="c.instruction_status"> · {{autoPix.label(c.instruction_status)}}</span></li></ul>
+        <button type="button" class="btn btn-secondary" :disabled="autoPix.state.busy" @click="autoPix.refresh">Atualizar situação</button>
+        <template v-if="['CREATED','ACTIVE'].includes(autoPix.state.view.authorization.status)">
+          <button v-if="!autoPix.state.confirmCancel" type="button" class="btn btn-secondary" @click="autoPix.state.confirmCancel=true">Cancelar autorização</button>
+          <div v-else><p>Deseja interromper os próximos débitos? Os pagamentos já enviados dependem de confirmação bancária.</p><button type="button" class="btn btn-secondary" :disabled="autoPix.state.busy" @click="autoPix.cancel">Confirmar cancelamento</button> <button type="button" class="btn btn-secondary" @click="autoPix.state.confirmCancel=false">Voltar</button></div>
+        </template>
+      </template>
+      <p v-else-if="!autoPix.state.view.can_enroll">Adesão indisponível para esta cobrança.</p>
+    </template>
+  </div>
+</div>

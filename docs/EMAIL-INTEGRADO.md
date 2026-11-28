@@ -1,8 +1,16 @@
 # E-mail institucional dentro da aplicação
 
-Cada usuário com caixa ativa pode abrir **E-mail** na instituição à qual tem acesso. O titular pode informar novamente a senha ou conectar outra caixa do domínio autorizado; o sistema valida IMAP e SMTP antes de trocar a conexão. O administrador não recebe acesso às mensagens dos demais usuários. Professores, alunos e responsáveis usam o mesmo isolamento por titular e escola.
+Cada usuário com caixa institucional ativa pode abrir **E-mail** na escola à qual tem acesso. A escola administra o vínculo e o titular acessa as próprias mensagens. O cliente de e-mail do gestor também permite conectar outra caixa do domínio autorizado mediante autenticação em IMAP e SMTP.
 
 O cliente lê a caixa real e permite pesquisar, paginar, abrir mensagens e anexos, marcar leitura ou destaque, mover mensagens, salvar e editar rascunhos e enviar e-mails. Pastas personalizadas podem ser criadas, renomeadas e removidas quando vazias. Mensagens na lixeira ou no spam podem ser excluídas definitivamente após confirmação. As pastas principais não podem ser renomeadas ou removidas.
+
+## Acesso pelo Portal do Professor e pelo Portal do Aluno e Responsável
+
+1. No gestor, selecione a escola e abra **Integrações → E-mail**. Para criar uma caixa, use **Nova caixa de e-mail** e escolha o usuário. Se já existe uma caixa ativa no provedor com o endereço cadastrado, use **Vincular e-mails existentes** e **Verificar e vincular** na linha do titular. Um login com o domínio da escola precisa desse vínculo para ter acesso ao webmail.
+2. Para professores, abra **Usuários e acessos → Editar → Rotinas do Portal do Professor** e confira **E-mail institucional**. O item **E-mail** aparece no portal quando a rotina está liberada e há caixa ativa vinculada. Para alunos e responsáveis, basta o vínculo ativo com a própria caixa na escola.
+3. O titular entra no portal e seleciona **E-mail**. O sistema tenta abrir o SOGo integrado com a credencial da caixa provisionada. Quando uma caixa já existente precisa ser autenticada, o titular informa a **Senha da caixa institucional** e escolhe **Conectar caixa**. Essa é a senha usada no servidor de e-mail da escola.
+
+O portal abre somente a caixa vinculada ao usuário que entrou e à instituição selecionada. Um responsável que alterna entre os alunos continua na própria caixa. Alterar ou recuperar a senha do PIGE360 mantém a senha do servidor de e-mail.
 
 ## Conexão
 

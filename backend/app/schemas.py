@@ -389,7 +389,24 @@ class Setup(Input):
     unit_name: str = Field(default='Unidade principal', min_length=2, max_length=160)
     academic_year: int = Field(ge=2000, le=2200)
 
-class UserInput(Input):
+TeacherRoutine = Literal['agenda', 'diary', 'materials', 'news', 'mail']
+
+
+class PortalRoutineInput(Input):
+    teacher_routines: list[TeacherRoutine] | None = Field(default=None, max_length=5)
+
+    @model_validator(mode='after')
+    def valid_teacher_routines(self):
+        if self.teacher_routines is not None:
+            if self.role != 'teacher':
+                raise ValueError('As rotinas do Portal do Professor só se aplicam a docentes.')
+            if 'materials' in self.teacher_routines and 'diary' not in self.teacher_routines:
+                raise ValueError('Atividades e trabalhos requer acesso ao Diário de classe.')
+            self.teacher_routines = sorted(set(self.teacher_routines))
+        return self
+
+
+class UserInput(PortalRoutineInput):
     name: str = Field(min_length=2, max_length=160)
     email: EmailStr
     password: str = Field(default='', max_length=128)
@@ -401,13 +418,14 @@ class UserInput(Input):
     role: Literal['admin','direction','coordination','secretary','finance','teacher','student','guardian','viewer'] = 'secretary'
     school_ids: list[str] = Field(default_factory=list, max_length=100)
     person_id: str | None = None
+    reuse_person_access: bool = False
     create_mailbox: bool = False
     mailbox_school_id: str | None = None
     mailbox_local_part: str = Field(default='', max_length=64)
     mailbox_quota_mb: int | None = Field(default=None, ge=1, le=1048576)
     access_profile_id: str | None = None
 
-class UserEdit(Input):
+class UserEdit(PortalRoutineInput):
     name: str = Field(min_length=2, max_length=160)
     role: Literal['admin','direction','coordination','secretary','finance','teacher','student','guardian','viewer']
     active: bool

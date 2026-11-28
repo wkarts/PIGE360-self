@@ -1,6 +1,7 @@
 """API e banco reais. Apenas provedores externos são substituídos em testes de contrato."""
 import re, uuid, io, base64
 from datetime import date, timedelta
+from ipaddress import IPv6Address
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -20,7 +21,9 @@ def online(api):
     cat=api.catalogs(capacity=3,year='2027')
     campaign=api.post('/admission-campaigns',{'slug':'processo-'+uuid.uuid4().hex[:12],'title':'Matrículas 2027','class_group_ids':[cat['group']['id']], 'opens_on':str(portal_today()-timedelta(days=1)),'closes_on':str(portal_today()+timedelta(days=90)),'active':True,'require_verified_contact':False,'privacy_notice':'Dados utilizados exclusivamente no processo de matrícula e atendimento escolar, conforme o aviso institucional.'})
     from app.main import app
-    parent=TestClient(app,base_url='http://testserver')
+    # Cada cenário representa uma família independente. O IP permanece estável dentro do teste.
+    peer = IPv6Address('2001:db8::') + (uuid.UUID(api.school['id']).int % (2**96))
+    parent=TestClient(app,base_url='http://testserver',client=(str(peer),50000))
     r=parent.post('/api/v1/portal/register',headers=CSRF,json={'campaign_slug':campaign['slug'],'name':'Responsável Teste','email':uuid.uuid4().hex+'@example.com','password':PASSWORD,'cpf':CPF,'phone':'75999990000','accept_privacy':True,'terms_version':'1','whatsapp_opt_in':True})
     assert r.status_code==201,r.text
     return {'api':api,'parent':parent,'account':r.json(),'campaign':campaign,'cat':cat}

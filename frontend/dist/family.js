@@ -135,11 +135,15 @@ var PigeMFA;
 var PigeLearning;
 (function (PigeLearning) {
     PigeLearning.component = { props: ['request', 'download', 'rootPath', 'schoolId', 'studentId', 'identity'], render: PigeRenders.learning, setup(props) {
-            const state = Vue.reactive({ busy: false, error: '', students: [], studentId: '', enrollmentId: '', note: '' });
+            const state = Vue.reactive({ busy: false, error: '', students: [], studentId: '', enrollmentId: '', groupId: '', note: '' });
             const base = () => (props.rootPath || '/profile') + '/learning';
             const student = () => state.students.find(s => s.student_id === state.studentId);
             const enrollment = () => student()?.enrollments.find(e => e.enrollment_id === state.enrollmentId);
-            function selectStudent() { state.enrollmentId = student()?.enrollments[0]?.enrollment_id || ''; }
+            function selectStudent() {
+                const enrollments = student()?.enrollments || [];
+                state.enrollmentId = (enrollments.find(item => item.status === 'active') || enrollments[0])?.enrollment_id || '';
+                state.groupId = '';
+            }
             async function run(action) { if (state.busy)
                 return; state.busy = true; state.error = ''; try {
                 await action();
@@ -150,8 +154,22 @@ var PigeLearning;
             finally {
                 state.busy = false;
             } }
-            async function load() { await run(async () => { const data = await props.request(base() + (props.schoolId ? '?school_id=' + encodeURIComponent(props.schoolId) : '')); state.students = props.studentId ? data.students.filter(item => item.student_id === props.studentId) : data.students; state.note = data.note; if (!student())
-                state.studentId = state.students[0]?.student_id || ''; selectStudent(); }); }
+            async function load() {
+                await run(async () => {
+                    const data = await props.request(base() + (props.schoolId ? '?school_id=' + encodeURIComponent(props.schoolId) : ''));
+                    state.students = props.studentId ? data.students.filter(item => item.student_id === props.studentId) : data.students;
+                    state.note = data.note;
+                    if (!student()) {
+                        state.studentId = state.students[0]?.student_id || '';
+                        selectStudent();
+                    }
+                    else if (!enrollment()) {
+                        selectStudent();
+                    }
+                    if (!periodGroups.value.some(group => group.id === state.groupId))
+                        state.groupId = '';
+                });
+            }
             const rows = () => (enrollment()?.subjects || []).flatMap(subject => subject.periods.map(period => ({ ...period, component_name: period.component_name || subject.component_name, diary_id: subject.diary_id })));
             const periodGroups = Vue.computed(() => {
                 const groups = new Map();
@@ -167,57 +185,89 @@ var PigeLearning;
                     return (a.order_index ?? 0) - (b.order_index ?? 0) || (a.starts_on || '').localeCompare(b.starts_on || '') || left.className.localeCompare(right.className, 'pt-BR');
                 });
             });
+            const visibleGroups = Vue.computed(() => periodGroups.value.filter(group => !state.groupId || group.id === state.groupId));
             const percent = (value) => value === null || value === undefined ? 'Não apurada' : Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%';
             async function download(documentId = '') { await run(async () => { if (!student() || !enrollment())
-                return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId) + (documentId ? '&document_id=' + encodeURIComponent(documentId) : ''), 'boletim-' + student().student_number + '.pdf'); }); }
+                return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId) + (documentId ? '&document_id=' + encodeURIComponent(documentId) : '') + (props.schoolId ? '&school_id=' + encodeURIComponent(props.schoolId) : ''), 'boletim-' + student().student_number + '.pdf'); }); }
             Vue.onMounted(() => { void load(); });
-            return { props, state, student, enrollment, selectStudent, rows, periodGroups, percent, load, download };
+            return { props, state, student, enrollment, selectStudent, rows, periodGroups, visibleGroups, percent, load, download };
         } };
 })(PigeLearning || (PigeLearning = {}));
 var PigeSupport;
 (function (PigeSupport) {
+    const runtime = window;
     PigeSupport.status = Vue.reactive({ error: '' });
-    let loadedSource = '', activeScope = '';
-    let pending = null;
-    let retryAt = 0;
     const busyMessage = 'O atendimento recebeu muitas solicitações. Aguarde antes de tentar novamente.';
-    let frame = null;
-    let observer = null;
-    let viewportTimer, startupTimer;
+    const roots = '#hub-widget-holder,#hub-bubble-holder';
+    // A URL sem versão pode continuar em cache por um ano após atualizar o HUB.
+    const sdkRevision = 'launcher-tooltip-1';
+    let sdkRefresh = 0;
+    let loadedSource = '', activeScope = '', sdkSource = '', sessionSource = '';
+    let pending = null;
+    let sdkQueue = Promise.resolve();
+    let script = null, activeSDK = null, lastSDK = null;
+    let generation = 0, retryAt = 0, startupTimer;
     let recovery = null, checkingArea = false, retryArea = null;
-    const startupTimeout = 8000;
-    function cancelStartup() {
-        if (startupTimer !== undefined)
-            window.clearTimeout(startupTimer);
-        startupTimer = undefined;
+    let visibilityStyle = null;
+    let listeningReady = false;
+    function setChecking(checking) {
+        checkingArea = checking;
+        visibilityStyle?.remove();
+        visibilityStyle = null;
+        if (checking) {
+            visibilityStyle = document.createElement('style');
+            visibilityStyle.textContent = roots + '{display:none!important}';
+            document.head.appendChild(visibilityStyle);
+        }
+        if (recovery)
+            recovery.hidden = checking;
     }
-    let generation = 0;
-    function release() {
+    function cancelStartup(stopListening = true) {
+        if (startupTimer !== undefined) {
+            window.clearTimeout(startupTimer);
+        }
+        startupTimer = undefined;
+        if (stopListening && listeningReady) {
+            window.removeEventListener('hub:ready', onReady);
+            listeningReady = false;
+        }
+    }
+    function onReady() {
+        if (!activeSDK || !runtime.$hub?.hasLoaded)
+            return;
         cancelStartup();
         recovery?.remove();
         recovery = null;
-        observer?.disconnect();
-        observer = null;
-        if (viewportTimer !== undefined)
-            window.clearInterval(viewportTimer);
-        viewportTimer = undefined;
-        const previous = frame;
-        frame = null;
-        loadedSource = '';
-        // O SDK executa em outro documento. Remover esse contexto encerra seus
-        // timers, listeners, iframes e DOM mesmo quando ele não oferece destroy.
-        try {
-            previous?.contentWindow?.hubSDK?.destroy?.();
-        }
-        catch { /* Atendimento não bloqueia a aplicação. */ }
-        previous?.remove();
+        PigeSupport.status.error = '';
     }
-    function dispose() { ++generation; activeScope = ''; pending = null; retryAt = 0; checkingArea = false; retryArea = null; release(); PigeSupport.status.error = ''; }
-    PigeSupport.dispose = dispose;
-    function offerRecovery(element, config, message) {
-        if (frame !== element || recovery)
-            return;
+    function release(clearSession = false) {
         cancelStartup();
+        recovery?.remove();
+        recovery = null;
+        // O SDK remove apenas seus próprios elementos e listeners no documento atual.
+        (activeSDK || (clearSession ? lastSDK : null))?.destroy?.({ clearSession });
+        if (clearSession) {
+            lastSDK = null;
+            sessionSource = '';
+        }
+        activeSDK = null;
+        loadedSource = '';
+    }
+    function dispose() {
+        ++generation;
+        pending = null;
+        retryAt = 0;
+        retryArea = null;
+        release(true);
+        activeScope = '';
+        setChecking(false);
+        PigeSupport.status.error = '';
+    }
+    PigeSupport.dispose = dispose;
+    function offerRecovery(config, message) {
+        if (recovery)
+            return;
+        cancelStartup(false);
         PigeSupport.status.error = message;
         const button = document.createElement('button');
         button.dataset.pigeSupportRecovery = 'true';
@@ -228,57 +278,50 @@ var PigeSupport;
         button.style.cssText = `position:fixed;${side}:max(1rem,env(safe-area-inset-${side}));bottom:max(1rem,env(safe-area-inset-bottom));z-index:2147483000;max-width:calc(100vw - 2rem);padding:.7rem 1rem;border:0;border-radius:999px;background:#174576;color:#fff;font:600 1rem/1.35 system-ui;cursor:pointer;`;
         button.hidden = checkingArea;
         button.addEventListener('click', () => {
-            if (frame !== element || checkingArea || recovery !== button)
+            if (checkingArea || recovery !== button)
                 return;
             const retry = retryArea;
             release();
-            retry?.(); // Busca a configuração vigente e respeita Retry-After.
+            retry?.();
         });
         recovery = button;
         document.body.appendChild(button);
     }
-    function clipWidget(element) {
-        if (frame !== element)
-            return;
-        const doc = element.contentDocument, win = element.contentWindow;
-        if (!doc || !win)
-            return;
-        let left = win.innerWidth, top = win.innerHeight, right = 0, bottom = 0;
-        // Recorta o documento do SDK à bolha/painel visível. A área transparente
-        // não intercepta cliques, scroll ou campos da página da escola.
-        for (const node of Array.from(doc.querySelectorAll('iframe,button,[role="button"],[class*="bubble-holder"],[class*="launcher"]'))) {
-            let visible = true;
-            for (let ancestor = node; ancestor && ancestor !== doc.documentElement; ancestor = ancestor.parentElement) {
-                const css = win.getComputedStyle(ancestor);
-                if (css.display === 'none' || css.visibility === 'hidden' || Number(css.opacity) === 0) {
-                    visible = false;
-                    break;
-                }
-            }
-            if (!visible)
-                continue;
-            const rect = node.getBoundingClientRect();
-            if (rect.width < 2 || rect.height < 2 || rect.right <= 0 || rect.bottom <= 0 || rect.left >= win.innerWidth || rect.top >= win.innerHeight)
-                continue;
-            left = Math.min(left, Math.max(0, rect.left - 4));
-            top = Math.min(top, Math.max(0, rect.top - 4));
-            right = Math.max(right, Math.min(win.innerWidth, rect.right + 4));
-            bottom = Math.max(bottom, Math.min(win.innerHeight, rect.bottom + 4));
-        }
-        element.style.clipPath = right > left && bottom > top ? `inset(${top}px ${Math.max(0, win.innerWidth - right)}px ${Math.max(0, win.innerHeight - bottom)}px ${left}px)` : 'inset(100%)';
-        element.style.visibility = right > left && bottom > top ? 'visible' : 'hidden';
-        if (element.style.visibility === 'visible' && !checkingArea) {
-            cancelStartup();
-            if (recovery) {
-                recovery.remove();
-                recovery = null;
-                PigeSupport.status.error = '';
-            }
-        }
+    function loadSDK(baseUrl) {
+        // Serializa downloads: um script antigo não pode sobrescrever o SDK novo.
+        const task = sdkQueue.catch(() => { }).then(async () => {
+            const compatible = () => typeof runtime.hubSDK?.run === 'function' && typeof runtime.hubSDK?.destroy === 'function';
+            if (sdkSource === baseUrl && compatible())
+                return;
+            sdkSource = '';
+            const download = (refresh = false) => new Promise((resolve, reject) => {
+                script?.remove();
+                const element = document.createElement('script');
+                script = element;
+                element.dataset.pigeSupportHub = 'true';
+                element.src = baseUrl + '/packs/js/sdk.js?pige_sdk=' + sdkRevision +
+                    (refresh ? '&pige_reload=' + Date.now() + '-' + (++sdkRefresh) : '');
+                element.defer = true;
+                element.async = true;
+                element.onload = () => resolve();
+                element.onerror = () => { element.remove(); reject(new Error('hub-sdk-download')); };
+                document.head.appendChild(element);
+            });
+            await download();
+            // Uma única revalidação recupera uma cópia antiga sem gerar polling/retries infinitos.
+            if (!compatible())
+                await download(true);
+            if (typeof runtime.hubSDK?.run !== 'function')
+                throw new Error('hub-sdk-missing');
+            if (typeof runtime.hubSDK.destroy !== 'function')
+                throw new Error('hub-sdk-lifecycle');
+            sdkSource = baseUrl;
+        });
+        sdkQueue = task;
+        return task;
     }
     async function load(schoolId = '', area = 'login', sessionKey = 'public') {
-        const scope = JSON.stringify([schoolId, sessionKey]);
-        const context = JSON.stringify([scope, area]);
+        const scope = JSON.stringify([schoolId, sessionKey]), context = JSON.stringify([scope, area]);
         if (scope !== activeScope) {
             dispose();
             activeScope = scope;
@@ -287,17 +330,15 @@ var PigeSupport;
             return pending.promise;
         pending = null;
         const request = ++generation;
-        checkingArea = true;
-        if (frame)
-            frame.style.display = 'none';
-        if (recovery)
-            recovery.hidden = true;
+        setChecking(true);
         if (!schoolId && area !== 'login') {
             release();
+            setChecking(false);
             return;
         }
         if (Date.now() < retryAt) {
             release();
+            setChecking(false);
             PigeSupport.status.error = busyMessage;
             return;
         }
@@ -325,6 +366,7 @@ var PigeSupport;
                 const delay = /^\d+$/.test(header) ? Number(header) * 1000 : Date.parse(header) - Date.now();
                 retryAt = Date.now() + (Number.isFinite(delay) && delay >= 0 ? delay : 60000);
                 release();
+                setChecking(false);
                 PigeSupport.status.error = busyMessage;
                 return;
             }
@@ -334,10 +376,10 @@ var PigeSupport;
         catch { /* Indisponibilidade do atendimento não bloqueia o formulário. */ }
         if (request !== generation)
             return;
-        checkingArea = false;
         retryArea = retry;
         if (!config?.enabled || !config.base_url || !config.website_token) {
             release();
+            setChecking(false);
             return;
         }
         let baseUrl;
@@ -349,89 +391,427 @@ var PigeSupport;
         }
         catch {
             release();
+            setChecking(false);
             PigeSupport.status.error = 'Revise o endereço configurado para o atendimento.';
             return;
         }
-        const sourceKey = JSON.stringify([scope, baseUrl, config.website_token, config.position, config.type, config.launcherTitle]);
-        if (sourceKey === loadedSource && frame) {
-            frame.style.display = '';
-            if (recovery) {
-                recovery.hidden = false;
+        const sourceKey = JSON.stringify([scope, baseUrl, config.website_token, config.position, config.type, config.launcherTitle, config.launcherTooltip]);
+        const sessionKey = JSON.stringify([scope, baseUrl, config.website_token]);
+        if (sourceKey === loadedSource && activeSDK) {
+            setChecking(false);
+            if (recovery)
                 PigeSupport.status.error = recovery.title;
-            }
-            clipWidget(frame);
             return;
         }
-        release();
-        const element = document.createElement('iframe');
-        element.dataset.pigeSupportFrame = 'true';
-        element.title = 'Atendimento da instituição';
-        element.tabIndex = -1;
-        element.src = 'about:blank';
-        element.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;background:transparent;z-index:2147483000;clip-path:inset(100%);visibility:hidden;color-scheme:light;';
-        frame = element;
-        loadedSource = sourceKey;
-        document.body.appendChild(element);
-        const doc = element.contentDocument, runtime = element.contentWindow;
-        if (!doc || !runtime) {
-            release();
-            PigeSupport.status.error = 'Não foi possível abrir o atendimento.';
-            return;
-        }
-        doc.documentElement.lang = 'pt-BR';
-        doc.documentElement.style.background = 'transparent';
-        doc.body.style.cssText = 'margin:0;background:transparent;';
-        runtime.hubSettings = { position: config.position || 'left', type: config.type || 'expanded_bubble', launcherTitle: config.launcherTitle || 'Suporte' };
-        const sdk = doc.createElement('script');
-        sdk.src = baseUrl + '/packs/js/sdk.js';
-        sdk.defer = true;
-        sdk.async = true;
-        sdk.onload = () => {
-            if (frame !== element)
+        release(sessionSource !== '' && sessionKey !== sessionSource);
+        try {
+            await loadSDK(baseUrl);
+            if (request !== generation)
                 return;
+            const sdk = runtime.hubSDK;
+            // O descarte é necessário para trocar escola/conta sem manter a conversa anterior.
+            if (!sdk?.run || !sdk.destroy) {
+                sdkSource = '';
+                throw new Error('hub-sdk-lifecycle');
+            }
+            runtime.hubSettings = { position: config.position || 'left', type: config.type || 'expanded_bubble', launcherTitle: config.launcherTitle || 'Suporte', launcherTooltip: config.launcherTooltip?.trim() || 'Abrir Conversa' };
+            activeSDK = sdk;
+            lastSDK = sdk;
+            loadedSource = sourceKey;
+            sessionSource = sessionKey;
+            window.addEventListener('hub:ready', onReady);
+            listeningReady = true;
+            startupTimer = window.setTimeout(() => offerRecovery(config, 'O atendimento não ficou pronto nesta página. Tente novamente.'), 15000);
+            sdk.run({ websiteToken: config.website_token, baseUrl });
+            setChecking(false);
+            if (runtime.$hub?.hasLoaded)
+                onReady();
+        }
+        catch (error) {
+            if (request !== generation)
+                return;
+            release();
+            setChecking(false);
+            const reason = error instanceof Error ? error.message : '';
+            const message = reason === 'hub-sdk-download' ? 'Não foi possível baixar o SDK do atendimento. Verifique a conexão e tente novamente.' :
+                reason === 'hub-sdk-missing' ? 'O script do atendimento não disponibilizou o SDK. Verifique a publicação do HUB.' :
+                    reason === 'hub-sdk-lifecycle' ? 'O HUB ainda entregou um SDK antigo após atualizar o cache. Publique o SDK atualizado e tente novamente.' :
+                        'O atendimento não iniciou. Tente novamente; se persistir, revise a integração do suporte.';
+            offerRecovery(config, message);
+        }
+    }
+    window.addEventListener('pagehide', () => { ++generation; release(); setChecking(false); });
+})(PigeSupport || (PigeSupport = {}));
+var PigeAutoPix;
+(function (PigeAutoPix) {
+    const frequencies = { WEEKLY: 'Semanal', MONTHLY: 'Mensal', QUARTERLY: 'Trimestral', SEMIANNUALLY: 'Semestral', ANNUALLY: 'Anual' };
+    const labels = { PREPARING: 'Em preparação', CREATED: 'Aguardando o banco', ACTIVE: 'Ativa',
+        INSTRUCTION_REFUSED: 'Instrução recusada', INSTRUCTION_CANCELLED: 'Instrução cancelada', CANCELLING: 'Cancelamento solicitado', CANCELLED: 'Cancelada', REFUSED: 'Recusada', EXPIRED: 'Expirada',
+        QUEUED: 'Na fila', CREATING: 'Em emissão', WAITING: 'Aguardando confirmação', RECEIVED: 'Recebimento confirmado',
+        RELEASED: 'Via anterior disponível para reativação pela Secretaria', PREVIOUS_RECEIVED: 'Pagamento confirmado na via anterior',
+        RESTORE_REVIEW: 'Conferência bancária após restauração', SKIPPED: 'Pagamento pontual', AWAITING_REQUEST: 'Aguardando envio', SCHEDULED: 'Agendada', DONE: 'Processada' };
+    function use(request, student) {
+        let epoch = 0;
+        const state = Vue.reactive({ id: '', busy: false, error: '', view: null, accepted: false, frequency: 'MONTHLY', confirmCancel: false });
+        function clear() {
+            epoch++;
+            Object.assign(state, { id: '', busy: false, error: '', view: null, accepted: false, frequency: 'MONTHLY', confirmCancel: false });
+        }
+        async function send(id, action = '', body) {
+            if (!id || !student() || (state.busy && state.id === id))
+                return;
+            const sid = student(), current = ++epoch;
+            state.id = id;
+            state.busy = true;
+            state.error = '';
             try {
-                if (!runtime.hubSDK?.run)
-                    throw new Error('SDK indisponível');
-                runtime.hubSDK.run({ websiteToken: config.website_token, baseUrl });
-                observer = new MutationObserver(() => clipWidget(element));
-                observer.observe(doc.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
-                viewportTimer = window.setInterval(() => clipWidget(element), 250);
-                clipWidget(element);
+                const path = '/family/students/' + encodeURIComponent(sid) + '/charges/' + encodeURIComponent(id) + '/pix-automatic';
+                const view = await request(path + (action ? '/' + action : ''), action ? { method: 'POST', body: JSON.stringify(body || {}) } : {});
+                if (epoch !== current || student() !== sid)
+                    return;
+                state.view = view;
+                state.accepted = false;
+                state.confirmCancel = false;
+            }
+            catch (error) {
+                if (epoch === current && student() === sid)
+                    state.error = error instanceof Error ? error.message : 'Não foi possível consultar a cobrança.';
+            }
+            finally {
+                if (epoch === current)
+                    state.busy = false;
+            }
+        }
+        function open(id) {
+            if (state.id === id) {
+                clear();
+                return;
+            }
+            clear();
+            void send(id);
+        }
+        function enroll() {
+            const v = state.view;
+            if (!v?.can_enroll || !state.accepted)
+                return;
+            return send(state.id, 'enroll', { quote: v.quote, terms_version: v.terms_version, frequency: state.frequency, accepted: true });
+        }
+        function cancel() {
+            if (!state.confirmCancel || !state.view?.authorization)
+                return;
+            return send(state.id, 'cancel', { version: state.view.authorization.version });
+        }
+        const label = (value) => labels[value] || value;
+        const money = (value) => Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        return { state, clear, open, enroll, cancel, refresh: () => send(state.id, 'refresh'), reload: () => send(state.id), frequencies, label, money };
+    }
+    PigeAutoPix.use = use;
+})(PigeAutoPix || (PigeAutoPix = {}));
+var PigeFamilyCard;
+(function (PigeFamilyCard) {
+    function use(request, student) {
+        const state = Vue.reactive({ charge: '', view: null, loading: false, error: '', agreed: false, until: '', limit: '', revoke: false });
+        let epoch = 0;
+        function clear() { epoch++; state.view = null; state.charge = ''; state.loading = false; state.error = ''; state.agreed = false; state.revoke = false; state.until = ''; state.limit = ''; }
+        async function load(id) {
+            clear();
+            const current = epoch, sid = student();
+            state.charge = id;
+            state.loading = true;
+            try {
+                const view = await request('/family/students/' + sid + '/charges/' + id + '/cards');
+                if (current === epoch && student() === sid) {
+                    state.view = view;
+                    state.limit = String((view.checkout?.quote.charged_cents || 0) / 100);
+                }
+            }
+            catch (e) {
+                if (current === epoch)
+                    state.error = e instanceof Error ? e.message : String(e);
+            }
+            finally {
+                if (current === epoch)
+                    state.loading = false;
+            }
+        }
+        async function submit(revoke = false) {
+            if (state.loading || !state.view || (!revoke && !state.agreed) || (revoke && !state.revoke))
+                return;
+            const current = epoch, sid = student(), id = state.charge;
+            state.loading = true;
+            state.error = '';
+            const body = revoke ? {} : { terms_version: state.view.terms_version, accepted: state.agreed, ends_on: state.until, limit_cents: Math.round(Number(state.limit.replace(',', '.')) * 100) };
+            try {
+                await request('/family/students/' + sid + '/charges/' + id + '/cards/' + (revoke ? 'revoke' : 'authorize'), { method: 'POST', body: JSON.stringify(body) });
+                if (current === epoch && student() === sid)
+                    await load(id);
+            }
+            catch (e) {
+                if (current === epoch)
+                    state.error = e instanceof Error ? e.message : String(e);
+            }
+            finally {
+                if (current === epoch)
+                    state.loading = false;
+            }
+        }
+        function link(value) {
+            try {
+                const url = new URL(value);
+                return url.protocol === 'https:' && ['asaas.com', 'sandbox.asaas.com'].includes(url.hostname) && url.pathname === '/checkoutSession/show' && !url.username && !url.password && !url.port && /^[A-Za-z0-9_-]+$/.test(url.searchParams.get('id') || '') ? url.href : '';
             }
             catch {
-                PigeSupport.status.error = 'O atendimento não iniciou. Confira a configuração com o administrador.';
-                release();
+                return '';
             }
-        };
-        sdk.onerror = () => offerRecovery(element, config, 'O atendimento não carregou nesta página. Tente novamente.');
-        startupTimer = window.setTimeout(() => offerRecovery(element, config, 'O atendimento não ficou pronto nesta página. Tente novamente.'), startupTimeout);
-        doc.head.appendChild(sdk);
+        }
+        return { state, clear, load, submit, link };
     }
-    window.addEventListener('pagehide', dispose);
-})(PigeSupport || (PigeSupport = {}));
+    PigeFamilyCard.use = use;
+})(PigeFamilyCard || (PigeFamilyCard = {}));
+/** Caixa pessoal já vinculada à conta escolar. O SOGo autentica pelo proxy da própria origem. */
+var PigePortalMail;
+(function (PigePortalMail) {
+    const base = (school) => '/schools/' + encodeURIComponent(school) + '/email';
+    function use(request) {
+        const state = Vue.reactive({ available: false });
+        let version = 0;
+        function clear() { version++; state.available = false; }
+        async function load(school) {
+            clear();
+            const current = version;
+            if (!school)
+                return;
+            try {
+                const account = await request(base(school) + '/account');
+                if (current === version)
+                    state.available = account.available === true;
+            }
+            catch { /* A indisponibilidade do e-mail não interrompe a rotina escolar. */ }
+        }
+        return { state, clear, load, request };
+    }
+    PigePortalMail.use = use;
+    PigePortalMail.component = { props: ['schoolId', 'request'], render: PigeRenders.portalMail, setup(props) {
+            const m = Vue.reactive({ busy: false, opening: false, error: '', password: '', address: '', needsPassword: false });
+            const frame = Vue.reactive({ src: 'about:blank' });
+            let active = true, timer;
+            async function open(connect = false) {
+                if (m.busy || m.opening)
+                    return;
+                m.busy = true;
+                m.error = '';
+                frame.src = 'about:blank';
+                const password = m.password;
+                m.password = '';
+                try {
+                    const path = base(props.schoolId);
+                    let account = await props.request(path + '/account');
+                    if (!active)
+                        return;
+                    if (!account.available)
+                        throw new Error('Sua caixa institucional está indisponível. Consulte a secretaria.');
+                    m.address = account.address;
+                    if (connect) {
+                        account = await props.request(path + '/connection/linked', { method: 'POST', body: JSON.stringify({ password }) });
+                    }
+                    else if (account.can_auto_connect) {
+                        account = await props.request(path + '/connection/automatic', { method: 'POST' });
+                    }
+                    if (!active)
+                        return;
+                    m.needsPassword = !account.connected && !account.can_auto_connect;
+                    if (!account.connected) {
+                        m.error = account.connection_error || (!m.needsPassword ? 'A conexão ainda está sendo preparada. Tente novamente em instantes.' : '');
+                        return;
+                    }
+                    const result = await props.request(path + '/webmail-ticket', { method: 'POST' });
+                    if (!active)
+                        return;
+                    const action = '/webmail/' + encodeURIComponent(props.schoolId) + '/launch';
+                    if (result.action !== action || !result.ticket)
+                        throw new Error('Não foi possível iniciar a sessão de e-mail.');
+                    // Navegação de formulários pode enviar Origin:null em páginas com no-referrer.
+                    // O POST de mesma origem recebe o cookie HttpOnly antes de navegar o quadro.
+                    const launch = await fetch(action, {
+                        method: 'POST', body: new URLSearchParams({ ticket: result.ticket }), credentials: 'same-origin',
+                        mode: 'same-origin', redirect: 'manual', referrerPolicy: 'same-origin', cache: 'no-store'
+                    });
+                    if (!active)
+                        return;
+                    if (launch.type !== 'opaqueredirect')
+                        throw new Error('O webmail não aceitou o convite de sessão. Tente abrir a caixa novamente.');
+                    frame.src = action.replace(/launch$/, 'SOGo/');
+                    m.opening = true;
+                    timer = window.setTimeout(() => { if (active && m.opening) {
+                        m.opening = false;
+                        m.error = 'O webmail demorou para responder. Tente abrir a caixa novamente.';
+                    } }, 30000);
+                }
+                catch (error) {
+                    if (active) {
+                        m.opening = false;
+                        m.error = error instanceof Error ? error.message : 'Não foi possível abrir sua caixa institucional.';
+                    }
+                }
+                finally {
+                    if (active)
+                        m.busy = false;
+                }
+            }
+            function loaded(event) {
+                if (!active)
+                    return;
+                const page = event.target.contentDocument;
+                if (!page || page.URL === 'about:blank')
+                    return;
+                window.clearTimeout(timer);
+                m.opening = false;
+                if (page.contentType === 'application/json' || page.contentType === 'text/plain') {
+                    m.error = 'O webmail não pôde carregar. Tente abrir a caixa novamente.';
+                    if (page.contentType === 'application/json') {
+                        try {
+                            const { detail } = JSON.parse(page.body.innerText);
+                            if (typeof detail === 'string')
+                                m.error = detail;
+                        }
+                        catch { /* resposta sem detalhe */ }
+                    }
+                }
+            }
+            Vue.onMounted(() => { void open(); });
+            Vue.onUnmounted(() => { active = false; window.clearTimeout(timer); m.password = ''; });
+            return { m, frame, open, loaded };
+        } };
+})(PigePortalMail || (PigePortalMail = {}));
+/** Interação da faixa de guias compartilhada pelos portais da escola. */
+var PigePortalTabs;
+(function (PigePortalTabs) {
+    function reveal() {
+        void Vue.nextTick(() => {
+            const tab = window.document.querySelector('.work-tabs-list [role="tab"][aria-selected="true"]');
+            const rail = tab?.closest('.work-tabs-list');
+            if (!tab || !rail)
+                return;
+            const selected = tab.getBoundingClientRect(), viewport = rail.getBoundingClientRect();
+            if (selected.left < viewport.left)
+                rail.scrollLeft += selected.left - viewport.left;
+            else if (selected.right > viewport.right)
+                rail.scrollLeft += selected.right - viewport.right;
+        });
+    }
+    PigePortalTabs.reveal = reveal;
+    function keyTarget(event, tabs, section) {
+        if (event.target.getAttribute('role') !== 'tab')
+            return;
+        const i = tabs.indexOf(section), n = tabs.length;
+        const index = { ArrowRight: (i + 1) % n, ArrowLeft: (i + n - 1) % n, Home: 0, End: n - 1 }[event.key];
+        if (index === undefined)
+            return;
+        event.preventDefault();
+        return tabs[index];
+    }
+    PigePortalTabs.keyTarget = keyTarget;
+})(PigePortalTabs || (PigePortalTabs = {}));
 /** Portal privado: shell da aplicação, transporte e autorizações escolares preservados. */
 var PigeFamily;
 (function (PigeFamily) {
-    const titles = { materials: 'Atividades', absences: 'Justificativas de ausência', overview: 'Visão geral', students: 'Meus alunos', academic: 'Vida acadêmica', news: 'Comunicados', agenda: 'Agenda escolar', finance: 'Financeiro', documents: 'Documentos', support: 'Atendimento' };
+    const titles = { webmail: 'E-mail', materials: 'Atividades', absences: 'Justificativas de ausência', overview: 'Visão geral', students: 'Alunos que acompanho', academic: 'Vida acadêmica', news: 'Comunicados', agenda: 'Agenda escolar', finance: 'Financeiro', documents: 'Documentos', support: 'Atendimento' };
     function routeSection() { const view = new URLSearchParams(location.search).get('view'); return view && titles[view] ? view : location.pathname.includes('documents') ? 'documents' : location.pathname.includes('finance') ? 'finance' : location.pathname.includes('academic') ? 'academic' : 'overview'; }
-    const s = Vue.reactive({ ready: false, busy: false, error: '', contextError: false, account: null, email: '', password: '', passwordVisible: false, menuOpen: false, schoolId: '', schools: {}, section: routeSection(), students: [], studentId: new URLSearchParams(location.search).get('student') || '', charges: [], financeNote: '', financeError: '', financeLoaded: false, news: [], events: [], feedItems: [], feedTotal: 0, feedPage: 1, feedBusy: false, feedError: '', overviewFeedError: '', selectedPost: null });
-    const schoolwork = Vue.reactive({ materials: [], absences: [], day: '', reason: '', file: null, key: '', receipt: '', fileVersion: 0 });
-    function clearSchoolwork() { schoolwork.materials = []; schoolwork.absences = []; schoolwork.file = null; schoolwork.key = ''; schoolwork.day = ''; schoolwork.reason = ''; schoolwork.receipt = ''; schoolwork.fileVersion++; }
+    function savedSidebarPreference() {
+        try {
+            return window.localStorage.getItem('pige-family-sidebar-collapsed') === 'true';
+        }
+        catch {
+            return false;
+        }
+    }
+    function toggleSidebar() {
+        s.sidebarCollapsed = !s.sidebarCollapsed;
+        PigePortalTabs.reveal();
+        try {
+            window.localStorage.setItem('pige-family-sidebar-collapsed', String(s.sidebarCollapsed));
+        }
+        catch { /* O menu continua utilizável se o armazenamento do navegador estiver bloqueado. */ }
+    }
+    const s = Vue.reactive({ ready: false, busy: false, error: '', contextError: false, account: null, email: '', password: '', passwordVisible: false, menuOpen: false, sidebarCollapsed: savedSidebarPreference(), feedQuery: '', feedTerm: '', schoolId: '', schools: {}, section: routeSection(), tabs: [], students: [], studentId: new URLSearchParams(location.search).get('student') || '', charges: [], financePage: 1, financePageSize: 30, financeTotal: 0, financeOverdue: 0, financeNote: '', financeError: '', financeLoaded: false, news: [], events: [], feedItems: [], feedTotal: 0, feedPage: 1, feedBusy: false, feedError: '', overviewFeedError: '', selectedPost: null });
+    const recentMaterials = Vue.reactive({ items: [], loading: false, error: '' });
+    let recentSequence = 0;
+    function clearRecentMaterials() {
+        recentSequence++;
+        recentMaterials.items = [];
+        recentMaterials.loading = false;
+        recentMaterials.error = '';
+    }
+    async function loadRecentMaterials() {
+        clearRecentMaterials();
+        const selected = student();
+        if (s.section !== 'overview' || !selected || selected.academic_authorized === false)
+            return;
+        const sequence = recentSequence, school = s.schoolId;
+        const current = () => sequence === recentSequence && selected.id === s.studentId && school === s.schoolId;
+        recentMaterials.loading = true;
+        try {
+            const items = await request('/family/students/' + selected.id + '/materials?view=recent');
+            if (current())
+                recentMaterials.items = items;
+        }
+        catch (e) {
+            if (current())
+                recentMaterials.error = e instanceof Error ? e.message : 'Não foi possível consultar as atividades.';
+        }
+        finally {
+            if (current())
+                recentMaterials.loading = false;
+        }
+    }
+    let schoolworkSequence = 0;
+    const schoolwork = Vue.reactive({ requestedMaterial: '', materialNotice: '', loading: false, error: '', materials: [], absences: [], filter: '', day: '', reason: '', file: null, key: '', receipt: '', fileVersion: 0 });
+    function clearSchoolwork() { schoolworkSequence++; schoolwork.requestedMaterial = ''; schoolwork.materialNotice = ''; schoolwork.loading = false; schoolwork.error = ''; schoolwork.materials = []; schoolwork.absences = []; schoolwork.filter = ''; schoolwork.file = null; schoolwork.key = ''; schoolwork.day = ''; schoolwork.reason = ''; schoolwork.receipt = ''; schoolwork.fileVersion++; }
     function pickEvidence(event) { schoolwork.file = event.target.files?.[0] || null; }
     async function loadSchoolwork() {
-        const current = generation, id = s.studentId, section = s.section;
-        if (!id || !['materials', 'absences'].includes(section) || (section === 'absences' && s.account?.role !== 'guardian'))
+        const sequence = ++schoolworkSequence, id = s.studentId, section = s.section;
+        schoolwork.error = '';
+        schoolwork.loading = false;
+        if (!id || student()?.academic_authorized === false || !['materials', 'absences'].includes(section) || (section === 'absences' && s.account?.role !== 'guardian'))
             return;
+        schoolwork.loading = true;
         const path = '/family/students/' + id + '/' + section;
-        if (section === 'materials') {
-            const items = await request(path);
-            if (current === generation && s.studentId === id)
-                schoolwork.materials = items;
+        const current = () => sequence === schoolworkSequence && s.studentId === id && s.section === section;
+        try {
+            if (section === 'materials') {
+                const items = await request(path);
+                if (current()) {
+                    schoolwork.materials = items;
+                    schoolwork.materialNotice = '';
+                    const target = schoolwork.requestedMaterial;
+                    if (target && !items.some(item => item.id === target))
+                        schoolwork.materialNotice = 'Esta atividade já não está disponível para a matrícula selecionada.';
+                }
+            }
+            else {
+                const items = await request(path);
+                if (current())
+                    schoolwork.absences = items;
+            }
         }
-        else {
-            const items = await request(path);
-            if (current === generation && s.studentId === id)
-                schoolwork.absences = items;
+        catch (error) {
+            if (current())
+                schoolwork.error = error instanceof Error ? error.message : 'Não foi possível consultar os registros.';
+        }
+        finally {
+            if (current()) {
+                schoolwork.loading = false;
+                const target = schoolwork.requestedMaterial;
+                if (section === 'materials' && target && !schoolwork.error) {
+                    schoolwork.requestedMaterial = '';
+                    void Vue.nextTick(() => {
+                        if (!current())
+                            return;
+                        const heading = window.document.getElementById('material-' + target);
+                        heading?.focus();
+                    });
+                }
+            }
         }
     }
     async function submitAbsence() {
@@ -461,7 +841,7 @@ var PigeFamily;
     function checkAuth(epoch) { if (epoch !== authEpoch)
         throw new SessionChanged(); }
     function invalidateAuth() { authEpoch++; refreshing = null; }
-    function clearPrivate() { generation++; feedGeneration++; clearSchoolwork(); s.students = []; s.charges = []; s.financeNote = ''; s.financeError = ''; s.financeLoaded = false; s.news = []; s.events = []; s.feedItems = []; s.feedTotal = 0; s.feedPage = 1; s.feedBusy = false; s.selectedPost = null; s.feedError = ''; s.overviewFeedError = ''; s.menuOpen = false; }
+    function clearPrivate() { generation++; s.tabs = []; savedFeeds.clear(); postTrigger = null; clearRecentMaterials(); mail.clear(); autoPix.clear(); cards.clear(); feedGeneration++; clearSchoolwork(); s.students = []; s.charges = []; s.financeTotal = 0; s.financePage = 1; s.financeOverdue = 0; s.financeNote = ''; s.financeError = ''; s.financeLoaded = false; s.news = []; s.events = []; s.feedItems = []; s.feedTotal = 0; s.feedPage = 1; s.feedBusy = false; s.selectedPost = null; s.feedError = ''; s.feedQuery = ''; s.feedTerm = ''; s.overviewFeedError = ''; s.menuOpen = false; }
     async function raw(path, options = {}) { const headers = new Headers(options.headers); headers.set('X-CSRF-Protection', '1'); if (token)
         headers.set('Authorization', 'Bearer ' + token); if (s.schoolId)
         headers.set('X-School-Id', s.schoolId); if (typeof options.body === 'string')
@@ -480,6 +860,13 @@ var PigeFamily;
                     s.account = null;
                     clearPrivate();
                     throw new Error('Sua sessão expirou. Entre novamente.');
+                }
+                if (s.account && (s.account.id !== data.user.id || s.account.role !== data.user.role || (s.schoolId && !data.user.school_ids.includes(s.schoolId)))) {
+                    invalidateAuth();
+                    token = '';
+                    s.account = null;
+                    clearPrivate();
+                    throw new Error('Seu acesso à escola mudou. Entre novamente.');
                 }
                 token = data.access_token;
                 s.account = data.user;
@@ -510,7 +897,9 @@ var PigeFamily;
             }
             catch { }
             checkAuth(epoch);
-            throw new Error(detail);
+            if (r.status === 403 && s.schoolId && (path.startsWith('/family/students/') || path.startsWith('/profile/learning')))
+                void checkStudentAccess();
+            throw Object.assign(new Error(detail), { status: r.status });
         }
         return r;
     }
@@ -544,53 +933,126 @@ var PigeFamily;
             s.account = null;
             s.schoolId = '';
             s.studentId = '';
+            s.section = 'overview';
             s.password = '';
             s.passwordVisible = false;
+            updateLocation();
             PigeMFA.clear();
         } });
     }
-    async function load() { clearPrivate(); s.contextError = false; const current = generation; try {
-        const data = await request('/family/context');
-        if (current !== generation)
-            return;
-        s.schools = Object.fromEntries((data.schools || []).map(x => [x.id, x.name]));
-        s.students = data.students;
-        if (!s.students.some(x => x.id === s.studentId))
-            s.studentId = s.students[0]?.id || '';
-        await Promise.all([finance(), overviewFeed(), loadSchoolwork()]);
-        if (current === generation && ['news', 'agenda'].includes(s.section))
-            await loadFeed();
+    const mail = PigePortalMail.use(request);
+    async function load() {
+        clearPrivate();
+        s.contextError = false;
+        const current = generation;
+        try {
+            const [data] = await Promise.all([
+                request('/family/context'),
+                mail.load(s.schoolId)
+            ]);
+            if (current !== generation)
+                return;
+            s.schools = Object.fromEntries((data.schools || []).map(item => [item.id, item.name]));
+            s.students = data.students;
+            if (!s.students.some(item => item.id === s.studentId))
+                s.studentId = s.students[0]?.id || '';
+            const previous = s.section;
+            setActiveTab(previous);
+            if (s.section !== previous)
+                updateLocation();
+            void loadRecentMaterials();
+            await Promise.all([finance(), overviewFeed(), loadSchoolwork()]);
+            if (current === generation && ['news', 'agenda'].includes(s.section))
+                await loadFeed();
+        }
+        catch (error) {
+            if (current === generation)
+                s.contextError = true;
+            throw error;
+        }
     }
-    catch (e) {
-        if (current === generation)
-            s.contextError = true;
-        throw e;
-    } }
-    const label = (value) => ({ open: 'Aberto', in_progress: 'Em atendimento', waiting: 'Aguardando', draft: 'Em preparação', active: 'Efetivada', suspended: 'Suspensa', completed: 'Concluída', pending: 'Pendente', overdue: 'Vencida', validated: 'Validado', received: 'Recebido', waived: 'Dispensado', rejected: 'Revisão necessária', expired: 'Vencido', queued: 'Em processamento', cancelled: 'Cancelada', paid: 'Paga', settled: 'Liquidada', issued: 'Emitida', registered: 'Registrada' }[value] || value);
+    let accessCheck = null;
+    function checkStudentAccess() {
+        if (accessCheck)
+            return accessCheck;
+        if (!s.account || !s.schoolId || s.contextError)
+            return Promise.resolve();
+        const scope = generation;
+        const fingerprint = (items) => JSON.stringify(items.map(item => [item.id, item.academic_authorized !== false, item.financial_authorized]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+        const pending = (async () => {
+            try {
+                const result = await request('/family/context');
+                if (scope === generation && fingerprint(result.students) !== fingerprint(s.students))
+                    await load();
+            }
+            catch (e) {
+                if (scope === generation && e.status === 403) {
+                    clearPrivate();
+                    s.contextError = true;
+                    s.error = 'A escola alterou as permissões deste acesso.';
+                }
+            }
+        })();
+        accessCheck = pending;
+        void pending.finally(() => { if (accessCheck === pending)
+            accessCheck = null; });
+        return pending;
+    }
+    function checkWhenVisible() { if (!window.document.hidden)
+        void checkStudentAccess(); }
+    const label = (value) => ({ open: 'Aberto', in_progress: 'Em atendimento', waiting: 'Aguardando', draft: 'Em preparação', active: 'Efetivada', suspended: 'Suspensa', completed: 'Concluída', pending: 'Pendente', overdue: 'Vencida', validated: 'Validado', received: 'Recebido', received_external: 'Recebido externamente', confirmed: 'Confirmada', refunded: 'Estornada', partially_refunded: 'Estorno parcial', refund_requested: 'Estorno solicitado', disputed: 'Em contestação', awaiting_review: 'Em análise', failed: 'Falha na emissão', uncertain: 'Em conciliação', waived: 'Dispensado', rejected: 'Revisão necessária', expired: 'Vencido', queued: 'Em processamento', cancelled: 'Cancelada', paid: 'Paga', settled: 'Liquidada', issued: 'Emitida', registered: 'Registrada' }[value] || value);
     const student = () => s.students.find(x => x.id === s.studentId);
-    const pendingDocuments = () => (student()?.documents || []).filter(x => ['pending', 'rejected', 'expired'].includes(x.status));
-    const overdue = () => s.charges.filter(x => x.status === 'overdue');
+    const activeEnrollments = () => student()?.enrollments.filter(item => item.status === 'active') || [];
+    function normalized(value) { return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').trim(); }
+    function visibleMaterials() {
+        const query = normalized(schoolwork.filter);
+        return query ? schoolwork.materials.filter(item => normalized(item.title + ' ' + item.body).includes(query)) : schoolwork.materials;
+    }
+    const pendingDocuments = () => student()?.document_pendencies ?? [];
+    const studentView = () => s.account?.role === 'student';
+    const portalName = () => studentView() ? 'Portal do aluno' : 'Portal da família';
     const initials = (name) => name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]).join('').toLocaleUpperCase('pt-BR');
-    const title = () => titles[s.section] || titles.overview;
+    const title = (name = s.section) => studentView() && name === 'students' ? 'Meu cadastro' : studentView() && name === 'academic' ? 'Minha vida escolar' : titles[name] || titles.overview;
     const date = (value) => { if (!value)
         return 'Data não informada'; const d = new Date(value.length === 10 ? value + 'T12:00:00' : value); return Number.isNaN(d.getTime()) ? 'Data não informada' : new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: 'short', year: 'numeric', ...(value.length > 10 ? { hour: '2-digit', minute: '2-digit' } : {}) }).format(d); };
     const money = (value) => Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    async function finance() { s.charges = []; s.financeNote = ''; s.financeError = ''; s.financeLoaded = false; if (!student()?.financial_authorized)
-        return; const selected = s.studentId, current = generation; try {
-        const data = await request('/family/students/' + selected + '/charges');
-        if (selected !== s.studentId || current !== generation)
+    const autoPix = PigeAutoPix.use(request, () => s.studentId);
+    const cards = PigeFamilyCard.use(request, () => s.studentId);
+    async function finance(page = 1) {
+        s.charges = [];
+        s.financeLoaded = false;
+        s.financeNote = '';
+        s.financeError = '';
+        s.financeOverdue = 0;
+        s.financeTotal = 0;
+        if (!student()?.financial_authorized)
             return;
-        s.charges = data.items;
-        s.financeNote = data.note;
-        s.financeLoaded = true;
+        const selected = s.studentId, current = generation;
+        try {
+            const data = await request(`/family/students/${selected}/charges?page=${page}&page_size=${s.financePageSize}`);
+            if (selected !== s.studentId || current !== generation)
+                return;
+            s.charges = data.items;
+            s.financeTotal = data.total ?? 0;
+            s.financeOverdue = data.overdue_count ?? data.items.filter(row => row.status === 'overdue').length;
+            s.financePage = page;
+            s.financeNote = data.note;
+            s.financeLoaded = true;
+        }
+        catch (e) {
+            if (selected === s.studentId && current === generation)
+                s.financeError = e instanceof Error ? e.message : 'Não foi possível carregar o financeiro.';
+        }
     }
-    catch (e) {
-        if (selected === s.studentId && current === generation)
-            s.financeError = e instanceof Error ? e.message : 'Não foi possível carregar o financeiro.';
-    } }
-    function feedPath(kind, page = 1, size = 12, upcoming = false) { return '/schools/' + encodeURIComponent(s.schoolId) + '/community-feed?' + new URLSearchParams({ kind, page: String(page), page_size: String(size), upcoming: String(upcoming) }); }
-    async function overviewFeed() { if (!s.schoolId)
-        return; const current = generation; try {
+    function feedPath(kind, page = 1, size = 12, upcoming = false, query = '') {
+        const params = new URLSearchParams({ kind, page: String(page), page_size: String(size), upcoming: String(upcoming) });
+        if (query.trim())
+            params.set('q', query.trim());
+        return '/schools/' + encodeURIComponent(s.schoolId) + '/community-feed?' + params;
+    }
+    let overviewFeedGeneration = -1;
+    async function overviewFeed() { if (!s.schoolId || student()?.academic_authorized === false || overviewFeedGeneration === generation)
+        return; const current = generation; overviewFeedGeneration = current; try {
         const [news, events] = await Promise.all([request(feedPath('news', 1, 3)), request(feedPath('event', 1, 3, true))]);
         if (current !== generation)
             return;
@@ -601,9 +1063,9 @@ var PigeFamily;
         if (current === generation)
             s.overviewFeedError = e instanceof Error ? e.message : 'Não foi possível carregar os comunicados e a agenda.';
     } }
-    async function loadFeed(page = 1) { if (!s.schoolId || s.contextError)
+    async function loadFeed(page = 1) { if (!s.schoolId || s.contextError || student()?.academic_authorized === false)
         return; const current = generation, id = ++feedGeneration, kind = s.section === 'agenda' ? 'event' : 'news'; s.feedBusy = true; s.feedError = ''; s.feedItems = []; s.selectedPost = null; try {
-        const data = await request(feedPath(kind, page));
+        const data = await request(feedPath(kind, page, 12, false, s.feedTerm));
         if (current !== generation || id !== feedGeneration)
             return;
         s.feedItems = data.items;
@@ -618,14 +1080,84 @@ var PigeFamily;
         if (id === feedGeneration)
             s.feedBusy = false;
     } }
-    function updateLocation(push = false) { const params = new URLSearchParams({ view: s.section }); if (s.studentId)
-        params.set('student', s.studentId); history[push ? 'pushState' : 'replaceState']({}, '', '/family?' + params); }
-    async function changeStudent() { if (s.busy)
-        return; clearSchoolwork(); s.selectedPost = null; updateLocation(); await run(async () => { await Promise.all([finance(), loadSchoolwork()]); }); }
-    async function chooseStudent(id) { if (s.busy)
-        return; s.studentId = id; await changeStudent(); section('academic'); }
+    async function searchFeed() {
+        s.feedTerm = s.feedQuery.trim();
+        await loadFeed(1);
+    }
+    function updateLocation(push = false) {
+        const params = new URLSearchParams({ view: s.section });
+        if (s.studentId)
+            params.set('student', s.studentId);
+        const scope = { familyAccount: s.account?.id, familySchool: s.schoolId };
+        history[push ? 'pushState' : 'replaceState'](scope, '', '/family?' + params);
+    }
+    function clearStudentWorkspace() {
+        generation++;
+        feedGeneration++;
+        clearRecentMaterials();
+        autoPix.clear();
+        cards.clear();
+        clearSchoolwork();
+        savedFeeds.clear();
+        s.tabs = [];
+        s.feedItems = [];
+        s.feedTotal = 0;
+        s.feedBusy = false;
+        s.feedPage = 1;
+        s.feedTerm = '';
+        s.feedQuery = '';
+        s.news = [];
+        s.events = [];
+        s.overviewFeedError = '';
+        s.selectedPost = null;
+        s.feedError = '';
+        postTrigger = null;
+    }
+    async function changeStudent() {
+        if (s.busy)
+            return;
+        clearStudentWorkspace();
+        setActiveTab(s.section);
+        updateLocation();
+        void loadRecentMaterials();
+        if (s.section === 'overview')
+            void overviewFeed();
+        await run(async () => { await Promise.all([finance(), loadSchoolwork()]); if (isFeed(s.section))
+            await loadFeed(); });
+    }
+    async function selectStudent(event) {
+        const input = event.currentTarget;
+        if (!canLeaveContext()) {
+            input.value = s.studentId;
+            return;
+        }
+        s.studentId = input.value;
+        await changeStudent();
+    }
+    async function chooseStudent(id) {
+        if (s.busy)
+            return;
+        if (id !== s.studentId) {
+            if (!canLeaveContext())
+                return;
+            s.studentId = id;
+            await changeStudent();
+        }
+        section('academic');
+    }
     async function changeSchool() { if (s.busy)
-        return; s.studentId = ''; await run(load); updateLocation(); }
+        return; s.studentId = ''; s.section = 'overview'; await run(load); updateLocation(); }
+    async function selectSchool(event) {
+        const input = event.currentTarget;
+        if (!canLeaveContext()) {
+            input.value = s.schoolId;
+            return;
+        }
+        s.schoolId = input.value;
+        await changeSchool();
+    }
+    function refreshWorkspace() { if (canLeaveContext())
+        void run(load); }
     async function download(path, filename) { const current = generation, selected = s.studentId; const r = await response(path); const blob = await r.blob(); if (current !== generation || selected !== s.studentId)
         return; const url = URL.createObjectURL(blob); const a = window.document.createElement('a'); a.href = url; a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
     async function document(file) { await run(() => download('/family/students/' + s.studentId + '/documents/' + file.id, 'documento-escolar')); }
@@ -647,7 +1179,7 @@ var PigeFamily;
     function closePost() { s.selectedPost = null; if (postTrigger?.isConnected)
         postTrigger.focus(); postTrigger = null; }
     function resized() { if (window.innerWidth > 800)
-        closeMenu(false); }
+        closeMenu(false); PigePortalTabs.reveal(); }
     function closeMenu(restore = true) { s.menuOpen = false; if (restore)
         void Vue.nextTick(() => { if (!s.menuOpen)
             window.document.getElementById('family-menu-toggle')?.focus(); }); }
@@ -669,19 +1201,183 @@ var PigeFamily;
             first?.focus();
         }
     } }
-    function section(name) { if (!titles[name])
-        return; const changed = s.section !== name; s.section = name; s.selectedPost = null; closeMenu(false); if (changed)
-        updateLocation(true); if (['materials', 'absences'].includes(name))
-        void loadSchoolwork().catch(e => { if (s.section === name)
-            s.error = e.message; }); if (['news', 'agenda'].includes(name))
-        void loadFeed(); void Vue.nextTick(() => window.document.getElementById('family-title')?.focus()); }
-    async function popstate() { s.section = routeSection(); s.selectedPost = null; closeMenu(false); const id = new URLSearchParams(location.search).get('student'); if (id && s.students.some(x => x.id === id) && id !== s.studentId) {
-        clearSchoolwork();
-        s.studentId = id;
-        await finance();
-    } await run(loadSchoolwork); if (['news', 'agenda'].includes(s.section))
-        await loadFeed(); }
-    Vue.createApp({ components: { 'learning-portal': PigeLearning.component }, render: PigeRenders.familyPortal, setup() {
+    function allowedSection(name) { if (name === 'webmail' && mail.state.available)
+        return name; if (name === 'webmail' || (name === 'absences' && s.account?.role !== 'guardian'))
+        name = 'overview'; return student()?.academic_authorized === false && name !== 'support' ? (student()?.financial_authorized ? 'finance' : 'support') : name; }
+    const isFeed = (key) => key === 'news' || key === 'agenda';
+    const savedFeeds = new Map();
+    function rememberFeed() {
+        if (!isFeed(s.section))
+            return;
+        savedFeeds.set(s.section, { query: s.feedQuery, term: s.feedTerm, items: s.feedItems, total: s.feedTotal,
+            page: s.feedPage, post: s.selectedPost, loaded: !s.feedError && !s.feedBusy });
+    }
+    function restoreFeed(key) {
+        const saved = savedFeeds.get(key);
+        s.feedQuery = saved?.query || '';
+        s.feedTerm = saved?.term || '';
+        s.feedItems = saved?.items || [];
+        s.feedPage = saved?.page || 1;
+        s.feedTotal = saved?.total || 0;
+        s.selectedPost = saved?.post || null;
+        s.feedBusy = false;
+        s.feedError = '';
+        return saved?.loaded === true;
+    }
+    function setActiveTab(requested) {
+        const home = allowedSection('overview');
+        const name = allowedSection(requested);
+        if (s.tabs[0] !== home)
+            s.tabs = [home];
+        s.tabs = s.tabs.filter(id => allowedSection(id) === id);
+        if (!s.tabs.includes(name))
+            s.tabs.push(name);
+        s.section = name;
+        PigePortalTabs.reveal();
+    }
+    function isOpen(key) {
+        return (s.section === key || s.tabs.includes(key)) && allowedSection(key) === key;
+    }
+    let navigationVersion = 0;
+    function setView(requested, materialId = '', focusHeading = true) {
+        navigationVersion++;
+        const name = allowedSection(requested), changed = s.section !== name;
+        let cached = false;
+        if (changed) {
+            rememberFeed();
+            feedGeneration++;
+            s.selectedPost = null;
+            postTrigger = null;
+        }
+        setActiveTab(name);
+        closeMenu(false);
+        if (changed && isFeed(name))
+            cached = restoreFeed(name);
+        schoolwork.requestedMaterial = name === 'materials' ? materialId : '';
+        schoolwork.materialNotice = '';
+        if (materialId)
+            schoolwork.filter = '';
+        if (name === 'overview') {
+            void loadRecentMaterials();
+            void overviewFeed();
+        }
+        if (name === 'materials' || name === 'absences')
+            void loadSchoolwork();
+        if (isFeed(name) && changed && !cached)
+            void loadFeed(s.feedPage);
+        if (focusHeading)
+            void Vue.nextTick(() => window.document.getElementById('family-title')?.focus());
+        return changed;
+    }
+    function section(name, materialId = '', focusHeading = true) {
+        if (!titles[name])
+            return;
+        if (setView(name, materialId, focusHeading))
+            updateLocation(true);
+    }
+    function financeDraft() {
+        const card = cards.state, pix = autoPix.state;
+        const initialLimit = String((card.view?.checkout?.quote.charged_cents || 0) / 100);
+        return Boolean(pix.accepted || pix.confirmCancel || (pix.view?.can_enroll && pix.frequency !== 'MONTHLY') ||
+            card.agreed || card.revoke || card.until || (card.view?.can_authorize && card.limit !== initialLimit));
+    }
+    function drafts(tabs) {
+        const result = [];
+        if (tabs.includes('absences') && (schoolwork.day || schoolwork.reason || schoolwork.file))
+            result.push('justificativa de ausência');
+        if (tabs.includes('finance') && financeDraft())
+            result.push('dados financeiros em edição');
+        return result;
+    }
+    function workspaceBusy(tabs) {
+        return s.busy || (tabs.includes('finance') && (autoPix.state.busy || cards.state.loading));
+    }
+    function canLeaveContext() {
+        if (workspaceBusy(s.tabs))
+            return false;
+        const pending = drafts(s.tabs);
+        const mailOpen = s.tabs.includes('webmail');
+        if (!pending.length && !mailOpen)
+            return true;
+        return window.confirm('Continuar e fechar as guias deste contexto?' + (pending.length ? ' Alterações ainda não salvas: ' + pending.join(', ') + '.' : '') +
+            (mailOpen ? ' Confira se as mensagens em edição foram salvas em Rascunhos.' : ''));
+    }
+    function forget(key) {
+        savedFeeds.delete(key);
+        if (key === 'finance') {
+            autoPix.clear();
+            cards.clear();
+        }
+        if (key === 'absences') {
+            schoolwork.day = '';
+            schoolwork.reason = '';
+            schoolwork.file = null;
+            schoolwork.fileVersion++;
+            schoolwork.key = '';
+            schoolwork.receipt = '';
+        }
+        if (key === 'materials') {
+            schoolwork.filter = '';
+            schoolwork.requestedMaterial = '';
+            schoolwork.materialNotice = '';
+        }
+    }
+    function focusTab() { void Vue.nextTick(() => window.document.getElementById('family-tab-' + s.section)?.focus()); }
+    function closeTabs(key) {
+        const home = s.tabs[0];
+        if (!home || s.tabs.length < 2 || key === home || (key && !s.tabs.includes(key)))
+            return;
+        const closing = key ? [key] : s.tabs.slice(1);
+        if (workspaceBusy(closing))
+            return;
+        const pending = drafts(closing), mailOpen = closing.includes('webmail');
+        const question = key ? 'Fechar a guia ' + title(key) + '?' : 'Fechar todas as outras guias e manter ' + title(home) + ' aberta?';
+        if ((!key || pending.length || mailOpen) && !window.confirm(question +
+            (pending.length ? ' As alterações em ' + pending.join(' e ') + ' serão descartadas.' : '') +
+            (mailOpen ? ' Confira se as mensagens em edição foram salvas em Rascunhos.' : '')))
+            return;
+        if (closing.includes(s.section)) {
+            setView(home, '', false);
+            updateLocation(true);
+        }
+        closing.forEach(forget);
+        s.tabs = s.tabs.filter(id => !closing.includes(id));
+        focusTab();
+    }
+    function tabKeys(event) {
+        const key = PigePortalTabs.keyTarget(event, s.tabs, s.section);
+        if (key) {
+            section(key, '', false);
+            focusTab();
+        }
+    }
+    async function popstate(event) {
+        if (!s.account)
+            return;
+        const requested = routeSection(), id = new URLSearchParams(location.search).get('student');
+        const ctx = event?.state;
+        if (ctx?.familyAccount && (ctx.familyAccount !== s.account.id || ctx.familySchool !== s.schoolId)) {
+            updateLocation();
+            return;
+        }
+        const changed = Boolean(id && id !== s.studentId && s.students.some(item => item.id === id));
+        if (changed && id) {
+            if (!canLeaveContext()) {
+                updateLocation();
+                return;
+            }
+            clearStudentWorkspace();
+            s.studentId = id;
+            const current = ++navigationVersion, scope = generation;
+            await finance();
+            if (scope !== generation || current !== navigationVersion)
+                return;
+        }
+        setView(requested);
+        if (s.section !== requested || (id && id !== s.studentId))
+            updateLocation();
+    }
+    Vue.createApp({ components: { 'portal-mail': PigePortalMail.component, 'learning-portal': PigeLearning.component }, render: PigeRenders.familyPortal, setup() {
             Vue.watch(() => [s.ready, s.account?.id, s.account?.role, s.schoolId].join('|'), () => {
                 if (s.account && s.schoolId)
                     void PigeSupport.load(s.schoolId, s.account.role === 'student' ? 'student_portal' : 'guardian_portal', s.account.id);
@@ -691,8 +1387,8 @@ var PigeFamily;
                     PigeSupport.dispose();
             });
             Vue.onUnmounted(PigeSupport.dispose);
-            Vue.onMounted(() => { window.addEventListener('popstate', popstate); window.addEventListener('keydown', menuKeys); window.addEventListener('resize', resized); PigeMFA.init(request, authenticated, logout); void start(); });
-            Vue.onUnmounted(() => { window.removeEventListener('popstate', popstate); window.removeEventListener('keydown', menuKeys); window.removeEventListener('resize', resized); });
-            return { s, schoolwork, pickEvidence, submitAbsence, label, student, title, initials, date, money, pendingDocuments, overdue, login, logout, changeSchool, changeStudent, chooseStudent, document, request, download, section, run, load, loadFeed, openPost, closePost, openMenu, closeMenu, mfa: PigeMFA, identity: PigeInstitution.state };
+            Vue.onMounted(() => { window.addEventListener('popstate', popstate); window.document.addEventListener?.('visibilitychange', checkWhenVisible); window.addEventListener('keydown', menuKeys); window.addEventListener('resize', resized); PigeMFA.init(request, authenticated, logout); void start(); });
+            Vue.onUnmounted(() => { window.removeEventListener('popstate', popstate); window.document.removeEventListener?.('visibilitychange', checkWhenVisible); window.removeEventListener('keydown', menuKeys); window.removeEventListener('resize', resized); });
+            return { s, closeTabs, tabKeys, isOpen, selectSchool, selectStudent, refreshWorkspace, recentMaterials, loadRecentMaterials, toggleSidebar, activeEnrollments, visibleMaterials, mail, autoPix, cards, schoolwork, loadSchoolwork, studentView, portalName, pickEvidence, submitAbsence, label, student, title, initials, date, money, pendingDocuments, finance, login, logout, changeSchool, changeStudent, chooseStudent, document, request, download, section, run, load, loadFeed, searchFeed, openPost, closePost, openMenu, closeMenu, mfa: PigeMFA, identity: PigeInstitution.state };
         } }).mount('#family');
 })(PigeFamily || (PigeFamily = {}));

@@ -187,6 +187,8 @@ def delete_post(id:str,db:DB,user:Actor,school:Scope,request:Request,version:int
 @router.get('/schools/{school_id}/community-feed')
 def school_feed(school_id:str,db:DB,user:Actor,q:str=Query('',max_length=160),kind:str='',upcoming:bool=False,page:int=Query(1,ge=1),page_size:int=Query(12,ge=1,le=50)):
     allowed_school(db,user,school_id)
+    from .access_security import require_teacher_routine
+    require_teacher_routine(db, user, school_id, 'news')
     stmt=filter_query(visible_query(school_id,role_audiences(user.role)),q,kind,upcoming)
     return page_output(db,stmt,page,page_size,upcoming=upcoming)
 

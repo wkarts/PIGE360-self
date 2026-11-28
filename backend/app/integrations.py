@@ -1,6 +1,7 @@
 """Configurações segregadas, testes explícitos, filas e webhooks autenticados."""
 import hashlib
 import json
+import re
 import secrets
 from datetime import timedelta
 from urllib.parse import urlsplit, quote
@@ -24,6 +25,37 @@ BANK_WEBHOOK_EVENTS = ['PAYMENT_CREATED','PAYMENT_UPDATED','PAYMENT_CONFIRMED','
     'PAYMENT_OVERDUE','PAYMENT_DELETED','PAYMENT_RESTORED','PAYMENT_REFUNDED',
     'PAYMENT_REFUND_IN_PROGRESS','PAYMENT_PARTIALLY_REFUNDED','PAYMENT_REFUND_DENIED','PAYMENT_RECEIVED_IN_CASH_UNDONE',
     'PAYMENT_CHARGEBACK_REQUESTED','PAYMENT_CHARGEBACK_DISPUTE','PAYMENT_AWAITING_CHARGEBACK_REVERSAL']
+
+CHECKOUT_WEBHOOK_EVENTS = ['CHECKOUT_CREATED','CHECKOUT_PAID','CHECKOUT_CANCELED','CHECKOUT_EXPIRED']
+
+
+def webhook_object(event, payload):
+    from .asaas_auto_pix import PIX_WEBHOOK_EVENTS, PREFIX
+    if event.startswith('PAYMENT_'):
+        key = 'payment'
+    elif event in CHECKOUT_WEBHOOK_EVENTS:
+        key = 'checkout'
+    elif event not in PIX_WEBHOOK_EVENTS:
+        fail(400, 'Evento bancário desconhecido.')
+    elif event == PREFIX+'ELIGIBILITY_UPDATED':
+        eligibility = payload.get('eligibility')
+        if isinstance(eligibility, dict) and eligibility.get('status') in ('ELIGIBLE','INELIGIBLE'):
+            return eligibility, eligibility['status']
+        fail(400, 'Situação de elegibilidade Pix inválida.')
+    elif event.startswith(PREFIX+'PAYMENT_INSTRUCTION_'):
+        key = 'paymentInstruction'
+    else:
+        key = 'authorization'
+    body = payload.get(key)
+    if not isinstance(body, dict):
+        fail(400, 'Objeto do evento bancário inválido.')
+    if key == 'paymentInstruction' and not isinstance(body.get('authorization', {}), dict):
+        fail(400, 'Autorização da instrução Pix inválida.')
+    remote = body.get('id') or (body.get('paymentId') if key == 'paymentInstruction' else None)
+    if not isinstance(remote, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,160}', remote):
+        fail(400, 'Identificador bancário inválido.')
+    return body, remote
+
 
 class WebhookSetup(Input):
     email: EmailStr
@@ -78,8 +110,11 @@ def save_connection(provider:str,data:s.ConnectionInput,db:DB,user:Actor,school:
     if obj:
         if data.version is None:fail(422,'Informe a versão atual da configuração.')
         check_version(obj,data.version)
-        if provider=='asaas' and obj.environment!=data.environment and db.scalar(select(m.BankCharge.id).where(m.BankCharge.connection_id==obj.id).limit(1)):
-            fail(409,'Não troque sandbox/produção de uma conexão que possui cobranças. Use outra escola/instalação de homologação.')
+        if provider == 'asaas' and obj.environment != data.environment:
+            has_charges = db.scalar(select(m.BankCharge.id).where(m.BankCharge.connection_id == obj.id).limit(1))
+            has_operations = db.scalar(select(m.AsaasNativeOperation.id).where(m.AsaasNativeOperation.connection_id == obj.id).limit(1))
+            if has_charges or has_operations:
+                fail(409, 'Esta conexão possui cobranças ou operações Asaas. Preserve o ambiente financeiro de origem.')
         if obj.environment!=data.environment:
             config={}
         if data.webhook_token or data.api_key:
@@ -109,6 +144,7 @@ def test_connection(provider:str,db:DB,user:Actor,school:Scope,request:Request):
 
 @router.post('/integrations/asaas/webhook')
 def setup_bank_webhook(data:WebhookSetup,db:DB,user:Actor,school:Scope,request:Request):
+    from .asaas_auto_pix import PIX_WEBHOOK_EVENTS
     """Configura apenas o retorno desta conexão, sem alterar outros webhooks da conta."""
     require(user,'integrations.manage');lock_school(db,school.id)
     conn=connection(db,school.id,'asaas')
@@ -124,7 +160,7 @@ def setup_bank_webhook(data:WebhookSetup,db:DB,user:Actor,school:Scope,request:R
         if len(matches)>1:raise IntegrationFailure('DUPLICATE_BANK_WEBHOOK')
         payload={'name':'PIGE360 - '+school.name[:100],'url':url,'email':str(data.email),
             'enabled':True,'interrupted':False,'apiVersion':3,'authToken':key,
-            'sendType':'SEQUENTIALLY','events':BANK_WEBHOOK_EVENTS}
+            'sendType':'SEQUENTIALLY','events':BANK_WEBHOOK_EVENTS + CHECKOUT_WEBHOOK_EVENTS + PIX_WEBHOOK_EVENTS}
         existing=matches[0] if matches else None
         if existing and not existing.get('id'):raise IntegrationFailure('WEBHOOK_ID_MISSING')
         result=provider.request('/webhooks/'+quote(str(existing['id']),safe=''),'PUT',payload) if existing else provider.request('/webhooks','POST',payload)
@@ -173,21 +209,24 @@ async def webhook(provider:str,connection_id:str,request:Request,db:DB):
     except (ValueError,UnicodeDecodeError):fail(400,'JSON inválido.')
     if not isinstance(payload,dict):fail(400,'Objeto JSON obrigatório.')
     lock_school(db,conn.school_id)
-    event=str(payload.get('event') or payload.get('type') or '')[:80]
-    if provider=='asaas':
-        body=payload.get('payment',{})
-        if not isinstance(body,dict):fail(400,'Objeto payment inválido.')
-        remote=str(body.get('id') or '')[:160]
-        event_id=str(payload.get('id') or '')[:200]
-        if not event_id or not event.startswith('PAYMENT_') or not remote:fail(400,'Evento de cobrança inválido.')
-    hash=hashlib.sha256(raw).hexdigest()
+    event = payload.get('event') or payload.get('type')
+    event_id = payload.get('id')
+    if (not isinstance(event, str) or not re.fullmatch(r'[A-Z_]{1,80}', event)
+            or not isinstance(event_id, str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,200}', event_id)):
+        fail(400,'Identificação do evento bancário inválida.')
+    body, remote = webhook_object(event, payload)
+    digest = hashlib.sha256(raw).hexdigest()
     existing=db.scalar(select(m.IntegrationWebhook).where(m.IntegrationWebhook.connection_id==conn.id,m.IntegrationWebhook.event_id==event_id))
     if existing:
-        if existing.payload_hash!=hash:fail(409,'ID de evento repetido com conteúdo divergente.')
+        if existing.payload_hash!=digest:fail(409,'ID de evento repetido com conteúdo divergente.')
         return {'accepted':True,'duplicate':True}
-    record=m.IntegrationWebhook(school_id=conn.school_id,connection_id=conn.id,event_id=event_id,event_type=event,payload_hash=hash,remote_id=remote)
+    record=m.IntegrationWebhook(school_id=conn.school_id,connection_id=conn.id,event_id=event_id,event_type=event,payload_hash=digest,remote_id=remote)
     db.add(record);db.flush()
-    if provider=='asaas':
+    from . import asaas_cards, asaas_auto_pix
+    event_data = dict(payload, event=event)
+    if asaas_auto_pix.handle_webhook(db, conn, event, event_data) or asaas_cards.observe_webhook(db, conn, event_data):
+        record.status = 'native_observed'
+    elif event.startswith('PAYMENT_'):
         charge=db.scalar(select(m.BankCharge).where(m.BankCharge.connection_id==conn.id,m.BankCharge.remote_payment_id==remote,m.BankCharge.school_id==conn.school_id))
         if not charge and body.get('externalReference'):
             charge=db.scalar(select(m.BankCharge).where(m.BankCharge.connection_id==conn.id,m.BankCharge.school_id==conn.school_id,
@@ -195,5 +234,7 @@ async def webhook(provider:str,connection_id:str,request:Request,db:DB):
         if charge:
             queue_charge_sync(db,charge,f'bank-webhook:{charge.id}:{record.id}');record.status='reconciliation_queued'
         else:record.status='unmatched'
+    else:
+        record.status='unmatched'
     audit(db,request,None,'integration.webhook.accepted',record,conn.school_id,{'provider':provider,'status':record.status})
     return {'accepted':True,'duplicate':False,'status':record.status}

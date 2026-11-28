@@ -1,0 +1,470 @@
+{
+  "statement": {
+    "title": "Extrato da conta Asaas",
+    "group": "Conta e resultados",
+    "description": "Movimentações que alteram o saldo da conta Asaas. Recebimentos, tarifas, transferências e estornos aparecem em lançamentos próprios; os identificadores permitem conferir a operação de origem.",
+    "endpoint": "/financialTransactions",
+    "kind": "list",
+    "dates": {"date": "Movimentação"},
+    "range": ["startDate", "finishDate"],
+    "filters": [
+      {"key": "order", "label": "Ordenação", "type": "select", "options": {"asc": "Mais antigos primeiro", "desc": "Mais recentes primeiro"}}
+    ],
+    "defaults": {"order": "asc"},
+    "columns": [
+      {"key": "date", "label": "Data", "type": "date", "visible": true},
+      {"key": "type", "label": "Natureza", "type": "text", "visible": true},
+      {"key": "description", "label": "Descrição", "type": "text", "visible": true},
+      {"key": "value", "label": "Valor", "type": "money", "visible": true},
+      {"key": "balance", "label": "Saldo após lançamento", "type": "money", "visible": true},
+      {"key": "id", "label": "Lançamento", "type": "text", "visible": true},
+      {"key": "paymentId", "label": "Cobrança", "type": "text", "visible": false},
+      {"key": "transferId", "label": "Transferência", "type": "text", "visible": false},
+      {"key": "anticipationId", "label": "Antecipação", "type": "text", "visible": false},
+      {"key": "billId", "label": "Conta paga", "type": "text", "visible": false},
+      {"key": "splitId", "label": "Split", "type": "text", "visible": false}
+    ]
+  },
+  "payments": {
+    "title": "Cobranças e recebimentos",
+    "group": "Cobranças",
+    "description": "Consulte recebimentos, pendências, vencimentos e valores líquidos. Confirmado indica pagamento confirmado; Recebido indica crédito recebido. Em parcelamentos, cada linha pode ser uma parcela. Esta consulta não registra baixa na escola.",
+    "endpoint": "/payments",
+    "kind": "list",
+    "dates": {"paymentDate": "Pagamento", "dueDate": "Vencimento", "dateCreated": "Criação", "estimatedCreditDate": "Crédito previsto"},
+    "filters": [
+      {"key": "status", "label": "Situação", "type": "select", "options": {"PENDING": "Pendente", "CONFIRMED": "Confirmado", "RECEIVED": "Recebido", "OVERDUE": "Vencido", "RECEIVED_IN_CASH": "Recebido em dinheiro", "REFUNDED": "Estornado", "REFUND_REQUESTED": "Estorno solicitado", "REFUND_IN_PROGRESS": "Estorno em andamento", "CHARGEBACK_REQUESTED": "Chargeback solicitado", "CHARGEBACK_DISPUTE": "Chargeback em disputa", "AWAITING_CHARGEBACK_REVERSAL": "Aguardando reversão de chargeback", "DUNNING_REQUESTED": "Negativação solicitada", "DUNNING_RECEIVED": "Recebido após negativação", "AWAITING_RISK_ANALYSIS": "Em análise de risco"}},
+      {"key": "billingType", "label": "Forma de pagamento", "type": "select", "options": {"BOLETO": "Boleto", "PIX": "Pix", "CREDIT_CARD": "Cartão de crédito", "UNDEFINED": "Forma a definir"}},
+      {"key": "customer", "label": "ID do cliente no Asaas", "type": "identifier", "required": false},
+      {"key": "externalReference", "label": "Referência externa", "type": "text"},
+      {"key": "installment", "label": "ID do parcelamento", "type": "identifier", "required": false},
+      {"key": "subscription", "label": "ID da assinatura", "type": "identifier", "required": false},
+      {"key": "anticipated", "label": "Antecipação", "type": "select", "options": {"true": "Antecipadas", "false": "Não antecipadas"}}
+    ],
+    "booleans": ["anticipated"],
+    "columns": [
+      {"key": "id", "label": "Cobrança", "type": "text", "visible": true},
+      {"key": "customer", "label": "Cliente no Asaas", "type": "text", "visible": true},
+      {"key": "status", "label": "Situação", "type": "status", "visible": true},
+      {"key": "billingType", "label": "Forma de pagamento", "type": "status", "visible": true},
+      {"key": "value", "label": "Valor", "type": "money", "visible": true},
+      {"key": "netValue", "label": "Valor líquido", "type": "money", "visible": true},
+      {"key": "dueDate", "label": "Vencimento", "type": "date", "visible": true},
+      {"key": "paymentDate", "label": "Pagamento", "type": "date", "visible": true},
+      {"key": "dateCreated", "label": "Criação", "type": "date", "visible": false},
+      {"key": "creditDate", "label": "Crédito", "type": "date", "visible": false},
+      {"key": "estimatedCreditDate", "label": "Crédito previsto", "type": "date", "visible": false},
+      {"key": "installment", "label": "Parcelamento", "type": "text", "visible": false},
+      {"key": "installmentNumber", "label": "Número da parcela", "type": "integer", "visible": false},
+      {"key": "subscription", "label": "Assinatura", "type": "text", "visible": false},
+      {"key": "externalReference", "label": "Referência externa", "type": "text", "visible": false},
+      {"key": "description", "label": "Descrição", "type": "text", "visible": false}
+    ]
+  },
+  "balance": {
+    "title": "Saldo atual",
+    "group": "Conta e resultados",
+    "description": "Saldo da conta Asaas no momento da consulta. Para investigar uma data passada, use o extrato e o saldo informado em cada lançamento.",
+    "endpoint": "/finance/balance",
+    "kind": "summary",
+    "filters": [],
+    "columns": [
+      {"key": "balance", "label": "Saldo atual", "type": "money", "visible": true}
+    ]
+  },
+  "statistics": {
+    "title": "Estatísticas de cobranças",
+    "group": "Conta e resultados",
+    "description": "Quantidade, valor bruto e valor líquido consolidados pela API para os filtros escolhidos. O período se refere ao campo de data selecionado; o total de cobranças não é o saldo disponível.",
+    "endpoint": "/finance/payment/statistics",
+    "kind": "summary",
+    "dates": {"dueDate": "Vencimento", "dateCreated": "Criação", "estimatedCreditDate": "Crédito previsto"},
+    "filters": [
+      {"key": "status", "label": "Situação", "type": "select", "options": {"PENDING": "Pendente", "CONFIRMED": "Confirmado", "RECEIVED": "Recebido", "OVERDUE": "Vencido"}},
+      {"key": "billingType", "label": "Forma de pagamento", "type": "select", "options": {"BOLETO": "Boleto", "CREDIT_CARD": "Cartão de crédito", "PIX": "Pix", "DEBIT_CARD": "Cartão de débito", "TRANSFER": "Transferência", "DEPOSIT": "Depósito"}},
+      {"key": "customer", "label": "ID do cliente no Asaas", "type": "identifier", "required": false},
+      {"key": "externalReference", "label": "Referência externa", "type": "text"},
+      {"key": "anticipated", "label": "Antecipação", "type": "select", "options": {"true": "Antecipadas", "false": "Não antecipadas"}}
+    ],
+    "booleans": ["anticipated"],
+    "columns": [
+      {"key": "quantity", "label": "Quantidade de cobranças", "type": "integer", "visible": true},
+      {"key": "value", "label": "Valor bruto", "type": "money", "visible": true},
+      {"key": "netValue", "label": "Valor líquido", "type": "money", "visible": true}
+    ]
+  },
+  "split_summary": {
+    "title": "Resumo de splits",
+    "group": "Splits",
+    "description": "Valores de splits a receber e a enviar informados pela conta no momento da consulta. Para conferir as operações, utilize as listas de splits recebidos ou enviados.",
+    "endpoint": "/finance/split/statistics",
+    "kind": "summary",
+    "filters": [],
+    "columns": [
+      {"key": "income", "label": "A receber", "type": "money", "visible": true},
+      {"key": "value", "label": "A enviar", "type": "money", "visible": true}
+    ]
+  },
+  "splits_received": {
+    "title": "Splits recebidos",
+    "group": "Splits",
+    "description": "Valores destinados à conta, a receber ou já recebidos. Confira a situação de cada split para distinguir pendência de liquidação.",
+    "endpoint": "/payments/splits/received",
+    "kind": "list",
+    "filters": [
+      {"key": "paymentId", "label": "ID da cobrança no Asaas", "type": "identifier", "required": false},
+      {"key": "status", "label": "Situação", "type": "select", "options": {"PENDING": "Pendente", "PROCESSING": "Em processamento", "PROCESSING_REFUND": "Estorno em processamento", "AWAITING_CREDIT": "Aguardando crédito", "CANCELLED": "Cancelado", "DONE": "Liquidado", "REFUNDED": "Estornado", "BLOCKED_BY_VALUE_DIVERGENCE": "Bloqueado por divergência de valor"}}
+    ],
+    "dates": {"creditDate": "Crédito do split", "paymentConfirmedDate": "Confirmação da cobrança"},
+    "columns": [
+      {"key": "id", "label": "Split", "type": "text", "visible": true},
+      {"key": "status", "label": "Situação", "type": "status", "visible": true},
+      {"key": "totalValue", "label": "Valor total", "type": "money", "visible": true},
+      {"key": "fixedValue", "label": "Valor fixo", "type": "money", "visible": true},
+      {"key": "percentualValue", "label": "Percentual", "type": "number", "visible": true},
+      {"key": "walletId", "label": "Carteira de destino", "type": "text", "visible": true},
+      {"key": "description", "label": "Descrição", "type": "text", "visible": true},
+      {"key": "externalReference", "label": "Referência externa", "type": "text", "visible": false},
+      {"key": "cancellationReason", "label": "Motivo do cancelamento", "type": "text", "visible": false}
+    ]
+  },
+  "splits_paid": {
+    "title": "Splits enviados",
+    "group": "Splits",
+    "description": "Valores destinados a outras contas Asaas. A lista inclui operações em processamento; apenas a situação liquidada confirma o repasse.",
+    "endpoint": "/payments/splits/paid",
+    "kind": "list",
+    "filters": [
+      {"key": "paymentId", "label": "ID da cobrança no Asaas", "type": "identifier", "required": false},
+      {"key": "status", "label": "Situação", "type": "select", "options": {"PENDING": "Pendente", "PROCESSING": "Em processamento", "PROCESSING_REFUND": "Estorno em processamento", "AWAITING_CREDIT": "Aguardando crédito", "CANCELLED": "Cancelado", "DONE": "Liquidado", "REFUNDED": "Estornado", "BLOCKED_BY_VALUE_DIVERGENCE": "Bloqueado por divergência de valor"}}
+    ],
+    "dates": {"creditDate": "Crédito do split", "paymentConfirmedDate": "Confirmação da cobrança"},
+    "columns": [
+      {"key": "id", "label": "Split", "type": "text", "visible": true},
+      {"key": "status", "label": "Situação", "type": "status", "visible": true},
+      {"key": "totalValue", "label": "Valor total", "type": "money", "visible": true},
+      {"key": "fixedValue", "label": "Valor fixo", "type": "money", "visible": true},
+      {"key": "percentualValue", "label": "Percentual", "type": "number", "visible": true},
+      {"key": "walletId", "label": "Carteira de destino", "type": "text", "visible": true},
+      {"key": "description", "label": "Descrição", "type": "text", "visible": true},
+      {"key": "externalReference", "label": "Referência externa", "type": "text", "visible": false},
+      {"key": "cancellationReason", "label": "Motivo do cancelamento", "type": "text", "visible": false}
+    ]
+  },
+  "transfers": {
+    "title": "Transferências",
+    "group": "Saídas e antecipações",
+    "description": "Histórico de transferências da conta Asaas, incluindo tarifas, valor líquido e situação. Dados completos de contas bancárias e chaves Pix não fazem parte deste relatório.",
+    "endpoint": "/transfers",
+    "kind": "list",
+    "dates": {"transferDate": "Efetivação", "dateCreated": "Criação"},
+    "filters": [
+      {"key": "type", "label": "Destino", "type": "select", "options": {"ASAAS_ACCOUNT": "Conta Asaas", "BANK_ACCOUNT": "Conta bancária"}}
+    ],
+    "columns": [
+      {"key": "id", "label": "Transferência", "type": "text", "visible": true},
+      {"key": "status", "label": "Situação", "type": "status", "visible": true},
+      {"key": "operationType", "label": "Modalidade", "type": "status", "visible": true},
+      {"key": "value", "label": "Valor", "type": "money", "visible": true},
+      {"key": "transferFee", "label": "Tarifa", "type": "money", "visible": true},
+      {"key": "netValue", "label": "Valor líquido", "type": "money", "visible": true},
+      {"key": "effectiveDate", "label": "Efetivação", "type": "date", "visible": true},
+      {"key": "scheduleDate", "label": "Agendamento", "type": "date", "visible": true},
+      {"key": "dateCreated", "label": "Criação", "type": "date", "visible": false},
+      {"key": "description", "label": "Descrição", "type": "text", "visible": false},
+      {"key": "externalReference", "label": "Referência externa", "type": "text", "visible": false},
+      {"key": "endToEndIdentifier", "label": "Identificador Pix", "type": "text", "visible": false},
+      {"key": "failReason", "label": "Motivo da falha", "type": "text", "visible": false}
+    ]
+  },
+  "anticipations": {
+    "title": "Antecipações",
+    "group": "Saídas e antecipações",
+    "description": "Consulte antecipações, tarifas, valores líquidos e situação. A API filtra por cobrança, parcelamento e situação; não oferece filtro de período nesta listagem.",
+    "endpoint": "/anticipations",
+    "kind": "list",
+    "filters": [
+      {"key": "status", "label": "Situação", "type": "select", "options": {"PENDING": "Pendente", "DENIED": "Negada", "CREDITED": "Creditada", "DEBITED": "Debitada", "CANCELLED": "Cancelada", "OVERDUE": "Vencida", "SCHEDULED": "Agendada"}},
+      {"key": "payment", "label": "ID da cobrança", "type": "identifier", "required": false},
+      {"key": "installment", "label": "ID do parcelamento", "type": "identifier", "required": false}
+    ],
+    "columns": [
+      {"key": "id", "label": "Antecipação", "type": "text", "visible": true},
+      {"key": "status", "label": "Situação", "type": "status", "visible": true},
+      {"key": "requestDate", "label": "Solicitação", "type": "date", "visible": true},
+      {"key": "anticipationDate", "label": "Antecipação", "type": "date", "visible": true},
+      {"key": "value", "label": "Valor", "type": "money", "visible": true},
+      {"key": "fee", "label": "Tarifa", "type": "money", "visible": true},
+      {"key": "netValue", "label": "Valor líquido", "type": "money", "visible": true},
+      {"key": "payment", "label": "Cobrança", "type": "text", "visible": true},
+      {"key": "installment", "label": "Parcelamento", "type": "text", "visible": false},
+      {"key": "dueDate", "label": "Vencimento", "type": "date", "visible": false},
+      {"key": "totalValue", "label": "Total da cobrança", "type": "money", "visible": false},
+      {"key": "anticipationDays", "label": "Dias antecipados", "type": "integer", "visible": false},
+      {"key": "denialObservation", "label": "Motivo da recusa", "type": "text", "visible": false}
+    ]
+  },
+  "bills": {
+    "title": "Contas pagas e agendadas",
+    "group": "Saídas e antecipações",
+    "description": "Pagamentos de contas efetuados pela conta Asaas. Inclui agendamentos, tarifas, descontos, juros e multas. A API permite filtrar por situação; não oferece filtro de período nesta listagem.",
+    "endpoint": "/bill",
+    "kind": "list",
+    "filters": [
+      {"key": "status", "label": "Situação", "type": "select", "options": {"PENDING": "Pendente", "BANK_PROCESSING": "Processamento bancário", "PAID": "Paga", "FAILED": "Falha", "CANCELLED": "Cancelada", "REFUNDED": "Estornada", "AWAITING_CHECKOUT_RISK_ANALYSIS_REQUEST": "Em análise"}}
+    ],
+    "columns": [
+      {"key": "id", "label": "Conta", "type": "text", "visible": true},
+      {"key": "description", "label": "Descrição", "type": "text", "visible": true},
+      {"key": "status", "label": "Situação", "type": "status", "visible": true},
+      {"key": "value", "label": "Valor", "type": "money", "visible": true},
+      {"key": "fee", "label": "Tarifa", "type": "money", "visible": true},
+      {"key": "dueDate", "label": "Vencimento", "type": "date", "visible": true},
+      {"key": "paymentDate", "label": "Pagamento", "type": "date", "visible": true},
+      {"key": "scheduleDate", "label": "Agendamento", "type": "date", "visible": false},
+      {"key": "discount", "label": "Desconto", "type": "money", "visible": false},
+      {"key": "interest", "label": "Juros", "type": "money", "visible": false},
+      {"key": "fine", "label": "Multa", "type": "money", "visible": false},
+      {"key": "companyName", "label": "Emissor", "type": "text", "visible": false},
+      {"key": "externalReference", "label": "Referência externa", "type": "text", "visible": false}
+    ]
+  },
+  "installments": {
+    "title": "Parcelamentos",
+    "group": "Cobranças",
+    "description": "Parcelamentos cadastrados na conta, com quantidade de parcelas e valores. Para conferir cada parcela, use Cobranças e recebimentos e informe o ID do parcelamento. Esta listagem não oferece filtros adicionais na API.",
+    "endpoint": "/installments",
+    "kind": "list",
+    "filters": [],
+    "columns": [
+      {"key": "id", "label": "Parcelamento", "type": "text", "visible": true},
+      {"key": "customer", "label": "Cliente no Asaas", "type": "text", "visible": true},
+      {"key": "billingType", "label": "Forma de pagamento", "type": "status", "visible": true},
+      {"key": "installmentCount", "label": "Parcelas", "type": "integer", "visible": true},
+      {"key": "value", "label": "Valor total", "type": "money", "visible": true},
+      {"key": "netValue", "label": "Valor líquido", "type": "money", "visible": true},
+      {"key": "paymentValue", "label": "Valor da parcela", "type": "money", "visible": true},
+      {"key": "dateCreated", "label": "Criação", "type": "date", "visible": true},
+      {"key": "paymentDate", "label": "Pagamento", "type": "date", "visible": false},
+      {"key": "deleted", "label": "Excluído", "type": "boolean", "visible": false},
+      {"key": "description", "label": "Descrição", "type": "text", "visible": false}
+    ]
+  },
+  "subscriptions": {
+    "title": "Assinaturas",
+    "group": "Cobranças",
+    "description": "Assinaturas criadas no Asaas e seus próximos vencimentos. Autorizações do cartão recorrente da escola e do Pix Automático em modo manual são recursos distintos e não aparecem como assinaturas Asaas.",
+    "endpoint": "/subscriptions",
+    "kind": "list",
+    "filters": [
+      {"key": "status", "label": "Situação", "type": "select", "options": {"ACTIVE": "Ativa", "EXPIRED": "Expirada", "INACTIVE": "Inativa"}},
+      {"key": "billingType", "label": "Forma de pagamento", "type": "select", "options": {"BOLETO": "Boleto", "PIX": "Pix", "CREDIT_CARD": "Cartão de crédito", "UNDEFINED": "Forma a definir"}},
+      {"key": "customer", "label": "ID do cliente no Asaas", "type": "identifier", "required": false},
+      {"key": "externalReference", "label": "Referência externa", "type": "text"},
+      {"key": "includeDeleted", "label": "Incluir excluídas", "type": "select", "options": {"true": "Sim", "false": "Não"}}
+    ],
+    "booleans": ["includeDeleted"],
+    "columns": [
+      {"key": "id", "label": "Assinatura", "type": "text", "visible": true},
+      {"key": "customer", "label": "Cliente no Asaas", "type": "text", "visible": true},
+      {"key": "status", "label": "Situação", "type": "status", "visible": true},
+      {"key": "billingType", "label": "Forma de pagamento", "type": "status", "visible": true},
+      {"key": "cycle", "label": "Periodicidade", "type": "status", "visible": true},
+      {"key": "value", "label": "Valor por ciclo", "type": "money", "visible": true},
+      {"key": "nextDueDate", "label": "Próximo vencimento", "type": "date", "visible": true},
+      {"key": "endDate", "label": "Fim da assinatura", "type": "date", "visible": false},
+      {"key": "dateCreated", "label": "Criação", "type": "date", "visible": false},
+      {"key": "deleted", "label": "Excluída", "type": "boolean", "visible": false},
+      {"key": "externalReference", "label": "Referência externa", "type": "text", "visible": false},
+      {"key": "description", "label": "Descrição", "type": "text", "visible": false}
+    ]
+  },
+  "pix_transactions": {
+    "title": "Transações Pix",
+    "group": "Pix",
+    "description": "Entradas, saídas e devoluções Pix da conta, conforme a natureza e a situação. Os dados bancários e as chaves Pix dos participantes são omitidos. A API não oferece filtro de período nesta listagem.",
+    "endpoint": "/pix/transactions",
+    "kind": "list",
+    "filters": [
+      {"key": "status", "label": "Situação", "type": "select", "options": {"SCHEDULED": "Agendada", "AWAITING_REQUEST": "Aguardando envio", "REQUESTED": "Solicitada", "DONE": "Concluída", "REFUSED": "Recusada", "CANCELLED": "Cancelada", "AWAITING_BALANCE_VALIDATION": "Validando saldo", "AWAITING_INSTANT_PAYMENT_ACCOUNT_BALANCE": "Aguardando saldo", "AWAITING_CRITICAL_ACTION_AUTHORIZATION": "Aguardando autorização", "AWAITING_CHECKOUT_RISK_ANALYSIS_REQUEST": "Em análise de risco (saída)", "AWAITING_CASH_IN_RISK_ANALYSIS_REQUEST": "Em análise de risco (entrada)"}},
+      {"key": "type", "label": "Natureza", "type": "select", "options": {"CREDIT": "Crédito", "DEBIT": "Débito", "CREDIT_REFUND": "Devolução de crédito", "DEBIT_REFUND": "Devolução de débito", "DEBIT_REFUND_CANCELLATION": "Cancelamento de devolução"}},
+      {"key": "endToEndIdentifier", "label": "Identificador Pix (EndToEnd)", "type": "identifier", "required": false}
+    ],
+    "columns": [
+      {"key": "id", "label": "Transação", "type": "text", "visible": true},
+      {"key": "type", "label": "Natureza", "type": "status", "visible": true},
+      {"key": "status", "label": "Situação", "type": "status", "visible": true},
+      {"key": "value", "label": "Valor", "type": "money", "visible": true},
+      {"key": "refundedValue", "label": "Valor devolvido", "type": "money", "visible": true},
+      {"key": "effectiveDate", "label": "Efetivação", "type": "date", "visible": true},
+      {"key": "scheduledDate", "label": "Agendamento", "type": "date", "visible": true},
+      {"key": "description", "label": "Descrição", "type": "text", "visible": false},
+      {"key": "endToEndIdentifier", "label": "Identificador Pix", "type": "text", "visible": false},
+      {"key": "originType", "label": "Origem", "type": "text", "visible": false},
+      {"key": "refusalReason", "label": "Motivo da recusa", "type": "text", "visible": false}
+    ]
+  },
+  "pix_authorizations": {
+    "title": "Autorizações de Pix Automático",
+    "group": "Pix",
+    "description": "Autorizações recorrentes registradas no banco. Criada não significa ativa nem comprova pagamento. A ativação depende da autorização do pagador no aplicativo do banco.",
+    "endpoint": "/pix/automatic/authorizations",
+    "kind": "list",
+    "filters": [
+      {"key": "status", "label": "Situação", "type": "select", "options": {"CREATED": "Criada", "ACTIVE": "Ativa", "CANCELLED": "Cancelada", "REFUSED": "Recusada", "EXPIRED": "Expirada"}},
+      {"key": "customerId", "label": "ID do cliente no Asaas", "type": "identifier", "required": false},
+      {"key": "subscriptionId", "label": "ID da assinatura (quando existente)", "type": "identifier", "required": false}
+    ],
+    "columns": [
+      {"key": "id", "label": "Autorização", "type": "text", "visible": true},
+      {"key": "customerId", "label": "Cliente no Asaas", "type": "text", "visible": true},
+      {"key": "status", "label": "Situação", "type": "status", "visible": true},
+      {"key": "frequency", "label": "Periodicidade", "type": "status", "visible": true},
+      {"key": "value", "label": "Valor fixo, se houver", "type": "money", "visible": true},
+      {"key": "startDate", "label": "Início", "type": "date", "visible": true},
+      {"key": "finishDate", "label": "Fim", "type": "date", "visible": true},
+      {"key": "contractId", "label": "Contrato", "type": "text", "visible": true},
+      {"key": "minLimitValue", "label": "Piso do limite", "type": "money", "visible": false},
+      {"key": "paymentCreationMode", "label": "Modo de criação", "type": "status", "visible": false},
+      {"key": "subscriptionId", "label": "Assinatura", "type": "text", "visible": false},
+      {"key": "cancellationDate", "label": "Cancelamento", "type": "date", "visible": false},
+      {"key": "cancellationReason", "label": "Motivo do cancelamento", "type": "text", "visible": false}
+    ]
+  },
+  "pix_instructions": {
+    "title": "Instruções de Pix Automático",
+    "group": "Pix",
+    "description": "Agendamentos e instruções vinculados às cobranças. Uma instrução concluída não substitui a confirmação do recebimento; confira a cobrança correspondente em Cobranças e recebimentos.",
+    "endpoint": "/pix/automatic/paymentInstructions",
+    "kind": "list",
+    "filters": [
+      {"key": "status", "label": "Situação", "type": "select", "options": {"AWAITING_REQUEST": "Aguardando envio", "SCHEDULED": "Agendada", "DONE": "Concluída", "CANCELLED": "Cancelada", "REFUSED": "Recusada"}},
+      {"key": "authorizationId", "label": "ID da autorização", "type": "identifier", "required": false},
+      {"key": "customerId", "label": "ID do cliente no Asaas", "type": "identifier", "required": false},
+      {"key": "paymentId", "label": "ID da cobrança", "type": "identifier", "required": false}
+    ],
+    "columns": [
+      {"key": "id", "label": "Instrução", "type": "text", "visible": true},
+      {"key": "authorization.id", "label": "Autorização", "type": "text", "visible": true},
+      {"key": "paymentId", "label": "Cobrança", "type": "text", "visible": true},
+      {"key": "status", "label": "Situação", "type": "status", "visible": true},
+      {"key": "dueDate", "label": "Vencimento", "type": "date", "visible": true},
+      {"key": "endToEndIdentifier", "label": "Identificador Pix", "type": "text", "visible": false}
+    ]
+  },
+  "chargebacks": {
+    "title": "Chargebacks",
+    "group": "Estornos e disputas",
+    "description": "Contestações de pagamentos, valor, situação e prazo para documentos. A consulta não abre nem altera disputas. Dados do cartão não são incluídos.",
+    "endpoint": "/chargebacks/",
+    "kind": "list",
+    "dates": {"originDisputeDate": "Abertura da disputa", "originTransactionDate": "Transação"},
+    "filters": [
+      {"key": "status", "label": "Situação", "type": "select", "options": {"REQUESTED": "Solicitado", "IN_DISPUTE": "Em disputa", "DISPUTE_LOST": "Disputa perdida", "REVERSED": "Revertido", "DONE": "Concluído"}}
+    ],
+    "columns": [
+      {"key": "id", "label": "Chargeback", "type": "text", "visible": true},
+      {"key": "payment", "label": "Cobrança", "type": "text", "visible": true},
+      {"key": "status", "label": "Situação", "type": "status", "visible": true},
+      {"key": "value", "label": "Valor", "type": "money", "visible": true},
+      {"key": "reason", "label": "Motivo", "type": "text", "visible": true},
+      {"key": "disputeStartDate", "label": "Abertura", "type": "date", "visible": true},
+      {"key": "deadlineToSendDisputeDocuments", "label": "Prazo para documentos", "type": "date", "visible": true},
+      {"key": "installment", "label": "Parcelamento", "type": "text", "visible": false},
+      {"key": "paymentDate", "label": "Pagamento", "type": "date", "visible": false},
+      {"key": "disputeStatus", "label": "Situação da disputa", "type": "status", "visible": false}
+    ]
+  },
+  "refunds": {
+    "title": "Estornos de uma cobrança",
+    "group": "Estornos e disputas",
+    "description": "Histórico de estornos totais ou parciais da cobrança informada. A devolução só está concluída na situação Concluído. Para consultar movimentações de estorno de toda a conta, use o extrato.",
+    "endpoint": "/payments/{id}/refunds",
+    "kind": "collection",
+    "filters": [
+      {"key": "payment_id", "label": "ID da cobrança no Asaas", "type": "identifier", "required": true}
+    ],
+    "path_filter": "payment_id",
+    "columns": [
+      {"key": "dateCreated", "label": "Solicitação", "type": "date", "visible": true},
+      {"key": "effectiveDate", "label": "Efetivação", "type": "date", "visible": true},
+      {"key": "status", "label": "Situação", "type": "status", "visible": true},
+      {"key": "value", "label": "Valor", "type": "money", "visible": true},
+      {"key": "description", "label": "Descrição", "type": "text", "visible": true},
+      {"key": "endToEndIdentifier", "label": "Identificador Pix", "type": "text", "visible": false}
+    ]
+  },
+  "service_invoices": {
+    "title": "Notas fiscais de serviço",
+    "group": "Outros registros financeiros",
+    "description": "Notas fiscais emitidas pelo Asaas, com valores, situação e vínculo à cobrança. São notas de serviço do Asaas, distintas das faturas comerciais da escola.",
+    "endpoint": "/invoices",
+    "kind": "list",
+    "dates": {"effectiveDate": "Emissão"},
+    "range": ["effectiveDate[Ge]", "effectiveDate[Le]"],
+    "filters": [
+      {"key": "status", "label": "Situação", "type": "select", "options": {"SCHEDULED": "Agendada", "AUTHORIZED": "Autorizada", "PROCESSING_CANCELLATION": "Cancelamento em processamento", "CANCELED": "Cancelada", "CANCELLATION_DENIED": "Cancelamento negado", "ERROR": "Erro"}},
+      {"key": "customer", "label": "ID do cliente no Asaas", "type": "identifier", "required": false},
+      {"key": "payment", "label": "ID da cobrança", "type": "identifier", "required": false},
+      {"key": "installment", "label": "ID do parcelamento", "type": "identifier", "required": false},
+      {"key": "externalReference", "label": "Referência externa", "type": "text"}
+    ],
+    "columns": [
+      {"key": "id", "label": "Nota fiscal", "type": "text", "visible": true},
+      {"key": "number", "label": "Número", "type": "text", "visible": true},
+      {"key": "status", "label": "Situação", "type": "status", "visible": true},
+      {"key": "customer", "label": "Cliente no Asaas", "type": "text", "visible": true},
+      {"key": "effectiveDate", "label": "Emissão", "type": "date", "visible": true},
+      {"key": "value", "label": "Valor", "type": "money", "visible": true},
+      {"key": "deductions", "label": "Deduções", "type": "money", "visible": true},
+      {"key": "payment", "label": "Cobrança", "type": "text", "visible": true},
+      {"key": "installment", "label": "Parcelamento", "type": "text", "visible": false},
+      {"key": "serviceDescription", "label": "Serviço", "type": "text", "visible": false},
+      {"key": "municipalServiceCode", "label": "Código municipal do serviço", "type": "text", "visible": false},
+      {"key": "externalReference", "label": "Referência externa", "type": "text", "visible": false},
+      {"key": "statusDescription", "label": "Descrição da situação", "type": "text", "visible": false}
+    ]
+  },
+  "dunnings": {
+    "title": "Negativações e recuperação de crédito",
+    "group": "Outros registros financeiros",
+    "description": "Solicitações de negativação ou recuperação de crédito, valores, tarifas e situação. O relatório consulta o histórico; não solicita nem cancela negativações.",
+    "endpoint": "/paymentDunnings",
+    "kind": "list",
+    "dates": {"requestDate": "Solicitação"},
+    "range": ["requestStartDate", "requestEndDate"],
+    "filters": [
+      {"key": "status", "label": "Situação", "type": "select", "options": {"PENDING": "Pendente", "AWAITING_APPROVAL": "Aguardando aprovação", "AWAITING_CANCELLATION": "Aguardando cancelamento", "PROCESSED": "Processada", "PAID": "Paga", "PARTIALLY_PAID": "Paga parcialmente", "DENIED": "Negada", "CANCELLED": "Cancelada"}},
+      {"key": "type", "label": "Modalidade", "type": "select", "options": {"CREDIT_BUREAU": "Negativação", "DEBT_RECOVERY_ASSISTANCE": "Recuperação de crédito"}},
+      {"key": "payment", "label": "ID da cobrança", "type": "identifier", "required": false}
+    ],
+    "columns": [
+      {"key": "id", "label": "Solicitação", "type": "text", "visible": true},
+      {"key": "payment", "label": "Cobrança", "type": "text", "visible": true},
+      {"key": "status", "label": "Situação", "type": "status", "visible": true},
+      {"key": "type", "label": "Modalidade", "type": "status", "visible": true},
+      {"key": "requestDate", "label": "Solicitação", "type": "date", "visible": true},
+      {"key": "value", "label": "Valor", "type": "money", "visible": true},
+      {"key": "feeValue", "label": "Tarifa", "type": "money", "visible": true},
+      {"key": "netValue", "label": "Valor líquido", "type": "money", "visible": true},
+      {"key": "receivedInCashFeeValue", "label": "Tarifa de recebimento em dinheiro", "type": "money", "visible": false},
+      {"key": "cancellationFeeValue", "label": "Tarifa de cancelamento", "type": "money", "visible": false},
+      {"key": "description", "label": "Descrição", "type": "text", "visible": false},
+      {"key": "denialReason", "label": "Motivo da recusa", "type": "text", "visible": false}
+    ]
+  },
+  "mobile_recharges": {
+    "title": "Recargas de celular",
+    "group": "Outros registros financeiros",
+    "description": "Recargas de celular pagas pela conta Asaas, com valor, operadora e situação. O número do telefone não é incluído. Esta listagem não oferece filtros adicionais na API.",
+    "endpoint": "/mobilePhoneRecharges",
+    "kind": "list",
+    "filters": [],
+    "columns": [
+      {"key": "id", "label": "Recarga", "type": "text", "visible": true},
+      {"key": "operatorName", "label": "Operadora", "type": "text", "visible": true},
+      {"key": "status", "label": "Situação", "type": "status", "visible": true},
+      {"key": "value", "label": "Valor", "type": "money", "visible": true}
+    ]
+  }
+}

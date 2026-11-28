@@ -221,7 +221,7 @@ def test_export_rejects_truncated_results(api,monkeypatch):
 
 
 def test_upgrade_from_v010_preserves_existing_data(tmp_path):
-    """Aplica 0001, grava um registro e aplica 0002 sem reescrever 0001."""
+    """Migra um cadastro da primeira revisão ao head e compara todo o esquema com a metadata."""
     env={**os.environ,'DATABASE_URL':'sqlite:///'+str(tmp_path/'upgrade.db'),'STORAGE_PATH':str(tmp_path/'files')}
     backend=ROOT/'backend'
     subprocess.run([sys.executable,'-m','alembic','upgrade','0001_secretary'],cwd=backend,env=env,check=True,capture_output=True)
@@ -229,7 +229,12 @@ def test_upgrade_from_v010_preserves_existing_data(tmp_path):
     db=sqlite3.connect(tmp_path/'upgrade.db')
     db.execute("INSERT INTO companies (id,name,document,created_at,updated_at,version) VALUES (?,?,?,?,?,?)",('legacy-company','Mantenedora anterior',None,'2026-01-01','2026-01-01',1));db.commit();db.close()
     subprocess.run([sys.executable,'-m','alembic','upgrade','head'],cwd=backend,env=env,check=True,capture_output=True)
-    subprocess.run([sys.executable,'-m','alembic','check'],cwd=backend,env=env,check=True,capture_output=True)
+    check = subprocess.run([sys.executable, '-m', 'alembic', 'check'], cwd=backend, env=env,
+                           capture_output=True, text=True)
+    assert check.returncode == 0, (
+        f"alembic check terminou com código {check.returncode} após upgrade head.\n"
+        f"stdout: {check.stdout[:6000]}\nstderr: {check.stderr[-6000:]}"
+    )
     db=sqlite3.connect(tmp_path/'upgrade.db')
     assert db.execute('SELECT name FROM companies WHERE id=?',('legacy-company',)).fetchone()==('Mantenedora anterior',)
     assert db.execute('SELECT COUNT(*) FROM protocol_events').fetchone()[0]==0

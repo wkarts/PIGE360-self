@@ -12,6 +12,10 @@ if [ "$#" -ne 2 ] || [ "$2" != "--confirm-restore" ]; then
   exit 1
 fi
 SOURCE="$1"
+if [ ! -s backend/app/restore_reconciliation.sql ]; then
+  echo 'Arquivo de reconciliação pós-restauração ausente.' >&2
+  exit 1
+fi
 python3 scripts/verify_backup.py "$SOURCE"
 compose_config=$(compose config --format json)
 printf '%s\n' "$compose_config" | python3 -c '
@@ -59,29 +63,7 @@ compose run --rm -T --no-deps --entrypoint sh app -c '
 compose run --rm -T --no-deps --entrypoint tar app -C /data --no-same-owner -xzf - < "$SOURCE/documents.tar.gz"
 # Uma restauração pode recuperar jobs anteriores a efeitos já realizados no banco/provedor.
 # Não reenviar essas operações cegamente após restaurar o snapshot.
-compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
-DO $$ BEGIN
-  IF to_regclass('public.integration_jobs') IS NOT NULL THEN
-    UPDATE integration_jobs SET status='uncertain',error_code='RESTORE_REQUIRES_RECONCILIATION',lease_until=NULL
-      WHERE status IN ('pending','retry','processing');
-  END IF;
-  IF to_regclass('public.bank_charges') IS NOT NULL THEN
-    UPDATE bank_charges SET status='uncertain' WHERE status='queued';
-  END IF;
-  IF to_regclass('public.crm_bridge_requests') IS NOT NULL THEN
-    UPDATE crm_bridge_requests SET status='failed',error_code='RESTORE_REQUIRES_RECONCILIATION'
-      WHERE status IN ('queued','retry');
-  END IF;
-  IF to_regclass('public.crm_bridge_external_requests') IS NOT NULL THEN
-    UPDATE crm_bridge_external_requests SET status='uncertain',error_code='RESTORE_REQUIRES_RECONCILIATION'
-      WHERE status IN ('queued','sending');
-  END IF;
-  IF to_regclass('public.connect_message_jobs') IS NOT NULL THEN
-    UPDATE connect_message_jobs SET status='uncertain',error_code='RESTORE_REQUIRES_RECONCILIATION',lease_until=NULL
-      WHERE status IN ('pending','retry','processing');
-  END IF;
-END $$;
-SQL
+compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < backend/app/restore_reconciliation.sql
 compose up -d --no-recreate --pull never --wait --wait-timeout 240 app
 compose start worker worker-ocr
 echo 'Restauração executada. Confira health, autenticação, alunos e download de documentos.'

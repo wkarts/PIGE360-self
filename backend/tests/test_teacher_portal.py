@@ -37,3 +37,32 @@ def test_teacher_portal_is_scoped_and_reads_the_same_diary(api, client, admin, s
     api.call("PATCH","/teacher-assignments/"+assignment["id"],{"version":assignment["version"],"data":{"active":False,"teacher_user_id":teacher["id"],"class_group_id":catalog["group"]["id"],"subject_name":"História"}})
     assert client.get(agenda, headers=principal).json()["events"] == []
     assert client.get(prefix+"/diaries/"+own, headers=principal).status_code == 403
+
+
+def test_assign_existing_diary_from_teacher_registry(api, client, admin, school):
+    catalog = api.catalogs(year="2027")
+    group_id = catalog["group"]["id"]
+    teacher = api.post("/teachers", {"person": {"name": "Docente de Ciências"}})
+    user = create_user(client, admin, name="Docente de Ciências", email="ciencias@example.com",
+                       role="teacher", school_id=school["id"], person_id=teacher["person"]["id"])
+    actor = login(client, user["email"], "Profile-Test-Password-2026!")
+    component = api.post("/curriculum-components", {"name": "Ciências"})
+    diary = api.post("/diaries", {"class_group_id": group_id, "component_id": component["id"]})
+    lesson = api.post("/diaries/"+diary["id"]+"/lessons", {"lesson_date": "2027-02-01", "content": "Observação"})
+    endpoint = "/diaries/"+diary["id"]+"/teacher-assignment"
+    portal = "/api/v1/teacher/schools/"+school["id"]+"/diaries/"+diary["id"]
+    assignment_data = {"teacher_person_id": teacher["person"]["id"], "class_group_id": group_id, "subject_name": "Ciências"}
+    assignment = api.post("/teacher-assignments", assignment_data)
+    assert api.post("/teacher-assignments", assignment_data)["id"] == assignment["id"]
+    other = api.post("/teacher-assignments", dict(assignment_data, subject_name="Língua Portuguesa"))
+    initial = api.get("/diaries/"+diary["id"])
+    change = {"version": initial["version"], "teacher_assignment_id": assignment["id"]}
+    api.call("PUT", endpoint, dict(change, teacher_assignment_id=other["id"]), expect=422)
+    assert client.put(portal+"/teacher-assignment", headers=actor, json=change).status_code == 403
+    saved = api.call("PUT", endpoint, change)
+    assert saved["teacher_name"] == "Docente de Ciências"
+    assert saved["teacher_assignment_id"] == assignment["id"]
+    assert client.get(portal, headers=actor).json()["lessons"][0]["id"] == lesson["id"]
+    api.call("PUT", endpoint, dict(change, teacher_assignment_id=None), expect=409)
+    api.call("PUT", endpoint, {"version": saved["version"], "teacher_assignment_id": None})
+    assert client.get(portal, headers=actor).status_code == 403

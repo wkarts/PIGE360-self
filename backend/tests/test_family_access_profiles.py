@@ -195,6 +195,32 @@ def test_guardian_link_restrictions_apply_with_and_without_selected_school(api,f
             assert result.status_code==200 and result.json()['students']==[],result.text
 
 
+def test_financial_only_link_needs_a_designation_or_own_charge(api):
+    from test_manual_banking import payload
+    _,headers,student,payer=account(api,'guardian')
+    enrollment=api.enroll(student,api.catalogs()['group'])
+    with SessionLocal.begin() as db:
+        link=db.query(m.GuardianLink).filter_by(person_id=payer['id'],student_id=student['id']).one()
+        link.legal=False
+        db.get(m.Enrollment,enrollment['id']).financial_person_id=None
+    path='/api/v1/family/students/'+student['id']+'/charges'
+    assert api.client.get(path,headers=headers).status_code==404
+    title=api.post('/bank-charges',payload(enrollment))['items'][0]
+    context=api.client.get('/api/v1/family/context',headers=headers).json()['students']
+    assert [(s['id'],s['academic_authorized']) for s in context]==[(student['id'],False)]
+    assert [c['id'] for c in api.client.get(path,headers=headers).json()['items']]==[title['id']]
+    assert api.client.get('/api/v1/profile/learning',headers=headers).json()['students']==[]
+    with SessionLocal.begin() as db:
+        db.get(m.BankCharge,title['id']).payer_snapshot={'name':'Outro pagador'}
+    assert api.client.get('/api/v1/family/context',headers=headers).json()['students']==[]
+    with SessionLocal.begin() as db:
+        db.get(m.Enrollment,enrollment['id']).financial_person_id=payer['id']
+    assert api.client.get(path,headers=headers).json()['items']==[]
+    with SessionLocal.begin() as db:
+        db.query(m.GuardianLink).filter_by(person_id=payer['id'],student_id=student['id']).one().active=False
+    assert api.client.get(path,headers=headers).status_code==404
+
+
 def test_two_children_have_independent_financial_permissions_and_revoked_access(api):
     _,headers,first,guardian=account(api,'guardian')
     second=api.student('Segundo filho sintético')
@@ -207,3 +233,73 @@ def test_two_children_have_independent_financial_permissions_and_revoked_access(
     api.patch('/students/'+second['id']+'/guardians/'+link['id'],{'version':link['version'],'data':{'person_id':guardian['id'],'legal':True,'financial':False,'active':False}})
     assert second['id'] not in [r['id'] for r in api.client.get('/api/v1/family/context',headers=headers).json()['students']]
     assert api.client.get('/api/v1/family/students/'+second['id']+'/charges',headers=headers).status_code==404
+
+
+def test_family_and_secretary_share_document_pendencies(api):
+    from pathlib import Path
+    _, headers, student, _ = account(api, 'guardian')
+    catalogs = api.catalogs()
+    api.enroll(student, catalogs['group'])
+    other_grade = api.post('/grades', {'name': 'Outra série'})
+    for name, required, grade in [('Obrigatório da turma', True, catalogs['grade']['id']),
+                                  ('Opcional', False, None), ('Outra série', True, other_grade['id'])]:
+        kind = api.post('/document-types', {'name': name, 'required': required, 'grade_id': grade})
+        if name == 'Obrigatório da turma':
+            type_id = kind['id']
+
+    def assert_pendencies(status):
+        response = api.client.get('/api/v1/family/context', headers=headers)
+        assert response.status_code == 200, response.text
+        record = response.json()['students'][0]
+        secretary = api.get('/document-pendencies')['items']
+        assert record['document_pendencies'] == (secretary[0]['documents'] if secretary else [])
+        assert [r['status'] for r in record['document_pendencies']] == ([status] if status else [])
+        return record
+
+    def upload(**fields):
+        icon = Path(__file__).resolve().parents[2] / 'frontend/public/icons/icon-192.png'
+        return api.call('POST', f"/students/{student['id']}/documents", expect=201,
+                        data={'document_type_id': type_id, **fields}, files={'file': ('teste.png', icon.read_bytes(), 'image/png')})
+
+    def review(doc, status):
+        api.patch('/student-documents/'+doc['id'], {'version': doc['version'], 'status': status, 'notes': 'Conferência de teste'})
+
+    assert_pendencies('pending')
+    expired = upload(expires_on='2000-01-01')
+    review(expired, 'validated')
+    assert_pendencies('expired')
+    rejected = upload()
+    review(rejected, 'rejected')
+    assert_pendencies('rejected')
+    current = upload()
+    assert_pendencies('received')
+    review(current, 'validated')
+    assert len(assert_pendencies(None)['documents']) == 3
+
+
+def test_family_finance_overdue_count_and_status_follow_the_entire_history(api):
+    from datetime import timedelta
+    from app.portal_access import today
+    from test_manual_banking import payload, receipt
+
+    _, headers, student, _ = account(api, 'guardian')
+    group = api.catalogs()['group']
+    enrollment = api.enroll(student, group)
+    due = today()
+    unpaid = api.post('/bank-charges', payload(enrollment, due_on=str(due - timedelta(days=1))))['items'][0]
+    current = api.post('/bank-charges', payload(enrollment, due_on=str(due)))['items'][0]
+    path = '/api/v1/family/students/' + student['id'] + '/charges'
+
+    def page(index):
+        response = api.client.get(path, headers=headers, params={'page': index, 'page_size': 1})
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    first = page(1)
+    assert first['total'] == 2 and first['overdue_count'] == 1
+    assert first['items'][0]['id'] == current['id'] and first['items'][0]['status'] == 'pending'
+    assert page(2)['items'][0]['status'] == unpaid['status'] == 'overdue'
+    api.post('/bank-charges/' + unpaid['id'] + '/manual-receipt', receipt(unpaid), 200)
+    second = page(2)
+    assert second['overdue_count'] == 0
+    assert second['items'][0]['status'] == 'received_external'
