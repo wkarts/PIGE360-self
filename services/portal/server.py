@@ -77,6 +77,21 @@ def webmail_route(path, method):
 
 
 def allowed(path,method):
+    protocols = re.fullmatch(r'/api/v1/(teacher|family)/schools/[0-9a-f-]{36}/protocols(?:/(.*))?', path)
+    if protocols:
+        if (protocols[1] == 'teacher') != TEACHER_ONLY:
+            return False
+        resource = protocols[2]
+        if resource is None:
+            return method in {'GET', 'POST'}
+        if resource == 'opening-channel':
+            return method == 'PUT'
+        identifier = r'[0-9a-f-]{36}'
+        if resource == 'options' or re.fullmatch(identifier, resource) or re.fullmatch(identifier + '/attachments/' + identifier, resource):
+            return method == 'GET'
+        if re.fullmatch(identifier + '/messages', resource):
+            return method == 'POST'
+        return method == 'PATCH' and bool(re.fullmatch(identifier + '/channel', resource))
     mail = re.fullmatch(r'/api/v1/schools/[0-9a-f-]{36}/email/(account|webmail-ticket|connection/(?:automatic|linked))', path)
     if mail:
         return method == ('GET' if mail[1] == 'account' else 'POST')

@@ -78,11 +78,12 @@
           <section v-if="s.section==='overview'" class="family-welcome">
             <div><h2>Olá, {{s.user.name.split(' ')[0]}}.</h2>
             <p v-if="available('agenda') && available('diary')">Consulte a programação e registre aulas, chamadas e avaliações das suas turmas.</p>
-            <p v-else-if="navigation().length>1">Consulte as rotinas liberadas pela escola para o seu acesso.</p>
+            <p v-else-if="navigation().some(item=>!['overview','support'].includes(item.id))">Consulte as rotinas liberadas pela escola para o seu acesso.</p>
             <p v-else-if="s.schoolId && !s.busy">Ainda não há rotinas liberadas para esta conta. Solicite a liberação à coordenação.</p></div>
             <div v-if="navigation().length>1" class="actions">
               <button v-if="available('diary') && s.agenda?.diaries.length" class="btn btn-primary" @click="navigate('diary')">Acessar meus diários</button>
               <button v-if="available('agenda')" class="btn" :class="available('diary') && s.agenda?.diaries.length?'btn-secondary':'btn-primary'" @click="navigate('agenda')">Consultar programação</button>
+              <button v-if="available('support')" class="btn btn-secondary" @click="navigate('support')">Fale com o colégio</button>
               <template v-if="!available('agenda') && !(available('diary') && s.agenda?.diaries.length)">
                 <button v-if="available('news')" class="btn btn-primary" @click="navigate('news')">Consultar avisos</button>
                 <button v-if="available('webmail')" class="btn btn-secondary" @click="navigate('webmail')">Abrir caixa institucional</button>
@@ -132,6 +133,9 @@
           <section v-if="s.tabs.includes('webmail') && available('webmail')" v-show="s.section==='webmail'" aria-label="E-mail institucional">
             <portal-mail :key="s.schoolId" :school-id="s.schoolId" :request="mail.request"></portal-mail>
           </section>
+          <div id="teacher-protocols" v-if="s.tabs.includes('support') && available('support')" v-show="s.section==='support'">
+            <portal-protocols :key="s.user.id+':'+s.schoolId" area="teacher" :school-id="s.schoolId" :request="mail.request" :download="download"></portal-protocols>
+          </div>
           <section v-if="s.section==='help'" class="panel family-detail-panel teacher-guide">
             <h2>Guia de uso do diário</h2>
             <div class="teacher-guide-content">

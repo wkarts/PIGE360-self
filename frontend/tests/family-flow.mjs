@@ -216,14 +216,35 @@ console.log('Family drawer: immediate visibility, deferred focus and rapid open/
  const view=sandbox.Vue.proxyRefs(ctx);
  const html=component.render.call(view,view,[]);
  const vnodes=nodes(html);
- const cells=label=>vnodes.filter(v=>v.type==='td'&&v.props?.['data-label']===label).map(text);
- assert.equal(cells('Nota / conceito')[0].trim(),'0');
- assert.equal(cells('Frequência')[0].trim(),'75%');
+ const cells=metric=>vnodes.filter(v=>v.type==='dd'&&v.props?.['data-metric']===metric).map(text);
+ assert.deepEqual(cells('grade').map(v=>v.trim()),['0']);
+ assert.deepEqual(cells('frequency').map(v=>v.trim()),['75%']);
  assert.ok(vnodes.some(v=>v.type==='caption'&&text(v).includes('2º Bimestre')));
  assert.ok(!vnodes.some(v=>v.type==='caption'&&text(v).includes('1º Bimestre')));
  await ctx.download();
  assert.equal(downloaded[0],'/profile/learning/aluno/report.pdf?enrollment_id=atual&school_id=escola');
  assert.ok(requested.every(r=>r==='/profile/learning?school_id=escola'));
+ ctx.state.groupId='';
+ const current=ctx.enrollment();
+ current.class_calendars={turma:[{period_id:'p3',period_name:'3º Bimestre',order_index:3}],
+  outra:[{period_id:'semestral',period_name:'Semestre de outra turma',order_index:1}]};
+ current.subjects[0].periods[0].opinions=['Parecer publicado da primeira etapa.'];
+ current.subjects[0].periods[1].recovery=['Bom'];
+ current.official_editions=[{id:'assinada',revision:2}];
+ for(const model of ['integrated','panel','journey']){
+  current.bulletin_model=model;
+  const content=nodes(component.render.call(view,view,[]));
+  assert.equal(content.filter(node=>node.type==='table').length,model==='panel'?2:1);
+  for(const metric of ['grade','frequency']){
+   assert.equal(content.filter(node=>node.props?.['data-metric']===metric).length,2,'Cada publicação aparece uma vez por medida');
+  }
+  assert.equal(content.filter(node=>node.type==='span'&&text(node)==='Não publicado').length,model==='panel'?2:1);
+  assert.ok(content.some(node=>node.type==='p'&&text(node)==='Parecer publicado da primeira etapa.'));
+  assert.ok(content.some(node=>node.type==='dd'&&text(node)==='Bom'));
+  assert.ok(!content.some(node=>node.type==='th'&&text(node).includes('Semestre de outra turma')));
+ }
+ await ctx.download('assinada');
+ assert.equal(downloaded[1],'/profile/learning/aluno/report.pdf?enrollment_id=atual&document_id=assinada&school_id=escola');
 }
 
 {
@@ -330,4 +351,36 @@ console.log('Portal da família: navegação e histórico por vínculo, adesão 
  ctx.s.section='overview';ctx.s.students=[{...b,academic_authorized:false,financial_authorized:true}];
  await ctx.loadRecentMaterials();
  assert.equal(summaries.length,2);assert.equal(ctx.recentMaterials.items.length,0);
+}
+
+{
+ const {ctx,sandbox,render}=fixture();ctx.s.ready=true;ctx.s.account=account;ctx.s.studentId='a';ctx.s.schoolId='school-a';
+ ctx.s.students=[student('a')];ctx.s.section='finance';ctx.s.tabs=['overview','finance'];
+ const charge={id:'q1',amount:'153.90',due_on:'2027-04-20',description:'Mensalidade de abril',status:'pending',
+   billing_type:'BOLETO',collection_mode:'provider',has_payment_documents:true,payment_source:'asaas'};
+ ctx.s.charges=[charge];ctx.s.financeLoaded=true;
+ const calls=[];let pending;
+ sandbox.fetch=async url=>{calls.push(url);return new Promise(r=>pending=r);};
+ const opening=ctx.showChargeDocuments(charge);
+ assert.equal(calls[0],'/api/v1/family/students/a/charges/q1/documents');
+ pending(Response.json({source:'asaas',billing_type:'BOLETO',invoice_url:'https://www.asaas.com/i/sintetica',bank_slip_url:'https://asaas.com.exemplo.invalid/segunda-via'}));await opening;
+ const tree=render();const links=nodes(tree).filter(n=>n.type==='a'&&n.props.target==='_blank');
+ assert.ok(links.some(link=>link.props.href==='https://www.asaas.com/i/sintetica'&&link.props.rel.includes('noreferrer')));
+ assert.ok(!links.some(link=>link.props.href.includes('exemplo.invalid')));
+ const external={...charge,payment_source:'crm',billing_type:'PIX',has_card_checkout:true,external_payment_status:'settled',has_payment_documents:false,status:'overdue'};
+ ctx.s.charges=[external];await ctx.showChargeDocuments(charge);
+ let settled=render();assert.match(text(settled),/Pagamento identificado no CRM/);assert.doesNotMatch(text(settled),/Consultar documentos da cobrança|Pix Automático|Consultar cartão desta cobrança|Vencida/);
+ const crm={...charge,payment_source:'crm'};
+ ctx.s.charges=[crm];
+ const docs=ctx.showChargeDocuments(crm);pending(Response.json({source:'crm',billing_type:'BOLETO',identification_field:'00190000000000',bar_code:'12345678'}));await docs;
+ const field=nodes(render()).find(n=>n.type==='input'&&n.props.id==='identification_field-q1');
+ assert.equal(field.props.value,'00190000000000');assert.equal(field.props.readonly,'');
+ let copied='';
+ sandbox.document.getElementById=()=>({value:field.props.value});
+ sandbox.navigator={clipboard:{async writeText(value){copied=value;}}};
+ await ctx.copyChargeCode('identification_field-q1');assert.equal(copied,field.props.value);
+ const stale=ctx.showChargeDocuments(crm,true);const reply=pending;ctx.s.students=[student('b',false)];
+ ctx.s.studentId='b';await ctx.changeStudent();reply(Response.json({source:'crm',billing_type:'PIX',pix_copy_paste:'antigo'}));await stale;
+ assert.equal(ctx.documentsPanel.data,null);assert.equal(ctx.documentsPanel.chargeId,'');
+ const count=calls.length;await ctx.showChargeDocuments(crm);assert.equal(calls.length,count);
 }

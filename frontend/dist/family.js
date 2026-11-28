@@ -134,6 +134,47 @@ var PigeMFA;
 })(PigeMFA || (PigeMFA = {}));
 var PigeLearning;
 (function (PigeLearning) {
+    function orderPeriod(a, b) {
+        return (a.order_index ?? 0) - (b.order_index ?? 0) || (a.starts_on || '').localeCompare(b.starts_on || '') || a.period_id.localeCompare(b.period_id);
+    }
+    // Um diário pertence a uma turma de origem; nomes iguais podem identificar diários distintos.
+    function matrices(groups, calendars, filtered) {
+        const classes = new Map();
+        for (const group of groups) {
+            let matrix = classes.get(group.classId);
+            if (!matrix) {
+                const periods = new Map();
+                if (!filtered)
+                    for (const period of calendars?.[group.classId] || [])
+                        periods.set(period.period_id, period);
+                matrix = { className: group.className, periods, components: new Map(), published: new Set() };
+                classes.set(group.classId, matrix);
+            }
+            for (const item of group.items) {
+                matrix.periods.set(item.period_id, item);
+                matrix.published.add(item.period_id);
+                const key = JSON.stringify([item.diary_id, item.component_name]);
+                const component = matrix.components.get(key) || { id: key, name: item.component_name, results: new Map() };
+                component.results.set(item.period_id, item);
+                matrix.components.set(key, component);
+            }
+        }
+        const windows = [];
+        for (const [classId, matrix] of classes) {
+            const periods = Array.from(matrix.periods.values()).sort(orderPeriod);
+            const components = Array.from(matrix.components.values()).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+            for (let start = 0; start < periods.length; start += 4) {
+                const window = periods.slice(start, start + 4);
+                windows.push({ key: JSON.stringify([classId, window[0].period_id]), className: matrix.className, periods: window,
+                    periodLabel: window.map(p => p.period_name).join(', '), rows: components.map(component => ({
+                        id: component.id, name: component.name, cells: window.map(p => ({
+                            period: p, result: component.results.get(p.period_id), empty: matrix.published.has(p.period_id) ? 'Sem resultado publicado' : 'Não publicado',
+                        })),
+                    })) });
+            }
+        }
+        return windows;
+    }
     PigeLearning.component = { props: ['request', 'download', 'rootPath', 'schoolId', 'studentId', 'identity'], render: PigeRenders.learning, setup(props) {
             const state = Vue.reactive({ busy: false, error: '', students: [], studentId: '', enrollmentId: '', groupId: '', note: '' });
             const base = () => (props.rootPath || '/profile') + '/learning';
@@ -170,33 +211,47 @@ var PigeLearning;
                         state.groupId = '';
                 });
             }
-            const rows = () => (enrollment()?.subjects || []).flatMap(subject => subject.periods.map(period => ({ ...period, component_name: period.component_name || subject.component_name, diary_id: subject.diary_id })));
             const periodGroups = Vue.computed(() => {
                 const groups = new Map();
-                for (const row of rows()) {
-                    const className = row.class_label || row.class_name || enrollment()?.class_name || '';
-                    const id = JSON.stringify([row.period_id, row.class_group_id || className]);
-                    const group = groups.get(id) || { id, label: row.period_name, className, items: [] };
-                    group.items.push(row);
-                    groups.set(id, group);
+                for (const subject of enrollment()?.subjects || []) {
+                    for (const period of subject.periods) {
+                        const className = period.class_label || period.class_name || enrollment()?.class_name || '';
+                        const classId = period.class_group_id || className;
+                        const id = JSON.stringify([period.period_id, classId]);
+                        const group = groups.get(id) || { id, label: period.period_name, classId, className, items: [] };
+                        group.items.push({ ...period, component_name: period.component_name || subject.component_name, diary_id: subject.diary_id });
+                        groups.set(id, group);
+                    }
                 }
-                return Array.from(groups.values()).sort((left, right) => {
-                    const a = left.items[0], b = right.items[0];
-                    return (a.order_index ?? 0) - (b.order_index ?? 0) || (a.starts_on || '').localeCompare(b.starts_on || '') || left.className.localeCompare(right.className, 'pt-BR');
-                });
+                return Array.from(groups.values()).sort((a, b) => orderPeriod(a.items[0], b.items[0]) || a.className.localeCompare(b.className, 'pt-BR'));
             });
             const visibleGroups = Vue.computed(() => periodGroups.value.filter(group => !state.groupId || group.id === state.groupId));
+            const model = Vue.computed(() => enrollment()?.bulletin_model || 'integrated');
+            const tables = Vue.computed(() => matrices(visibleGroups.value, enrollment()?.class_calendars, Boolean(state.groupId)));
+            const tableKinds = Vue.computed(() => model.value === 'panel' ? ['grade', 'attendance'] : [model.value]);
+            const titles = { integrated: 'Rendimento e frequência', grade: 'Rendimento por componente', attendance: 'Aulas, faltas e frequência', journey: 'Percurso por componente' };
+            const modelNames = { integrated: 'Grade integrada', panel: 'Painel do aluno', journey: 'Percurso acadêmico' };
+            const fonts = { system: 'system-ui, sans-serif', arial: 'Arial, sans-serif', verdana: 'Verdana, sans-serif', georgia: 'Georgia, serif', times: 'Times New Roman, serif' };
+            const facts = Vue.computed(() => {
+                const e = enrollment();
+                return [['Registro escolar', student()?.student_number], ['Matrícula', e?.number], ['Ano letivo', e?.year_name], ['Etapa', e?.stage], ['Unidade', e?.unit], ['Turno', e?.shift]].filter(([, value]) => value);
+            });
+            const uniformStatus = Vue.computed(() => {
+                const values = new Set(visibleGroups.value.flatMap(group => group.items.map(item => item.result_label)));
+                return values.size === 1 ? Array.from(values)[0] : '';
+            });
+            const opinions = Vue.computed(() => visibleGroups.value.flatMap(group => group.items.filter(item => item.opinions?.length)));
             const percent = (value) => value === null || value === undefined ? 'Não apurada' : Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%';
             async function download(documentId = '') { await run(async () => { if (!student() || !enrollment())
                 return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId) + (documentId ? '&document_id=' + encodeURIComponent(documentId) : '') + (props.schoolId ? '&school_id=' + encodeURIComponent(props.schoolId) : ''), 'boletim-' + student().student_number + '.pdf'); }); }
             Vue.onMounted(() => { void load(); });
-            return { props, state, student, enrollment, selectStudent, rows, periodGroups, visibleGroups, percent, load, download };
+            return { props, state, student, enrollment, selectStudent, model, modelNames, fonts, facts, periodGroups, visibleGroups, tables, tableKinds, titles, uniformStatus, opinions, percent, load, download };
         } };
 })(PigeLearning || (PigeLearning = {}));
 var PigeSupport;
 (function (PigeSupport) {
     const runtime = window;
-    PigeSupport.status = Vue.reactive({ error: '' });
+    PigeSupport.status = Vue.reactive({ error: '', canOpen: false });
     const busyMessage = 'O atendimento recebeu muitas solicitações. Aguarde antes de tentar novamente.';
     const roots = '#hub-widget-holder,#hub-bubble-holder';
     // A URL sem versão pode continuar em cache por um ano após atualizar o HUB.
@@ -210,8 +265,21 @@ var PigeSupport;
     let recovery = null, checkingArea = false, retryArea = null;
     let visibilityStyle = null;
     let listeningReady = false;
+    function launcher() { return document.querySelector?.('button#hub-bubble-holder, #hub-bubble-holder button, #hub-bubble-holder[role="button"]'); }
+    function checkLauncher() { PigeSupport.status.canOpen = Boolean(activeSDK && !checkingArea && runtime.$hub?.hasLoaded && (typeof runtime.$hub.toggle === 'function' || launcher())); }
+    function openChat() {
+        checkLauncher();
+        if (!PigeSupport.status.canOpen)
+            return;
+        if (typeof runtime.$hub?.toggle === 'function')
+            runtime.$hub.toggle('open');
+        else
+            launcher()?.click();
+    }
+    PigeSupport.openChat = openChat;
     function setChecking(checking) {
         checkingArea = checking;
+        checkLauncher();
         visibilityStyle?.remove();
         visibilityStyle = null;
         if (checking) {
@@ -235,6 +303,7 @@ var PigeSupport;
     function onReady() {
         if (!activeSDK || !runtime.$hub?.hasLoaded)
             return;
+        checkLauncher();
         cancelStartup();
         recovery?.remove();
         recovery = null;
@@ -252,6 +321,7 @@ var PigeSupport;
         }
         activeSDK = null;
         loadedSource = '';
+        PigeSupport.status.canOpen = false;
     }
     function dispose() {
         ++generation;
@@ -568,6 +638,208 @@ var PigeFamilyCard;
     }
     PigeFamilyCard.use = use;
 })(PigeFamilyCard || (PigeFamilyCard = {}));
+var PigePortalProtocols;
+(function (PigePortalProtocols) {
+    const categories = { secretaria: 'Secretaria', pedagogico: 'Pedagógico', financeiro: 'Financeiro', tecnico: 'Suporte técnico' };
+    const statuses = { open: 'Aberto', in_progress: 'Em atendimento', waiting: 'Aguardando', completed: 'Concluído', cancelled: 'Cancelado' };
+    const channels = { portal: 'No portal', email: 'E-mail', whatsapp: 'WhatsApp' };
+    const dateFormatter = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+    const date = (value) => value && Number.isFinite(Date.parse(value)) ? dateFormatter.format(new Date(value)) : '';
+    const blank = () => ({ category: 'secretaria', subject: '', message: '', channel: 'portal', file: null });
+    PigePortalProtocols.component = { props: ['area', 'schoolId', 'studentId', 'academic', 'financial', 'request', 'download'], render: PigeRenders.portalProtocols, setup(props) {
+            const s = Vue.reactive({ view: 'list', busy: false, error: '', notice: '', items: [], ticket: null,
+                query: '', term: '', page: 1, pageSize: 20, total: 0, form: blank(), fileVersion: 0, options: { channels: ['portal'] }, optionsError: '', openingChannel: 'portal' });
+            const availableCategories = Vue.computed(() => Object.keys(categories).filter(key => key === 'financeiro' ? props.area === 'family' && props.financial :
+                key !== 'pedagogico' || props.area === 'teacher' || props.academic !== false));
+            const dirty = () => Boolean(s.form.message || s.form.file || (s.view === 'detail' && s.ticket && s.form.channel !== s.ticket.preferred_channel) || (s.view === 'new' && (s.form.subject || s.form.category !== 'secretaria' || s.form.channel !== 'portal')));
+            const closed = () => ['completed', 'cancelled'].includes(s.ticket?.status || '');
+            const base = '/' + props.area + '/schools/' + encodeURIComponent(props.schoolId) + '/protocols';
+            const path = (id) => base + '/' + encodeURIComponent(id);
+            const controller = new AbortController();
+            let active = true, optionsVersion = 0, clientKey = '', lastPayload = '', lastFile = null;
+            function reset() { s.form = blank(); s.fileVersion++; clientKey = ''; lastPayload = ''; lastFile = null; }
+            function displayError(e) { return e instanceof Error ? e.message : 'Não foi possível concluir a solicitação.'; }
+            function discard() { return !dirty() || window.confirm('Descartar o texto e o anexo que ainda não foram enviados?'); }
+            function focusTitle() { void Vue.nextTick(() => { if (active)
+                document.getElementById('portal-protocol-title')?.focus(); }); }
+            async function run(work) {
+                if (s.busy || !active)
+                    return;
+                s.busy = true;
+                s.error = '';
+                s.notice = '';
+                try {
+                    await work();
+                }
+                catch (e) {
+                    if (active) {
+                        s.error = displayError(e);
+                        if ([403, 404].includes(e?.status || 0)) {
+                            reset();
+                            s.ticket = null;
+                            s.items = [];
+                            s.total = 0;
+                            s.view = 'list';
+                        }
+                    }
+                }
+                finally {
+                    if (active)
+                        s.busy = false;
+                }
+            }
+            function applyOptions(data) {
+                const allowed = Object.keys(channels).filter(key => key === 'portal' || data.channels.includes(key));
+                const opening = data.opening_channel === undefined ? undefined : allowed.includes(data.opening_channel) ? data.opening_channel : 'portal';
+                s.options = { ...data, channels: allowed, opening_channel: opening };
+                s.openingChannel = opening || 'portal';
+                s.optionsError = '';
+            }
+            async function options() {
+                const version = ++optionsVersion;
+                try {
+                    const data = await props.request(base + '/options', { signal: controller.signal });
+                    if (active && version === optionsVersion)
+                        applyOptions(data);
+                }
+                catch (e) {
+                    if (active && version === optionsVersion) {
+                        s.options = { channels: ['portal'] };
+                        s.optionsError = displayError(e);
+                    }
+                }
+            }
+            async function saveOpeningChannel() {
+                if (!s.options.opening_channel || !s.options.channels.includes(s.openingChannel))
+                    return;
+                await run(async () => {
+                    const version = ++optionsVersion;
+                    const data = await props.request(base + '/opening-channel', { method: 'PUT', body: JSON.stringify({ preferred_channel: s.openingChannel }), signal: controller.signal });
+                    if (active && version === optionsVersion) {
+                        applyOptions(data);
+                        s.notice = 'Preferência de avisos para novos protocolos da escola salva.';
+                    }
+                });
+            }
+            const whatsappUrl = Vue.computed(() => {
+                const line = s.options.whatsapp_contact;
+                if (!line || !/^[1-9]\d{7,14}$/.test(line) || !s.ticket || closed() || !/^PRO-\d+$/.test(s.ticket.number))
+                    return '';
+                return 'https://wa.me/' + line + '?' + new URLSearchParams({ text: 'Olá, quero falar sobre o protocolo ' + s.ticket.number }).toString();
+            });
+            async function list(page = 1, search = false) {
+                if (s.busy || !discard())
+                    return;
+                const term = search ? s.query.trim() : s.term;
+                await run(async () => {
+                    const params = new URLSearchParams({ page: String(page) });
+                    if (props.studentId)
+                        params.set('student_id', props.studentId);
+                    if (term)
+                        params.set('q', term);
+                    const data = await props.request(base + '?' + params, { signal: controller.signal });
+                    if (!active)
+                        return;
+                    const changed = s.view !== 'list';
+                    s.view = 'list';
+                    s.ticket = null;
+                    reset();
+                    s.items = data.items;
+                    s.total = data.total;
+                    s.page = data.page;
+                    s.pageSize = data.page_size;
+                    s.term = term;
+                    if (changed)
+                        focusTitle();
+                });
+            }
+            function showNew() { if (s.busy || (props.area === 'family' && !props.studentId))
+                return; reset(); s.view = 'new'; s.ticket = null; s.error = ''; s.notice = ''; focusTitle(); }
+            function showTicket(data) { reset(); s.ticket = data; s.form.channel = data.preferred_channel; s.view = 'detail'; }
+            async function open(id) {
+                if (s.busy || !discard())
+                    return;
+                await run(async () => { const data = await props.request(path(id), { signal: controller.signal }); if (active) {
+                    showTicket(data);
+                    focusTitle();
+                } });
+            }
+            function chooseFile(event) { s.form.file = event.target.files?.[0] || null; }
+            async function copyNumber() {
+                const ticket = s.ticket;
+                if (!ticket)
+                    return;
+                try {
+                    await navigator.clipboard.writeText(ticket.number);
+                    if (active && ticket.id === s.ticket?.id)
+                        s.notice = 'Número do protocolo copiado.';
+                }
+                catch {
+                    if (active && ticket.id === s.ticket?.id)
+                        s.notice = 'Selecione o número ' + ticket.number + ' no cabeçalho para copiá-lo.';
+                }
+            }
+            async function send() {
+                const creating = s.view === 'new';
+                if ((!creating && (!s.ticket || closed())) || s.busy)
+                    return;
+                await run(async () => {
+                    const message = s.form.message.trim(), subject = s.form.subject.trim();
+                    if (message.length < 3 || (creating && subject.length < 2))
+                        throw new Error('Informe ao menos dois caracteres no assunto e três na mensagem.');
+                    if (s.form.file && s.options.max_attachment_mb && s.form.file.size > s.options.max_attachment_mb * 1024 * 1024)
+                        throw new Error('O anexo ultrapassa o limite de ' + s.options.max_attachment_mb + ' MB.');
+                    const body = new FormData();
+                    body.set('message', message);
+                    if (creating) {
+                        body.set('subject', subject);
+                        body.set('category', s.form.category);
+                        body.set('preferred_channel', s.form.channel);
+                        if (props.studentId)
+                            body.set('student_id', props.studentId);
+                    }
+                    const target = creating ? base : path(s.ticket.id) + '/messages';
+                    const payload = JSON.stringify(creating ? [target, message, subject, s.form.category, s.form.channel] : [target, message]);
+                    if (!clientKey || payload !== lastPayload || s.form.file !== lastFile) {
+                        clientKey = crypto.randomUUID();
+                        lastPayload = payload;
+                        lastFile = s.form.file;
+                    }
+                    body.set('client_key', clientKey);
+                    if (s.form.file)
+                        body.set('file', s.form.file);
+                    const data = await props.request(target, { method: 'POST', body, signal: controller.signal });
+                    if (active) {
+                        showTicket(data);
+                        s.notice = creating ? 'Protocolo ' + data.number + ' aberto.' : 'Resposta registrada.';
+                        if (creating)
+                            focusTitle();
+                    }
+                });
+            }
+            async function changeChannel() {
+                const ticket = s.ticket;
+                if (!ticket || closed() || !s.options.channels.includes(s.form.channel) || ticket.preferred_channel === s.form.channel)
+                    return;
+                await run(async () => {
+                    const data = await props.request(path(ticket.id) + '/channel', { method: 'PATCH', body: JSON.stringify({ preferred_channel: s.form.channel }), signal: controller.signal });
+                    if (active) {
+                        s.ticket = data;
+                        s.form.channel = data.preferred_channel;
+                        s.notice = 'Preferência de avisos atualizada.';
+                    }
+                });
+            }
+            async function attachment(file) {
+                const ticket = s.ticket;
+                if (ticket && file)
+                    await run(() => props.download(path(ticket.id) + '/attachments/' + encodeURIComponent(file.id), file.name));
+            }
+            Vue.onMounted(() => { void options(); void list(); });
+            Vue.onUnmounted(() => { active = false; controller.abort(); reset(); });
+            return { s, props, availableCategories, categories, statuses, channels, closed, dirty, date, options, saveOpeningChannel, whatsappUrl, list, showNew, open, chooseFile, copyNumber, send, changeChannel, attachment, chat: PigeSupport.status, openChat: PigeSupport.openChat };
+        } };
+})(PigePortalProtocols || (PigePortalProtocols = {}));
 /** Caixa pessoal já vinculada à conta escolar. O SOGo autentica pelo proxy da própria origem. */
 var PigePortalMail;
 (function (PigePortalMail) {
@@ -841,7 +1113,7 @@ var PigeFamily;
     function checkAuth(epoch) { if (epoch !== authEpoch)
         throw new SessionChanged(); }
     function invalidateAuth() { authEpoch++; refreshing = null; }
-    function clearPrivate() { generation++; s.tabs = []; savedFeeds.clear(); postTrigger = null; clearRecentMaterials(); mail.clear(); autoPix.clear(); cards.clear(); feedGeneration++; clearSchoolwork(); s.students = []; s.charges = []; s.financeTotal = 0; s.financePage = 1; s.financeOverdue = 0; s.financeNote = ''; s.financeError = ''; s.financeLoaded = false; s.news = []; s.events = []; s.feedItems = []; s.feedTotal = 0; s.feedPage = 1; s.feedBusy = false; s.selectedPost = null; s.feedError = ''; s.feedQuery = ''; s.feedTerm = ''; s.overviewFeedError = ''; s.menuOpen = false; }
+    function clearPrivate() { generation++; s.tabs = []; savedFeeds.clear(); postTrigger = null; clearRecentMaterials(); mail.clear(); autoPix.clear(); cards.clear(); clearChargeDocuments(); feedGeneration++; clearSchoolwork(); s.students = []; s.charges = []; s.financeTotal = 0; s.financePage = 1; s.financeOverdue = 0; s.financeNote = ''; s.financeError = ''; s.financeLoaded = false; s.news = []; s.events = []; s.feedItems = []; s.feedTotal = 0; s.feedPage = 1; s.feedBusy = false; s.selectedPost = null; s.feedError = ''; s.feedQuery = ''; s.feedTerm = ''; s.overviewFeedError = ''; s.menuOpen = false; }
     async function raw(path, options = {}) { const headers = new Headers(options.headers); headers.set('X-CSRF-Protection', '1'); if (token)
         headers.set('Authorization', 'Bearer ' + token); if (s.schoolId)
         headers.set('X-School-Id', s.schoolId); if (typeof options.body === 'string')
@@ -921,6 +1193,10 @@ var PigeFamily;
         return; await authenticated(result); }); }
     async function logout() {
         if (s.busy)
+            return;
+        if (isOpen('support') && workspaceBusy(['support']))
+            return;
+        if (drafts(['support']).length && !window.confirm('Descartar a mensagem de atendimento ainda não enviada e sair?'))
             return;
         // Invalidate pending renewals before the logout network request, not after it.
         invalidateAuth();
@@ -1018,7 +1294,89 @@ var PigeFamily;
     const money = (value) => Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     const autoPix = PigeAutoPix.use(request, () => s.studentId);
     const cards = PigeFamilyCard.use(request, () => s.studentId);
+    const paymentSources = { asaas: 'Asaas', crm: 'CRM', manual: 'Lançamento da escola' };
+    function chargeStatus(charge) {
+        if (charge.payment_source === 'crm') {
+            if (charge.external_payment_status === 'settled')
+                return 'Pagamento identificado no CRM';
+            if (charge.external_payment_status === 'cancelled')
+                return 'Cancelada no CRM';
+            if (charge.external_payment_status === 'unavailable')
+                return 'Situação no CRM indisponível';
+        }
+        return label(charge.status);
+    }
+    const paymentKinds = { PIX: 'Pix', BOLETO: 'Boleto', CREDIT_CARD: 'Cartão de crédito', MANUAL: 'Cobrança manual' };
+    const documentsPanel = Vue.reactive({ chargeId: '', loading: false, error: '', notice: '', data: null });
+    let documentRequest = 0, financeRequest = 0;
+    function clearChargeDocuments() {
+        documentRequest++;
+        documentsPanel.chargeId = '';
+        documentsPanel.data = null;
+        documentsPanel.loading = false;
+        documentsPanel.error = '';
+        documentsPanel.notice = '';
+    }
+    function instrumentLink(value) {
+        if (!value)
+            return '';
+        try {
+            const url = new URL(value);
+            return url.protocol === 'https:' && !url.username && !url.password && !url.port &&
+                (url.hostname === 'asaas.com' || url.hostname.endsWith('.asaas.com')) ? url.href : '';
+        }
+        catch {
+            return '';
+        }
+    }
+    async function showChargeDocuments(charge, retry = false) {
+        if (documentsPanel.chargeId === charge.id && !retry) {
+            clearChargeDocuments();
+            return;
+        }
+        clearChargeDocuments();
+        if (!student()?.financial_authorized || !charge.has_payment_documents || !s.charges.some(row => row.id === charge.id))
+            return;
+        const sequence = documentRequest, school = s.schoolId, selected = s.studentId;
+        const current = () => sequence === documentRequest && school === s.schoolId && selected === s.studentId;
+        documentsPanel.chargeId = charge.id;
+        documentsPanel.loading = true;
+        try {
+            const data = await request('/family/students/' + encodeURIComponent(selected) + '/charges/' + encodeURIComponent(charge.id) + '/documents');
+            if (!current())
+                return;
+            documentsPanel.data = { ...data, invoice_url: instrumentLink(data.invoice_url), bank_slip_url: instrumentLink(data.bank_slip_url) };
+        }
+        catch (error) {
+            if (current())
+                documentsPanel.error = error instanceof Error ? error.message : 'Não foi possível consultar os documentos desta cobrança.';
+        }
+        finally {
+            if (current())
+                documentsPanel.loading = false;
+        }
+    }
+    async function copyChargeCode(controlId) {
+        const control = window.document.getElementById(controlId);
+        if (!control || !documentsPanel.data || !student()?.financial_authorized)
+            return;
+        const current = documentRequest;
+        try {
+            await navigator.clipboard.writeText(control.value);
+            if (current === documentRequest)
+                documentsPanel.notice = 'Código copiado.';
+        }
+        catch {
+            if (current !== documentRequest)
+                return;
+            control.focus();
+            control.select();
+            documentsPanel.notice = 'Código selecionado. Use a opção Copiar do seu dispositivo.';
+        }
+    }
     async function finance(page = 1) {
+        const sequence = ++financeRequest;
+        clearChargeDocuments();
         s.charges = [];
         s.financeLoaded = false;
         s.financeNote = '';
@@ -1030,7 +1388,7 @@ var PigeFamily;
         const selected = s.studentId, current = generation;
         try {
             const data = await request(`/family/students/${selected}/charges?page=${page}&page_size=${s.financePageSize}`);
-            if (selected !== s.studentId || current !== generation)
+            if (sequence !== financeRequest || selected !== s.studentId || current !== generation)
                 return;
             s.charges = data.items;
             s.financeTotal = data.total ?? 0;
@@ -1040,7 +1398,7 @@ var PigeFamily;
             s.financeLoaded = true;
         }
         catch (e) {
-            if (selected === s.studentId && current === generation)
+            if (sequence === financeRequest && selected === s.studentId && current === generation)
                 s.financeError = e instanceof Error ? e.message : 'Não foi possível carregar o financeiro.';
         }
     }
@@ -1097,6 +1455,7 @@ var PigeFamily;
         clearRecentMaterials();
         autoPix.clear();
         cards.clear();
+        clearChargeDocuments();
         clearSchoolwork();
         savedFeeds.clear();
         s.tabs = [];
@@ -1283,6 +1642,8 @@ var PigeFamily;
     }
     function drafts(tabs) {
         const result = [];
+        if (tabs.includes('support') && window.document.querySelector?.('#family-protocols [data-workspace-dirty="true"]'))
+            result.push('mensagem de atendimento');
         if (tabs.includes('absences') && (schoolwork.day || schoolwork.reason || schoolwork.file))
             result.push('justificativa de ausência');
         if (tabs.includes('finance') && financeDraft())
@@ -1290,7 +1651,7 @@ var PigeFamily;
         return result;
     }
     function workspaceBusy(tabs) {
-        return s.busy || (tabs.includes('finance') && (autoPix.state.busy || cards.state.loading));
+        return s.busy || (tabs.includes('support') && Boolean(window.document.querySelector?.('#family-protocols [aria-busy="true"]'))) || (tabs.includes('finance') && (autoPix.state.busy || cards.state.loading));
     }
     function canLeaveContext() {
         if (workspaceBusy(s.tabs))
@@ -1307,6 +1668,7 @@ var PigeFamily;
         if (key === 'finance') {
             autoPix.clear();
             cards.clear();
+            clearChargeDocuments();
         }
         if (key === 'absences') {
             schoolwork.day = '';
@@ -1377,7 +1739,7 @@ var PigeFamily;
         if (s.section !== requested || (id && id !== s.studentId))
             updateLocation();
     }
-    Vue.createApp({ components: { 'portal-mail': PigePortalMail.component, 'learning-portal': PigeLearning.component }, render: PigeRenders.familyPortal, setup() {
+    Vue.createApp({ components: { 'portal-protocols': PigePortalProtocols.component, 'portal-mail': PigePortalMail.component, 'learning-portal': PigeLearning.component }, render: PigeRenders.familyPortal, setup() {
             Vue.watch(() => [s.ready, s.account?.id, s.account?.role, s.schoolId].join('|'), () => {
                 if (s.account && s.schoolId)
                     void PigeSupport.load(s.schoolId, s.account.role === 'student' ? 'student_portal' : 'guardian_portal', s.account.id);
@@ -1389,6 +1751,6 @@ var PigeFamily;
             Vue.onUnmounted(PigeSupport.dispose);
             Vue.onMounted(() => { window.addEventListener('popstate', popstate); window.document.addEventListener?.('visibilitychange', checkWhenVisible); window.addEventListener('keydown', menuKeys); window.addEventListener('resize', resized); PigeMFA.init(request, authenticated, logout); void start(); });
             Vue.onUnmounted(() => { window.removeEventListener('popstate', popstate); window.document.removeEventListener?.('visibilitychange', checkWhenVisible); window.removeEventListener('keydown', menuKeys); window.removeEventListener('resize', resized); });
-            return { s, closeTabs, tabKeys, isOpen, selectSchool, selectStudent, refreshWorkspace, recentMaterials, loadRecentMaterials, toggleSidebar, activeEnrollments, visibleMaterials, mail, autoPix, cards, schoolwork, loadSchoolwork, studentView, portalName, pickEvidence, submitAbsence, label, student, title, initials, date, money, pendingDocuments, finance, login, logout, changeSchool, changeStudent, chooseStudent, document, request, download, section, run, load, loadFeed, searchFeed, openPost, closePost, openMenu, closeMenu, mfa: PigeMFA, identity: PigeInstitution.state };
+            return { s, chargeStatus, documentsPanel, paymentSources, paymentKinds, showChargeDocuments, copyChargeCode, closeTabs, tabKeys, isOpen, selectSchool, selectStudent, refreshWorkspace, recentMaterials, loadRecentMaterials, toggleSidebar, activeEnrollments, visibleMaterials, mail, autoPix, cards, schoolwork, loadSchoolwork, studentView, portalName, pickEvidence, submitAbsence, label, student, title, initials, date, money, pendingDocuments, finance, login, logout, changeSchool, changeStudent, chooseStudent, document, request, download, section, run, load, loadFeed, searchFeed, openPost, closePost, openMenu, closeMenu, mfa: PigeMFA, identity: PigeInstitution.state };
         } }).mount('#family');
 })(PigeFamily || (PigeFamily = {}));

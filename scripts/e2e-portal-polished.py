@@ -7,6 +7,7 @@ import httpx
 from playwright.sync_api import sync_playwright, expect
 from datetime import date, timedelta
 from qa.portal_access import accept_local_access_link, check_sogo_frame, check_teacher_layout, link_test_mailbox, start_sogo_fixture
+from qa.portal_protocols import check_portal_protocols
 ROOT=Path(__file__).resolve().parents[1]
 OUT=Path(os.getenv('PIGE_E2E_EVIDENCE_DIR',str(ROOT/'evidence/qa/online')));OUT.mkdir(parents=True,exist_ok=True)
 TEMP=Path(tempfile.mkdtemp(prefix='pige-online-e2e-'))
@@ -531,9 +532,10 @@ try:
         parent.get_by_role('button',name='Ativar acesso',exact=True).click()
         expect(parent.get_by_role('button',name='Revogar acesso',exact=True)).to_be_visible()
         parent.get_by_role('button',name=re.compile('^Boletim')).click()
-        expect(parent.get_by_role('table', name=re.compile('^Rendimento e frequência'))).to_contain_text('Matemática')
-        expect(parent.get_by_role('table', name=re.compile('^Rendimento e frequência'))).to_contain_text('8,5')
-        expect(parent.locator('.learning-workspace td[data-label="Frequência"]')).to_contain_text('100%')
+        report = parent.get_by_role('table', name=re.compile('^Rendimento e frequência'))
+        expect(report).to_contain_text('Matemática')
+        expect(report.locator('[data-metric="grade"]').first).to_contain_text('8,5')
+        expect(report.locator('[data-metric="frequency"]').first).to_contain_text(re.compile(r'100(?:[,.]0+)?%'))
         with parent.expect_download() as down:parent.get_by_role('button',name='Baixar boletim PDF',exact=True).click()
         down.value.save_as(str(OUT/'boletim-escolar.pdf'))
         parent.screenshot(path=str(OUT/'05-portal-boletim.png'),full_page=True)
@@ -911,6 +913,10 @@ try:
         reopened=direction_post('/reopen',reopening)
         assert reopened['diary']['status']=='open' and reopened['revision']['reason']==reopening['reason']
         record('API: Professor impedido de reabrir; Direção reabre com justificativa registrada.')
+        check_portal_protocols(browser=browser,clerk=clerk,student_page=studentPage,guardian_page=familyPage,
+            manager_url=URL,family_url=PORTAL_URL,teacher_url=TEACHER_URL,school=school,student_id=student_id,
+            sibling_id=sibling['id'],teacher=teacher,password=password,client=client,admin=headers,base=base,
+            root=ROOT,env=env,database=TEMP/'e2e.db',sample=sample,output=OUT,record=record)
         assert not failed_requests,failed_requests
         assert not bad_responses,bad_responses
         assert not errors,errors

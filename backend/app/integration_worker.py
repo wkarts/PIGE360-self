@@ -199,6 +199,10 @@ def execute(db, job):
         from .certificate_alerts import execute_certificate_alert
         from .notification_email import send
         return execute_certificate_alert(db, job, payload, lambda message: send(db, job.school_id, message, send_email))
+    if job.kind == 'protocol_notice':
+        from .protocol_notifications import execute_protocol_notice
+        from .notification_email import send
+        return execute_protocol_notice(db, job, payload, lambda message: send(db, job.school_id, message, send_email))
     if job.kind == 'legacy_import':
         from .import_operations import execute as import_package
         return import_package(db,job,payload)

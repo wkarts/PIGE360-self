@@ -50,7 +50,7 @@ var PigeInstitution;
 var PigeSupport;
 (function (PigeSupport) {
     const runtime = window;
-    PigeSupport.status = Vue.reactive({ error: '' });
+    PigeSupport.status = Vue.reactive({ error: '', canOpen: false });
     const busyMessage = 'O atendimento recebeu muitas solicitações. Aguarde antes de tentar novamente.';
     const roots = '#hub-widget-holder,#hub-bubble-holder';
     // A URL sem versão pode continuar em cache por um ano após atualizar o HUB.
@@ -64,8 +64,21 @@ var PigeSupport;
     let recovery = null, checkingArea = false, retryArea = null;
     let visibilityStyle = null;
     let listeningReady = false;
+    function launcher() { return document.querySelector?.('button#hub-bubble-holder, #hub-bubble-holder button, #hub-bubble-holder[role="button"]'); }
+    function checkLauncher() { PigeSupport.status.canOpen = Boolean(activeSDK && !checkingArea && runtime.$hub?.hasLoaded && (typeof runtime.$hub.toggle === 'function' || launcher())); }
+    function openChat() {
+        checkLauncher();
+        if (!PigeSupport.status.canOpen)
+            return;
+        if (typeof runtime.$hub?.toggle === 'function')
+            runtime.$hub.toggle('open');
+        else
+            launcher()?.click();
+    }
+    PigeSupport.openChat = openChat;
     function setChecking(checking) {
         checkingArea = checking;
+        checkLauncher();
         visibilityStyle?.remove();
         visibilityStyle = null;
         if (checking) {
@@ -89,6 +102,7 @@ var PigeSupport;
     function onReady() {
         if (!activeSDK || !runtime.$hub?.hasLoaded)
             return;
+        checkLauncher();
         cancelStartup();
         recovery?.remove();
         recovery = null;
@@ -106,6 +120,7 @@ var PigeSupport;
         }
         activeSDK = null;
         loadedSource = '';
+        PigeSupport.status.canOpen = false;
     }
     function dispose() {
         ++generation;

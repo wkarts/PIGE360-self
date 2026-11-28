@@ -132,7 +132,12 @@ def document_pendencies(db: DB, user: Actor, school: Scope, filters: PendencyFil
 def protocol_output(db, obj):
     student = db.get(m.Student, obj.student_id) if obj.student_id else None
     person = db.get(m.Person, student.person_id) if student else None
-    return {**output(obj), 'student_name':person.name if person else '',
+    requester = db.get(m.User, obj.requester_user_id) if obj.requester_user_id else None
+    return _protocol_fields(obj, person.name if person else '', requester.name if requester else '')
+
+
+def _protocol_fields(obj, student_name, requester_name):
+    return {**output(obj), 'student_name':student_name or '', 'subject':obj.kind, 'requester_name':requester_name or '',
             'overdue':bool(obj.due_on and obj.due_on < date.today() and obj.status not in ('completed','cancelled'))}
 
 
@@ -143,10 +148,17 @@ def protocol_event(db, obj, user, action, message, before=None):
 
 @router.get('/protocols')
 def protocols(db: DB, user: Actor, school: Scope, q: str = Query('', max_length=160), status: str = '',
-              student_id: str = '', overdue: bool = False,
+              student_id: str = '', overdue: bool = False, source: str = Query('', max_length=16), category: str = Query('', max_length=24),
               page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100)):
     require(user, 'protocols.read')
-    stmt = select(m.Protocol).where(m.Protocol.school_id == school.id)
+    stmt = (select(m.Protocol, m.Person.name.label('student_name'), m.User.name.label('requester_name'))
+            .outerjoin(m.Student, (m.Student.id == m.Protocol.student_id) & (m.Student.school_id == school.id))
+            .outerjoin(m.Person, (m.Person.id == m.Student.person_id) & (m.Person.school_id == school.id))
+            .outerjoin(m.User, m.User.id == m.Protocol.requester_user_id).where(m.Protocol.school_id == school.id))
+    if source:
+        stmt=stmt.where(m.Protocol.source==source)
+    if category:
+        stmt=stmt.where(m.Protocol.category==category)
     if status:
         if status not in PROTOCOL_STATES: fail(422, 'Situação de protocolo inválida.')
         stmt = stmt.where(m.Protocol.status == status)
@@ -156,16 +168,27 @@ def protocols(db: DB, user: Actor, school: Scope, q: str = Query('', max_length=
     if overdue:
         stmt = stmt.where(m.Protocol.due_on < date.today(), m.Protocol.status.not_in(['completed','cancelled']))
     if q.strip():
-        stmt = stmt.where(or_(m.Protocol.number.icontains(q.strip(), autoescape=True), m.Protocol.kind.icontains(q.strip(), autoescape=True), m.Protocol.description.icontains(q.strip(), autoescape=True)))
+        term=q.strip()
+        stmt = stmt.where(or_(*(column.icontains(term, autoescape=True) for column in
+                                (m.Protocol.number,m.Protocol.kind,m.Protocol.description,m.User.name,m.Person.name))))
     total = db.scalar(select(func.count()).select_from(stmt.subquery()))
-    return {'items':[protocol_output(db, p) for p in db.scalars(stmt.order_by(m.Protocol.created_at.desc(), m.Protocol.id.desc()).offset((page-1)*page_size).limit(page_size))], 'total':total, 'page':page, 'page_size':page_size}
+    rows = db.execute(stmt.order_by(m.Protocol.updated_at.desc(), m.Protocol.id.desc()).offset((page-1)*page_size).limit(page_size))
+    return {'items':[_protocol_fields(obj, student, requester) for obj,student,requester in rows],
+            'total':total, 'page':page, 'page_size':page_size}
 
 
 @router.post('/protocols', status_code=201)
-def create_protocol(data: s.ProtocolInput, db: DB, user: Actor, school: Scope, request: Request):
+def create_protocol(data: s.ProtocolCreateInput, db: DB, user: Actor, school: Scope, request: Request):
     require(user, 'protocols.write'); lock_school(db, school.id)
+    if data.requester_user_id:
+        from .protocol_portal import open_ticket, find_requester
+        target=find_requester(db,school.id,data.requester_user_id)
+        obj=open_ticket(db,school,user,target,data.student_id,data.category or 'secretaria',data.kind,
+                        data.description,'manager',None,data.client_key,None,request,status=data.status,due_on=data.due_on)
+        return protocol_output(db,obj)
     if data.student_id: scoped(db, m.Student, data.student_id, school.id)
-    obj = m.Protocol(school_id=school.id, number=number(db, school.id, 'protocol', 'PRO-'), **data.model_dump())
+    obj = m.Protocol(school_id=school.id, number=number(db, school.id, 'protocol', 'PRO-'),
+                     **data.model_dump(exclude={'requester_user_id','client_key','category'}))
     if data.status == 'completed': obj.completed_at = now()
     db.add(obj); db.flush()
     protocol_event(db, obj, user, 'created', 'Protocolo aberto.')
@@ -177,12 +200,24 @@ def create_protocol(data: s.ProtocolInput, db: DB, user: Actor, school: Scope, r
 def protocol_detail(protocol_id: str, db: DB, user: Actor, school: Scope):
     require(user, 'protocols.read')
     obj = scoped(db, m.Protocol, protocol_id, school.id)
-    history = db.execute(select(m.ProtocolEvent, m.User.name).join(m.User, m.User.id == m.ProtocolEvent.actor_id).where(
-        m.ProtocolEvent.school_id == school.id, m.ProtocolEvent.protocol_id == obj.id).order_by(m.ProtocolEvent.created_at, m.ProtocolEvent.id)).all()
+    return protocol_details(db, obj)
+
+
+def protocol_details(db, obj):
+    from .protocol_portal import attachment_info
+    from .protocol_notifications import delivery_by_event
+    history = db.execute(select(m.ProtocolEvent, m.User.name, m.FileRecord).join(m.User, m.User.id == m.ProtocolEvent.actor_id)
+        .outerjoin(m.FileRecord, (m.FileRecord.id == m.ProtocolEvent.file_id) & (m.FileRecord.school_id == obj.school_id))
+        .where(m.ProtocolEvent.school_id == obj.school_id, m.ProtocolEvent.protocol_id == obj.id)
+        .order_by(m.ProtocolEvent.created_at, m.ProtocolEvent.id)).all()
+    notices = delivery_by_event(db, obj.school_id, [event for event, _, _ in history if event.visibility == 'public'])
     submission = db.get(m.AbsenceSubmission, obj.id)
     file = db.get(m.FileRecord, submission.file_id) if submission and submission.file_id else None
     return {**protocol_output(db, obj), 'evidence_file_id': file.id if file else None,
-            'evidence_filename': file.original_name if file else None, 'history':[{**output(e), 'actor_name':name} for e,name in history]}
+            'evidence_filename': file.original_name if file else None,
+            'history':[{**output(event, ('client_key','client_fingerprint')), 'actor_name':name,
+                        'attachment':attachment_info(attachment), 'notification':notices.get(event.id)}
+                       for event,name,attachment in history]}
 
 
 @router.patch('/protocols/{protocol_id}')
@@ -193,6 +228,8 @@ def edit_protocol(protocol_id: str, data: s.Edit, db: DB, user: Actor, school: S
     if values['student_id']: scoped(db, m.Student, values['student_id'], school.id)
     if values['student_id'] != obj.student_id and db.get(m.AbsenceSubmission, obj.id):
         fail(409, 'O aluno de uma justificativa enviada pela família deve ser preservado.')
+    if obj.requester_user_id and values['student_id']!=obj.student_id:
+        fail(409,'O aluno de uma conversa vinculada ao solicitante deve ser preservado.')
     before = output(obj)
     for key, value in values.items(): setattr(obj, key, value)
     obj.completed_at = (obj.completed_at or now()) if obj.status == 'completed' else None
@@ -200,7 +237,11 @@ def edit_protocol(protocol_id: str, data: s.Edit, db: DB, user: Actor, school: S
     db.flush()
     changed = [key for key in values if str(before.get(key) or '') != str(values[key] or '')]
     message = 'Situação: ' + STATE_LABELS.get(before['status'], before['status']) + ' → ' + STATE_LABELS[obj.status] if before['status'] != obj.status else 'Dados do protocolo atualizados.'
-    protocol_event(db, obj, user, 'updated', message, before)
+    if obj.requester_user_id and before['status']!=obj.status:
+        from .protocol_portal import public_event
+        public_event(db,obj,user,'public_status',message)
+    else:
+        protocol_event(db, obj, user, 'updated', message, before)
     audit(db, request, user, 'protocol.updated', obj, school.id, {'before':before, 'after':output(obj), 'fields':changed})
     return protocol_output(db, obj)
 
@@ -223,6 +264,8 @@ def add_protocol_note(protocol_id: str, data: s.ProtocolNote, db: DB, user: Acto
 def protocol_pdf(protocol_id: str, db: DB, user: Actor, school: Scope, request: Request):
     require(user, 'reports.read')
     obj = scoped(db, m.Protocol, protocol_id, school.id)
+    if obj.requester_user_id:
+        require(user, 'protocols.read')
     data = protocol_output(db, obj)
     content = render_pdf(school, 'Comprovante de protocolo', [
         ('Protocolo', obj.number), ('Solicitação', obj.kind), ('Aluno', data['student_name'] or 'Não vinculado'),

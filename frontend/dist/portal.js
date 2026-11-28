@@ -50,7 +50,7 @@ var PigeInstitution;
 var PigeSupport;
 (function (PigeSupport) {
     const runtime = window;
-    PigeSupport.status = Vue.reactive({ error: '' });
+    PigeSupport.status = Vue.reactive({ error: '', canOpen: false });
     const busyMessage = 'O atendimento recebeu muitas solicitações. Aguarde antes de tentar novamente.';
     const roots = '#hub-widget-holder,#hub-bubble-holder';
     // A URL sem versão pode continuar em cache por um ano após atualizar o HUB.
@@ -64,8 +64,21 @@ var PigeSupport;
     let recovery = null, checkingArea = false, retryArea = null;
     let visibilityStyle = null;
     let listeningReady = false;
+    function launcher() { return document.querySelector?.('button#hub-bubble-holder, #hub-bubble-holder button, #hub-bubble-holder[role="button"]'); }
+    function checkLauncher() { PigeSupport.status.canOpen = Boolean(activeSDK && !checkingArea && runtime.$hub?.hasLoaded && (typeof runtime.$hub.toggle === 'function' || launcher())); }
+    function openChat() {
+        checkLauncher();
+        if (!PigeSupport.status.canOpen)
+            return;
+        if (typeof runtime.$hub?.toggle === 'function')
+            runtime.$hub.toggle('open');
+        else
+            launcher()?.click();
+    }
+    PigeSupport.openChat = openChat;
     function setChecking(checking) {
         checkingArea = checking;
+        checkLauncher();
         visibilityStyle?.remove();
         visibilityStyle = null;
         if (checking) {
@@ -89,6 +102,7 @@ var PigeSupport;
     function onReady() {
         if (!activeSDK || !runtime.$hub?.hasLoaded)
             return;
+        checkLauncher();
         cancelStartup();
         recovery?.remove();
         recovery = null;
@@ -106,6 +120,7 @@ var PigeSupport;
         }
         activeSDK = null;
         loadedSource = '';
+        PigeSupport.status.canOpen = false;
     }
     function dispose() {
         ++generation;
@@ -333,6 +348,47 @@ var PigeOnline;
 })(PigeOnline || (PigeOnline = {}));
 var PigeLearning;
 (function (PigeLearning) {
+    function orderPeriod(a, b) {
+        return (a.order_index ?? 0) - (b.order_index ?? 0) || (a.starts_on || '').localeCompare(b.starts_on || '') || a.period_id.localeCompare(b.period_id);
+    }
+    // Um diário pertence a uma turma de origem; nomes iguais podem identificar diários distintos.
+    function matrices(groups, calendars, filtered) {
+        const classes = new Map();
+        for (const group of groups) {
+            let matrix = classes.get(group.classId);
+            if (!matrix) {
+                const periods = new Map();
+                if (!filtered)
+                    for (const period of calendars?.[group.classId] || [])
+                        periods.set(period.period_id, period);
+                matrix = { className: group.className, periods, components: new Map(), published: new Set() };
+                classes.set(group.classId, matrix);
+            }
+            for (const item of group.items) {
+                matrix.periods.set(item.period_id, item);
+                matrix.published.add(item.period_id);
+                const key = JSON.stringify([item.diary_id, item.component_name]);
+                const component = matrix.components.get(key) || { id: key, name: item.component_name, results: new Map() };
+                component.results.set(item.period_id, item);
+                matrix.components.set(key, component);
+            }
+        }
+        const windows = [];
+        for (const [classId, matrix] of classes) {
+            const periods = Array.from(matrix.periods.values()).sort(orderPeriod);
+            const components = Array.from(matrix.components.values()).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+            for (let start = 0; start < periods.length; start += 4) {
+                const window = periods.slice(start, start + 4);
+                windows.push({ key: JSON.stringify([classId, window[0].period_id]), className: matrix.className, periods: window,
+                    periodLabel: window.map(p => p.period_name).join(', '), rows: components.map(component => ({
+                        id: component.id, name: component.name, cells: window.map(p => ({
+                            period: p, result: component.results.get(p.period_id), empty: matrix.published.has(p.period_id) ? 'Sem resultado publicado' : 'Não publicado',
+                        })),
+                    })) });
+            }
+        }
+        return windows;
+    }
     PigeLearning.component = { props: ['request', 'download', 'rootPath', 'schoolId', 'studentId', 'identity'], render: PigeRenders.learning, setup(props) {
             const state = Vue.reactive({ busy: false, error: '', students: [], studentId: '', enrollmentId: '', groupId: '', note: '' });
             const base = () => (props.rootPath || '/profile') + '/learning';
@@ -369,27 +425,41 @@ var PigeLearning;
                         state.groupId = '';
                 });
             }
-            const rows = () => (enrollment()?.subjects || []).flatMap(subject => subject.periods.map(period => ({ ...period, component_name: period.component_name || subject.component_name, diary_id: subject.diary_id })));
             const periodGroups = Vue.computed(() => {
                 const groups = new Map();
-                for (const row of rows()) {
-                    const className = row.class_label || row.class_name || enrollment()?.class_name || '';
-                    const id = JSON.stringify([row.period_id, row.class_group_id || className]);
-                    const group = groups.get(id) || { id, label: row.period_name, className, items: [] };
-                    group.items.push(row);
-                    groups.set(id, group);
+                for (const subject of enrollment()?.subjects || []) {
+                    for (const period of subject.periods) {
+                        const className = period.class_label || period.class_name || enrollment()?.class_name || '';
+                        const classId = period.class_group_id || className;
+                        const id = JSON.stringify([period.period_id, classId]);
+                        const group = groups.get(id) || { id, label: period.period_name, classId, className, items: [] };
+                        group.items.push({ ...period, component_name: period.component_name || subject.component_name, diary_id: subject.diary_id });
+                        groups.set(id, group);
+                    }
                 }
-                return Array.from(groups.values()).sort((left, right) => {
-                    const a = left.items[0], b = right.items[0];
-                    return (a.order_index ?? 0) - (b.order_index ?? 0) || (a.starts_on || '').localeCompare(b.starts_on || '') || left.className.localeCompare(right.className, 'pt-BR');
-                });
+                return Array.from(groups.values()).sort((a, b) => orderPeriod(a.items[0], b.items[0]) || a.className.localeCompare(b.className, 'pt-BR'));
             });
             const visibleGroups = Vue.computed(() => periodGroups.value.filter(group => !state.groupId || group.id === state.groupId));
+            const model = Vue.computed(() => enrollment()?.bulletin_model || 'integrated');
+            const tables = Vue.computed(() => matrices(visibleGroups.value, enrollment()?.class_calendars, Boolean(state.groupId)));
+            const tableKinds = Vue.computed(() => model.value === 'panel' ? ['grade', 'attendance'] : [model.value]);
+            const titles = { integrated: 'Rendimento e frequência', grade: 'Rendimento por componente', attendance: 'Aulas, faltas e frequência', journey: 'Percurso por componente' };
+            const modelNames = { integrated: 'Grade integrada', panel: 'Painel do aluno', journey: 'Percurso acadêmico' };
+            const fonts = { system: 'system-ui, sans-serif', arial: 'Arial, sans-serif', verdana: 'Verdana, sans-serif', georgia: 'Georgia, serif', times: 'Times New Roman, serif' };
+            const facts = Vue.computed(() => {
+                const e = enrollment();
+                return [['Registro escolar', student()?.student_number], ['Matrícula', e?.number], ['Ano letivo', e?.year_name], ['Etapa', e?.stage], ['Unidade', e?.unit], ['Turno', e?.shift]].filter(([, value]) => value);
+            });
+            const uniformStatus = Vue.computed(() => {
+                const values = new Set(visibleGroups.value.flatMap(group => group.items.map(item => item.result_label)));
+                return values.size === 1 ? Array.from(values)[0] : '';
+            });
+            const opinions = Vue.computed(() => visibleGroups.value.flatMap(group => group.items.filter(item => item.opinions?.length)));
             const percent = (value) => value === null || value === undefined ? 'Não apurada' : Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%';
             async function download(documentId = '') { await run(async () => { if (!student() || !enrollment())
                 return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId) + (documentId ? '&document_id=' + encodeURIComponent(documentId) : '') + (props.schoolId ? '&school_id=' + encodeURIComponent(props.schoolId) : ''), 'boletim-' + student().student_number + '.pdf'); }); }
             Vue.onMounted(() => { void load(); });
-            return { props, state, student, enrollment, selectStudent, rows, periodGroups, visibleGroups, percent, load, download };
+            return { props, state, student, enrollment, selectStudent, model, modelNames, fonts, facts, periodGroups, visibleGroups, tables, tableKinds, titles, uniformStatus, opinions, percent, load, download };
         } };
 })(PigeLearning || (PigeLearning = {}));
 /** Notícias e agenda com transporte compartilhável entre gestão, portal e página pública. */

@@ -38,11 +38,28 @@ A aplicação não implementa um lançamento retroativo de vigência de moviment
 
 Ficha cadastral pode ser emitida na ficha do aluno. Comprovante e declaração exigem matrícula ativa. O PDF fica arquivado, junto a uma cópia dos dados usados na emissão e o hash do arquivo. Edições posteriores nos cadastros não modificam automaticamente os PDFs já emitidos.
 
-A emissão não significa assinatura digital nem validação oficial. O documento contém espaço de assinatura física e aviso de ausência de assinatura digital. Os templates são código versionado nesta entrega; alterações de layout exigem manutenção no módulo de documentos.
+Confira no próprio documento se a emissão prevê assinatura física ou digital. Para o boletim, a família pode baixar o PDF de consulta ou uma revisão oficial que a escola já tenha assinado com certificado A1.
 
 ## Protocolos e relatórios
 
-Abra um protocolo, selecione o aluno quando aplicável, informe tipo, prazo e descrição. Os estados disponíveis são Aberto, Em atendimento, Aguardando, Concluído e Cancelado. Conclusão registra data. Não há aprovação em cadeia, notificação automática ou SLA com alertas.
+No gestor, abra **Protocolos** para acompanhar pedidos recebidos e atendimentos iniciados pela Secretaria. Os estados disponíveis são Aberto, Em atendimento, Aguardando, Concluído e Cancelado. A conclusão registra a data. A equipe pode informar prazo para acompanhar pendências na própria lista.
+
+### Fale com o colégio nos portais
+
+1. O professor, aluno ou responsável entra em **Atendimento → Novo protocolo**. No portal da família, primeiro seleciona o aluno. A categoria **Pedagógico** exige acesso acadêmico ao aluno e **Financeiro** exige o vínculo de responsável financeiro. O professor abre os próprios pedidos sem selecionar um aluno.
+2. O solicitante escolhe a categoria, informa assunto e mensagem e, se necessário, anexa um PDF, JPG ou PNG dentro do limite exibido. Ao clicar em **Abrir protocolo**, recebe um número com o prefixo **PRO-**. Para consultar depois, pode buscar pelo número ou abrir o assunto em **Meus protocolos**. Cada conta vê os pedidos em seu nome no contexto da escola e do aluno selecionados.
+3. Na Secretaria, abra **Protocolos → Ver atendimento**. Confira a origem, o solicitante e o aluno, quando houver. Em **Conversa com o solicitante**, use **Responder ao solicitante** para publicar texto e anexo no portal. **Adicionar nota interna** grava somente no histórico da equipe. Para iniciar um pedido em nome de alguém, escolha **Iniciar atendimento no portal**, pesquise o solicitante e confira o aluno e a categoria antes de enviar.
+4. No portal, o solicitante abre **Histórico do protocolo** para ler e baixar anexos. Durante o atendimento, escreve em **Sua resposta** e usa **Enviar resposta**. Depois do encerramento, o histórico continua disponível para consulta.
+
+**Preferência de avisos** define onde a pessoa recebe o aviso de uma atualização pública da escola. O e-mail depende do endereço da conta e do serviço de envio configurado. O WhatsApp exige telefone cadastrado e conexão ativa da escola. Cada aviso indica o número do protocolo e direciona ao portal para ler e responder.
+
+Para definir como quer receber a abertura de futuros atendimentos pela Secretaria, o titular usa **Avisos de novos protocolos abertos pela escola**, na lista. Escolha o canal disponível e clique em **Salvar preferência de abertura**. A escolha vale para essa pessoa nessa escola. Dentro de cada protocolo em andamento, o titular pode ajustar a preferência daquele atendimento.
+
+**Abrir chat da escola** inicia o atendimento pelo HUB quando a escola o habilita e o chat fica disponível. Use **Copiar número do protocolo** e cole a referência na conversa para que o atendente localize o pedido no gestor. **Continuar pelo WhatsApp** abre a conversa com a escola e prepara uma mensagem com esse número para o solicitante enviar. As conversas e respostas por e-mail ficam nos respectivos canais. Para acrescentar uma mensagem ao histórico do protocolo, use **Enviar resposta** no portal ou **Responder ao solicitante** no gestor.
+
+[Ver exemplo do histórico de atendimento](../frontend/public/guia/atendimento.webp)
+
+### Relatórios
 
 Relatórios permite selecionar turma e gerar PDF. Exportar cadastro CSV inclui código, nome, nascimento, contato e situação. As fórmulas perigosas em células de texto são prefixadas para não serem interpretadas como fórmulas em uma planilha.
 
@@ -66,16 +83,27 @@ No cadastro de um novo usuário, a escola pode marcar **Criar uma caixa de e-mai
 
 O titular abre **E-mail** no próprio portal. Aluno e responsável usam contas individuais. A troca de aluno acompanhado preserva a caixa da pessoa que entrou. [Operação do e-mail institucional](EMAIL-INTEGRADO.md)
 
+### Orientar a leitura do boletim
+
+O aluno entra em **Minha vida escolar**. O responsável com acesso acadêmico seleciona o dependente e entra em **Vida acadêmica**. Ambos também podem escolher **Consultar boletim** na visão geral. Confira a matrícula, o ano e a turma antes de interpretar as notas. Quando houver vários fechamentos, **Período e turma** filtra a consulta.
+
+Cada componente segue o critério da escola, que pode usar nota ou conceito. A frequência e as faltas correspondem ao mesmo período. **Não publicado** indica um período que ainda aguarda publicação. **Sem resultado publicado** indica que há publicação no período, mas falta resultado para aquele componente. **Não apurada** indica que a frequência ainda não pôde ser calculada. Quando a escola publica uma observação, ela aparece em **Pareceres pedagógicos**.
+
+**Baixar boletim PDF** reúne os resultados publicados da matrícula inteira, inclusive quando a tela exibe apenas um período. Para entregar uma via com assinatura digital, abra a revisão solicitada em **Vias oficiais assinadas**. Essa lista aparece quando a escola já emitiu uma revisão com certificado A1. [Ver a grade com quatro bimestres e cinco componentes](../frontend/public/guia/boletim-aluno.webp)
+
+### Conferir as cobranças que a família pode acessar
+
+Na ficha do aluno, confirme o vínculo **Financeiro** ativo do responsável. Em **Financeiro**, ele vê as cobranças autorizadas para aquele dependente. O pagador identificado na cobrança também pode consultar o documento de pagamento enquanto houver instruções válidas. O vínculo exclusivamente financeiro permite consultar as próprias cobranças e preserva a privacidade das atividades e do boletim.
+
+No Asaas, o portal pode apresentar fatura, boleto ou Pix copia e cola. Pela integração com o CRM, o título pode trazer Pix ou a linha digitável e o código de barras do boleto. **Pagamento identificado no CRM** informa o retorno externo. Para conferir a baixa na escola, consulte o registro da cobrança no gestor.
+
 ## Sem conexão
 
 A PWA não é um sistema de matrícula offline. Sem conexão, a interface avisa a indisponibilidade e não confirma a gravação. Dados já abertos podem permanecer temporariamente na memória da aba, mas não são persistidos pelo service worker. Ao sair, o estado de aplicação é limpo. Não use terminais compartilhados sem políticas de sessão e proteção do dispositivo.
 
 ## Guia dentro da aplicação
 
-Em qualquer tela autenticada, use **Guia de uso** para abrir a sequência recomendada: configurar a estrutura acadêmica, cadastrar ou reutilizar a identidade, criar e ativar a matrícula e operar o Diário. Na tela do Diário, o roteiro rápido explica períodos, aulas, chamada, avaliações, revisão, fechamento e autorização familiar. Mensagens de validação apontam o campo que precisa de correção; erros exibem um código de referência para suporte.
-
-
-No **Guia de uso**, em **Escolher tarefa**, selecione **Consultar atividades e boletim no Portal do Aluno** para orientar a família ou **Fazer chamada e planejar uma aula no Portal do Professor** para orientar o docente. As duas opções mostram telas da aplicação com dados fictícios. [Ver exemplo do painel do aluno](../frontend/public/guia/portal-aluno.webp) · [Ver exemplo do diário do professor](../frontend/public/guia/professor.webp)
+No gestor, abra **Guia de uso → Escolher tarefa** para consultar os passos e as capturas da aplicação. Selecione **Ler e imprimir o boletim escolar**, **Orientar a família sobre atividades e cobranças** ou **Fazer chamada e planejar uma aula no Portal do Professor** conforme a dúvida. No Diário, o roteiro rápido também explica chamada, avaliações, revisão, fechamento e publicação para a família. [Ver exemplo do painel do aluno](../frontend/public/guia/portal-aluno.webp) · [Ver exemplo do diário do professor](../frontend/public/guia/professor.webp)
 
 ## Recursos adicionados na 0.2.0
 
@@ -85,7 +113,7 @@ Em Matrículas, abra Detalhes e use **Editar pré-matrícula**. Disponível apen
 
 ### Acompanhar protocolos
 
-Abra **Ver atendimento** para consultar a descrição e a linha do tempo. **Registrar atendimento** acrescenta uma nota; não sobrescreve a anterior. **Atualizar protocolo** permite alterar prazo e situação, com registro de autoria. Para protocolos encerrados, reabra antes de acrescentar nova nota. **Comprovante PDF** comprova o pedido registrado, não o deferimento.
+Abra **Ver atendimento** para consultar a descrição e a linha do tempo. Nos protocolos internos, **Registrar atendimento** acrescenta uma nota e preserva os registros anteriores. Nos protocolos vinculados a um solicitante, use **Responder ao solicitante** ou **Adicionar nota interna**, conforme o destinatário. **Atualizar protocolo** permite alterar prazo e situação, com registro de autoria. Para protocolos encerrados, reabra antes de acrescentar uma nota. **Comprovante PDF** documenta o pedido registrado.
 
 A lista permite buscar número/assunto/descrição e filtrar situação ou apenas prazos vencidos. Na ficha do aluno, a aba **Protocolos** reúne os pedidos vinculados e permite abrir outro com o aluno já selecionado.
 

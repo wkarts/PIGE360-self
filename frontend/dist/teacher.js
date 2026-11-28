@@ -1162,7 +1162,7 @@ var PigeDiary;
 var PigeSupport;
 (function (PigeSupport) {
     const runtime = window;
-    PigeSupport.status = Vue.reactive({ error: '' });
+    PigeSupport.status = Vue.reactive({ error: '', canOpen: false });
     const busyMessage = 'O atendimento recebeu muitas solicitações. Aguarde antes de tentar novamente.';
     const roots = '#hub-widget-holder,#hub-bubble-holder';
     // A URL sem versão pode continuar em cache por um ano após atualizar o HUB.
@@ -1176,8 +1176,21 @@ var PigeSupport;
     let recovery = null, checkingArea = false, retryArea = null;
     let visibilityStyle = null;
     let listeningReady = false;
+    function launcher() { return document.querySelector?.('button#hub-bubble-holder, #hub-bubble-holder button, #hub-bubble-holder[role="button"]'); }
+    function checkLauncher() { PigeSupport.status.canOpen = Boolean(activeSDK && !checkingArea && runtime.$hub?.hasLoaded && (typeof runtime.$hub.toggle === 'function' || launcher())); }
+    function openChat() {
+        checkLauncher();
+        if (!PigeSupport.status.canOpen)
+            return;
+        if (typeof runtime.$hub?.toggle === 'function')
+            runtime.$hub.toggle('open');
+        else
+            launcher()?.click();
+    }
+    PigeSupport.openChat = openChat;
     function setChecking(checking) {
         checkingArea = checking;
+        checkLauncher();
         visibilityStyle?.remove();
         visibilityStyle = null;
         if (checking) {
@@ -1201,6 +1214,7 @@ var PigeSupport;
     function onReady() {
         if (!activeSDK || !runtime.$hub?.hasLoaded)
             return;
+        checkLauncher();
         cancelStartup();
         recovery?.remove();
         recovery = null;
@@ -1218,6 +1232,7 @@ var PigeSupport;
         }
         activeSDK = null;
         loadedSource = '';
+        PigeSupport.status.canOpen = false;
     }
     function dispose() {
         ++generation;
@@ -1408,6 +1423,208 @@ var PigeSupport;
     }
     window.addEventListener('pagehide', () => { ++generation; release(); setChecking(false); });
 })(PigeSupport || (PigeSupport = {}));
+var PigePortalProtocols;
+(function (PigePortalProtocols) {
+    const categories = { secretaria: 'Secretaria', pedagogico: 'Pedagógico', financeiro: 'Financeiro', tecnico: 'Suporte técnico' };
+    const statuses = { open: 'Aberto', in_progress: 'Em atendimento', waiting: 'Aguardando', completed: 'Concluído', cancelled: 'Cancelado' };
+    const channels = { portal: 'No portal', email: 'E-mail', whatsapp: 'WhatsApp' };
+    const dateFormatter = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+    const date = (value) => value && Number.isFinite(Date.parse(value)) ? dateFormatter.format(new Date(value)) : '';
+    const blank = () => ({ category: 'secretaria', subject: '', message: '', channel: 'portal', file: null });
+    PigePortalProtocols.component = { props: ['area', 'schoolId', 'studentId', 'academic', 'financial', 'request', 'download'], render: PigeRenders.portalProtocols, setup(props) {
+            const s = Vue.reactive({ view: 'list', busy: false, error: '', notice: '', items: [], ticket: null,
+                query: '', term: '', page: 1, pageSize: 20, total: 0, form: blank(), fileVersion: 0, options: { channels: ['portal'] }, optionsError: '', openingChannel: 'portal' });
+            const availableCategories = Vue.computed(() => Object.keys(categories).filter(key => key === 'financeiro' ? props.area === 'family' && props.financial :
+                key !== 'pedagogico' || props.area === 'teacher' || props.academic !== false));
+            const dirty = () => Boolean(s.form.message || s.form.file || (s.view === 'detail' && s.ticket && s.form.channel !== s.ticket.preferred_channel) || (s.view === 'new' && (s.form.subject || s.form.category !== 'secretaria' || s.form.channel !== 'portal')));
+            const closed = () => ['completed', 'cancelled'].includes(s.ticket?.status || '');
+            const base = '/' + props.area + '/schools/' + encodeURIComponent(props.schoolId) + '/protocols';
+            const path = (id) => base + '/' + encodeURIComponent(id);
+            const controller = new AbortController();
+            let active = true, optionsVersion = 0, clientKey = '', lastPayload = '', lastFile = null;
+            function reset() { s.form = blank(); s.fileVersion++; clientKey = ''; lastPayload = ''; lastFile = null; }
+            function displayError(e) { return e instanceof Error ? e.message : 'Não foi possível concluir a solicitação.'; }
+            function discard() { return !dirty() || window.confirm('Descartar o texto e o anexo que ainda não foram enviados?'); }
+            function focusTitle() { void Vue.nextTick(() => { if (active)
+                document.getElementById('portal-protocol-title')?.focus(); }); }
+            async function run(work) {
+                if (s.busy || !active)
+                    return;
+                s.busy = true;
+                s.error = '';
+                s.notice = '';
+                try {
+                    await work();
+                }
+                catch (e) {
+                    if (active) {
+                        s.error = displayError(e);
+                        if ([403, 404].includes(e?.status || 0)) {
+                            reset();
+                            s.ticket = null;
+                            s.items = [];
+                            s.total = 0;
+                            s.view = 'list';
+                        }
+                    }
+                }
+                finally {
+                    if (active)
+                        s.busy = false;
+                }
+            }
+            function applyOptions(data) {
+                const allowed = Object.keys(channels).filter(key => key === 'portal' || data.channels.includes(key));
+                const opening = data.opening_channel === undefined ? undefined : allowed.includes(data.opening_channel) ? data.opening_channel : 'portal';
+                s.options = { ...data, channels: allowed, opening_channel: opening };
+                s.openingChannel = opening || 'portal';
+                s.optionsError = '';
+            }
+            async function options() {
+                const version = ++optionsVersion;
+                try {
+                    const data = await props.request(base + '/options', { signal: controller.signal });
+                    if (active && version === optionsVersion)
+                        applyOptions(data);
+                }
+                catch (e) {
+                    if (active && version === optionsVersion) {
+                        s.options = { channels: ['portal'] };
+                        s.optionsError = displayError(e);
+                    }
+                }
+            }
+            async function saveOpeningChannel() {
+                if (!s.options.opening_channel || !s.options.channels.includes(s.openingChannel))
+                    return;
+                await run(async () => {
+                    const version = ++optionsVersion;
+                    const data = await props.request(base + '/opening-channel', { method: 'PUT', body: JSON.stringify({ preferred_channel: s.openingChannel }), signal: controller.signal });
+                    if (active && version === optionsVersion) {
+                        applyOptions(data);
+                        s.notice = 'Preferência de avisos para novos protocolos da escola salva.';
+                    }
+                });
+            }
+            const whatsappUrl = Vue.computed(() => {
+                const line = s.options.whatsapp_contact;
+                if (!line || !/^[1-9]\d{7,14}$/.test(line) || !s.ticket || closed() || !/^PRO-\d+$/.test(s.ticket.number))
+                    return '';
+                return 'https://wa.me/' + line + '?' + new URLSearchParams({ text: 'Olá, quero falar sobre o protocolo ' + s.ticket.number }).toString();
+            });
+            async function list(page = 1, search = false) {
+                if (s.busy || !discard())
+                    return;
+                const term = search ? s.query.trim() : s.term;
+                await run(async () => {
+                    const params = new URLSearchParams({ page: String(page) });
+                    if (props.studentId)
+                        params.set('student_id', props.studentId);
+                    if (term)
+                        params.set('q', term);
+                    const data = await props.request(base + '?' + params, { signal: controller.signal });
+                    if (!active)
+                        return;
+                    const changed = s.view !== 'list';
+                    s.view = 'list';
+                    s.ticket = null;
+                    reset();
+                    s.items = data.items;
+                    s.total = data.total;
+                    s.page = data.page;
+                    s.pageSize = data.page_size;
+                    s.term = term;
+                    if (changed)
+                        focusTitle();
+                });
+            }
+            function showNew() { if (s.busy || (props.area === 'family' && !props.studentId))
+                return; reset(); s.view = 'new'; s.ticket = null; s.error = ''; s.notice = ''; focusTitle(); }
+            function showTicket(data) { reset(); s.ticket = data; s.form.channel = data.preferred_channel; s.view = 'detail'; }
+            async function open(id) {
+                if (s.busy || !discard())
+                    return;
+                await run(async () => { const data = await props.request(path(id), { signal: controller.signal }); if (active) {
+                    showTicket(data);
+                    focusTitle();
+                } });
+            }
+            function chooseFile(event) { s.form.file = event.target.files?.[0] || null; }
+            async function copyNumber() {
+                const ticket = s.ticket;
+                if (!ticket)
+                    return;
+                try {
+                    await navigator.clipboard.writeText(ticket.number);
+                    if (active && ticket.id === s.ticket?.id)
+                        s.notice = 'Número do protocolo copiado.';
+                }
+                catch {
+                    if (active && ticket.id === s.ticket?.id)
+                        s.notice = 'Selecione o número ' + ticket.number + ' no cabeçalho para copiá-lo.';
+                }
+            }
+            async function send() {
+                const creating = s.view === 'new';
+                if ((!creating && (!s.ticket || closed())) || s.busy)
+                    return;
+                await run(async () => {
+                    const message = s.form.message.trim(), subject = s.form.subject.trim();
+                    if (message.length < 3 || (creating && subject.length < 2))
+                        throw new Error('Informe ao menos dois caracteres no assunto e três na mensagem.');
+                    if (s.form.file && s.options.max_attachment_mb && s.form.file.size > s.options.max_attachment_mb * 1024 * 1024)
+                        throw new Error('O anexo ultrapassa o limite de ' + s.options.max_attachment_mb + ' MB.');
+                    const body = new FormData();
+                    body.set('message', message);
+                    if (creating) {
+                        body.set('subject', subject);
+                        body.set('category', s.form.category);
+                        body.set('preferred_channel', s.form.channel);
+                        if (props.studentId)
+                            body.set('student_id', props.studentId);
+                    }
+                    const target = creating ? base : path(s.ticket.id) + '/messages';
+                    const payload = JSON.stringify(creating ? [target, message, subject, s.form.category, s.form.channel] : [target, message]);
+                    if (!clientKey || payload !== lastPayload || s.form.file !== lastFile) {
+                        clientKey = crypto.randomUUID();
+                        lastPayload = payload;
+                        lastFile = s.form.file;
+                    }
+                    body.set('client_key', clientKey);
+                    if (s.form.file)
+                        body.set('file', s.form.file);
+                    const data = await props.request(target, { method: 'POST', body, signal: controller.signal });
+                    if (active) {
+                        showTicket(data);
+                        s.notice = creating ? 'Protocolo ' + data.number + ' aberto.' : 'Resposta registrada.';
+                        if (creating)
+                            focusTitle();
+                    }
+                });
+            }
+            async function changeChannel() {
+                const ticket = s.ticket;
+                if (!ticket || closed() || !s.options.channels.includes(s.form.channel) || ticket.preferred_channel === s.form.channel)
+                    return;
+                await run(async () => {
+                    const data = await props.request(path(ticket.id) + '/channel', { method: 'PATCH', body: JSON.stringify({ preferred_channel: s.form.channel }), signal: controller.signal });
+                    if (active) {
+                        s.ticket = data;
+                        s.form.channel = data.preferred_channel;
+                        s.notice = 'Preferência de avisos atualizada.';
+                    }
+                });
+            }
+            async function attachment(file) {
+                const ticket = s.ticket;
+                if (ticket && file)
+                    await run(() => props.download(path(ticket.id) + '/attachments/' + encodeURIComponent(file.id), file.name));
+            }
+            Vue.onMounted(() => { void options(); void list(); });
+            Vue.onUnmounted(() => { active = false; controller.abort(); reset(); });
+            return { s, props, availableCategories, categories, statuses, channels, closed, dirty, date, options, saveOpeningChannel, whatsappUrl, list, showNew, open, chooseFile, copyNumber, send, changeChannel, attachment, chat: PigeSupport.status, openChat: PigeSupport.openChat };
+        } };
+})(PigePortalProtocols || (PigePortalProtocols = {}));
 /** Caixa pessoal já vinculada à conta escolar. O SOGo autentica pelo proxy da própria origem. */
 var PigePortalMail;
 (function (PigePortalMail) {
@@ -1560,6 +1777,7 @@ var PigeTeacher;
         { id: 'diary', label: 'Diário de classe', icon: 'academic' },
         { id: 'materials', label: 'Atividades e trabalhos', icon: 'documents' },
         { id: 'news', label: 'Avisos e publicações', icon: 'bell' },
+        { id: 'support', label: 'Atendimento', icon: 'school' },
         { id: 'webmail', label: 'E-mail', icon: 'email' },
     ];
     const mail = PigePortalMail.use(PigeAPI.request);
@@ -1674,7 +1892,7 @@ var PigeTeacher;
                 await enter(data);
         });
     }
-    async function logout() { if (canDiscardDiary())
+    async function logout() { if (canLeaveSchool())
         await run(async () => { await PigeAPI.post('/auth/logout', {}); clear(); }); }
     async function start() {
         await PigeInstitution.load();
@@ -1692,7 +1910,7 @@ var PigeTeacher;
     }
     function selectSchool(event) {
         const select = event.target;
-        if (!canDiscardDiary()) {
+        if (!canLeaveSchool()) {
             select.value = s.schoolId;
             return;
         }
@@ -1715,6 +1933,8 @@ var PigeTeacher;
             return true;
         if (!s.schoolId || !s.user)
             return false;
+        if (section === 'support')
+            return true;
         const routines = s.user.teacher_routines;
         if (section === 'webmail')
             return Boolean(routines?.includes('mail') && mail.state.available);
@@ -1766,6 +1986,13 @@ var PigeTeacher;
         if (section === 'agenda')
             void run(agenda);
     }
+    function supportDraft() { return Boolean(document.querySelector('#teacher-protocols [data-workspace-dirty="true"]')); }
+    function supportBusy() { return Boolean(document.querySelector('#teacher-protocols [aria-busy="true"]')); }
+    function canLeaveSchool() {
+        if (supportBusy() || !canDiscardDiary())
+            return false;
+        return !supportDraft() || window.confirm('Descartar a mensagem de atendimento que ainda não foi enviada?');
+    }
     function canDiscardDiary() {
         if (document.querySelector('#teacher-diary [aria-busy="true"]'))
             return false;
@@ -1787,11 +2014,15 @@ var PigeTeacher;
         if (closingDiary && document.querySelector('#teacher-diary [aria-busy="true"]'))
             return;
         const dirty = closingDiary && document.querySelector('#teacher-diary [data-workspace-dirty="true"]');
+        const closingSupport = s.tabs.includes('support') && (!section || section === 'support');
+        if (closingSupport && supportBusy())
+            return;
+        const supportWarning = closingSupport && supportDraft() ? ' A mensagem de atendimento ainda não enviada será descartada.' : '';
         const closingMail = s.tabs.includes('webmail') && (!section || section === 'webmail');
         const message = section ? 'Fechar a guia ' + title(section) + '?' : 'Fechar todas as outras guias e manter a Visão geral aberta?';
         const diaryWarning = dirty ? ' As alterações do diário que ainda não foram salvas serão descartadas.' : '';
         const mailWarning = closingMail ? ' Confira se as mensagens em edição foram salvas em Rascunhos.' : '';
-        if ((!section || dirty || closingMail) && !window.confirm(message + diaryWarning + mailWarning))
+        if ((!section || dirty || closingMail || supportWarning) && !window.confirm(message + diaryWarning + mailWarning + supportWarning))
             return;
         const previous = s.section;
         s.tabs = section ? s.tabs.filter(id => id !== section) : ['overview'];
@@ -1857,7 +2088,7 @@ var PigeTeacher;
         const assignment = s.agenda?.assignments.find(item => item.id === diary?.teacher_assignment_id);
         return [assignment?.class_name, diary?.component].filter(Boolean).join(' · ');
     }
-    Vue.createApp({ render: PigeRenders.teacherPortal, components: { 'school-diary': PigeDiary.component, 'portal-mail': PigePortalMail.component }, setup() {
+    Vue.createApp({ render: PigeRenders.teacherPortal, components: { 'portal-protocols': PigePortalProtocols.component, 'school-diary': PigeDiary.component, 'portal-mail': PigePortalMail.component }, setup() {
             Vue.watch(() => [s.ready, s.user?.id, s.user?.role, s.schoolId].join('|'), () => {
                 if (s.user && s.schoolId)
                     void PigeSupport.load(s.schoolId, 'teacher_portal', s.user.id);
@@ -1874,6 +2105,6 @@ var PigeTeacher;
                     s.menuOpen = false; PigePortalTabs.reveal(); });
                 void start();
             });
-            return { s, mail, available, unavailable, can, navigation, title, initials, metrics, openDiary, closeTabs, tabKeys, toggleSidebar, retry, pilotForSchool: PigeDiary.pilotForSchool, navigate, toggleMenu, menuKey, publications, identity: PigeInstitution.state, mfa: PigeMFA, login, logout, run, agenda, workspace, date, group, selectSchool };
+            return { s, mail, download: PigeAPI.download, available, unavailable, can, navigation, title, initials, metrics, openDiary, closeTabs, tabKeys, toggleSidebar, retry, pilotForSchool: PigeDiary.pilotForSchool, navigate, toggleMenu, menuKey, publications, identity: PigeInstitution.state, mfa: PigeMFA, login, logout, run, agenda, workspace, date, group, selectSchool };
         } }).mount('#teacher');
 })(PigeTeacher || (PigeTeacher = {}));

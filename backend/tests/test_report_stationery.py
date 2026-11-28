@@ -29,6 +29,37 @@ def test_stationery_on_student_and_family_exports(api, client, admin):
     for label in (enrollment['number'], '3º Bimestre', 'Matemática', '8,5', '66,67%'):
         assert label in grades
     assert '99.9999' not in grades and 'NOTA_INTERNA' not in grades
+    assert 'Consulta de resultados publicados' in grades and 'via sem assinatura digital' in grades
+    assert 'PRÉVIA' not in grades and 'Sistema de gestão escolar' not in grades
+    assert 'Carimbo de identificação institucional' in grades and 'Assinatura da instituição' in grades
+
+
+def test_bulletin_matrix_keeps_measures_and_publication_distinct():
+    from app.report_bulletins import bulletin_sections
+
+    def term(pid, order, grade, rate, status, **changes):
+        return dict(period_id=pid, period_name=f'{order}º trimestre', order_index=order, starts_on=f'2026-0{order}-01',
+                    class_group_id='turma', class_label='Turma A', component_name='', grade_display=grade,
+                    result_label=status, recovery=[], opinions=[],
+                    attendance={'total': 1, 'absent': 0, 'justified_absence': 0, 'unrecorded': int(rate is None),
+                                'percentage': rate}, **changes)
+
+    math = term('t1', 1, '0', 0, 'Consolidado')
+    art = term('t1', 1, 'Satisfatório', None, 'Conceito consolidado')
+    entry = {'enrollment_id':'e', 'number':'MAT-1', 'stage':'Médio', 'grade_name':'3ª série', 'year_name':'2026',
+             'class_group_id':'turma', 'class_name':'A', 'unit':'Centro', 'shift':'Vespertino',
+             'subjects':[{'diary_id':'d1','component_name':'Matemática','periods':[math]},
+                         {'diary_id':'d2','component_name':'Arte','periods':[art]}],
+             'class_calendars':{'turma':[{'period_id':'t2','period_name':'2º trimestre','order_index':2,'starts_on':'2026-05-01'}]}}
+    for model in ('integrated', 'panel', 'journey'):
+        matrices = [section for section in bulletin_sections([entry], model) if section.get('column_groups')]
+        cells = {(r['component'], c['metric']):r[c['key']] for section in matrices for c in section['columns']
+                 if 'metric' in c for r in section['rows']}
+        assert cells['Matemática','grade'] == '0' and cells['Matemática','rate'] == '0%'
+        assert cells['Arte','grade'] == 'Satisfatório' and cells['Arte','rate'] == 'Não apurada'
+        assert cells['Arte','unrecorded'] == 1 and cells['Arte','unpublished'] == '—'
+        assert all(sum(b['span'] for b in table['column_groups']) == len(table['columns']) for table in matrices)
+
 
 
 def test_grade_matrix_preserves_class_period_order_and_partial_publication():

@@ -5,6 +5,7 @@ var _Vue=Vue; var PigeRenders={teacherPortal:function render(_ctx, _cache) {
 
     const _component_school_diary = _resolveComponent("school-diary")
     const _component_portal_mail = _resolveComponent("portal-mail")
+    const _component_portal_protocols = _resolveComponent("portal-protocols")
 
     return (_openBlock(), _createElementBlock("div", {
       class: "family-root",
@@ -335,7 +336,7 @@ var _Vue=Vue; var PigeRenders={teacherPortal:function render(_ctx, _cache) {
                     class: "family-welcome"
                   }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Olá, " + _toDisplayString(s.user.name.split(' ')[0]) + ".", 1), (available('agenda') && available('diary'))
                     ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Consulte a programação e registre aulas, chamadas e avaliações das suas turmas."))
-                    : (navigation().length>1)
+                    : (navigation().some(item=>!['overview','support'].includes(item.id)))
                       ? (_openBlock(), _createElementBlock("p", { key: 1 }, "Consulte as rotinas liberadas pela escola para o seu acesso."))
                       : (s.schoolId && !s.busy)
                         ? (_openBlock(), _createElementBlock("p", { key: 2 }, "Ainda não há rotinas liberadas para esta conta. Solicite a liberação à coordenação."))
@@ -343,33 +344,44 @@ var _Vue=Vue; var PigeRenders={teacherPortal:function render(_ctx, _cache) {
                     ? (_openBlock(), _createElementBlock("div", {
                         key: 0,
                         class: "actions"
-                      }, [(available('diary') && s.agenda?.diaries.length)
-                        ? (_openBlock(), _createElementBlock("button", {
-                            key: 0,
-                            class: "btn btn-primary",
-                            onClick: $event => (navigate('diary'))
-                          }, "Acessar meus diários", 8, ["onClick"]))
-                        : _createCommentVNode("", true), (available('agenda'))
-                        ? (_openBlock(), _createElementBlock("button", {
-                            key: 1,
-                            class: _normalizeClass(["btn", available('diary') && s.agenda?.diaries.length?'btn-secondary':'btn-primary']),
-                            onClick: $event => (navigate('agenda'))
-                          }, "Consultar programação", 10, ["onClick"]))
-                        : _createCommentVNode("", true), (!available('agenda') && !(available('diary') && s.agenda?.diaries.length))
-                        ? (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [(available('news'))
-                            ? (_openBlock(), _createElementBlock("button", {
-                                key: 0,
-                                class: "btn btn-primary",
-                                onClick: $event => (navigate('news'))
-                              }, "Consultar avisos", 8, ["onClick"]))
-                            : _createCommentVNode("", true), (available('webmail'))
-                            ? (_openBlock(), _createElementBlock("button", {
-                                key: 1,
-                                class: "btn btn-secondary",
-                                onClick: $event => (navigate('webmail'))
-                              }, "Abrir caixa institucional", 8, ["onClick"]))
-                            : _createCommentVNode("", true)], 64))
-                        : _createCommentVNode("", true)]))
+                      }, [
+                        (available('diary') && s.agenda?.diaries.length)
+                          ? (_openBlock(), _createElementBlock("button", {
+                              key: 0,
+                              class: "btn btn-primary",
+                              onClick: $event => (navigate('diary'))
+                            }, "Acessar meus diários", 8, ["onClick"]))
+                          : _createCommentVNode("", true),
+                        (available('agenda'))
+                          ? (_openBlock(), _createElementBlock("button", {
+                              key: 1,
+                              class: _normalizeClass(["btn", available('diary') && s.agenda?.diaries.length?'btn-secondary':'btn-primary']),
+                              onClick: $event => (navigate('agenda'))
+                            }, "Consultar programação", 10, ["onClick"]))
+                          : _createCommentVNode("", true),
+                        (available('support'))
+                          ? (_openBlock(), _createElementBlock("button", {
+                              key: 2,
+                              class: "btn btn-secondary",
+                              onClick: $event => (navigate('support'))
+                            }, "Fale com o colégio", 8, ["onClick"]))
+                          : _createCommentVNode("", true),
+                        (!available('agenda') && !(available('diary') && s.agenda?.diaries.length))
+                          ? (_openBlock(), _createElementBlock(_Fragment, { key: 3 }, [(available('news'))
+                              ? (_openBlock(), _createElementBlock("button", {
+                                  key: 0,
+                                  class: "btn btn-primary",
+                                  onClick: $event => (navigate('news'))
+                                }, "Consultar avisos", 8, ["onClick"]))
+                              : _createCommentVNode("", true), (available('webmail'))
+                              ? (_openBlock(), _createElementBlock("button", {
+                                  key: 1,
+                                  class: "btn btn-secondary",
+                                  onClick: $event => (navigate('webmail'))
+                                }, "Abrir caixa institucional", 8, ["onClick"]))
+                              : _createCommentVNode("", true)], 64))
+                          : _createCommentVNode("", true)
+                      ]))
                     : _createCommentVNode("", true)]))
                 : _createCommentVNode("", true),
               (s.section==='overview' && s.agenda)
@@ -524,9 +536,21 @@ var _Vue=Vue; var PigeRenders={teacherPortal:function render(_ctx, _cache) {
                     request: mail.request
                   }, null, 8, ["school-id", "request"]))], 512)), [[_vShow, s.section==='webmail']])
                 : _createCommentVNode("", true),
+              (s.tabs.includes('support') && available('support'))
+                ? _withDirectives((_openBlock(), _createElementBlock("div", {
+                    key: 8,
+                    id: "teacher-protocols"
+                  }, [(_openBlock(), _createBlock(_component_portal_protocols, {
+                    key: s.user.id+':'+s.schoolId,
+                    area: "teacher",
+                    "school-id": s.schoolId,
+                    request: mail.request,
+                    download: download
+                  }, null, 8, ["school-id", "request", "download"]))], 512)), [[_vShow, s.section==='support']])
+                : _createCommentVNode("", true),
               (s.section==='help')
                 ? (_openBlock(), _createElementBlock("section", {
-                    key: 8,
+                    key: 9,
                     class: "panel family-detail-panel teacher-guide"
                   }, [_createElementVNode("h2", null, "Guia de uso do diário"), _createElementVNode("div", { class: "teacher-guide-content" }, [_createElementVNode("ol", null, [
                     _createElementVNode("li", null, [_createTextVNode("Na Visão geral, localize a turma e a disciplina em "), _createElementVNode("strong", null, "Minhas turmas"), _createTextVNode(". A coordenação confere o vínculo no Diário Escolar.")]),
@@ -2358,5 +2382,278 @@ var _Vue=Vue; var PigeRenders={teacherPortal:function render(_ctx, _cache) {
         onLoad: loaded
       }, null, 40, ["src", "onLoad"]), [[_vShow, !m.needsPassword&&!m.error]])
     ]))
+  }
+},portalProtocols:function render(_ctx, _cache) {
+  with (_ctx) {
+    const { toDisplayString: _toDisplayString, createElementVNode: _createElementVNode, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createTextVNode: _createTextVNode, vModelText: _vModelText, withDirectives: _withDirectives, withModifiers: _withModifiers, renderList: _renderList, Fragment: _Fragment, vModelSelect: _vModelSelect } = _Vue
+
+    return (_openBlock(), _createElementBlock("section", {
+      class: "panel family-detail-panel portal-protocols",
+      "aria-label": "Atendimento do colégio",
+      "aria-busy": s.busy,
+      "data-workspace-dirty": dirty()?'true':undefined
+    }, [
+      _createElementVNode("header", { class: "portal-protocols-heading" }, [_createElementVNode("div", null, [_createElementVNode("h2", {
+        id: "portal-protocol-title",
+        tabindex: "-1"
+      }, _toDisplayString(s.view==='list'?'Fale com o colégio':s.view==='new'?'Novo protocolo':s.ticket?.subject), 1), (s.view==='list')
+        ? (_openBlock(), _createElementBlock("p", { key: 0 }, "Abra uma solicitação ou acompanhe o retorno da escola pelo número do protocolo."))
+        : _createCommentVNode("", true), (s.ticket)
+        ? (_openBlock(), _createElementBlock("p", { key: 1 }, [_createElementVNode("strong", null, _toDisplayString(s.ticket.number), 1), _createTextVNode(" · " + _toDisplayString(statuses[s.ticket.status]||s.ticket.status) + " · " + _toDisplayString(categories[s.ticket.category]||s.ticket.category), 1)]))
+        : _createCommentVNode("", true)]), _createElementVNode("div", { class: "actions" }, [(s.view==='list' && (props.area==='teacher' || props.studentId))
+        ? (_openBlock(), _createElementBlock("button", {
+            key: 0,
+            type: "button",
+            class: "btn btn-primary",
+            disabled: s.busy,
+            onClick: showNew
+          }, "Novo protocolo", 8, ["disabled", "onClick"]))
+        : (s.view!=='list')
+          ? (_openBlock(), _createElementBlock("button", {
+              key: 1,
+              type: "button",
+              class: "btn btn-secondary",
+              disabled: s.busy,
+              onClick: $event => (list(s.page))
+            }, "Voltar aos protocolos", 8, ["disabled", "onClick"]))
+          : _createCommentVNode("", true), (chat.canOpen)
+        ? (_openBlock(), _createElementBlock("button", {
+            key: 2,
+            type: "button",
+            class: "btn btn-secondary",
+            onClick: openChat
+          }, "Abrir chat da escola", 8, ["onClick"]))
+        : _createCommentVNode("", true)])]),
+      (chat.canOpen && s.ticket && !closed())
+        ? (_openBlock(), _createElementBlock("div", {
+            key: 0,
+            class: "portal-ticket-handoff"
+          }, [_createElementVNode("p", null, "No chat da escola, informe " + _toDisplayString(s.ticket.number) + ". Para registrar uma mensagem no histórico deste protocolo, use Enviar resposta.", 1), _createElementVNode("button", {
+            type: "button",
+            class: "link-button",
+            onClick: copyNumber
+          }, "Copiar número do protocolo", 8, ["onClick"])]))
+        : _createCommentVNode("", true),
+      (s.busy)
+        ? (_openBlock(), _createElementBlock("p", {
+            key: 1,
+            role: "status"
+          }, "Aguarde, atualizando o atendimento…"))
+        : _createCommentVNode("", true),
+      (s.error)
+        ? (_openBlock(), _createElementBlock("p", {
+            key: 2,
+            class: "alert error",
+            role: "alert"
+          }, _toDisplayString(s.error), 1))
+        : _createCommentVNode("", true),
+      (s.notice)
+        ? (_openBlock(), _createElementBlock("p", {
+            key: 3,
+            class: "alert success",
+            role: "status"
+          }, _toDisplayString(s.notice), 1))
+        : _createCommentVNode("", true),
+      (s.view==='list')
+        ? (_openBlock(), _createElementBlock(_Fragment, { key: 4 }, [
+            _createElementVNode("form", {
+              class: "family-feed-search",
+              onSubmit: _withModifiers($event => (list(1,true)), ["prevent"])
+            }, [_createElementVNode("label", { class: "field" }, [_createTextVNode("Número do protocolo"), _withDirectives(_createElementVNode("input", {
+              type: "search",
+              "onUpdate:modelValue": $event => ((s.query) = $event),
+              maxlength: "100",
+              placeholder: "PRO-",
+              disabled: s.busy
+            }, null, 8, ["onUpdate:modelValue", "disabled"]), [[_vModelText, s.query]])]), _createElementVNode("button", {
+              class: "btn btn-secondary",
+              disabled: s.busy
+            }, "Buscar", 8, ["disabled"])], 40, ["onSubmit"]),
+            _createElementVNode("h3", null, "Meus protocolos"),
+            (s.items.length)
+              ? (_openBlock(), _createElementBlock("ul", {
+                  key: 0,
+                  class: "portal-ticket-list"
+                }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.items, (item) => {
+                  return (_openBlock(), _createElementBlock("li", { key: item.id }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(item.number), 1), _createElementVNode("button", {
+                    type: "button",
+                    class: "link-button",
+                    "aria-label": 'Abrir '+item.number+' · '+item.subject,
+                    onClick: $event => (open(item.id)),
+                    disabled: s.busy
+                  }, _toDisplayString(item.subject), 9, ["aria-label", "onClick", "disabled"])]), _createElementVNode("p", null, [_createTextVNode(_toDisplayString(statuses[item.status]||item.status) + " · " + _toDisplayString(categories[item.category]||item.category), 1), _createElementVNode("small", null, "Atualizado em " + _toDisplayString(date(item.updated_at)), 1)])]))
+                }), 128))]))
+              : (!s.busy&&!s.error)
+                ? (_openBlock(), _createElementBlock("p", {
+                    key: 1,
+                    class: "family-empty"
+                  }, _toDisplayString(s.term?'Nenhum protocolo encontrado para esse número.':'Você ainda não tem protocolos neste contexto.'), 1))
+                : _createCommentVNode("", true),
+            (s.total>s.pageSize)
+              ? (_openBlock(), _createElementBlock("nav", {
+                  key: 2,
+                  class: "family-pagination",
+                  "aria-label": "Páginas de protocolos"
+                }, [_createElementVNode("button", {
+                  class: "btn btn-secondary",
+                  disabled: s.busy||s.page<=1,
+                  onClick: $event => (list(s.page-1))
+                }, "Anterior", 8, ["disabled", "onClick"]), _createElementVNode("span", null, "Página " + _toDisplayString(s.page) + " de " + _toDisplayString(Math.ceil(s.total/s.pageSize)), 1), _createElementVNode("button", {
+                  class: "btn btn-secondary",
+                  disabled: s.busy||s.page*s.pageSize>=s.total,
+                  onClick: $event => (list(s.page+1))
+                }, "Próxima", 8, ["disabled", "onClick"])]))
+              : _createCommentVNode("", true),
+            (s.options.opening_channel)
+              ? (_openBlock(), _createElementBlock("section", {
+                  key: 3,
+                  class: "portal-opening-channel"
+                }, [_createElementVNode("h3", null, "Avisos de novos protocolos abertos pela escola"), _createElementVNode("form", {
+                  class: "family-feed-search",
+                  onSubmit: _withModifiers(saveOpeningChannel, ["prevent"])
+                }, [_createElementVNode("label", { class: "field" }, [_createTextVNode("Quando a Secretaria abrir um atendimento para mim"), _withDirectives(_createElementVNode("select", {
+                  "onUpdate:modelValue": $event => ((s.openingChannel) = $event),
+                  disabled: s.busy
+                }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.options.channels, (key) => {
+                  return (_openBlock(), _createElementBlock("option", {
+                    key: key,
+                    value: key
+                  }, _toDisplayString(key==='portal'?'Somente no portal':channels[key]), 9, ["value"]))
+                }), 128))], 8, ["onUpdate:modelValue", "disabled"]), [[_vModelSelect, s.openingChannel]])]), _createElementVNode("button", {
+                  type: "submit",
+                  class: "btn btn-secondary",
+                  disabled: s.busy
+                }, "Salvar preferência de abertura", 8, ["disabled"])], 40, ["onSubmit"])]))
+              : _createCommentVNode("", true)
+          ], 64))
+        : _createCommentVNode("", true),
+      (s.view==='detail' && s.ticket)
+        ? (_openBlock(), _createElementBlock(_Fragment, { key: 5 }, [_createElementVNode("div", { class: "portal-protocols-heading" }, [_createElementVNode("h3", null, "Histórico do protocolo"), _createElementVNode("button", {
+            class: "btn btn-secondary",
+            type: "button",
+            onClick: $event => (open(s.ticket.id)),
+            disabled: s.busy
+          }, "Atualizar histórico", 8, ["onClick", "disabled"])]), _createElementVNode("ol", { class: "portal-ticket-history" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.ticket.history, (entry) => {
+            return (_openBlock(), _createElementBlock("li", { key: entry.id }, [_createElementVNode("header", null, [_createElementVNode("strong", null, _toDisplayString(entry.author==='you'?'Você':'Escola'), 1), _createElementVNode("time", { datetime: entry.created_at }, _toDisplayString(date(entry.created_at)), 9, ["datetime"])]), _createElementVNode("p", null, _toDisplayString(entry.message), 1), (entry.attachment)
+              ? (_openBlock(), _createElementBlock("button", {
+                  key: 0,
+                  type: "button",
+                  class: "link-button",
+                  disabled: s.busy,
+                  onClick: $event => (attachment(entry.attachment))
+                }, "Baixar anexo · " + _toDisplayString(entry.attachment.name), 9, ["disabled", "onClick"]))
+              : _createCommentVNode("", true)]))
+          }), 128))])], 64))
+        : _createCommentVNode("", true),
+      (s.optionsError)
+        ? (_openBlock(), _createElementBlock("p", {
+            key: 6,
+            class: "alert",
+            role: "status"
+          }, [_createTextVNode("Preferências de contato indisponíveis. O atendimento pelo portal continua disponível. "), _createElementVNode("button", {
+            type: "button",
+            class: "link-button",
+            onClick: options
+          }, "Tentar novamente", 8, ["onClick"])]))
+        : _createCommentVNode("", true),
+      (s.view==='new'||(s.view==='detail'&&!closed()))
+        ? (_openBlock(), _createElementBlock("form", {
+            key: 7,
+            class: "portal-ticket-form",
+            onSubmit: _withModifiers(send, ["prevent"])
+          }, [_createElementVNode("fieldset", { disabled: s.busy }, [
+            _createElementVNode("legend", null, _toDisplayString(s.view==='new'?'Dados da solicitação':'Responder ao colégio'), 1),
+            (s.view==='new')
+              ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createElementVNode("label", { class: "field" }, [_createTextVNode("Categoria"), _withDirectives(_createElementVNode("select", {
+                  "onUpdate:modelValue": $event => ((s.form.category) = $event),
+                  required: ""
+                }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(availableCategories, (key) => {
+                  return (_openBlock(), _createElementBlock("option", {
+                    key: key,
+                    value: key
+                  }, _toDisplayString(categories[key]), 9, ["value"]))
+                }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, s.form.category]])]), _createElementVNode("label", { class: "field" }, [_createTextVNode("Assunto"), _withDirectives(_createElementVNode("input", {
+                  type: "text",
+                  "onUpdate:modelValue": $event => ((s.form.subject) = $event),
+                  minlength: "2",
+                  maxlength: "120",
+                  required: ""
+                }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.form.subject]])]), (s.options.channels.length>1)
+                  ? (_openBlock(), _createElementBlock("label", {
+                      key: 0,
+                      class: "field"
+                    }, [_createTextVNode("Preferência de avisos"), _withDirectives(_createElementVNode("select", { "onUpdate:modelValue": $event => ((s.form.channel) = $event) }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.options.channels, (key) => {
+                      return (_openBlock(), _createElementBlock("option", {
+                        key: key,
+                        value: key
+                      }, _toDisplayString(channels[key]), 9, ["value"]))
+                    }), 128))], 8, ["onUpdate:modelValue"]), [[_vModelSelect, s.form.channel]])]))
+                  : _createCommentVNode("", true)], 64))
+              : _createCommentVNode("", true),
+            _createElementVNode("label", { class: "field" }, [_createTextVNode(_toDisplayString(s.view==='new'?'Mensagem':'Sua resposta'), 1), _withDirectives(_createElementVNode("textarea", {
+              "onUpdate:modelValue": $event => ((s.form.message) = $event),
+              rows: "4",
+              minlength: "3",
+              maxlength: "4000",
+              required: ""
+            }, null, 8, ["onUpdate:modelValue"]), [[_vModelText, s.form.message]])]),
+            _createElementVNode("label", { class: "field" }, [_createTextVNode("Anexo (opcional)"), (_openBlock(), _createElementBlock("input", {
+              key: s.fileVersion,
+              type: "file",
+              accept: "application/pdf,image/png,image/jpeg",
+              onChange: chooseFile
+            }, null, 40, ["onChange"])), _createElementVNode("small", null, [_createTextVNode("PDF, JPG ou PNG"), (s.options.max_attachment_mb)
+              ? (_openBlock(), _createElementBlock("span", { key: 0 }, " de até " + _toDisplayString(s.options.max_attachment_mb) + " MB", 1))
+              : _createCommentVNode("", true), _createTextVNode(".")])]),
+            _createElementVNode("button", {
+              type: "submit",
+              class: "btn btn-primary"
+            }, _toDisplayString(s.view==='new'?'Abrir protocolo':'Enviar resposta'), 1)
+          ], 8, ["disabled"])], 40, ["onSubmit"]))
+        : (s.view==='detail'&&closed())
+          ? (_openBlock(), _createElementBlock("p", {
+              key: 8,
+              class: "muted"
+            }, "Este protocolo foi encerrado. Seu histórico continua disponível para consulta."))
+          : _createCommentVNode("", true),
+      (s.ticket && !closed() && (s.options.channels.length>1 || s.ticket.preferred_channel!=='portal' || whatsappUrl))
+        ? (_openBlock(), _createElementBlock("section", {
+            key: 9,
+            class: "portal-ticket-channels",
+            "aria-label": "Canais de contato"
+          }, [(!closed() && (s.options.channels.length>1 || s.ticket.preferred_channel!=='portal'))
+            ? (_openBlock(), _createElementBlock("form", {
+                key: 0,
+                class: "family-feed-search",
+                onSubmit: _withModifiers(changeChannel, ["prevent"])
+              }, [_createElementVNode("label", { class: "field" }, [_createTextVNode("Preferência de avisos"), _withDirectives(_createElementVNode("select", {
+                "onUpdate:modelValue": $event => ((s.form.channel) = $event),
+                disabled: s.busy
+              }, [(!s.options.channels.includes(s.ticket.preferred_channel))
+                ? (_openBlock(), _createElementBlock("option", {
+                    key: 0,
+                    value: s.ticket.preferred_channel,
+                    disabled: ""
+                  }, _toDisplayString(channels[s.ticket.preferred_channel]) + " (indisponível)", 9, ["value"]))
+                : _createCommentVNode("", true), (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(s.options.channels, (key) => {
+                return (_openBlock(), _createElementBlock("option", {
+                  key: key,
+                  value: key
+                }, _toDisplayString(channels[key]), 9, ["value"]))
+              }), 128))], 8, ["onUpdate:modelValue", "disabled"]), [[_vModelSelect, s.form.channel]])]), _createElementVNode("button", {
+                class: "btn btn-secondary",
+                disabled: s.busy||s.form.channel===s.ticket.preferred_channel
+              }, "Salvar preferência", 8, ["disabled"])], 40, ["onSubmit"]))
+            : _createCommentVNode("", true), whatsappUrl
+            ? (_openBlock(), _createElementBlock("a", {
+                key: 1,
+                class: "btn btn-secondary",
+                href: whatsappUrl,
+                target: "_blank",
+                rel: "noopener noreferrer"
+              }, "Continuar pelo WhatsApp", 8, ["href"]))
+            : _createCommentVNode("", true)]))
+        : _createCommentVNode("", true)
+    ], 8, ["aria-busy", "data-workspace-dirty"]))
   }
 }};

@@ -46,7 +46,7 @@ def effective_status_expression():
     return case((and_(m.BankCharge.collection_mode=='manual',m.BankCharge.status=='pending',m.BankCharge.due_on<school_today()),'overdue'),else_=m.BankCharge.status)
 
 def safe_invoice_url(value):
-    if not isinstance(value,str):return ''
+    if not isinstance(value,str) or len(value)>2048 or any(char.isspace() or ord(char)<32 or ord(char)==127 or char==chr(92) for char in value):return ''
     try:
         url=urlsplit(value)
         host=url.hostname or ''

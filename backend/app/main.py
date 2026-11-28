@@ -22,7 +22,7 @@ from .db import engine
 from .storage import ensure_storage
 from .queue_notifications import install as install_queue_notifications
 from starlette.concurrency import run_in_threadpool
-from . import teacher_portal
+from . import teacher_portal, protocol_portal
 from . import embedding, embedding_settings, mfa, dossiers, ocr, lookups, diagnostics, telemetry, diary
 from . import report_emission, report_preferences
 from . import auth, people, registry, enrollments, documents, contract_templates, reports, portal, admissions, integrations, connect, banking, profiles, support, institution, business_people, account, legacy_import
@@ -66,7 +66,7 @@ async def lifespan(app):
         engine.dispose()
 
 app = FastAPI(title='PIGE360 Self — Gestão Educacional', version=cfg.app_version, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url='/api/v1/openapi.json')
-for router in [report_emission.router, report_preferences.router, educacenso.router, enrollment_batches.router, academic_preparation.router, admission_matching.router, notification_email.router, restore_control.router,family_portal.router,user_invitations.router,import_operations.router,school_website.router, backups.router, portability_access.router,crm_bridge.router, crm_bridge_external.router, crm_bridge.hooks, auth.router, registry.router, people.router, enrollments.router, documents.router, contract_templates.router, contract_signatures.router, personal_signing.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router, mfa.router, dossiers.router, ocr.router, lookups.router, diagnostics.router, teacher_portal.router, legacy_import.router, mailcow.router, school_community.router, email_client.router, email_client.webmail_router, fiscal_signing.router, certificate_alerts.router]:
+for router in [protocol_portal.router, report_emission.router, report_preferences.router, educacenso.router, enrollment_batches.router, academic_preparation.router, admission_matching.router, notification_email.router, restore_control.router,family_portal.router,user_invitations.router,import_operations.router,school_website.router, backups.router, portability_access.router,crm_bridge.router, crm_bridge_external.router, crm_bridge.hooks, auth.router, registry.router, people.router, enrollments.router, documents.router, contract_templates.router, contract_signatures.router, personal_signing.router, reports.router, portal.router, admissions.router, integrations.router, integrations.hooks, connect.router, banking.router, profiles.router, support.router, institution.router, business_people.router, account.router, embedding_settings.router, mfa.router, dossiers.router, ocr.router, lookups.router, diagnostics.router, teacher_portal.router, legacy_import.router, mailcow.router, school_community.router, email_client.router, email_client.webmail_router, fiscal_signing.router, certificate_alerts.router]:
     app.include_router(router)
 app.include_router(asaas_native.router)
 app.include_router(asaas_auto_pix.family_router)

@@ -246,7 +246,7 @@ var PigeAPI;
 var PigeSupport;
 (function (PigeSupport) {
     const runtime = window;
-    PigeSupport.status = Vue.reactive({ error: '' });
+    PigeSupport.status = Vue.reactive({ error: '', canOpen: false });
     const busyMessage = 'O atendimento recebeu muitas solicitações. Aguarde antes de tentar novamente.';
     const roots = '#hub-widget-holder,#hub-bubble-holder';
     // A URL sem versão pode continuar em cache por um ano após atualizar o HUB.
@@ -260,8 +260,21 @@ var PigeSupport;
     let recovery = null, checkingArea = false, retryArea = null;
     let visibilityStyle = null;
     let listeningReady = false;
+    function launcher() { return document.querySelector?.('button#hub-bubble-holder, #hub-bubble-holder button, #hub-bubble-holder[role="button"]'); }
+    function checkLauncher() { PigeSupport.status.canOpen = Boolean(activeSDK && !checkingArea && runtime.$hub?.hasLoaded && (typeof runtime.$hub.toggle === 'function' || launcher())); }
+    function openChat() {
+        checkLauncher();
+        if (!PigeSupport.status.canOpen)
+            return;
+        if (typeof runtime.$hub?.toggle === 'function')
+            runtime.$hub.toggle('open');
+        else
+            launcher()?.click();
+    }
+    PigeSupport.openChat = openChat;
     function setChecking(checking) {
         checkingArea = checking;
+        checkLauncher();
         visibilityStyle?.remove();
         visibilityStyle = null;
         if (checking) {
@@ -285,6 +298,7 @@ var PigeSupport;
     function onReady() {
         if (!activeSDK || !runtime.$hub?.hasLoaded)
             return;
+        checkLauncher();
         cancelStartup();
         recovery?.remove();
         recovery = null;
@@ -302,6 +316,7 @@ var PigeSupport;
         }
         activeSDK = null;
         loadedSource = '';
+        PigeSupport.status.canOpen = false;
     }
     function dispose() {
         ++generation;
@@ -4337,6 +4352,47 @@ var PigeLegacyImport;
 })(PigeLegacyImport || (PigeLegacyImport = {}));
 var PigeLearning;
 (function (PigeLearning) {
+    function orderPeriod(a, b) {
+        return (a.order_index ?? 0) - (b.order_index ?? 0) || (a.starts_on || '').localeCompare(b.starts_on || '') || a.period_id.localeCompare(b.period_id);
+    }
+    // Um diário pertence a uma turma de origem; nomes iguais podem identificar diários distintos.
+    function matrices(groups, calendars, filtered) {
+        const classes = new Map();
+        for (const group of groups) {
+            let matrix = classes.get(group.classId);
+            if (!matrix) {
+                const periods = new Map();
+                if (!filtered)
+                    for (const period of calendars?.[group.classId] || [])
+                        periods.set(period.period_id, period);
+                matrix = { className: group.className, periods, components: new Map(), published: new Set() };
+                classes.set(group.classId, matrix);
+            }
+            for (const item of group.items) {
+                matrix.periods.set(item.period_id, item);
+                matrix.published.add(item.period_id);
+                const key = JSON.stringify([item.diary_id, item.component_name]);
+                const component = matrix.components.get(key) || { id: key, name: item.component_name, results: new Map() };
+                component.results.set(item.period_id, item);
+                matrix.components.set(key, component);
+            }
+        }
+        const windows = [];
+        for (const [classId, matrix] of classes) {
+            const periods = Array.from(matrix.periods.values()).sort(orderPeriod);
+            const components = Array.from(matrix.components.values()).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+            for (let start = 0; start < periods.length; start += 4) {
+                const window = periods.slice(start, start + 4);
+                windows.push({ key: JSON.stringify([classId, window[0].period_id]), className: matrix.className, periods: window,
+                    periodLabel: window.map(p => p.period_name).join(', '), rows: components.map(component => ({
+                        id: component.id, name: component.name, cells: window.map(p => ({
+                            period: p, result: component.results.get(p.period_id), empty: matrix.published.has(p.period_id) ? 'Sem resultado publicado' : 'Não publicado',
+                        })),
+                    })) });
+            }
+        }
+        return windows;
+    }
     PigeLearning.component = { props: ['request', 'download', 'rootPath', 'schoolId', 'studentId', 'identity'], render: PigeRenders.learning, setup(props) {
             const state = Vue.reactive({ busy: false, error: '', students: [], studentId: '', enrollmentId: '', groupId: '', note: '' });
             const base = () => (props.rootPath || '/profile') + '/learning';
@@ -4373,27 +4429,41 @@ var PigeLearning;
                         state.groupId = '';
                 });
             }
-            const rows = () => (enrollment()?.subjects || []).flatMap(subject => subject.periods.map(period => ({ ...period, component_name: period.component_name || subject.component_name, diary_id: subject.diary_id })));
             const periodGroups = Vue.computed(() => {
                 const groups = new Map();
-                for (const row of rows()) {
-                    const className = row.class_label || row.class_name || enrollment()?.class_name || '';
-                    const id = JSON.stringify([row.period_id, row.class_group_id || className]);
-                    const group = groups.get(id) || { id, label: row.period_name, className, items: [] };
-                    group.items.push(row);
-                    groups.set(id, group);
+                for (const subject of enrollment()?.subjects || []) {
+                    for (const period of subject.periods) {
+                        const className = period.class_label || period.class_name || enrollment()?.class_name || '';
+                        const classId = period.class_group_id || className;
+                        const id = JSON.stringify([period.period_id, classId]);
+                        const group = groups.get(id) || { id, label: period.period_name, classId, className, items: [] };
+                        group.items.push({ ...period, component_name: period.component_name || subject.component_name, diary_id: subject.diary_id });
+                        groups.set(id, group);
+                    }
                 }
-                return Array.from(groups.values()).sort((left, right) => {
-                    const a = left.items[0], b = right.items[0];
-                    return (a.order_index ?? 0) - (b.order_index ?? 0) || (a.starts_on || '').localeCompare(b.starts_on || '') || left.className.localeCompare(right.className, 'pt-BR');
-                });
+                return Array.from(groups.values()).sort((a, b) => orderPeriod(a.items[0], b.items[0]) || a.className.localeCompare(b.className, 'pt-BR'));
             });
             const visibleGroups = Vue.computed(() => periodGroups.value.filter(group => !state.groupId || group.id === state.groupId));
+            const model = Vue.computed(() => enrollment()?.bulletin_model || 'integrated');
+            const tables = Vue.computed(() => matrices(visibleGroups.value, enrollment()?.class_calendars, Boolean(state.groupId)));
+            const tableKinds = Vue.computed(() => model.value === 'panel' ? ['grade', 'attendance'] : [model.value]);
+            const titles = { integrated: 'Rendimento e frequência', grade: 'Rendimento por componente', attendance: 'Aulas, faltas e frequência', journey: 'Percurso por componente' };
+            const modelNames = { integrated: 'Grade integrada', panel: 'Painel do aluno', journey: 'Percurso acadêmico' };
+            const fonts = { system: 'system-ui, sans-serif', arial: 'Arial, sans-serif', verdana: 'Verdana, sans-serif', georgia: 'Georgia, serif', times: 'Times New Roman, serif' };
+            const facts = Vue.computed(() => {
+                const e = enrollment();
+                return [['Registro escolar', student()?.student_number], ['Matrícula', e?.number], ['Ano letivo', e?.year_name], ['Etapa', e?.stage], ['Unidade', e?.unit], ['Turno', e?.shift]].filter(([, value]) => value);
+            });
+            const uniformStatus = Vue.computed(() => {
+                const values = new Set(visibleGroups.value.flatMap(group => group.items.map(item => item.result_label)));
+                return values.size === 1 ? Array.from(values)[0] : '';
+            });
+            const opinions = Vue.computed(() => visibleGroups.value.flatMap(group => group.items.filter(item => item.opinions?.length)));
             const percent = (value) => value === null || value === undefined ? 'Não apurada' : Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%';
             async function download(documentId = '') { await run(async () => { if (!student() || !enrollment())
                 return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId) + (documentId ? '&document_id=' + encodeURIComponent(documentId) : '') + (props.schoolId ? '&school_id=' + encodeURIComponent(props.schoolId) : ''), 'boletim-' + student().student_number + '.pdf'); }); }
             Vue.onMounted(() => { void load(); });
-            return { props, state, student, enrollment, selectStudent, rows, periodGroups, visibleGroups, percent, load, download };
+            return { props, state, student, enrollment, selectStudent, model, modelNames, fonts, facts, periodGroups, visibleGroups, tables, tableKinds, titles, uniformStatus, opinions, percent, load, download };
         } };
 })(PigeLearning || (PigeLearning = {}));
 /** Notícias e agenda com transporte compartilhável entre gestão, portal e página pública. */
@@ -5452,6 +5522,12 @@ var PigeEnrollmentWorkflow;
 })(PigeEnrollmentWorkflow || (PigeEnrollmentWorkflow = {}));
 var PigeUI;
 (function (PigeUI) {
+    const protocolLabels = {
+        sources: { manager: 'Gestão escolar', family: 'Portal do aluno e responsável', teacher: 'Portal do professor' },
+        categories: { secretaria: 'Secretaria', pedagogico: 'Pedagógico', financeiro: 'Financeiro', tecnico: 'Suporte técnico' },
+        channels: { portal: 'Portal', email: 'E-mail', whatsapp: 'WhatsApp' },
+        events: { created: 'Protocolo aberto', updated: 'Protocolo atualizado', note: 'Nota interna', message: 'Mensagem', reply: 'Resposta da equipe' },
+    };
     const text = (value) => value === null || value === undefined ? '' : String(value);
     const statusLabels = { legacy_import: 'Portabilidade', active: 'Ativo', archived: 'Arquivado', draft: 'Rascunho', suspended: 'Suspenso', transferred: 'Transferido', cancelled: 'Cancelado', completed: 'Concluído', pending: 'Pendente', received: 'Recebido', validated: 'Validado', rejected: 'Rejeitado', expired: 'Vencido', waived: 'Dispensado', open: 'Aberto', in_progress: 'Em atendimento', waiting: 'Aguardando', closed: 'Fechado', admin: 'Administrador', direction: 'Direção', coordination: 'Coordenação', finance: 'Financeiro', secretary: 'Secretaria', teacher: 'Professor', student: 'Aluno', guardian: 'Responsável', viewer: 'Consulta', leave: 'Afastado', inactive: 'Inativo', clt: 'CLT', public: 'Serviço público', temporary: 'Temporário', substitute: 'Substituto', intern: 'Estágio', outsourced: 'Terceirizado', other: 'Outro' };
     const catalogLabels = { 'units': 'Unidades', 'academic-years': 'Anos letivos', 'grades': 'Séries e etapas', 'shifts': 'Turnos', 'class-groups': 'Turmas', 'document-types': 'Tipos de documento' };
@@ -5516,13 +5592,29 @@ var PigeUI;
                 'Em Fazer chamada, selecione a aula e registre a frequência de cada aluno. Confira os lançamentos antes de salvar. Se sua turma aparece e falta um desses atalhos, peça ao gestor que confira as permissões de lançamento do seu perfil.'],
             alt: 'Portal do Professor com a turma atribuída e os botões Abrir diário, Fazer chamada e Planejar aula para Ciências.',
             caption: 'Os atalhos abrem a atividade na turma e no componente do professor.' },
-        { id: 'family', title: 'Consultar atividades e boletim no Portal do Aluno', image: 'portal-aluno',
+        { id: 'family', title: 'Orientar a família sobre atividades e cobranças', image: 'portal-aluno',
             steps: ['Na Visão geral, confira a turma e o ano letivo. Quem acompanha mais de um aluno deve escolher o dependente antes de consultar as atividades.',
                 'Em Atividades recentes, abra o título para ler o material. Use Baixar para imprimir para obter o PDF. Ver todas as atividades abre a lista completa.',
-                'Escolha Consultar boletim e confira a matrícula e o período. Quando a escola tiver publicado os resultados, use Baixar boletim PDF.',
-                'Um responsável com vínculo exclusivamente financeiro consulta as cobranças autorizadas. Atividades e boletim exigem vínculo acadêmico com o aluno.'],
+                'Para consultar uma cobrança, o responsável com vínculo financeiro ativo escolhe o aluno e abre Financeiro. Confira descrição, vencimento, valor e situação.',
+                'Se você for o pagador e houver um documento disponível, escolha Consultar documentos da cobrança. No Asaas, abra a fatura ou o boleto disponível, ou copie o Pix. Na integração com o CRM, copie o Pix, a linha digitável ou o código de barras que aparecer.'],
             alt: 'Visão geral de um aluno fictício do 3º Ano A, com os botões Consultar boletim e Ver atividades e uma lista de atividades recentes.',
             caption: 'O painel reúne materiais da turma e atividades individuais do aluno selecionado.' },
+        { id: 'protocols', page: 'protocols', title: 'Abrir e responder um protocolo nos portais', image: 'atendimento',
+            steps: ['No portal do professor, aluno ou responsável, entre em Atendimento e escolha Novo protocolo. No portal da família, selecione antes o aluno a que o pedido se refere.',
+                'Escolha a categoria, escreva o assunto e a mensagem e, se necessário, anexe um PDF, JPG ou PNG. Em Abrir protocolo, o sistema registra o pedido e gera um número que começa com PRO-.',
+                'No gestor, abra Protocolos e localize o número. Em Ver atendimento, escolha Responder ao solicitante para enviar uma mensagem ao portal. Use Adicionar nota interna para registrar algo restrito à equipe.',
+                'O solicitante abre o assunto em Meus protocolos para ler o Histórico do protocolo. Enquanto estiver aberto para respostas, pode escrever em Sua resposta e escolher Enviar resposta.',
+                'A preferência por e-mail ou WhatsApp, quando disponível, envia avisos de atualização. Em Avisos de novos protocolos abertos pela escola, o titular também pode escolher como receber a primeira mensagem da Secretaria.',
+                'Para registrar uma resposta no histórico, escreva no portal. Se escolher o chat, use Copiar número do protocolo e cole a referência na conversa. No WhatsApp, o atalho já prepara uma mensagem com esse número.'],
+            alt: 'Protocolo fictício com três mensagens entre a escola e o responsável, um anexo, o formulário de resposta e a preferência de avisos.',
+            caption: 'O histórico identifica quem escreveu cada mensagem e permite baixar os anexos daquela conversa.' },
+        { id: 'bulletin', title: 'Ler e imprimir o boletim escolar', image: 'boletim-aluno',
+            steps: ['Na Visão geral, escolha Consultar boletim. No menu, o aluno também pode abrir Minha vida escolar. Para o responsável com acesso acadêmico, a opção se chama Vida acadêmica.',
+                'Confira o nome, a turma e o ano. Se houver mais de uma matrícula, use Matrícula para escolher. O filtro Período e turma permite consultar um fechamento por vez quando houver mais de um.',
+                'Leia a nota ou o conceito de cada componente e a frequência do mesmo período. Não publicado indica que o período ainda não foi publicado. Não apurada indica que a frequência ainda não pôde ser calculada.',
+                'Para imprimir, escolha Baixar boletim PDF e abra o arquivo. Essa via reúne todos os resultados publicados da matrícula, inclusive ao filtrar a tela. Quando a escola emitir uma via oficial com certificado A1, escolha a revisão em Vias oficiais assinadas.'],
+            alt: 'Boletim fictício em grade integrada com cinco componentes, quatro bimestres, notas, conceitos, frequência e parecer de Arte.',
+            caption: 'No exemplo, Arte usa conceitos. As outras disciplinas usam notas e o quarto bimestre aguarda publicação.' },
         { id: 'online', page: 'online', title: 'Abrir e acompanhar a matrícula online', image: 'matricula-online',
             steps: ['Abra Inscrições online, selecione Processos e link público e use + Novo processo. Informe ano letivo, turmas e datas. Confira os termos para as famílias.',
                 'Marque Publicar processo no portal quando a escola quiser receber inscrições. Confira a oferta e o prazo antes de compartilhar o link. A escola pode deixar a cobrança desativada. Para cobrar a inscrição, configure a conta bancária, o valor e a modalidade Pix ou boleto.',
@@ -5750,7 +5842,7 @@ var PigeUI;
             supportHub: blankSupport(),
             personTypeQuery: '', cadastresOpen: true, integrationsOpen: true, emailStatus: 'idle', registryFilter: { type_code: '', entity_kind: '', active: '' }, modalSection: 'identification', discardChanges: false, modalInitial: '', reuseTarget: '',
             modal: blankModal(), login: { email: '', password: '' }, setup: { token: '', admin_name: '', admin_email: '', admin_password: '', company_name: '', company_document: '', school_name: '', unit_name: 'Unidade principal', academic_year: new Date().getFullYear() },
-            filters: { status: '', academic_year_id: '', class_group_id: '', document_type_id: '', document_status: '', overdue: false },
+            filters: { status: '', academic_year_id: '', class_group_id: '', document_type_id: '', document_status: '', overdue: false, source: '', category: '' },
             pendencySummary: { truncated: false, total_documents: 0, scanned_students: 0, total_students: 0 },
             studentProtocols: [], studentProtocolTotal: 0,
             canInstall: false, updateAvailable: false,
@@ -5774,11 +5866,11 @@ var PigeUI;
         const photoRetryAfter = new Map();
         const photoWaiters = [];
         let activePhotoDownloads = 0, photoEpoch = 0;
-        function resetFilters() { state.filters = { status: '', academic_year_id: '', class_group_id: '', document_type_id: '', document_status: '', overdue: false }; }
+        function resetFilters() { state.filters = { status: '', academic_year_id: '', class_group_id: '', document_type_id: '', document_status: '', overdue: false, source: '', category: '' }; }
         function filteredClasses() { return options('class-groups').filter(o => !state.filters.academic_year_id || state.catalogs['class-groups']?.find(c => c.id === o.value)?.academic_year_id === state.filters.academic_year_id); }
         function filterQuery() {
             const query = new URLSearchParams();
-            const keys = state.page === 'protocols' ? ['status', 'overdue'] : state.page === 'documents' ? ['academic_year_id', 'class_group_id', 'document_type_id', 'document_status'] : ['status', 'academic_year_id', 'class_group_id'];
+            const keys = state.page === 'protocols' ? ['status', 'overdue', 'source', 'category'] : state.page === 'documents' ? ['academic_year_id', 'class_group_id', 'document_type_id', 'document_status'] : ['status', 'academic_year_id', 'class_group_id'];
             for (const key of keys) {
                 const value = state.filters[key];
                 if (value)
@@ -7248,17 +7340,149 @@ var PigeUI;
             const fields = [field('class_group_id', 'Turma de destino', 'select', true, groups), field('enrolled_on', 'Data da matrícula', 'date', true), field('notes', 'Observações', 'textarea', false, undefined, true), field('reason', 'Motivo da alteração', 'textarea', true, undefined, true)];
             openModal('draft-edit', 'Editar pré-matrícula', fields, valuesFrom(target, fields), target);
         }
+        function showProtocol(data) {
+            openModal('protocol-detail', 'Protocolo ' + text(data.number), [], {}, data);
+        }
         async function viewProtocol(id) {
             await safe(async () => {
-                const data = await PigeAPI.request(base() + '/protocols/' + id);
-                openModal('protocol-detail', 'Protocolo ' + text(data.number), [], {}, data);
+                const school = state.schoolId, modal = state.modal;
+                const data = await PigeAPI.request(base() + '/protocols/' + encodeURIComponent(id));
+                if (state.schoolId === school && state.modal === modal)
+                    showProtocol(data);
             });
+        }
+        function timestamp(value) {
+            return value ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Bahia' }).format(new Date(value)) : '';
         }
         function protocolNote() {
             const target = state.modal.target;
             if (!target)
                 return;
-            openModal('protocol-note', 'Registrar atendimento', [field('message', 'Registro do atendimento', 'textarea', true, undefined, true)], {}, target);
+            openModal('protocol-note', target.requester_user_id ? 'Adicionar nota interna' : 'Registrar atendimento', [field('message', 'Registro do atendimento', 'textarea', true, undefined, true)], {}, target);
+        }
+        function replyProtocol() {
+            const target = state.modal.target;
+            if (!target?.requester_user_id || !can('protocols.write') || ['completed', 'cancelled'].includes(text(target.status)))
+                return;
+            openModal('protocol-reply', 'Responder ao solicitante', [field('message', 'Mensagem para o solicitante', 'textarea', true, undefined, true), field('attachment', 'Anexo (opcional)', 'file', false, undefined, true)], {}, target);
+            state.modal.action = crypto.randomUUID();
+        }
+        function startPortalProtocol() {
+            if (!can('protocols.write'))
+                return;
+            openModal('protocol-contact', 'Iniciar atendimento no portal', [field('kind', 'Assunto', 'text', true), field('description', 'Mensagem para o solicitante', 'textarea', true, undefined, true)]);
+            state.modal.lookup = { query: '', requesters: [], students: [], role: '', page: 1, total: 0, pageSize: 20, busy: false, studentsBusy: false, searched: false, searchEpoch: 0, studentEpoch: 0, error: '' };
+            Object.assign(state.modal.form, { requester_user_id: '', student_id: '', category: 'secretaria' });
+            state.modalInitial = JSON.stringify(state.modal.form);
+            state.modal.action = crypto.randomUUID();
+        }
+        function eligibleProtocolStudents() {
+            const { form, lookup } = state.modal;
+            return (lookup?.students || []).filter(s => form.category === 'financeiro' ? s.financial_authorized : form.category === 'pedagogico' ? s.academic_authorized : s.academic_authorized || s.financial_authorized);
+        }
+        function syncProtocolStudent() {
+            const form = state.modal.form, allowed = eligibleProtocolStudents();
+            if (!allowed.some(s => s.id === form.student_id))
+                form.student_id = allowed.length === 1 ? allowed[0].id : '';
+        }
+        function clearProtocolRequester() {
+            const { lookup, form } = state.modal;
+            if (!lookup)
+                return;
+            lookup.role = '';
+            lookup.students = [];
+            lookup.studentsBusy = false;
+            lookup.studentEpoch++;
+            form.requester_user_id = '';
+            form.student_id = '';
+        }
+        function protocolQueryChanged() {
+            const { lookup } = state.modal;
+            if (!lookup)
+                return;
+            clearProtocolRequester();
+            lookup.searchEpoch++;
+            lookup.requesters = [];
+            lookup.busy = false;
+            lookup.searched = false;
+            lookup.error = '';
+        }
+        async function searchProtocolRequesters(page = 1) {
+            const modal = state.modal, lookup = modal.lookup;
+            if (!lookup)
+                return;
+            clearProtocolRequester();
+            const epoch = ++lookup.searchEpoch;
+            lookup.busy = true;
+            lookup.error = '';
+            lookup.requesters = [];
+            lookup.searched = false;
+            try {
+                const query = new URLSearchParams({ q: lookup.query.trim(), page: String(page) });
+                const result = await PigeAPI.request(base() + '/protocol-requesters?' + query);
+                if (state.modal !== modal || epoch !== lookup.searchEpoch)
+                    return;
+                lookup.page = result.page;
+                lookup.pageSize = result.page_size;
+                lookup.total = result.total;
+                lookup.requesters = result.items;
+                lookup.searched = true;
+            }
+            catch (error) {
+                if (state.modal === modal && epoch === lookup.searchEpoch)
+                    lookup.error = text(error.message);
+            }
+            finally {
+                if (state.modal === modal && epoch === lookup.searchEpoch)
+                    lookup.busy = false;
+            }
+        }
+        async function chooseProtocolRequester(id) {
+            const modal = state.modal, lookup = modal.lookup;
+            if (!lookup)
+                return;
+            clearProtocolRequester();
+            lookup.error = '';
+            const recipient = lookup.requesters.find(item => item.id === id);
+            if (!recipient)
+                return;
+            modal.form.requester_user_id = id;
+            lookup.role = recipient.role;
+            if (recipient.role !== 'guardian' && modal.form.category === 'financeiro')
+                modal.form.category = 'secretaria';
+            if (recipient.role === 'teacher')
+                return;
+            const epoch = lookup.studentEpoch;
+            lookup.studentsBusy = true;
+            try {
+                const result = await PigeAPI.request(base() + '/protocol-requesters/' + encodeURIComponent(id) + '/students');
+                if (state.modal !== modal || lookup.studentEpoch !== epoch)
+                    return;
+                lookup.students = result.items;
+                syncProtocolStudent();
+            }
+            catch (error) {
+                if (state.modal === modal && lookup.studentEpoch === epoch)
+                    lookup.error = text(error.message);
+            }
+            finally {
+                if (state.modal === modal && lookup.studentEpoch === epoch)
+                    lookup.studentsBusy = false;
+            }
+        }
+        function protocolNoticeLabel(notice) {
+            const channel = notice.channel === 'email' ? 'e-mail' : 'WhatsApp';
+            if (notice.status === 'completed')
+                return 'Aceito pelo serviço de ' + channel;
+            const status = { pending: 'Na fila de envio', retry: 'Aguardando nova tentativa', processing: 'Envio em andamento', failed: 'Falha no envio', uncertain: 'Envio sem confirmação do serviço' };
+            return 'Aviso por ' + channel + ' · ' + status[notice.status];
+        }
+        function protocolEvents(visibility) {
+            const events = state.modal.target?.history;
+            return (events || []).filter(event => visibility === 'public' ? event.visibility === 'public' : event.visibility !== 'public');
+        }
+        async function protocolAttachment(protocolId, attachment) {
+            await safe(() => PigeAPI.download(base() + '/protocols/' + encodeURIComponent(protocolId) + '/attachments/' + encodeURIComponent(attachment.id), attachment.name));
         }
         async function protocolReceipt(id) { await safe(() => PigeAPI.download(base() + '/protocols/' + id + '/pdf', 'comprovante-protocolo.pdf')); }
         async function exportPendencies(format) { await safe(() => PigeAPI.download(base() + '/reports/document-pendencies.' + format + '?q=' + encodeURIComponent(state.q) + '&' + filterQuery(), 'pendencias-documentais.' + format)); }
@@ -7366,6 +7590,11 @@ var PigeUI;
         }
         async function newProtocol(row = null) {
             await safe(async () => {
+                if (row?.requester_user_id) {
+                    const fields = [field('due_on', 'Prazo', 'date'), field('status', 'Situação', 'select', true, ['open', 'in_progress', 'waiting', 'completed', 'cancelled'].map(v => ({ value: v, label: label(v) })))];
+                    openModal('protocol', 'Atualizar protocolo', fields, valuesFrom(row, fields), row);
+                    return;
+                }
                 await searchStudents();
                 const studentId = text(row?.student_id) || state.selectedStudent?.id;
                 if (studentId && !state.studentChoices.some(s => s.id === studentId))
@@ -7668,6 +7897,40 @@ var PigeUI;
                 }
                 else if (modal.kind === 'draft-edit')
                     await PigeAPI.patch(base() + '/enrollments/' + target.id, { ...form, version: target.version });
+                else if (modal.kind === 'protocol-contact' || modal.kind === 'protocol-reply') {
+                    let data;
+                    if (modal.kind === 'protocol-contact') {
+                        if (!modal.lookup?.role || !form.requester_user_id)
+                            throw new Error('Selecione o solicitante que receberá o atendimento.');
+                        const teacher = modal.lookup.role === 'teacher';
+                        if (!teacher && !eligibleProtocolStudents().some(student => student.id === form.student_id))
+                            throw new Error('Selecione um aluno com vínculo autorizado para esta categoria.');
+                        data = await PigeAPI.post(base() + '/protocols', { kind: text(form.kind).trim(), description: text(form.description).trim(),
+                            requester_user_id: form.requester_user_id, category: form.category, student_id: teacher ? null : form.student_id, client_key: modal.action });
+                    }
+                    else {
+                        const payload = new FormData();
+                        payload.set('message', text(form.message).trim());
+                        payload.set('client_key', modal.action);
+                        if (photo)
+                            payload.set('file', photo);
+                        data = await PigeAPI.request(base() + '/protocols/' + encodeURIComponent(target.id) + '/messages', { method: 'POST', body: payload });
+                    }
+                    if (state.modal !== modal)
+                        return;
+                    const schoolId = state.schoolId;
+                    state.modal = blankModal();
+                    const cleared = state.modal;
+                    state.success = modal.kind === 'protocol-contact' ? 'Atendimento iniciado no portal.' : 'Resposta publicada no portal.';
+                    await safe(loadPage);
+                    if (state.schoolId !== schoolId || state.modal !== cleared)
+                        return;
+                    if (modal.kind === 'protocol-reply')
+                        showProtocol(data);
+                    else
+                        await viewProtocol(data.id);
+                    return;
+                }
                 else if (modal.kind === 'protocol-note')
                     await PigeAPI.post(base() + '/protocols/' + target.id + '/notes', { ...form, version: target.version });
                 else if (modal.kind === 'movement')
@@ -7700,6 +7963,8 @@ var PigeUI;
                     }
                 }
                 else if (modal.kind === 'protocol') {
+                    if (target?.requester_user_id)
+                        Object.assign(form, { kind: target.kind, description: target.description, student_id: target.student_id });
                     form.student_id = form.student_id || null;
                     form.due_on = form.due_on || null;
                     if (target)
@@ -7956,7 +8221,7 @@ var PigeUI;
             clearPhotos();
             clearProfilePreview();
         }
-        return { portalRole, openPortalAccess, printStaff, editorPhoto, personPhotoChange, viewPersonRecord, recordKind, recordTabs, recordDetails, editRecord, closePersonRecord, moreRecordFamily, openSiteEditor, studentList, studentSection, selectSchool, taskState, openDesk, closeDesk, closeOtherDesks, selectWorkspaceTab, toggleMenuGroup, toggleSidebar, sidebarRail, resumeForm, keyTabs, scrollTabs, pageAllowed, loadShell, landingPage, safe, initialize, setupPWA, dispose, afterMFA, dialogHost, academicPrepared, importedDataChanged, openCamera, photoCaptured, documentPages, configurationPages, supportAreas, supportAreaLabels, refreshAccess, isEnrollmentForm, enrollmentStudent, enrollmentClass, administrationPages, institutionTabs, catalogDescriptions, adminTool, manageRecord, lifecycleCompleted, request: PigeAPI.request, download: PigeAPI.download, state, base, familyAssistFields, assistRequest, assistFields, assistEligible, assistCompany, setupCompany, setupCompanyFields, companyExtra, setupLookup, readStudentDocument, readResponsibleDocument, editIntake, mfa: PigeMFA, dossier, selectedPersonTypes, availablePersonTypes, togglePersonType, lockedPersonType, familyRelevant, manageMFA, editMFAPolicy, editEmbedding, probeEmbedding, editMyProfile, myPhotoChange, profilePassword, registryPages, integrationPages, businessTypes, isBusiness, newBusiness, reusePerson, personDocument, modalSections, modalTab, visibleSection, modalFieldLabel, modalFieldRelevant, advancedPersonField, isPersonModal, personTypeOptions, personTypeLabel, modalDirty, contractDirty, identity: PigeInstitution.state, supportStatus: PigeSupport.status, editIdentity, identityFileChange, manageUnits, editMaintainer, text, can, isProfileRole, school, label, enrollmentLabel, date, cpf, initials, photoSrc, getName, options, pageLabels, catalogLabels, configure, login, logout, navigate, changeSchool, setCatalog, search, page, loadPage, openSogoWebmail, webmailFrameLoaded, saveWebmailPreference, saveWebmailDefault, legacyImportFileChange, previewLegacyImport, applyLegacyImport, populatedImportTables, downloadLegacyArchive, viewStudent, newPerson, newStudent, editStudent, newGuardian, newTeacher, editTeacher, newEmployee, editEmployee, editPerson, newCatalog, newEnrollment, viewEnrollment, contractsForEnrollment, startMovement, reenroll, newLink, enrollmentLinkStudentId, linkFromEnrollment, editLink, uploadDocument, fileChange, reviewDocument, waiveDocument, issueDocument, downloadFile, newProtocol, newCompany, newSchool, editSupportHub, password, archiveStudent, closeModal, saveModal, loadReport, exportStudents, exportClass, searchStudents, searchPersons, filteredClasses, clearFilters, yearChanged, editDraft, viewProtocol, protocolNote, protocolReceipt, exportPendencies, install, updateApp };
+        return { portalRole, openPortalAccess, printStaff, editorPhoto, personPhotoChange, viewPersonRecord, recordKind, recordTabs, recordDetails, editRecord, closePersonRecord, moreRecordFamily, openSiteEditor, studentList, studentSection, selectSchool, taskState, openDesk, closeDesk, closeOtherDesks, selectWorkspaceTab, toggleMenuGroup, toggleSidebar, sidebarRail, resumeForm, keyTabs, scrollTabs, pageAllowed, loadShell, landingPage, safe, initialize, setupPWA, dispose, afterMFA, dialogHost, academicPrepared, importedDataChanged, openCamera, photoCaptured, documentPages, configurationPages, supportAreas, supportAreaLabels, refreshAccess, isEnrollmentForm, enrollmentStudent, enrollmentClass, administrationPages, institutionTabs, catalogDescriptions, adminTool, manageRecord, lifecycleCompleted, request: PigeAPI.request, download: PigeAPI.download, state, base, familyAssistFields, assistRequest, assistFields, assistEligible, assistCompany, setupCompany, setupCompanyFields, companyExtra, setupLookup, readStudentDocument, readResponsibleDocument, editIntake, mfa: PigeMFA, dossier, selectedPersonTypes, availablePersonTypes, togglePersonType, lockedPersonType, familyRelevant, manageMFA, editMFAPolicy, editEmbedding, probeEmbedding, editMyProfile, myPhotoChange, profilePassword, registryPages, integrationPages, businessTypes, isBusiness, newBusiness, reusePerson, personDocument, modalSections, modalTab, visibleSection, modalFieldLabel, modalFieldRelevant, advancedPersonField, isPersonModal, personTypeOptions, personTypeLabel, modalDirty, contractDirty, identity: PigeInstitution.state, supportStatus: PigeSupport.status, editIdentity, identityFileChange, manageUnits, editMaintainer, text, can, isProfileRole, school, label, enrollmentLabel, date, cpf, initials, photoSrc, getName, options, pageLabels, catalogLabels, configure, login, logout, navigate, changeSchool, setCatalog, search, page, loadPage, openSogoWebmail, webmailFrameLoaded, saveWebmailPreference, saveWebmailDefault, legacyImportFileChange, previewLegacyImport, applyLegacyImport, populatedImportTables, downloadLegacyArchive, viewStudent, newPerson, newStudent, editStudent, newGuardian, newTeacher, editTeacher, newEmployee, editEmployee, editPerson, newCatalog, newEnrollment, viewEnrollment, contractsForEnrollment, startMovement, reenroll, newLink, enrollmentLinkStudentId, linkFromEnrollment, editLink, uploadDocument, fileChange, reviewDocument, waiveDocument, issueDocument, downloadFile, newProtocol, newCompany, newSchool, editSupportHub, password, archiveStudent, closeModal, saveModal, loadReport, exportStudents, exportClass, searchStudents, searchPersons, filteredClasses, clearFilters, yearChanged, editDraft, viewProtocol, protocolNote, timestamp, protocolReceipt, replyProtocol, startPortalProtocol, protocolLabels, protocolQueryChanged, searchProtocolRequesters, chooseProtocolRequester, eligibleProtocolStudents, syncProtocolStudent, protocolNoticeLabel, protocolEvents, protocolAttachment, exportPendencies, install, updateApp };
     }
     const components = { 'educacenso-panel': PigeEducacenso.component, 'contract-value-field': PigeContractFields.component, 'enrollment-workflow': PigeEnrollmentWorkflow.component, 'academic-preparation': PigeAcademicPreparation.component, 'notification-email': PigeNotificationEmail.component, 'camera-capture': PigeCamera.component, 'users-panel': PigeUsers.component, 'institutional-email': PigeEmail.component, 'audit-panel': PigeAudit.component, 'lifecycle-panel': PigeLifecycle.component, 'mailcow-panel': PigeMailcow.component, 'school-community': PigeCommunity.component, 'learning-panel': PigeLearning.component, 'reports-panel': PigeReports.component, 'legacy-import-panel': PigeLegacyImport.component, 'diagnostics-panel': PigeDiagnostics.component, 'expansion-panel': PigeExpansion.component, 'diary-panel': PigeDiary.component, 'contracts-panel': PigeContracts.component, 'signing-panel': PigeSigning.component, 'assist-panel': PigeAssist.component };
     function mountDesk(page, shared, portalTarget) {

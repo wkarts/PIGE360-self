@@ -81,6 +81,76 @@ assert.deepEqual(Array.from(context.state.supportHub.enabled_areas),['online_enr
 context.closeModal(true);context.editSupportHub();await Promise.resolve();
 assert.deepEqual(Array.from(context.state.modal.form.enabled_areas),['online_enrollment','news'],'Cancelar e reabrir restaura as áreas salvas');
 context.closeModal(true);
+{
+ const api=sandbox.PigeAPI,originalRequest=api.request,originalPost=api.post;
+ const {state}=context,requests=[],replies=[],creations=[];
+ const protocol={id:'p1',version:2,number:'PRO-0001',kind:'Atendimento escolar',created_at:'2026-10-10T13:00:00Z',updated_at:'2026-10-10T14:00:00Z',requester_user_id:'u1',requester_name:'Nome do responsável',source:'family',category:'secretaria',status:'open',preferred_channel:'email',history:[
+  {id:'e1',visibility:'public',actor_name:'Responsável',message:'Preciso do histórico.',created_at:'2026-10-10T13:00:00Z'},
+  {id:'e2',action:'note',actor_name:'Secretaria',message:'Anotação da equipe.',created_at:'2026-10-10T14:00:00Z'}]};
+ const priorPage=state.page,priorRows=state.rows;
+ try{
+  state.page='protocols';
+  api.request=async(path,options)=>{
+   requests.push(path);
+   if(path.includes('/protocol-requesters?'))return {page:1,total:2,page_size:30,items:[{id:'teacher',name:'Docente',role:'teacher'},{id:'u1',name:'Responsável',role:'guardian'}]};
+   if(path.endsWith('/u1/students'))return {items:[{id:'pedag',name:'Acadêmico',academic_authorized:true,financial_authorized:false},{id:'fin',name:'Financeiro',academic_authorized:false,financial_authorized:true}]};
+   if(path.endsWith('/messages')){
+    assert.ok(options.body instanceof FormData);
+    replies.push({message:options.body.get('message'),key:options.body.get('client_key')});
+    if(replies.length===1)throw Error('Sem confirmação do envio.');
+    return protocol;
+   }
+   if(path.includes('/protocols?'))return {items:[protocol],total:1};
+   if(path.endsWith('/protocols/p1'))return protocol;
+   throw Error('Consulta inesperada '+path);
+  };
+  api.post=async(path,body)=>{assert.ok(path.endsWith('/protocols'));creations.push(body);return protocol;};
+  state.rows=[protocol];
+  assert.ok(nodes(render()).some(node=>node.type==='small' && node.children==='Aberto em 10/10/2026'));
+  assert.ok(nodes(render()).some(node=>node.type==='small' && typeof node.children==='string' && node.children.startsWith('Última atividade 10/10/2026')));
+  await context.viewProtocol('p1');
+  assert.equal(context.protocolEvents('internal').length,1);
+  assert.equal(context.protocolEvents('public').length,1);
+  assert.equal(context.protocolEvents('public')[0].message,'Preciso do histórico.');
+  assert.ok(nodes(render()).some(n=>n.type==='button'&&n.children==='Responder ao solicitante'));
+  const notices=()=>nodes(render()).filter(node=>node.type==='small'&&node.props?.class?.includes('protocol-notification'));
+  assert.equal(notices().length,0,'Protocolo sem job de aviso não apresenta estado de envio');
+  const event=state.modal.target.history[0];
+  for(const [status,expected] of Object.entries({pending:'Na fila de envio',retry:'Aguardando nova tentativa',processing:'Envio em andamento',completed:'Aceito pelo serviço de WhatsApp',failed:'Falha no envio',uncertain:'Envio sem confirmação do serviço'})){
+   event.notification={channel:'whatsapp',status};
+   assert.equal(notices().length,1,'O estado só aparece na mensagem que possui aviso');
+   assert.ok(notices()[0].children.includes(expected),status);
+  }
+  event.notification={channel:'email',status:'completed'};
+  assert.equal(notices()[0].children,'Aceito pelo serviço de e-mail');
+  event.notification=null;
+  assert.equal(notices().length,0);
+  context.replyProtocol();state.modal.form.message='  Vamos conferir.  ';
+  await context.saveModal();
+  assert.match(state.modal.error,/Sem confirmação do envio/);
+  await context.saveModal();
+  assert.deepEqual(replies[0],replies[1]);
+  assert.equal(replies[1].message,'Vamos conferir.');
+  assert.equal(state.modal.kind,'protocol-detail');
+  context.startPortalProtocol();
+  await context.searchProtocolRequesters();
+  await context.chooseProtocolRequester('u1');
+  state.modal.form.category='financeiro';context.syncProtocolStudent();
+  assert.equal(state.modal.form.student_id,'fin');
+  state.modal.form.category='pedagogico';context.syncProtocolStudent();
+  assert.equal(state.modal.form.student_id,'pedag');
+  await context.chooseProtocolRequester('teacher');
+  assert.equal(state.modal.form.student_id,'');
+  state.modal.form.kind='Orientação escolar';state.modal.form.description='Mensagem institucional.';
+  await context.saveModal();
+  assert.equal(creations.length,1);
+  assert.equal(creations[0].student_id,null);
+  assert.equal(creations[0].requester_user_id,'teacher');
+  assert.equal(creations[0].category,'pedagogico');
+  assert.ok(/^[\da-f-]{36}$/i.test(creations[0].client_key));
+  console.log('Protocolos: histórico público e interno, resposta idempotente e abertura autorizada por conta/vínculo OK.');
+ }finally{context.closeModal(true);state.page=priorPage;state.rows=priorRows;api.request=originalRequest;api.post=originalPost;}
+}
 await (await import('./person-record-flow.mjs')).testPersonRecords({context,sandbox,render,nodes});
 const originalObjectUrl=sandbox.PigeAPI.objectUrl;
 let activePhotos=0,maxActivePhotos=0;

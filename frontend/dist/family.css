@@ -62,3 +62,35 @@ body:has(.family-sidebar.visible){overflow:hidden}
   .family-work-tabs :is([role=tab], .work-tab-close, .family-close-others) { min-height: 44px; }
   .family-work-tabs .work-tab-close { min-width: 32px; }
 }
+
+.family-charge{display:grid;gap:12px;justify-items:start;min-width:0;padding:20px 0;border-top:1px solid var(--border)}
+.family-charge-header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 16px;width:100%}
+.family-charge-header h3{margin:0;overflow-wrap:anywhere}
+.family-charge-header p,.family-charge-documents p{margin:4px 0}
+.family-charge-header small{color:var(--muted)}
+.family-charge-documents{display:grid;gap:10px;width:100%;min-width:0}
+.family-charge-code{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px 8px;width:100%}
+.family-charge-code label{grid-column:1/-1}.family-charge-code input{min-width:0;width:100%}
+
+.portal-protocols{display:grid;grid-template-columns:minmax(0,1fr);gap:1.25rem;min-width:0;overflow-wrap:anywhere}
+.portal-protocols h2,.portal-protocols h3,.portal-protocols p,.portal-protocols ul,.portal-protocols ol{margin:0}
+.portal-protocols-heading,.portal-ticket-list li,.portal-ticket-history header{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:.55rem 1.25rem}
+.portal-protocols-heading p{margin-top:.35rem}
+.portal-ticket-list,.portal-ticket-history{list-style:none;padding:0}
+.portal-ticket-list li,.portal-ticket-history li{padding:.8rem 0;border-bottom:1px solid var(--border,#d8e2ec);overflow-wrap:anywhere}
+.portal-ticket-list li div,.portal-ticket-list small{display:grid;min-width:0;gap:.3rem}
+.portal-ticket-list li .link-button{text-align:start}
+.portal-ticket-history li{display:grid;gap:.35rem}
+.portal-ticket-history time,.portal-ticket-list small{font-size:.88rem;color:var(--muted)}
+.portal-ticket-history p{white-space:pre-line}
+.portal-ticket-history .link-button{justify-self:start}
+.portal-ticket-form{max-width:48rem;width:100%}
+.portal-ticket-form fieldset{margin:0;border:0;padding:0;min-width:0;display:grid;gap:.9rem}
+.portal-ticket-form legend{font-weight:700;margin-bottom:.75rem;padding:0}
+.portal-ticket-form input,.portal-ticket-form textarea,.portal-ticket-form select{width:100%;max-width:100%;min-width:0}
+.portal-ticket-form .btn{justify-self:start}
+.portal-ticket-channels{display:grid;gap:.85rem;justify-items:start}
+.portal-ticket-handoff{display:grid;gap:.4rem;color:var(--muted);justify-items:start}
+
+.portal-opening-channel{border-top:1px solid var(--border,#d8e2ec);padding-top:1rem}
+.portal-opening-channel .family-feed-search{margin-bottom:0}

@@ -11,10 +11,10 @@ namespace PigeSupport {
   interface HubWindow extends Window {
     hubSettings?: {position:string;type:string;launcherTitle:string;launcherTooltip:string};
     hubSDK?:HubSDK;
-    $hub?:{hasLoaded?:boolean};
+    $hub?:{hasLoaded?:boolean;toggle?:(state:'open')=>void};
   }
   const runtime=window as HubWindow;
-  export const status=Vue.reactive({error:''});
+  export const status=Vue.reactive({error:'',canOpen:false});
   const busyMessage='O atendimento recebeu muitas solicitações. Aguarde antes de tentar novamente.';
   const roots='#hub-widget-holder,#hub-bubble-holder';
   // A URL sem versão pode continuar em cache por um ano após atualizar o HUB.
@@ -28,8 +28,17 @@ namespace PigeSupport {
   let recovery:HTMLButtonElement|null=null,checkingArea=false,retryArea:(()=>void)|null=null;
   let visibilityStyle:HTMLStyleElement|null=null;
   let listeningReady=false;
+  function launcher(){return document.querySelector?.<HTMLElement>('button#hub-bubble-holder, #hub-bubble-holder button, #hub-bubble-holder[role="button"]');}
+  function checkLauncher(){status.canOpen=Boolean(activeSDK&&!checkingArea&&runtime.$hub?.hasLoaded&&(typeof runtime.$hub.toggle==='function'||launcher()));}
+  export function openChat():void {
+    checkLauncher();
+    if(!status.canOpen)return;
+    if(typeof runtime.$hub?.toggle==='function')runtime.$hub.toggle('open');
+    else launcher()?.click();
+  }
   function setChecking(checking:boolean):void {
     checkingArea=checking;
+    checkLauncher();
     visibilityStyle?.remove();visibilityStyle=null;
     if(checking){
       visibilityStyle=document.createElement('style');
@@ -47,6 +56,7 @@ namespace PigeSupport {
   }
   function onReady():void {
     if(!activeSDK||!runtime.$hub?.hasLoaded)return;
+    checkLauncher();
     cancelStartup();recovery?.remove();recovery=null;status.error='';
   }
   function release(clearSession=false):void {
@@ -54,7 +64,7 @@ namespace PigeSupport {
     // O SDK remove apenas seus próprios elementos e listeners no documento atual.
     (activeSDK||(clearSession?lastSDK:null))?.destroy?.({clearSession});
     if(clearSession){lastSDK=null;sessionSource='';}
-    activeSDK=null;loadedSource='';
+    activeSDK=null;loadedSource='';status.canOpen=false;
   }
   export function dispose():void {
     ++generation;pending=null;retryAt=0;retryArea=null;
