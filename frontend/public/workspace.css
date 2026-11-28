@@ -563,3 +563,68 @@ html[data-dialog-short-viewport] .modal .modal-footer { padding-block: 8px; min-
   .school-dashboard .dash-class small { display: inline; margin-inline-start: .5em; }
   .school-dashboard .dash-row .badge { grid-row: 1; grid-column: 2; justify-self: end; }
 }
+
+.school-dashboard .dash-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-inline-start: 3px solid var(--primary);
+  padding-inline-start: 14px;
+}
+.school-dashboard .dash-head h2 { margin: 0; font-size: clamp(1.22rem, 2vw, 1.55rem); }
+.school-dashboard .dash-date { margin: 0 0 4px; color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+.school-dashboard .dash-metric dd small,
+.school-dashboard .panel-header p,
+.school-dashboard .dash-events small,
+.school-dashboard .dash-agenda small {
+  display: block; color: var(--muted); font-size: .8125rem; line-height: 1.4; font-weight: 400;
+}
+.school-dashboard .dash-metric dd small { margin-top: 6px; }
+.school-dashboard .panel-header p { margin: 3px 0 0; }
+.school-dashboard .dash-events ol, .school-dashboard .dash-agenda ol { margin: 0; padding: 0; list-style: none; }
+.school-dashboard :is(.dash-events,.dash-agenda) li + li { border-top: 1px solid var(--border); }
+.school-dashboard :is(.dash-events,.dash-agenda) li button {
+  width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center;
+  border: 0; background: transparent; text-align: start; padding: 11px 18px; font: inherit; color: var(--ink); overflow-wrap: anywhere; cursor: pointer;
+}
+.school-dashboard .dash-agenda li button { grid-template-columns: auto minmax(0, 1fr); }
+.school-dashboard :is(.dash-events,.dash-agenda) li button:hover { background: var(--teal-soft); }
+.school-dashboard .dash-feed strong, .school-dashboard .dash-agenda li strong { font-size: .9rem; }
+.school-dashboard .dash-event-icon, .school-dashboard .dash-day {
+  display: inline-grid; place-items: center; color: var(--primary); background: var(--teal-soft); border-radius: .55rem;
+  min-width: 36px; min-height: 36px; padding: 4px; font-variant-numeric: tabular-nums;
+}
+.school-dashboard .dash-day { font-size: .875rem; font-weight: 700; }
+.school-dashboard .dash-event-icon svg { width: 17px; height: 17px; }
+.school-dashboard .dash-feed time { color: var(--muted); font-size: .75rem; font-variant-numeric: tabular-nums; }
+.school-dashboard .dash-followup a > strong {
+  min-width: 29px; padding: 4px 7px; text-align: center; border-radius: .4rem; background: var(--teal-soft);
+}
+@container (max-width: 31rem) {
+  .school-dashboard .dash-feed li button { grid-template-columns: auto minmax(0, 1fr); gap: 2px 9px; }
+  .school-dashboard .dash-feed time { grid-column: 2; }
+  .school-dashboard :is(.dash-events,.dash-agenda) li button { padding-inline: 12px; }
+}
+.school-dashboard .dash-range { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.school-dashboard .dash-range label { display: grid; gap: 3px; font-size: .8125rem; color: var(--muted); }
+.school-dashboard .dash-range select { width: auto; min-height: 42px; }
+.school-dashboard .dash-capacity { border-top: 1px solid var(--border); padding: 16px 18px; }
+.school-dashboard .dash-capacity > div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px; }
+.school-dashboard .dash-capacity > div strong { color: var(--ink); font-size: .875rem; }
+.school-dashboard .dash-capacity span, .school-dashboard .dash-capacity small { font-size: .78rem; color: var(--muted); }
+.school-dashboard .dash-capacity progress { display: block; width: 100%; height: 9px; margin: 9px 0; accent-color: var(--primary); }
+@container (max-width: 36rem) {
+  .school-dashboard .dash-head { flex-wrap: wrap; }
+}
+.school-dashboard .dash-stack { display: grid; min-width: 0; gap: 16px; align-content: start; }
+@container (max-width: 51rem) {
+  .school-dashboard .dash-stack { display: contents; }
+  .school-dashboard .dash-events { order: 1; }
+  .school-dashboard .dash-followup { order: 2; }
+  .school-dashboard .dash-agenda { order: 3; }
+  .school-dashboard .dash-recent { order: 4; }
+}
+
+.school-dashboard .dash-followup a.dash-urgent > strong { color: #783600; background: #fff0d9; }
+.school-dashboard .dash-followup a.dash-urgent small { color: #824509; }

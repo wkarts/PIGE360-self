@@ -282,6 +282,10 @@
           </details>
         </section>
         <section v-if="state.page==='dashboard' && !isProfileRole()" class="dashboard school-dashboard" aria-label="Painel da escola" :aria-busy="state.loading">
+          <header class="dash-head"><div><p v-if="state.dashboard.operations" class="dash-date">{{ date(state.dashboard.operations.today) }}</p><h2>Rotina da escola</h2></div>
+            <div class="dash-range" data-workspace-filter><label>Período da movimentação<select v-model.number="state.dashboardDays" @change="loadPage"><option :value="7">Últimos 7 dias</option><option :value="30">Últimos 30 dias</option><option :value="90">Últimos 90 dias</option></select></label>
+              <button type="button" class="btn btn-secondary" :disabled="state.loading" @click="loadPage">Atualizar painel</button></div>
+          </header>
           <nav v-if="can('people.write') || can('enrollments.write') || pageAllowed('online') || pageAllowed('diary') || pageAllowed('users')" class="dash-toolbar" aria-label="Ações da escola">
             <div class="dash-primary" v-if="can('people.write') || can('enrollments.write')">
               <button v-if="can('people.write')" type="button" class="btn btn-secondary" @click="newStudent()">Cadastrar aluno</button>
@@ -295,16 +299,28 @@
           </nav>
           <dl class="dash-metrics" aria-label="Indicadores escolares">
             <div v-for="metric in [
-              {key:'students',label:'Alunos ativos',icon:'students'},
-              {key:'enrollments',label:'Matrículas ativas',icon:'enrollment'},
-              {key:'drafts',label:'Matrículas em rascunho',icon:'clock'},
-              {key:'available',label:'Vagas disponíveis',icon:'academic'}
+              {key:'students',label:'Alunos ativos',hint:'Cadastros ativos nesta escola',icon:'students'},
+              {key:'enrollments',label:'Matrículas ativas',hint:'Vínculos escolares confirmados',icon:'enrollment'},
+              {key:'drafts',label:'Matrículas em rascunho',hint:'Aguardando efetivação',icon:'clock'},
+              {key:'available',label:'Vagas disponíveis',hint:'Nas turmas dos anos letivos ativos',icon:'academic'}
             ]" :key="metric.key" class="panel dash-metric">
               <dt><svg aria-hidden="true" focusable="false" class="ui-icon"><use :href="'/ui-icons.svg#'+metric.icon"></use></svg>{{ metric.label }}</dt>
-              <dd>{{ state.dashboard[metric.key] ?? '—' }}</dd>
+              <dd>{{ state.dashboard[metric.key] ?? '—' }}<small>{{ metric.hint }}</small></dd>
             </div>
           </dl>
           <div class="dash-sections">
+            <div class="dash-stack">
+            <section v-if="state.dashboard.operations" class="panel dash-events">
+              <div class="panel-header"><div><h2>Movimentação da escola</h2><p>{{ date(state.dashboard.operations.since) }} a {{ date(state.dashboard.operations.today) }} · até 6 registros recentes</p></div></div>
+              <ol v-if="state.dashboard.operations.activity.length" class="dash-feed">
+                <li v-for="event in state.dashboard.operations.activity" :key="event.page+event.id+event.title">
+                  <button type="button" @click="openDashboardItem(event)">
+                    <span class="dash-event-icon" aria-hidden="true"><svg class="ui-icon"><use :href="'/ui-icons.svg#'+dashboardIcon(event.page)"></use></svg></span>
+                    <span><strong>{{ event.title }}</strong><small>{{ event.detail }}</small></span><time :datetime="event.at">{{ timestamp(event.at) }}</time>
+                  </button>
+                </li>
+              </ol><p v-else class="dash-notice">Nenhuma movimentação registrada nas rotinas a que você tem acesso entre {{ date(state.dashboard.operations.since) }} e {{ date(state.dashboard.operations.today) }}.</p>
+            </section>
             <section v-if="pageAllowed('enrollments')" class="panel dash-recent">
               <div class="panel-header"><h2>Matrículas recentes</h2><a href="#/enrollments" @click.prevent="navigate('enrollments')">Ver todas <span aria-hidden="true">→</span></a></div>
               <p v-if="state.loading && !state.dashboard.recent_enrollments" class="dash-notice" role="status">Carregando matrículas…</p>
@@ -323,18 +339,44 @@
                 </ul>
               </template>
             </section>
-            <section v-if="pageAllowed('documents') || pageAllowed('protocols') || pageAllowed('academic')" class="panel dash-followup">
-              <div class="panel-header"><h2>Acompanhamento</h2></div>
+            </div>
+            <div class="dash-stack">
+            <section v-if="pageAllowed('documents') || pageAllowed('protocols') || pageAllowed('academic') || Object.keys(state.dashboard.operations?.counts || {}).length" class="panel dash-followup">
+              <div class="panel-header"><div><h2>O que precisa de atenção?</h2><p>Filas de trabalho da instituição</p></div></div>
               <a v-if="pageAllowed('documents')" href="#/documents" @click.prevent="navigate('documents')">
                 <span>Documentos recebidos<small>Aguardando análise</small></span><strong>{{ state.dashboard.received_documents ?? '—' }}</strong>
               </a>
-              <a v-if="pageAllowed('protocols')" href="#/protocols" @click.prevent="navigate('protocols')">
+              <a v-if="pageAllowed('protocols')" href="#/protocols" :class="{'dash-urgent':state.dashboard.overdue_protocols > 0}" @click.prevent="navigate('protocols')">
                 <span>Protocolos abertos<small v-if="state.dashboard.overdue_protocols != null">{{ state.dashboard.overdue_protocols }} com prazo vencido</small></span><strong>{{ state.dashboard.open_protocols ?? '—' }}</strong>
+              </a>
+              <a v-if="state.dashboard.operations?.counts.admissions_review != null" href="#/online" @click.prevent="navigate('online')">
+                <span>Inscrições em análise<small>Enviadas ou em conferência pela Secretaria</small></span><strong>{{ state.dashboard.operations.counts.admissions_review }}</strong>
+              </a>
+              <a v-if="state.dashboard.operations?.counts.lessons_without_calls != null" href="#/diary" @click.prevent="navigate('diary')">
+                <span>Aulas sem chamada<small>Registros dos últimos 7 dias sem frequência lançada</small></span><strong>{{ state.dashboard.operations.counts.lessons_without_calls }}</strong>
+              </a>
+              <a v-if="state.dashboard.operations?.counts.overdue_charges != null" href="#/banking" :class="{'dash-urgent':state.dashboard.operations.counts.overdue_charges > 0}" @click.prevent="navigate('banking')">
+                <span>Cobranças vencidas<small>Títulos em atraso no financeiro escolar</small></span><strong>{{ state.dashboard.operations.counts.overdue_charges }}</strong>
               </a>
               <a v-if="pageAllowed('academic')" href="#/academic" @click.prevent="navigate('academic')">
                 <span>Turmas ativas<small>Nos períodos letivos ativos</small></span><strong>{{ state.dashboard.classes ?? '—' }}</strong>
               </a>
+              <div v-if="pageAllowed('academic') && state.dashboard.capacity > 0" class="dash-capacity">
+                <div><strong>Ocupação das turmas</strong><span>{{ state.dashboard.capacity - state.dashboard.available }} de {{ state.dashboard.capacity }} vagas</span></div>
+                <progress aria-label="Vagas ocupadas ou reservadas" :max="state.dashboard.capacity" :value="state.dashboard.capacity-state.dashboard.available"></progress>
+                <small>Vagas comprometidas por matrículas ou reservas vigentes nos anos ativos.</small>
+              </div>
             </section>
+            <section v-if="state.dashboard.operations" class="panel dash-agenda">
+              <div class="panel-header"><div><h2>Agenda da escola</h2><p>{{ date(state.dashboard.operations.today) }} a {{ date(state.dashboard.operations.through) }} · próximos 6 compromissos</p></div></div>
+              <ol v-if="state.dashboard.operations.agenda.length"><li v-for="item in state.dashboard.operations.agenda" :key="item.page+item.id">
+                <button type="button" @click="openDashboardItem(item)">
+                  <time :datetime="item.day" class="dash-day">{{ date(item.day).slice(0,5) }}</time>
+                  <span><small>{{ item.kind }}<template v-if="item.hour"> · {{ item.hour }}</template></small><strong>{{ item.title }}</strong><small v-if="item.detail">{{ item.detail }}</small></span>
+                </button>
+              </li></ol><p v-else class="dash-notice">Nenhum compromisso visível previsto para estes 7 dias.</p>
+            </section>
+            </div>
           </div>
         </section>
         <section v-if="state.page==='dashboard' && isProfileRole()" class="dashboard">

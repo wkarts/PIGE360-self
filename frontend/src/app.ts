@@ -71,6 +71,12 @@ namespace PigeUI {
         'Ao ver o aviso, escolha Voltar se precisar salvar algo. Para descartar os rascunhos das guias que serão fechadas e manter a inicial, confirme em Fechar outras guias.'],
       alt:'Menu do gestor recolhido, com o painel Cadastros aberto e a opção Alunos ao lado dos ícones.',
       caption:'Gestor da escola de demonstração com o grupo Cadastros aberto. Selecione Alunos no painel para abrir a lista.'},
+    {id:'dashboard',page:'dashboard',title:'Acompanhar a rotina da escola',image:'visao-geral',
+      steps:['Confira a instituição selecionada e os totais de alunos, matrículas e vagas. Consulte a ocupação para entender quantas vagas já estão comprometidas.',
+        'Escolha um período de 7, 30 ou 90 dias em Movimentação da escola. Clique em uma matrícula ou protocolo para abrir o registro correspondente.',
+        'Consulte as filas em O que precisa de atenção? e os prazos, eventos e avaliações na Agenda da escola. A agenda mostra a semana atual a partir de hoje. O botão Atualizar painel consulta os dados da escola novamente.'],
+      alt:'Visão geral do gestor com movimentações datadas, inscrições, aulas sem chamada, ocupação das turmas e agenda de sete dias.',
+      caption:'A movimentação segue o período escolhido. Os compromissos seguem os próximos sete dias.'},
     {id:'users',page:'users',title:'Criar o acesso ao portal',image:'usuarios',
       steps:['Cadastre a pessoa em Alunos, Professores ou Pais e responsáveis. Na ficha do aluno, use Responsáveis para registrar os vínculos legal e financeiro que se aplicam àquela pessoa.',
         'Abra Gerenciar acesso ao portal na ficha ou entre em Usuários e acessos e escolha + Criar usuário. Confira o e-mail que receberá o convite, o Perfil base e a Pessoa vinculada.',
@@ -320,7 +326,7 @@ namespace PigeUI {
   const state = Vue.reactive({
     guideSelection,
     guideChoices():GuideWalkthrough[]{
-      return walkthroughs.filter(item=>!item.page || (pageAllowed(item.page) && (item.id!=='diary' || can('diary.configure'))));
+      return walkthroughs.filter(item=>(item.id!=='dashboard' || !isProfileRole()) && (!item.page || (pageAllowed(item.page) && (item.id!=='diary' || can('diary.configure')))));
     },
     currentGuide():GuideWalkthrough{
       return state.guideChoices().find(item=>item.id===guideSelection.topic) || walkthroughs[0];
@@ -337,7 +343,7 @@ namespace PigeUI {
     ready:false, configured:true, embedded:window.self!==window.top, online:navigator.onLine, loginBusy:false, busy:false, loading:false,
     error:'', success:'', menuOpen:false, loginPasswordVisible:false, registryFiltersOpen:false, user:null as PigeAPI.User|null, userPhotoUrl:'', profilePhotoPreview:'', cameraTarget:'', captureName:'',
     schools:[] as PigeAPI.School[], schoolId:'', page:'dashboard', q:'', pageNumber:1, total:0,
-    rows:[] as Row[], dashboard:{} as Row, catalogs:{} as Record<string,Row[]>, catalog:'class-groups',
+    rows:[] as Row[], dashboard:{} as Row, dashboardDays:7, catalogs:{} as Record<string,Row[]>, catalog:'class-groups',
     recordOrientation:'',personRecord:null as PigeDossier.Reply|null, recordTab:'general', recordArchived:false, familyBusy:false,
     selectedStudent:null as Student|null, studentTab:'cadastro', contractEnrollmentId:'', contractReviewIssuedId:'', profileContext:{} as Row, studentDocs:{items:[],checklist:[],issued:[]} as {items:Row[];checklist:Row[];issued:Row[]}, history:[] as Row[],
     studentChoices:[] as Student[], personChoices:[] as Row[], studentSearchQuery:'',studentSearchBusy:false,studentSearchMessage:'Digite ao menos 2 caracteres para pesquisar.',personSearchQuery:'',personSearchBusy:false,personSearchMessage:'Digite ao menos 2 caracteres para pesquisar.',photoUrls:{} as Record<string,string>, companies:[] as Row[], reportClass:'', reportRows:[] as Row[],
@@ -435,6 +441,16 @@ namespace PigeUI {
     return names[text(value)] || label(value);
   }
   function label(value: unknown): string { const key=text(value); return statusLabels[key] || key || '—'; }
+  function dashboardIcon(page:string):string {
+    const icons:Record<string,string>={enrollments:'enrollment',online:'online',diary:'academic',protocols:'protocols',community:'bell',documents:'documents'};
+    return icons[page] || 'clock';
+  }
+  async function openDashboardItem(item:{id:string;page:string;record_id?:string}):Promise<void>{
+    if(!pageAllowed(item.page))return;
+    if(item.page==='protocols')return viewProtocol(item.id);
+    if(item.page==='enrollments')return viewEnrollment(item.record_id||item.id);
+    await navigate(item.page);
+  }
   function date(value: unknown): string { const v=text(value); return v ? new Intl.DateTimeFormat('pt-BR',{timeZone:v.length===10?'UTC':'America/Bahia'}).format(new Date(v.length===10?v+'T12:00:00Z':v)) : '—'; }
   function cpf(value: unknown): string { const v=text(value); return v.length===11 ? `***.${v.slice(3,6)}.${v.slice(6,9)}-**` : 'Não informado'; }
   function initials(value: unknown): string { return text(value).split(' ').filter(Boolean).slice(0,2).map(v=>v[0]).join('').toUpperCase(); }
@@ -750,7 +766,7 @@ namespace PigeUI {
           const data=await PigeAPI.request<Row>('/profile/context');
           if(current===sequence)state.profileContext=data;
         }else{
-          const data=await PigeAPI.request<Row>(base()+'/dashboard');if(current===sequence)state.dashboard=data;
+          const data=await PigeAPI.request<Row>(base()+'/dashboard'+(state.dashboardDays===7?'':'?days='+state.dashboardDays));if(current===sequence)state.dashboard=data;
         }
       }else if(state.page==='academic'){
         await loadCatalogs();const rows=state.archiveFilter==='active'?(state.catalogs[state.catalog]||[]):await PigeAPI.request<Row[]>(base()+'/'+state.catalog+'?archived='+state.archiveFilter);if(current===sequence){state.rows=filterAcademic(rows);state.total=state.rows.length;}
@@ -1201,7 +1217,7 @@ namespace PigeUI {
     openModal('enrollment','Nova matrícula',fields,{student_id:selected?.id||'',enrolled_on:new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bahia',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),enrollment_type:'new'});
     if(selected)state.studentChoices=[selected];
   });}
-  async function viewEnrollment(id:string):Promise<void>{await safe(async()=>{const data=await PigeAPI.request<Row>(base()+'/enrollments/'+id);openModal('enrollment-detail','Matrícula '+text(data.number),[],{},data);});}
+  async function viewEnrollment(id:string):Promise<void>{await safe(async()=>{const school=state.schoolId;const modal=state.modal;const data=await PigeAPI.request<Row>(base()+'/enrollments/'+id);if(state.schoolId!==school || state.modal!==modal)return;openModal('enrollment-detail','Matrícula '+text(data.number),[],{},data);});}
   async function contractsForEnrollment(id:string,issuedId=''):Promise<void>{state.modal=blankModal();
     if(shell){if(!pageAllowed('contracts'))return;await openDesk('contracts');const target=desks.get('contracts');if(target){target.context.state.contractEnrollmentId=id;target.context.state.contractReviewIssuedId=issuedId;}}
     else {state.contractEnrollmentId=id;state.contractReviewIssuedId=issuedId;await navigate('contracts');}}
@@ -1721,7 +1737,7 @@ namespace PigeUI {
     closePersonRecord();++sequence;++schoolSequence;++personSearchSequence;++studentSearchSequence;
     clearTimeout(personSearchTimer);clearTimeout(studentSearchTimer);clearPhotos();clearProfilePreview();
   }
-  return {rail,portalRole,openPortalAccess,printStaff,editorPhoto,personPhotoChange,viewPersonRecord,recordKind,recordTabs,recordDetails,editRecord,closePersonRecord,moreRecordFamily,openSiteEditor,studentList,studentSection,selectSchool,taskState,openDesk,closeDesk,closeOtherDesks,selectWorkspaceTab,toggleMenuGroup,toggleSidebar,sidebarRail,resumeForm,keyTabs,scrollTabs,pageAllowed,loadShell,landingPage,safe,initialize,setupPWA,dispose,afterMFA,dialogHost,academicPrepared,importedDataChanged,openCamera,photoCaptured,documentPages,configurationPages,supportAreas,supportAreaLabels,refreshAccess,isEnrollmentForm,enrollmentStudent,enrollmentClass,administrationPages,institutionTabs,catalogDescriptions,adminTool,manageRecord,lifecycleCompleted,request:PigeAPI.request,download:PigeAPI.download,state,base,familyAssistFields,assistRequest,assistFields,assistEligible,assistCompany,setupCompany,setupCompanyFields,companyExtra,setupLookup,readStudentDocument,readResponsibleDocument,editIntake,mfa:PigeMFA,dossier,selectedPersonTypes,availablePersonTypes,togglePersonType,lockedPersonType,familyRelevant,manageMFA,editMFAPolicy,editEmbedding,probeEmbedding,editMyProfile,myPhotoChange,profilePassword,registryPages,integrationPages,businessTypes,isBusiness,newBusiness,reusePerson,personDocument,modalSections,modalTab,visibleSection,modalFieldLabel,modalFieldRelevant,advancedPersonField,isPersonModal,personTypeOptions,personTypeLabel,modalDirty,contractDirty,identity:PigeInstitution.state,supportStatus:PigeSupport.status,editIdentity,identityFileChange,manageUnits,editMaintainer,text,can,isProfileRole,school,label,enrollmentLabel,date,cpf,initials,photoSrc,getName,options,pageLabels,catalogLabels,configure,login,logout,requestLogout,navigate,changeSchool,setCatalog,search,page,loadPage,openSogoWebmail,webmailFrameLoaded,saveWebmailPreference,saveWebmailDefault,legacyImportFileChange,previewLegacyImport,applyLegacyImport,populatedImportTables,downloadLegacyArchive,viewStudent,newPerson,newStudent,editStudent,newGuardian,newTeacher,editTeacher,newEmployee,editEmployee,editPerson,newCatalog,newEnrollment,viewEnrollment,contractsForEnrollment,startMovement,reenroll,newLink,enrollmentLinkStudentId,linkFromEnrollment,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,editSupportHub,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,timestamp,protocolReceipt,replyProtocol,startPortalProtocol,protocolLabels,protocolQueryChanged,searchProtocolRequesters,chooseProtocolRequester,eligibleProtocolStudents,syncProtocolStudent,protocolNoticeLabel,protocolEvents,protocolAttachment,exportPendencies,install,updateApp};
+  return {rail,portalRole,openPortalAccess,printStaff,editorPhoto,personPhotoChange,viewPersonRecord,recordKind,recordTabs,recordDetails,editRecord,closePersonRecord,moreRecordFamily,openSiteEditor,studentList,studentSection,selectSchool,taskState,openDesk,closeDesk,closeOtherDesks,selectWorkspaceTab,toggleMenuGroup,toggleSidebar,sidebarRail,resumeForm,keyTabs,scrollTabs,pageAllowed,loadShell,landingPage,safe,initialize,setupPWA,dispose,afterMFA,dialogHost,academicPrepared,importedDataChanged,openCamera,photoCaptured,documentPages,configurationPages,supportAreas,supportAreaLabels,refreshAccess,isEnrollmentForm,enrollmentStudent,enrollmentClass,administrationPages,institutionTabs,catalogDescriptions,adminTool,manageRecord,lifecycleCompleted,request:PigeAPI.request,download:PigeAPI.download,state,base,familyAssistFields,assistRequest,assistFields,assistEligible,assistCompany,setupCompany,setupCompanyFields,companyExtra,setupLookup,readStudentDocument,readResponsibleDocument,editIntake,mfa:PigeMFA,dossier,selectedPersonTypes,availablePersonTypes,togglePersonType,lockedPersonType,familyRelevant,manageMFA,editMFAPolicy,editEmbedding,probeEmbedding,editMyProfile,myPhotoChange,profilePassword,registryPages,integrationPages,businessTypes,isBusiness,newBusiness,reusePerson,personDocument,modalSections,modalTab,visibleSection,modalFieldLabel,modalFieldRelevant,advancedPersonField,isPersonModal,personTypeOptions,personTypeLabel,modalDirty,contractDirty,identity:PigeInstitution.state,supportStatus:PigeSupport.status,editIdentity,identityFileChange,manageUnits,editMaintainer,text,can,isProfileRole,school,label,enrollmentLabel,date,cpf,initials,photoSrc,getName,options,dashboardIcon,openDashboardItem,pageLabels,catalogLabels,configure,login,logout,requestLogout,navigate,changeSchool,setCatalog,search,page,loadPage,openSogoWebmail,webmailFrameLoaded,saveWebmailPreference,saveWebmailDefault,legacyImportFileChange,previewLegacyImport,applyLegacyImport,populatedImportTables,downloadLegacyArchive,viewStudent,newPerson,newStudent,editStudent,newGuardian,newTeacher,editTeacher,newEmployee,editEmployee,editPerson,newCatalog,newEnrollment,viewEnrollment,contractsForEnrollment,startMovement,reenroll,newLink,enrollmentLinkStudentId,linkFromEnrollment,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,editSupportHub,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,timestamp,protocolReceipt,replyProtocol,startPortalProtocol,protocolLabels,protocolQueryChanged,searchProtocolRequesters,chooseProtocolRequester,eligibleProtocolStudents,syncProtocolStudent,protocolNoticeLabel,protocolEvents,protocolAttachment,exportPendencies,install,updateApp};
   }
   const components={'educacenso-panel':PigeEducacenso.component,'contract-value-field':PigeContractFields.component,'enrollment-workflow':PigeEnrollmentWorkflow.component,'academic-preparation':PigeAcademicPreparation.component,'notification-email':PigeNotificationEmail.component,'camera-capture':PigeCamera.component,'users-panel':PigeUsers.component,'institutional-email':PigeEmail.component,'audit-panel':PigeAudit.component,'lifecycle-panel':PigeLifecycle.component,'mailcow-panel':PigeMailcow.component,'school-community':PigeCommunity.component,'learning-panel':PigeLearning.component,'reports-panel':PigeReports.component,'legacy-import-panel':PigeLegacyImport.component,'diagnostics-panel':PigeDiagnostics.component,'expansion-panel':PigeExpansion.component,'diary-panel':PigeDiary.component,'contracts-panel':PigeContracts.component,'signing-panel':PigeSigning.component,'assist-panel':PigeAssist.component};
   function mountDesk(page:string,shared?:DeskContext,portalTarget?:PigeUsers.PortalTarget):Desk {
@@ -1752,7 +1768,7 @@ namespace PigeUI {
       });
       for(const event of ['input','change'])node.addEventListener(event,e=>{
         const field=e.target;
-        if(!(field instanceof HTMLElement)||field.closest('.filter-bar'))return;
+        if(!(field instanceof HTMLElement)||field.closest('.filter-bar,[data-workspace-filter]'))return;
         if(field.closest('form,[role="dialog"],textarea,[contenteditable="true"]'))desk.changed.add(field);
       });
       app.mount(mount);

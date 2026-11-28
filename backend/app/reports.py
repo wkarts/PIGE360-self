@@ -10,8 +10,9 @@ from . import models as m, schemas as s
 from .common import audit, number, output
 from .access_security import permissions_for
 from .db import now
+from .dashboard import OPEN_PROTOCOLS, SCHOOL_ZONE, capacity_summary, school_operations
 from .documents import checklist, render_pdf
-from .registry import occupancy, validate
+from .registry import validate
 from .security import Actor, DB, Scope, check_version, fail, lock_school, require, scoped
 
 router = APIRouter(prefix='/api/v1/schools/{school_id}', tags=['Secretaria, protocolos e relatórios'])
@@ -103,22 +104,25 @@ def pendencies(db, school_id, student_limit=5000):
 
 
 @router.get('/dashboard')
-def dashboard(db: DB, user: Actor, school: Scope):
+def dashboard(db: DB, user: Actor, school: Scope, days: int = 7):
     require(user, 'dashboard.read')
+    if days not in (7, 30, 90):
+        fail(422, 'Selecione um período de 7, 30 ou 90 dias.')
     def count(model, *filters):
         return db.scalar(select(func.count()).select_from(model).where(model.school_id == school.id, *filters)) or 0
-    groups = db.scalars(select(m.ClassGroup).join(m.AcademicYear, m.AcademicYear.id == m.ClassGroup.academic_year_id).where(m.ClassGroup.school_id == school.id, m.ClassGroup.active.is_(True), m.AcademicYear.status == 'active')).all()
     from .enrollments import enrollment_output
     recent = []
-    if 'enrollments.read' in permissions_for(user, db, school.id):
+    permissions = permissions_for(user, db, school.id)
+    instant = now()
+    if 'enrollments.read' in permissions:
         recent = db.scalars(select(m.Enrollment).where(m.Enrollment.school_id == school.id)
                             .order_by(m.Enrollment.created_at.desc()).limit(6)).all()
     return {'students': count(m.Student, m.Student.status == 'active'), 'enrollments': count(m.Enrollment, m.Enrollment.status == 'active'),
-            'drafts': count(m.Enrollment, m.Enrollment.status == 'draft'), 'classes': len(groups),
-            'available': sum(max(0, g.capacity - occupancy(db, g.id)) for g in groups),
-            'open_protocols':count(m.Protocol, m.Protocol.status.in_(['open','in_progress','waiting'])),
-            'overdue_protocols':count(m.Protocol, m.Protocol.status.in_(['open','in_progress','waiting']), m.Protocol.due_on < date.today()),
+            'drafts': count(m.Enrollment, m.Enrollment.status == 'draft'), **capacity_summary(db, school.id),
+            'open_protocols':count(m.Protocol, m.Protocol.status.in_(OPEN_PROTOCOLS)),
+            'overdue_protocols':count(m.Protocol, m.Protocol.status.in_(OPEN_PROTOCOLS), m.Protocol.due_on < instant.astimezone(SCHOOL_ZONE).date()),
             'received_documents':count(m.StudentDocument, m.StudentDocument.status == 'received'),
+            'operations':school_operations(db, school.id, user, permissions, instant, days),
             'recent_enrollments':[enrollment_output(db,e) for e in recent]}
 
 @router.get('/document-pendencies')

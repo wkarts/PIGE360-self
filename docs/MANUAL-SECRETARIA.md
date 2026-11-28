@@ -121,6 +121,12 @@ Em **Educacenso → Dados a declarar**, escolha o ambiente, a etapa, o ano letiv
 
 Em **Editar dados**, a etapa **Matrícula Inicial** permite ajustar o nome, o código Inep e a data de nascimento declarados. A etapa **Situação do Aluno** permite ajustar a situação. Informe o motivo e use **Salvar ajuste**. Retirar uma matrícula altera a composição desse rascunho. Arquivar encerra o trabalho nele e preserva a consulta pelo **Histórico** no ambiente correspondente. Use **Baixar ficha do aluno** para imprimir ou guardar o PDF daquela matrícula. Cada revisão tem um diagnóstico local em JSON. A secretaria continua responsável pelo procedimento oficial no INEP. [Ver exemplo de rascunho individual](../frontend/public/guia/educacenso-individual.webp)
 
+## Ler a Visão geral da escola
+
+O painel abre na instituição selecionada. Os quatro indicadores mostram cadastros ativos, vínculos efetivados, matrículas em rascunho e vagas disponíveis. Em **O que precisa de atenção?**, confira documentos em análise, protocolos vencidos, inscrições em conferência e, conforme seu acesso, aulas sem chamada e títulos em atraso. A ocupação considera também as reservas vigentes.
+
+Em **Movimentação da escola**, escolha os últimos 7, 30 ou 90 dias. O painel exibe até seis registros em ordem de data. Selecione uma matrícula ou protocolo para abrir sua ficha. A **Agenda da escola** mantém seu próprio intervalo de sete dias e reúne eventos publicados, avaliações publicadas e prazos de protocolos em aberto. **Atualizar painel** consulta o estado atual da instituição.
+
 ## Guia dentro da aplicação
 
 No gestor, abra **Guia de uso → Escolher tarefa** para consultar os passos e as capturas da aplicação. Selecione **Ler e imprimir o boletim escolar**, **Orientar a família sobre atividades e cobranças** ou **Fazer chamada e planejar uma aula no Portal do Professor** conforme a dúvida. No Diário, o roteiro rápido também explica chamada, avaliações, revisão, fechamento e publicação para a família. [Ver exemplo do painel do aluno](../frontend/public/guia/portal-aluno.webp) · [Ver exemplo do diário do professor](../frontend/public/guia/professor.webp)

@@ -3316,135 +3316,237 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                           class: "dashboard school-dashboard",
                           "aria-label": "Painel da escola",
                           "aria-busy": state.loading
-                        }, [(can('people.write') || can('enrollments.write') || pageAllowed('online') || pageAllowed('diary') || pageAllowed('users'))
-                          ? (_openBlock(), _createElementBlock("nav", {
-                              key: 0,
-                              class: "dash-toolbar",
-                              "aria-label": "Ações da escola"
-                            }, [(can('people.write') || can('enrollments.write'))
-                              ? (_openBlock(), _createElementBlock("div", {
-                                  key: 0,
-                                  class: "dash-primary"
-                                }, [(can('people.write'))
-                                  ? (_openBlock(), _createElementBlock("button", {
-                                      key: 0,
-                                      type: "button",
-                                      class: "btn btn-secondary",
-                                      onClick: $event => (newStudent())
-                                    }, "Cadastrar aluno", 8, ["onClick"]))
-                                  : _createCommentVNode("", true), (can('enrollments.write'))
-                                  ? (_openBlock(), _createElementBlock("button", {
-                                      key: 1,
-                                      type: "button",
-                                      class: "btn btn-primary",
-                                      onClick: newEnrollment
-                                    }, "Nova matrícula", 8, ["onClick"]))
-                                  : _createCommentVNode("", true)]))
-                              : _createCommentVNode("", true), (pageAllowed('online') || pageAllowed('diary') || pageAllowed('users'))
-                              ? (_openBlock(), _createElementBlock("div", {
-                                  key: 1,
-                                  class: "dash-shortcuts"
-                                }, [(pageAllowed('online'))
-                                  ? (_openBlock(), _createElementBlock("a", {
-                                      key: 0,
-                                      href: "#/online",
-                                      onClick: _withModifiers($event => (navigate('online')), ["prevent"])
-                                    }, "Inscrições online", 8, ["onClick"]))
-                                  : _createCommentVNode("", true), (pageAllowed('diary'))
-                                  ? (_openBlock(), _createElementBlock("a", {
-                                      key: 1,
-                                      href: "#/diary",
-                                      onClick: _withModifiers($event => (navigate('diary')), ["prevent"])
-                                    }, "Diário Escolar", 8, ["onClick"]))
-                                  : _createCommentVNode("", true), (pageAllowed('users'))
-                                  ? (_openBlock(), _createElementBlock("a", {
-                                      key: 2,
-                                      href: "#/users",
-                                      onClick: _withModifiers($event => (navigate('users')), ["prevent"])
-                                    }, "Usuários e acessos", 8, ["onClick"]))
-                                  : _createCommentVNode("", true)]))
-                              : _createCommentVNode("", true)]))
-                          : _createCommentVNode("", true), _createElementVNode("dl", {
-                          class: "dash-metrics",
-                          "aria-label": "Indicadores escolares"
-                        }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList([
-              {key:'students',label:'Alunos ativos',icon:'students'},
-              {key:'enrollments',label:'Matrículas ativas',icon:'enrollment'},
-              {key:'drafts',label:'Matrículas em rascunho',icon:'clock'},
-              {key:'available',label:'Vagas disponíveis',icon:'academic'}
+                        }, [
+                          _createElementVNode("header", { class: "dash-head" }, [_createElementVNode("div", null, [(state.dashboard.operations)
+                            ? (_openBlock(), _createElementBlock("p", {
+                                key: 0,
+                                class: "dash-date"
+                              }, _toDisplayString(date(state.dashboard.operations.today)), 1))
+                            : _createCommentVNode("", true), _createElementVNode("h2", null, "Rotina da escola")]), _createElementVNode("div", {
+                            class: "dash-range",
+                            "data-workspace-filter": ""
+                          }, [_createElementVNode("label", null, [_createTextVNode("Período da movimentação"), _withDirectives(_createElementVNode("select", {
+                            "onUpdate:modelValue": $event => ((state.dashboardDays) = $event),
+                            onChange: loadPage
+                          }, [_createElementVNode("option", { value: 7 }, "Últimos 7 dias", 8, ["value"]), _createElementVNode("option", { value: 30 }, "Últimos 30 dias", 8, ["value"]), _createElementVNode("option", { value: 90 }, "Últimos 90 dias", 8, ["value"])], 40, ["onUpdate:modelValue", "onChange"]), [[
+                            _vModelSelect,
+                            state.dashboardDays,
+                            void 0,
+                            { number: true }
+                          ]])]), _createElementVNode("button", {
+                            type: "button",
+                            class: "btn btn-secondary",
+                            disabled: state.loading,
+                            onClick: loadPage
+                          }, "Atualizar painel", 8, ["disabled", "onClick"])])]),
+                          (can('people.write') || can('enrollments.write') || pageAllowed('online') || pageAllowed('diary') || pageAllowed('users'))
+                            ? (_openBlock(), _createElementBlock("nav", {
+                                key: 0,
+                                class: "dash-toolbar",
+                                "aria-label": "Ações da escola"
+                              }, [(can('people.write') || can('enrollments.write'))
+                                ? (_openBlock(), _createElementBlock("div", {
+                                    key: 0,
+                                    class: "dash-primary"
+                                  }, [(can('people.write'))
+                                    ? (_openBlock(), _createElementBlock("button", {
+                                        key: 0,
+                                        type: "button",
+                                        class: "btn btn-secondary",
+                                        onClick: $event => (newStudent())
+                                      }, "Cadastrar aluno", 8, ["onClick"]))
+                                    : _createCommentVNode("", true), (can('enrollments.write'))
+                                    ? (_openBlock(), _createElementBlock("button", {
+                                        key: 1,
+                                        type: "button",
+                                        class: "btn btn-primary",
+                                        onClick: newEnrollment
+                                      }, "Nova matrícula", 8, ["onClick"]))
+                                    : _createCommentVNode("", true)]))
+                                : _createCommentVNode("", true), (pageAllowed('online') || pageAllowed('diary') || pageAllowed('users'))
+                                ? (_openBlock(), _createElementBlock("div", {
+                                    key: 1,
+                                    class: "dash-shortcuts"
+                                  }, [(pageAllowed('online'))
+                                    ? (_openBlock(), _createElementBlock("a", {
+                                        key: 0,
+                                        href: "#/online",
+                                        onClick: _withModifiers($event => (navigate('online')), ["prevent"])
+                                      }, "Inscrições online", 8, ["onClick"]))
+                                    : _createCommentVNode("", true), (pageAllowed('diary'))
+                                    ? (_openBlock(), _createElementBlock("a", {
+                                        key: 1,
+                                        href: "#/diary",
+                                        onClick: _withModifiers($event => (navigate('diary')), ["prevent"])
+                                      }, "Diário Escolar", 8, ["onClick"]))
+                                    : _createCommentVNode("", true), (pageAllowed('users'))
+                                    ? (_openBlock(), _createElementBlock("a", {
+                                        key: 2,
+                                        href: "#/users",
+                                        onClick: _withModifiers($event => (navigate('users')), ["prevent"])
+                                      }, "Usuários e acessos", 8, ["onClick"]))
+                                    : _createCommentVNode("", true)]))
+                                : _createCommentVNode("", true)]))
+                            : _createCommentVNode("", true),
+                          _createElementVNode("dl", {
+                            class: "dash-metrics",
+                            "aria-label": "Indicadores escolares"
+                          }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList([
+              {key:'students',label:'Alunos ativos',hint:'Cadastros ativos nesta escola',icon:'students'},
+              {key:'enrollments',label:'Matrículas ativas',hint:'Vínculos escolares confirmados',icon:'enrollment'},
+              {key:'drafts',label:'Matrículas em rascunho',hint:'Aguardando efetivação',icon:'clock'},
+              {key:'available',label:'Vagas disponíveis',hint:'Nas turmas dos anos letivos ativos',icon:'academic'}
             ], (metric) => {
-                          return (_openBlock(), _createElementBlock("div", {
-                            key: metric.key,
-                            class: "panel dash-metric"
-                          }, [_createElementVNode("dt", null, [(_openBlock(), _createElementBlock("svg", {
-                            "aria-hidden": "true",
-                            focusable: "false",
-                            class: "ui-icon"
-                          }, [_createElementVNode("use", { href: '/ui-icons.svg#'+metric.icon }, null, 8, ["href"])])), _createTextVNode(_toDisplayString(metric.label), 1)]), _createElementVNode("dd", null, _toDisplayString(state.dashboard[metric.key] ?? '—'), 1)]))
-                        }), 128))]), _createElementVNode("div", { class: "dash-sections" }, [(pageAllowed('enrollments'))
-                          ? (_openBlock(), _createElementBlock("section", {
-                              key: 0,
-                              class: "panel dash-recent"
-                            }, [_createElementVNode("div", { class: "panel-header" }, [_createElementVNode("h2", null, "Matrículas recentes"), _createElementVNode("a", {
-                              href: "#/enrollments",
-                              onClick: _withModifiers($event => (navigate('enrollments')), ["prevent"])
-                            }, [_createTextVNode("Ver todas "), _createElementVNode("span", { "aria-hidden": "true" }, "→")], 8, ["onClick"])]), (state.loading && !state.dashboard.recent_enrollments)
-                              ? (_openBlock(), _createElementBlock("p", {
-                                  key: 0,
-                                  class: "dash-notice",
-                                  role: "status"
-                                }, "Carregando matrículas…"))
-                              : (!state.dashboard.recent_enrollments)
-                                ? (_openBlock(), _createElementBlock("p", {
+                            return (_openBlock(), _createElementBlock("div", {
+                              key: metric.key,
+                              class: "panel dash-metric"
+                            }, [_createElementVNode("dt", null, [(_openBlock(), _createElementBlock("svg", {
+                              "aria-hidden": "true",
+                              focusable: "false",
+                              class: "ui-icon"
+                            }, [_createElementVNode("use", { href: '/ui-icons.svg#'+metric.icon }, null, 8, ["href"])])), _createTextVNode(_toDisplayString(metric.label), 1)]), _createElementVNode("dd", null, [_createTextVNode(_toDisplayString(state.dashboard[metric.key] ?? '—'), 1), _createElementVNode("small", null, _toDisplayString(metric.hint), 1)])]))
+                          }), 128))]),
+                          _createElementVNode("div", { class: "dash-sections" }, [_createElementVNode("div", { class: "dash-stack" }, [(state.dashboard.operations)
+                            ? (_openBlock(), _createElementBlock("section", {
+                                key: 0,
+                                class: "panel dash-events"
+                              }, [_createElementVNode("div", { class: "panel-header" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Movimentação da escola"), _createElementVNode("p", null, _toDisplayString(date(state.dashboard.operations.since)) + " a " + _toDisplayString(date(state.dashboard.operations.today)) + " · até 6 registros recentes", 1)])]), (state.dashboard.operations.activity.length)
+                                ? (_openBlock(), _createElementBlock("ol", {
+                                    key: 0,
+                                    class: "dash-feed"
+                                  }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.dashboard.operations.activity, (event) => {
+                                    return (_openBlock(), _createElementBlock("li", { key: event.page+event.id+event.title }, [_createElementVNode("button", {
+                                      type: "button",
+                                      onClick: $event => (openDashboardItem(event))
+                                    }, [_createElementVNode("span", {
+                                      class: "dash-event-icon",
+                                      "aria-hidden": "true"
+                                    }, [(_openBlock(), _createElementBlock("svg", { class: "ui-icon" }, [_createElementVNode("use", { href: '/ui-icons.svg#'+dashboardIcon(event.page) }, null, 8, ["href"])]))]), _createElementVNode("span", null, [_createElementVNode("strong", null, _toDisplayString(event.title), 1), _createElementVNode("small", null, _toDisplayString(event.detail), 1)]), _createElementVNode("time", { datetime: event.at }, _toDisplayString(timestamp(event.at)), 9, ["datetime"])], 8, ["onClick"])]))
+                                  }), 128))]))
+                                : (_openBlock(), _createElementBlock("p", {
                                     key: 1,
                                     class: "dash-notice"
-                                  }, "Matrículas recentes indisponíveis."))
-                                : (!state.dashboard.recent_enrollments.length)
-                                  ? (_openBlock(), _createElementBlock("p", {
-                                      key: 2,
-                                      class: "dash-notice"
-                                    }, "Nenhuma matrícula registrada nesta escola."))
-                                  : (_openBlock(), _createElementBlock(_Fragment, { key: 3 }, [_createElementVNode("div", {
-                                      class: "dash-row dash-labels",
-                                      "aria-hidden": "true"
-                                    }, [_createElementVNode("span", null, "Aluno e matrícula"), _createElementVNode("span", null, "Turma e ano letivo"), _createElementVNode("span", null, "Situação")]), _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.dashboard.recent_enrollments, (e) => {
-                                      return (_openBlock(), _createElementBlock("li", { key: e.id }, [_createElementVNode("button", {
-                                        type: "button",
-                                        class: "dash-row",
-                                        onClick: $event => (viewEnrollment(e.id))
-                                      }, [_createElementVNode("span", { class: "dash-student" }, [_createElementVNode("span", { class: "sr-only" }, "Abrir matrícula de "), _createElementVNode("strong", null, _toDisplayString(e.student_name), 1), _createElementVNode("small", null, _toDisplayString(e.number), 1)]), _createElementVNode("span", { class: "dash-class" }, [_createTextVNode(_toDisplayString(e.class_name), 1), _createElementVNode("small", null, _toDisplayString(e.year_name), 1)]), _createElementVNode("span", { class: _normalizeClass(["badge", e.status]) }, _toDisplayString(enrollmentLabel(e.status)), 3)], 8, ["onClick"])]))
-                                    }), 128))])], 64))]))
-                          : _createCommentVNode("", true), (pageAllowed('documents') || pageAllowed('protocols') || pageAllowed('academic'))
-                          ? (_openBlock(), _createElementBlock("section", {
-                              key: 1,
-                              class: "panel dash-followup"
-                            }, [
-                              _createElementVNode("div", { class: "panel-header" }, [_createElementVNode("h2", null, "Acompanhamento")]),
-                              (pageAllowed('documents'))
-                                ? (_openBlock(), _createElementBlock("a", {
+                                  }, "Nenhuma movimentação registrada nas rotinas a que você tem acesso entre " + _toDisplayString(date(state.dashboard.operations.since)) + " e " + _toDisplayString(date(state.dashboard.operations.today)) + ".", 1))]))
+                            : _createCommentVNode("", true), (pageAllowed('enrollments'))
+                            ? (_openBlock(), _createElementBlock("section", {
+                                key: 1,
+                                class: "panel dash-recent"
+                              }, [_createElementVNode("div", { class: "panel-header" }, [_createElementVNode("h2", null, "Matrículas recentes"), _createElementVNode("a", {
+                                href: "#/enrollments",
+                                onClick: _withModifiers($event => (navigate('enrollments')), ["prevent"])
+                              }, [_createTextVNode("Ver todas "), _createElementVNode("span", { "aria-hidden": "true" }, "→")], 8, ["onClick"])]), (state.loading && !state.dashboard.recent_enrollments)
+                                ? (_openBlock(), _createElementBlock("p", {
                                     key: 0,
-                                    href: "#/documents",
-                                    onClick: _withModifiers($event => (navigate('documents')), ["prevent"])
-                                  }, [_createElementVNode("span", null, [_createTextVNode("Documentos recebidos"), _createElementVNode("small", null, "Aguardando análise")]), _createElementVNode("strong", null, _toDisplayString(state.dashboard.received_documents ?? '—'), 1)], 8, ["onClick"]))
-                                : _createCommentVNode("", true),
-                              (pageAllowed('protocols'))
-                                ? (_openBlock(), _createElementBlock("a", {
+                                    class: "dash-notice",
+                                    role: "status"
+                                  }, "Carregando matrículas…"))
+                                : (!state.dashboard.recent_enrollments)
+                                  ? (_openBlock(), _createElementBlock("p", {
+                                      key: 1,
+                                      class: "dash-notice"
+                                    }, "Matrículas recentes indisponíveis."))
+                                  : (!state.dashboard.recent_enrollments.length)
+                                    ? (_openBlock(), _createElementBlock("p", {
+                                        key: 2,
+                                        class: "dash-notice"
+                                      }, "Nenhuma matrícula registrada nesta escola."))
+                                    : (_openBlock(), _createElementBlock(_Fragment, { key: 3 }, [_createElementVNode("div", {
+                                        class: "dash-row dash-labels",
+                                        "aria-hidden": "true"
+                                      }, [_createElementVNode("span", null, "Aluno e matrícula"), _createElementVNode("span", null, "Turma e ano letivo"), _createElementVNode("span", null, "Situação")]), _createElementVNode("ul", null, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.dashboard.recent_enrollments, (e) => {
+                                        return (_openBlock(), _createElementBlock("li", { key: e.id }, [_createElementVNode("button", {
+                                          type: "button",
+                                          class: "dash-row",
+                                          onClick: $event => (viewEnrollment(e.id))
+                                        }, [_createElementVNode("span", { class: "dash-student" }, [_createElementVNode("span", { class: "sr-only" }, "Abrir matrícula de "), _createElementVNode("strong", null, _toDisplayString(e.student_name), 1), _createElementVNode("small", null, _toDisplayString(e.number), 1)]), _createElementVNode("span", { class: "dash-class" }, [_createTextVNode(_toDisplayString(e.class_name), 1), _createElementVNode("small", null, _toDisplayString(e.year_name), 1)]), _createElementVNode("span", { class: _normalizeClass(["badge", e.status]) }, _toDisplayString(enrollmentLabel(e.status)), 3)], 8, ["onClick"])]))
+                                      }), 128))])], 64))]))
+                            : _createCommentVNode("", true)]), _createElementVNode("div", { class: "dash-stack" }, [(pageAllowed('documents') || pageAllowed('protocols') || pageAllowed('academic') || Object.keys(state.dashboard.operations?.counts || {}).length)
+                            ? (_openBlock(), _createElementBlock("section", {
+                                key: 0,
+                                class: "panel dash-followup"
+                              }, [
+                                _createElementVNode("div", { class: "panel-header" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "O que precisa de atenção?"), _createElementVNode("p", null, "Filas de trabalho da instituição")])]),
+                                (pageAllowed('documents'))
+                                  ? (_openBlock(), _createElementBlock("a", {
+                                      key: 0,
+                                      href: "#/documents",
+                                      onClick: _withModifiers($event => (navigate('documents')), ["prevent"])
+                                    }, [_createElementVNode("span", null, [_createTextVNode("Documentos recebidos"), _createElementVNode("small", null, "Aguardando análise")]), _createElementVNode("strong", null, _toDisplayString(state.dashboard.received_documents ?? '—'), 1)], 8, ["onClick"]))
+                                  : _createCommentVNode("", true),
+                                (pageAllowed('protocols'))
+                                  ? (_openBlock(), _createElementBlock("a", {
+                                      key: 1,
+                                      href: "#/protocols",
+                                      class: _normalizeClass({'dash-urgent':state.dashboard.overdue_protocols > 0}),
+                                      onClick: _withModifiers($event => (navigate('protocols')), ["prevent"])
+                                    }, [_createElementVNode("span", null, [_createTextVNode("Protocolos abertos"), (state.dashboard.overdue_protocols != null)
+                                      ? (_openBlock(), _createElementBlock("small", { key: 0 }, _toDisplayString(state.dashboard.overdue_protocols) + " com prazo vencido", 1))
+                                      : _createCommentVNode("", true)]), _createElementVNode("strong", null, _toDisplayString(state.dashboard.open_protocols ?? '—'), 1)], 10, ["onClick"]))
+                                  : _createCommentVNode("", true),
+                                (state.dashboard.operations?.counts.admissions_review != null)
+                                  ? (_openBlock(), _createElementBlock("a", {
+                                      key: 2,
+                                      href: "#/online",
+                                      onClick: _withModifiers($event => (navigate('online')), ["prevent"])
+                                    }, [_createElementVNode("span", null, [_createTextVNode("Inscrições em análise"), _createElementVNode("small", null, "Enviadas ou em conferência pela Secretaria")]), _createElementVNode("strong", null, _toDisplayString(state.dashboard.operations.counts.admissions_review), 1)], 8, ["onClick"]))
+                                  : _createCommentVNode("", true),
+                                (state.dashboard.operations?.counts.lessons_without_calls != null)
+                                  ? (_openBlock(), _createElementBlock("a", {
+                                      key: 3,
+                                      href: "#/diary",
+                                      onClick: _withModifiers($event => (navigate('diary')), ["prevent"])
+                                    }, [_createElementVNode("span", null, [_createTextVNode("Aulas sem chamada"), _createElementVNode("small", null, "Registros dos últimos 7 dias sem frequência lançada")]), _createElementVNode("strong", null, _toDisplayString(state.dashboard.operations.counts.lessons_without_calls), 1)], 8, ["onClick"]))
+                                  : _createCommentVNode("", true),
+                                (state.dashboard.operations?.counts.overdue_charges != null)
+                                  ? (_openBlock(), _createElementBlock("a", {
+                                      key: 4,
+                                      href: "#/banking",
+                                      class: _normalizeClass({'dash-urgent':state.dashboard.operations.counts.overdue_charges > 0}),
+                                      onClick: _withModifiers($event => (navigate('banking')), ["prevent"])
+                                    }, [_createElementVNode("span", null, [_createTextVNode("Cobranças vencidas"), _createElementVNode("small", null, "Títulos em atraso no financeiro escolar")]), _createElementVNode("strong", null, _toDisplayString(state.dashboard.operations.counts.overdue_charges), 1)], 10, ["onClick"]))
+                                  : _createCommentVNode("", true),
+                                (pageAllowed('academic'))
+                                  ? (_openBlock(), _createElementBlock("a", {
+                                      key: 5,
+                                      href: "#/academic",
+                                      onClick: _withModifiers($event => (navigate('academic')), ["prevent"])
+                                    }, [_createElementVNode("span", null, [_createTextVNode("Turmas ativas"), _createElementVNode("small", null, "Nos períodos letivos ativos")]), _createElementVNode("strong", null, _toDisplayString(state.dashboard.classes ?? '—'), 1)], 8, ["onClick"]))
+                                  : _createCommentVNode("", true),
+                                (pageAllowed('academic') && state.dashboard.capacity > 0)
+                                  ? (_openBlock(), _createElementBlock("div", {
+                                      key: 6,
+                                      class: "dash-capacity"
+                                    }, [_createElementVNode("div", null, [_createElementVNode("strong", null, "Ocupação das turmas"), _createElementVNode("span", null, _toDisplayString(state.dashboard.capacity - state.dashboard.available) + " de " + _toDisplayString(state.dashboard.capacity) + " vagas", 1)]), _createElementVNode("progress", {
+                                      "aria-label": "Vagas ocupadas ou reservadas",
+                                      max: state.dashboard.capacity,
+                                      value: state.dashboard.capacity-state.dashboard.available
+                                    }, null, 8, ["max", "value"]), _createElementVNode("small", null, "Vagas comprometidas por matrículas ou reservas vigentes nos anos ativos.")]))
+                                  : _createCommentVNode("", true)
+                              ]))
+                            : _createCommentVNode("", true), (state.dashboard.operations)
+                            ? (_openBlock(), _createElementBlock("section", {
+                                key: 1,
+                                class: "panel dash-agenda"
+                              }, [_createElementVNode("div", { class: "panel-header" }, [_createElementVNode("div", null, [_createElementVNode("h2", null, "Agenda da escola"), _createElementVNode("p", null, _toDisplayString(date(state.dashboard.operations.today)) + " a " + _toDisplayString(date(state.dashboard.operations.through)) + " · próximos 6 compromissos", 1)])]), (state.dashboard.operations.agenda.length)
+                                ? (_openBlock(), _createElementBlock("ol", { key: 0 }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.dashboard.operations.agenda, (item) => {
+                                    return (_openBlock(), _createElementBlock("li", { key: item.page+item.id }, [_createElementVNode("button", {
+                                      type: "button",
+                                      onClick: $event => (openDashboardItem(item))
+                                    }, [_createElementVNode("time", {
+                                      datetime: item.day,
+                                      class: "dash-day"
+                                    }, _toDisplayString(date(item.day).slice(0,5)), 9, ["datetime"]), _createElementVNode("span", null, [_createElementVNode("small", null, [_createTextVNode(_toDisplayString(item.kind), 1), (item.hour)
+                                      ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createTextVNode(" · " + _toDisplayString(item.hour), 1)], 64))
+                                      : _createCommentVNode("", true)]), _createElementVNode("strong", null, _toDisplayString(item.title), 1), (item.detail)
+                                      ? (_openBlock(), _createElementBlock("small", { key: 0 }, _toDisplayString(item.detail), 1))
+                                      : _createCommentVNode("", true)])], 8, ["onClick"])]))
+                                  }), 128))]))
+                                : (_openBlock(), _createElementBlock("p", {
                                     key: 1,
-                                    href: "#/protocols",
-                                    onClick: _withModifiers($event => (navigate('protocols')), ["prevent"])
-                                  }, [_createElementVNode("span", null, [_createTextVNode("Protocolos abertos"), (state.dashboard.overdue_protocols != null)
-                                    ? (_openBlock(), _createElementBlock("small", { key: 0 }, _toDisplayString(state.dashboard.overdue_protocols) + " com prazo vencido", 1))
-                                    : _createCommentVNode("", true)]), _createElementVNode("strong", null, _toDisplayString(state.dashboard.open_protocols ?? '—'), 1)], 8, ["onClick"]))
-                                : _createCommentVNode("", true),
-                              (pageAllowed('academic'))
-                                ? (_openBlock(), _createElementBlock("a", {
-                                    key: 2,
-                                    href: "#/academic",
-                                    onClick: _withModifiers($event => (navigate('academic')), ["prevent"])
-                                  }, [_createElementVNode("span", null, [_createTextVNode("Turmas ativas"), _createElementVNode("small", null, "Nos períodos letivos ativos")]), _createElementVNode("strong", null, _toDisplayString(state.dashboard.classes ?? '—'), 1)], 8, ["onClick"]))
-                                : _createCommentVNode("", true)
-                            ]))
-                          : _createCommentVNode("", true)])], 8, ["aria-busy"]))
+                                    class: "dash-notice"
+                                  }, "Nenhum compromisso visível previsto para estes 7 dias."))]))
+                            : _createCommentVNode("", true)])])
+                        ], 8, ["aria-busy"]))
                       : _createCommentVNode("", true),
                     (state.page==='dashboard' && isProfileRole())
                       ? (_openBlock(), _createElementBlock("section", {

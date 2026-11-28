@@ -17,13 +17,15 @@ def state(admission):
     return admission.reservation_status
 
 
-def reserved_count(db, class_id, exclude_enrollment_id=None):
-    query = select(func.count()).select_from(m.Admission).join(
-        m.Enrollment, m.Enrollment.id == m.Admission.enrollment_id).where(
-        m.Admission.class_group_id == class_id, m.Admission.status == 'approved',
-        m.Enrollment.status.in_(['draft','cancelled']),
+def active_reservations():
+    return select(m.Admission).join(m.Enrollment, m.Enrollment.id == m.Admission.enrollment_id).where(
+        m.Admission.status == 'approved', m.Enrollment.status.in_(['draft','cancelled']),
         or_(m.Admission.reservation_status == 'paid', and_(
             m.Admission.reservation_status == 'held', m.Admission.reserved_until > now())))
+
+
+def reserved_count(db, class_id, exclude_enrollment_id=None):
+    query = active_reservations().with_only_columns(func.count(m.Admission.id)).where(m.Admission.class_group_id == class_id)
     if exclude_enrollment_id:
         query = query.where(m.Admission.enrollment_id != exclude_enrollment_id)
     return db.scalar(query) or 0
