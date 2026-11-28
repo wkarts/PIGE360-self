@@ -7,6 +7,8 @@
 .teacher-content :is(h1,h2,h3,p,button) { overflow-wrap: anywhere; }
 .teacher-content:focus, #teacher-title:focus { outline: none; }
 .teacher-content .family-welcome h2 { margin-top: 0; }
+.teacher-content .actions { min-width: 0; max-width: 100%; }
+.teacher-content .btn { min-width: 0; max-width: 100%; white-space: normal; }
 .teacher-overview { min-width: 0; }
 .teacher-overview .panel { align-self: start; }
 .teacher-overview .family-panel-heading { align-items: flex-start; }

@@ -84,21 +84,34 @@ def check_teacher_layout(page, output, responsive):
     for width, height in [(1440, 950), (390, 844), (320, 740)]:
         page.set_viewport_size({'width': width, 'height': height})
         expect(title).to_be_visible()
-        sizes = page.evaluate("""() => {
+        sizes = page.evaluate("""async () => {
+          await document.fonts.ready;
+          const sidebar = document.getElementById('teacher-navigation');
+          const header = document.querySelector('.family-main > header');
+          await new Promise(requestAnimationFrame);
+          await Promise.allSettled(sidebar.getAnimations().map(animation => animation.finished));
           const rect = element => {
             const {top, left, right, width, height} = element.getBoundingClientRect();
             return {top, left, right, width, height};
           };
+          const viewport = document.documentElement.clientWidth;
+          const pageWidth = document.documentElement.scrollWidth;
           return {
-            viewport: document.documentElement.clientWidth,
-            pageWidth: document.documentElement.scrollWidth,
-            header: rect(document.querySelector('.family-main > header')),
-            sidebar: rect(document.getElementById('teacher-navigation')),
+            viewport, pageWidth,
+            overflowing: pageWidth <= viewport + 1 ? [] : [...document.body.querySelectorAll('*')]
+              .filter(element => element.getBoundingClientRect().right > viewport + 1)
+              .slice(0, 12).map(element => ({tag: element.localName, id: element.id,
+                classes: element.getAttribute('class'), label: element.getAttribute('aria-label'), right: rect(element).right})),
+            header: rect(header),
+            headerPaddingRight: parseFloat(getComputedStyle(header).paddingRight),
+            logout: rect(header.querySelector('button[aria-label="Sair"]')),
+            sidebar: rect(sidebar),
             title: rect(document.getElementById('teacher-title')),
             overview: rect(document.querySelector('.teacher-overview'))
           };
         }""")
         assert sizes['pageWidth'] <= sizes['viewport'] + 1, sizes
+        assert sizes['logout']['right'] <= sizes['header']['right'] - sizes['headerPaddingRight'] + 1, sizes
         assert -1 <= sizes['header']['top'] <= 2, sizes
         assert sizes['header']['height'] <= sizes['title']['top'] <= 230, sizes
         assert abs(sizes['header']['right'] - sizes['viewport']) <= 2, sizes

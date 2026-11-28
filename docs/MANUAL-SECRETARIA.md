@@ -75,6 +75,8 @@ A PWA não é um sistema de matrícula offline. Sem conexão, a interface avisa 
 Em qualquer tela autenticada, use **Guia de uso** para abrir a sequência recomendada: configurar a estrutura acadêmica, cadastrar ou reutilizar a identidade, criar e ativar a matrícula e operar o Diário. Na tela do Diário, o roteiro rápido explica períodos, aulas, chamada, avaliações, revisão, fechamento e autorização familiar. Mensagens de validação apontam o campo que precisa de correção; erros exibem um código de referência para suporte.
 
 
+No **Guia de uso**, em **Escolher tarefa**, selecione **Consultar atividades e boletim no Portal do Aluno** para orientar a família ou **Fazer chamada e planejar uma aula no Portal do Professor** para orientar o docente. As duas opções mostram telas da aplicação com dados fictícios. [Ver exemplo do painel do aluno](../frontend/public/guia/portal-aluno.webp) · [Ver exemplo do diário do professor](../frontend/public/guia/professor.webp)
+
 ## Recursos adicionados na 0.2.0
 
 ### Corrigir uma pré-matrícula

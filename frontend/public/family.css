@@ -57,6 +57,8 @@ body:has(.family-sidebar.visible){overflow:hidden}
 
 .family-work-tabs .family-close-others { border-inline-start: 1px solid var(--border); border-radius: 0; flex: 0 0 42px; }
 @media (max-width:800px) {
+  .family-header-school { flex: 1 1 0; }
+  .family-account { flex: none; }
   .family-work-tabs :is([role=tab], .work-tab-close, .family-close-others) { min-height: 44px; }
   .family-work-tabs .work-tab-close { min-width: 32px; }
 }
