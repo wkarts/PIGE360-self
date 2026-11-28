@@ -10,3 +10,53 @@
 body:has(.family-sidebar.visible){overflow:hidden}
 
 /* Visibility switches immediately so the drawer is focusable on Vue nextTick. Only transform animates. */
+
+.portal-mail {padding:clamp(10px,1.5vw,20px);min-width:0}
+.portal-mail-frame {display:block;width:100%;height:clamp(410px,72vh,1000px);border:0;background:#fff}
+.portal-mail-connection {max-width:28rem;display:grid;gap:12px}
+.portal-mail-connection button {justify-self:start}
+
+/* Mantém a navegação do portal familiar alinhada com a área de trabalho da escola. */
+.family-shell .family-rail-toggle { display: none; }
+.family-shell .family-context:empty { display: none; }
+.family-shell .family-welcome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  border-inline-start: 4px solid var(--primary);
+}
+.family-shell .family-welcome h2 { margin: 0 0 6px; }
+.family-shell .family-welcome .actions { margin: 0; flex-wrap: wrap; }
+.family-class-summary { display: flex; flex-wrap: wrap; column-gap: 16px; color: var(--muted); }
+.family-shell .family-stats { grid-template-columns: repeat(auto-fit,minmax(min(100%,185px),1fr)); }
+.family-shell .family-stat:hover, .family-shell .family-stat:focus-visible {
+  border-color: var(--primary);
+}
+.family-shell .family-feed-search { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin: 20px 0; }
+.family-shell .family-material-search, .family-shell .family-feed-search label { width: min(100%,32rem); }
+.family-shell .family-material-search { margin: 18px 0; }
+@media (min-width: 801px) {
+  .family-shell .family-rail-toggle { display: grid; flex: none; }
+  .family-shell-collapsed .family-rail-toggle svg { transform: rotate(180deg); }
+  .family-shell-collapsed .family-sidebar { width: 68px; }
+  .family-shell-collapsed .family-main { margin-left: 68px; }
+  .family-shell-collapsed .family-sidebar-brand { min-height: 76px; padding: 12px 6px; }
+  .family-shell-collapsed .family-sidebar-brand img { max-height: 50px; }
+  .family-shell-collapsed .family-sidebar-brand strong { font-size: 11px; }
+  .family-shell-collapsed .family-sidebar-scroll { padding: 8px; }
+  .family-shell-collapsed .family-sidebar nav { padding: 4px 0; }
+  .family-shell-collapsed .family-sidebar nav + .family-nav-label + nav { border-top: 1px solid var(--border); }
+  .family-shell-collapsed .family-sidebar nav :is(button,a) { justify-content: center; padding-inline: 6px; }
+  .family-shell-collapsed .family-sidebar :is(.family-nav-label, .family-sidebar-footer, small, nav span) { display: none; }
+}
+@media (max-width: 800px) {
+  .family-shell .family-stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+
+.family-work-tabs .family-close-others { border-inline-start: 1px solid var(--border); border-radius: 0; flex: 0 0 42px; }
+@media (max-width:800px) {
+  .family-work-tabs :is([role=tab], .work-tab-close, .family-close-others) { min-height: 44px; }
+  .family-work-tabs .work-tab-close { min-width: 32px; }
+}

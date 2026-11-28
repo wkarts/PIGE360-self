@@ -23,6 +23,9 @@ def main():
     with SessionLocal.begin() as db:
         user=db.scalar(select(User).where(User.email==args.email.strip().lower()))
         if not user:parser.error('Usuário não encontrado.')
+        from .user_invitations import UserInvitation, revoke
+        for link in db.scalars(select(UserInvitation).where(UserInvitation.user_id==user.id,UserInvitation.used_at.is_(None),UserInvitation.revoked_at.is_(None))):
+            revoke(db,link)
         user.password_hash=hash_password(password)
         db.execute(update(AuthSession).where(AuthSession.user_id==user.id).values(revoked=True))
         db.add(AuditEvent(actor_id=None,action='auth.local_password_recovery',entity_type='User',entity_id=user.id,request_id='local-cli',details={'origin':'local_operator','affected_user_id':user.id}))

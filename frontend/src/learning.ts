@@ -10,7 +10,11 @@ namespace PigeLearning {
     const base=()=> (props.rootPath||'/profile')+'/learning';
     const student=()=>state.students.find(s=>s.student_id===state.studentId);
     const enrollment=()=>student()?.enrollments.find(e=>e.enrollment_id===state.enrollmentId);
-    function selectStudent():void{state.enrollmentId=student()?.enrollments[0]?.enrollment_id||'';state.groupId='';}
+    function selectStudent():void {
+      const enrollments=student()?.enrollments||[];
+      state.enrollmentId=(enrollments.find(item=>item.status==='active')||enrollments[0])?.enrollment_id||'';
+      state.groupId='';
+    }
     async function run(action:()=>Promise<void>):Promise<void>{if(state.busy)return;state.busy=true;state.error='';try{await action();}catch(e){state.error=e instanceof Error?e.message:'Não foi possível carregar o boletim.';}finally{state.busy=false;}}
     async function load():Promise<void>{await run(async()=>{
       const data=await props.request<{students:Student[];note:string}>(base()+(props.schoolId?'?school_id='+encodeURIComponent(props.schoolId):''));

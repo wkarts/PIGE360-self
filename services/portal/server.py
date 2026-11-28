@@ -11,7 +11,7 @@ from functools import lru_cache
 import re
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 ORIGIN=os.environ.get('PIGE_INTERNAL_URL','http://app:8000')
 PUBLIC=os.environ.get('PORTAL_PUBLIC_URL','').rstrip('/')
@@ -59,9 +59,29 @@ def client_headers(method,path,peer,forwarded=''):
     return {'X-Pige-Portal-IP':address,'X-Pige-Portal-Time':timestamp,'X-Pige-Portal-Signature':signature}
 
 
+MAIL_METHODS = {'GET','HEAD','POST','PUT','DELETE','OPTIONS','PROPFIND','REPORT','MKCOL','MOVE','COPY'}
+
+
+def webmail_route(path, method):
+    match = re.fullmatch(r'/webmail/[0-9a-f-]{36}/(.+)', path)
+    if not match:
+        return False
+    resource = match[1]
+    if resource == 'launch':
+        return method == 'POST'
+    decoded = unquote(unquote(resource))
+    return (method in MAIL_METHODS and len(decoded) <= 4096
+            and decoded.startswith(('SOGo/', 'principals/', 'SOGo.woa/WebServerResources/'))
+            and not any(part in {'.', '..'} for part in decoded.split('/'))
+            and not any(ord(char) < 32 or ord(char) == 127 or char == chr(92) for char in decoded))
+
+
 def allowed(path,method):
+    mail = re.fullmatch(r'/api/v1/schools/[0-9a-f-]{36}/email/(account|webmail-ticket|connection/(?:automatic|linked))', path)
+    if mail:
+        return method == ('GET' if mail[1] == 'account' else 'POST')
     if path=='/api/v1/support-widget' or re.fullmatch(r'/api/v1/schools/[0-9a-f-]{36}/support-widget',path):return method=='GET'
-    if TEACHER_ONLY and not (path.startswith(('/api/v1/teacher/', '/api/v1/auth/', '/api/v1/institution/'))
+    if TEACHER_ONLY and not (path.startswith(('/api/v1/teacher/', '/api/v1/auth/', '/api/v1/institution/', '/api/v1/invitations/'))
             or re.fullmatch(r'/api/v1/schools/[0-9a-f-]{36}/community-feed', path)):
         return False
     if not TEACHER_ONLY and path.startswith('/api/v1/teacher/'):
@@ -70,7 +90,7 @@ def allowed(path,method):
     teacher=re.fullmatch(r'/api/v1/teacher/schools/[0-9a-f-]{36}/(.+)',path)
     if teacher:
         resource=teacher[1]
-        if resource in {'programacao','diaries','academic-periods','curriculum-components','diary-dashboard','diary-entry-fields'}:return method=='GET'
+        if resource in {'programacao','atribuicoes','diaries','academic-periods','curriculum-components','diary-dashboard','diary-entry-fields'}:return method=='GET'
         if resource=='curriculum-plans':return method in {'GET','POST'}
         if re.fullmatch(r'curriculum-plans/[0-9a-f-]{36}',resource):return method=='PATCH'
         diary=re.fullmatch(r'diaries/[0-9a-f-]{36}(?:/(.*))?',resource)
@@ -87,7 +107,7 @@ def allowed(path,method):
     if re.fullmatch(r'/api/v1/auth/(?:login|refresh|logout|me|mfa(?:/[^?#]*)?)',path):return method in {'GET','POST'}
     if re.fullmatch(r'/api/v1/profile/learning(?:/[0-9a-f-]{36}/report.pdf)?',path):return method=='GET'
     if re.fullmatch(r'/api/v1/schools/[0-9a-f-]{36}/community-feed',path):return method=='GET'
-    if re.fullmatch(r'/api/v1/invitations/(?:inspect|accept)',path):return method=='POST'
+    if re.fullmatch(r'/api/v1/invitations/(?:inspect|accept|password-recovery)',path):return method=='POST'
     if re.fullmatch(r'/api/v1/mfa/(?:challenge|verify|recovery|status)(?:/[^?#]*)?',path):return method in {'GET','POST'}
     if re.fullmatch(r'/api/v1/institution/(?:identity|theme.css|icon.png|assets/[0-9a-f]{64}\.(?:png|ttf|woff2))',path):return method=='GET'
     if re.fullmatch(r'/api/v1/support/(?:configuration|context|token)',path):return method in {'GET','POST'}
@@ -148,6 +168,13 @@ class Handler(BaseHTTPRequestHandler):
     def handle_request(self):
         parsed=urlsplit(self.path);path=parsed.path
         if path not in {'/health/ready','/health/live'} and self.headers.get('Host','')!=urlsplit(PUBLIC).netloc:return self.respond(403,b'Host invalid')
+        if path.startswith('/webmail/'):
+            if not webmail_route(path, self.command):
+                return self.respond(404,b'Route unavailable')
+            origin = self.headers.get('Origin','').rstrip('/')
+            if (origin and origin != PUBLIC) or (self.command not in {'GET','HEAD','OPTIONS'} and origin != PUBLIC):
+                return self.respond(403,b'Origin invalid')
+            return self.proxy(self.path, webmail=True)
         if '%' in path or '\\' in path or '..' in path or self.path.startswith('//'):return self.respond(400,b'Invalid path')
         if TEACHER_ONLY and path in ('/manifest.webmanifest', '/sw.js'):
             return self.respond(404, b'Not found')
@@ -168,6 +195,9 @@ class Handler(BaseHTTPRequestHandler):
         routes = {'/': 'professor.html', '/professor': 'professor.html'} if TEACHER_ONLY else {
             '/': 'family.html', '/family': 'family.html', '/online': 'online.html', '/first-access': 'first-access.html',
             '/academic': 'family.html', '/finance': 'family.html', '/documents': 'family.html'}
+        surface_path = '/professor' if TEACHER_ONLY else '/family'
+        routes['/first-access'] = routes[surface_path + '/first-access'] = 'first-access.html'
+        routes[surface_path + '/recuperar-senha'] = 'first-access.html'
         if path.endswith('.html'):
             legacy = path.removesuffix('.html')
             if legacy not in routes:
@@ -177,7 +207,7 @@ class Handler(BaseHTTPRequestHandler):
         name = routes.get(path.rstrip('/') or '/', path.lstrip('/'))
         teacher_files = {'professor.html', 'teacher.js', 'teacher-renders.js', 'teacher.css', 'guia/professor.webp'}
         shared_files = {'auth.css', 'app.css', 'family.css', 'portal.css', 'institution-layout.css', 'mfa.css',
-                        'ui-icons.svg', 'renders.js', 'vendor/vue-3.5.13.global.prod.js', 'favicon.svg'}
+                        'ui-icons.svg', 'renders.js', 'vendor/vue-3.5.13.global.prod.js', 'favicon.svg', 'first-access.html', 'first-access.js'}
         files = teacher_files | shared_files if TEACHER_ONLY else (ASSETS | {'family.html', 'online.html'}) - teacher_files
         if name not in files:
             return self.respond(404, b'Not found')
@@ -185,6 +215,8 @@ class Handler(BaseHTTPRequestHandler):
         if not file.is_file():return self.respond(404,b'Not found')
         import mimetypes
         content=file.read_bytes()
+        if TEACHER_ONLY and name=='first-access.html':
+            content=content.replace(b'<link rel="manifest" href="/manifest.webmanifest">',b'')
         widget_policy=''
         if name.endswith('.html'):
             conn=None
@@ -206,22 +238,41 @@ class Handler(BaseHTTPRequestHandler):
         return self.respond(200,content,mimetypes.guess_type(name)[0] or 'application/octet-stream',
                             widget_policy=widget_policy,cache_control=cache_control)
 
-    def proxy(self,path):
+    def proxy(self,path,webmail=False):
         conn=None
         try:
             length=int(self.headers.get('Content-Length','0'))
             if length<0 or length>MAX_BODY or self.headers.get('Transfer-Encoding'):return self.respond(413,b'Body too large')
             conn=connection()
             headers={key:self.headers[key] for key in ('Content-Type','Cookie','Authorization','X-CSRF-Protection','X-School-ID','Accept') if key in self.headers}
+            if webmail:
+                for key in ('Accept-Language','Depth','Destination','Overwrite','If','If-Match','If-None-Match',
+                            'If-Modified-Since','Range','X-Requested-With','Prefer'):
+                    if key in self.headers:
+                        headers[key] = self.headers[key]
             headers['Host']='localhost'
             # Nunca encaminha X-Pige-* recebido. A assinatura é produzida neste serviço.
             headers.update(client_headers(self.command,path,self.client_address[0],','.join(self.headers.get_all('X-Forwarded-For',[]))))
-            if self.command not in {'GET','HEAD'}:headers['Origin']=PUBLIC
+            if webmail or '/email/' in path or self.command not in {'GET','HEAD'}:headers['Origin']=PUBLIC
             conn.request(self.command,path,body=self.rfile.read(length) if length else None,headers=headers)
             response=conn.getresponse()
             forwarded=[(k,v) for k,v in response.getheaders() if k.lower() in {'set-cookie','content-disposition','x-request-id','retry-after'}]
             content=response.read(64*1024*1024+1)
             if len(content)>64*1024*1024:return self.respond(502,b'Response too large')
+            if webmail:
+                # O CSP do SOGo exige incorporação pela própria origem; o shell continua com frame-ancestors 'none'.
+                self.send_response(response.status)
+                safe = {'content-type','content-language','content-security-policy','x-frame-options','cache-control',
+                        'set-cookie','location','content-disposition','etag','last-modified','accept-ranges','content-range',
+                        'referrer-policy','x-content-type-options','x-request-id','retry-after','allow','dav'}
+                for key, value in response.getheaders():
+                    if key.lower() in safe:
+                        self.send_header(key,value)
+                self.send_header('Content-Length', response.getheader('Content-Length','0') if self.command=='HEAD' else str(len(content)))
+                self.end_headers()
+                if self.command!='HEAD':
+                    self.wfile.write(content)
+                return
             self.respond(response.status,content,response.getheader('Content-Type','application/octet-stream'),forwarded)
         except (OSError,ValueError,http.client.HTTPException):self.respond(503,b'{"detail":"Portal temporariamente sem conexao com a escola. Tente novamente."}','application/json')
         finally:
@@ -232,6 +283,13 @@ class Handler(BaseHTTPRequestHandler):
     do_PATCH=handle_request
     do_PUT=handle_request
     do_DELETE=handle_request
+    do_HEAD=handle_request
+    do_OPTIONS=handle_request
+    do_PROPFIND=handle_request
+    do_REPORT=handle_request
+    do_MKCOL=handle_request
+    do_MOVE=handle_request
+    do_COPY=handle_request
 
 
 if __name__=='__main__':

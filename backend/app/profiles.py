@@ -93,9 +93,14 @@ def student_summary(db, student, school_id, include_documents=False):
 
 
 def teacher_context(db, user):
+    from .access_security import permissions_for, teacher_routines_for
     assignments = []
     for school_id in school_ids(db, user):
         school = allowed_school(db, user, school_id)
+        routines = teacher_routines_for(db, user, school.id)
+        permissions = permissions_for(user, db, school.id)
+        if not routines.intersection({'agenda', 'diary'}) or 'teacher.classes.read' not in permissions:
+            continue
         person = linked_person(db, user, school.id)
         assignment_owner = [m.TeacherAssignment.teacher_user_id == user.id]
         if person:
@@ -118,7 +123,7 @@ def teacher_context(db, user):
                 m.Enrollment.school_id == school.id,
                 m.Enrollment.class_group_id == assignment.class_group_id,
                 m.Enrollment.status.in_(['active', 'suspended']),
-            ).order_by(m.Person.name)).all()
+            ).order_by(m.Person.name)).all() if 'diary' in routines and 'teacher.students.read' in permissions else []
             assignments.append({
                 'id': assignment.id,
                 'school_id': school.id,

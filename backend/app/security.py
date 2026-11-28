@@ -1,4 +1,5 @@
 import hashlib
+import re
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
@@ -133,11 +134,12 @@ def current_user(request: Request, db: DB, credential: Annotated[HTTPAuthorizati
         fail(401, 'Sessão revogada ou usuário inativo.')
     from .mfa import enforce_session
     enforce_session(db, 'user', user, session)
+    request.state.auth_session_id = session.id
     # A entidade vem do endereço operacional ou da seleção explícita da interface.
     # Nunca permitir que um cabeçalho antigo direcione ações para outra escola.
     user._active_school_id = None
     # O seletor precisa continuar acessível quando o vínculo antes ativo foi revogado.
-    selected_id = '' if request.method == 'GET' and request.url.path == '/api/v1/schools' else request.headers.get('X-School-Id', '')
+    selected_id = '' if request.method == 'GET' and request.url.path in {'/api/v1/schools', '/api/v1/teacher/schools'} else request.headers.get('X-School-Id', '')
     scopes = [value.strip() for value in (
         request.path_params.get('school_id', ''), selected_id,
         request.query_params.get('school_id', ''),
@@ -188,12 +190,28 @@ def check_version(obj, expected: int):
     if obj.version != expected:
         fail(409, 'O registro foi alterado por outro usuário. Recarregue antes de salvar.')
 
+PORTAL_LOGIN_PATHS = {'teacher': '/professor', 'student': '/family', 'guardian': '/family'}
+
+
+def portal_origin(role):
+    if role == 'teacher':
+        return settings().teacher_portal_public_url.rstrip('/')
+    if role in {'student', 'guardian'}:
+        return settings().portal_public_url.rstrip('/')
+    return ''
+
+
 def allowed_request_origin(origin,path):
     if origin.rstrip('/')==settings().app_url.rstrip('/'):return True
-    teacher = settings().teacher_portal_public_url.rstrip('/')
-    if teacher and origin.rstrip('/') == teacher:
-        return path.startswith(('/api/v1/teacher/', '/api/v1/auth/'))
     portal=settings().portal_public_url.rstrip('/')
+    teacher = settings().teacher_portal_public_url.rstrip('/')
+    if origin.rstrip('/') and origin.rstrip('/') in {portal, teacher}:
+        if re.fullmatch(r'/api/v1/schools/[0-9a-f-]{36}/email/(account|connection/(automatic|linked)|webmail-ticket)', path):
+            return True
+        if path.startswith('/webmail/'):
+            return True
+    if teacher and origin.rstrip('/') == teacher:
+        return path.startswith(('/api/v1/teacher/', '/api/v1/auth/', '/api/v1/invitations/'))
     if not portal or origin.rstrip('/')!=portal:return False
     return path.startswith(('/api/v1/portal/','/api/v1/family/','/api/v1/profile/learning','/api/v1/invitations/','/api/v1/auth/'))
 

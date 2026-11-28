@@ -113,7 +113,7 @@ async def security_headers(request: Request, call_next):
     response.headers['X-Request-ID'] = request.state.request_id
     response.headers['X-App-Version'] = cfg.app_version
     response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['Referrer-Policy'] = 'no-referrer' if request.url.path.startswith('/first-access') else 'same-origin'
+    response.headers['Referrer-Policy'] = 'no-referrer' if '/first-access' in request.url.path else 'same-origin'
     if not parents and not is_webmail:
         response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Permissions-Policy'] = 'camera=(self), microphone=(), geolocation=()'
@@ -240,6 +240,16 @@ def frontend(path: str, request: Request, db: auth.DB):
               'professor': 'professor', 'first-access': 'first-access'}
     name = path.removesuffix('.html').rstrip('/')
     query = '?' + request.url.query if request.url.query else ''
+    credential_pages = {surface + '/' + action: (role, action) for surface, role in
+                        (('professor','teacher'),('family','student')) for action in ('first-access','recuperar-senha')}
+    if name in credential_pages:
+        role, action = credential_pages[name]
+        from .security import portal_origin
+        origin = portal_origin(role)
+        if origin:
+            target = '/first-access' if action == 'first-access' else '/' + name
+            return RedirectResponse(origin + target + query, status_code=302)
+        path = 'first-access.html'
     if name == 'professor' and cfg.teacher_portal_public_url:
         return RedirectResponse(cfg.teacher_portal_public_url.rstrip('/') + '/' + query, status_code=302)
     if name == 'family' and cfg.portal_public_url:
@@ -258,7 +268,7 @@ def frontend(path: str, request: Request, db: auth.DB):
         requested = root / 'index.html'
     if not requested.is_file():
         raise HTTPException(503, 'Frontend ainda não compilado. Execute node frontend/build.mjs.')
-    if requested.name in ('index.html', 'online.html', 'news.html'):
+    if requested.name in ('index.html', 'online.html', 'news.html', 'professor.html', 'family.html', 'first-access.html'):
         from .branding import branded_html
         content = branded_html(requested, db)
         headers = {'Cache-Control':'no-store', 'Content-Length':str(len(content.encode('utf-8')))}

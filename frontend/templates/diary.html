@@ -21,13 +21,13 @@
         <button :class="{active:state.tab==='opinions'}" @click="state.tab='opinions'">Pareceres</button>
         <button :class="{active:state.tab==='records'}" @click="state.tab='records'">Registros pedagógicos</button>
         <button :class="{active:state.tab==='occurrences'}" @click="state.tab='occurrences'">Ocorrências</button>
-        <button :class="{active:state.tab==='materials'}" @click="state.tab='materials'">Materiais da turma</button>
+        <button v-if="!props.teacherPortal || props.allowMaterials!==false" :class="{active:state.tab==='materials'}" @click="state.tab='materials'">Materiais da turma</button>
         <button v-if="can('communications.send')" :class="{active:state.tab==='communications'}" @click="state.tab='communications'">Comunicações</button>
         <button v-if="can('diary.configure')" :class="{active:state.tab==='setup'}" @click="state.tab='setup'">Configuração</button>
       </div>
     </section>
 
-    <section v-if="state.tab==='materials'" class="panel x-card">
+    <section v-if="state.tab==='materials' && (!props.teacherPortal || props.allowMaterials!==false)" class="panel x-card">
       <h2>Materiais da turma</h2>
       <p v-if="!state.selected">Abra o diário da turma em Diários para publicar ou imprimir.</p>
       <template v-else><h3>{{state.selected.class_name}} · {{state.selected.component_name}}</h3>

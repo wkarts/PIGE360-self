@@ -5,21 +5,23 @@ import vm from 'node:vm';
 
 const script=fs.readFileSync(new URL('../../frontend/public/first-access.js',import.meta.url),'utf8');
 const id='11111111-1111-4111-8111-111111111111',token='synthetic-invitation-token-0000000000000000';
-async function page(hash='',search='',failure=false,loginPath='/'){
+async function page(hash='',search='',failure=false,loginPath='/', pathname='/first-access.html', detail={}){
   const fields={},calls=[],history=[];
-  for(const key of ['status','invite-form','institution-name','institution-logo','school','password','confirmation','login-link'])fields[key]={hidden:true,textContent:'',value:''};
+  for(const key of ['status','invite-form','institution-name','institution-logo','school','password','confirmation','login-link','access-context','access-title','recovery-form','email'])fields[key]={hidden:true,textContent:'',value:''};
   fields['login-link'].href='/';
-  fields['invite-form'].addEventListener=(_,handler)=>fields['invite-form'].submit=handler;
-  fields['invite-form'].querySelector=()=>({disabled:false});
+  for(const key of ['invite-form','recovery-form']){
+    fields[key].addEventListener=(_,handler)=>fields[key].submit=handler;
+    fields[key].querySelector=()=>({disabled:false});
+  }
   const identity={display_name:'Colégio Horizonte',primary_color:'#A12255',version:4,logo_url:'/api/v1/institution/assets/'+'a'.repeat(64)+'.png'};
-  const context={URLSearchParams,location:{hash,search,pathname:'/first-access.html'},
+  const context={URLSearchParams,location:{hash,search,pathname,replace:url=>history.push(url)},
     document:{title:'',getElementById:key=>fields[key]||null,querySelector:()=>({})},
     history:{replaceState:(_,__,url)=>history.push(url)},
     localStorage:new Proxy({},{get(){throw Error('token em armazenamento JavaScript');}}),
     sessionStorage:new Proxy({},{get(){throw Error('token em armazenamento JavaScript');}}),
     fetch:async(path,options)=>{
       calls.push({path,options});
-      return {ok:!failure,json:async()=>path.endsWith('/identity')?identity:path.endsWith('/inspect')?{invitation_id:id,school_name:'Nome cadastral',login_path:loginPath}:{message:'Senha definida.',login_path:loginPath}};
+      return {ok:!failure,json:async()=>path.endsWith('/identity')?identity:path.endsWith('/inspect')?{invitation_id:id,school_name:'Nome cadastral',login_path:loginPath,...detail}:{message:'Senha definida.',login_path:loginPath}};
     }};
   vm.runInNewContext(script,context);
   await new Promise(resolve=>setImmediate(resolve));
@@ -46,6 +48,25 @@ for (const [loginPath,expected] of [['/professor','/professor'], ['/family','/fa
   fields.password.value=fields.confirmation.value='Synthetic-Test-Password!';
   await fields['invite-form'].submit({preventDefault(){}});
   assert.equal(fields['login-link'].href,expected);
+}
+const legacy=await page('#'+token,'',false,'/professor','/first-access',{continue_path:'/professor/first-access'});
+assert.deepEqual(legacy.history,['/professor/first-access#'+token]);
+assert.equal(legacy.fields['invite-form'].hidden,true);
+const untrusted=await page('#'+token,'',false,'/family','/first-access',{continue_path:'https://example.invalid/first-access'});
+assert.equal(untrusted.history[0],'/first-access?invitation='+id);
+const reset=await page('#'+token,'',false,'/professor','/first-access',{purpose:'password_reset'});
+assert.equal(reset.fields['access-title'].textContent,'Redefina sua senha');
+for(const [path,portal,login] of [['/professor/recuperar-senha','teacher','/professor'],['/family/recuperar-senha','family','/family']]){
+  const screen=await page('','',false,'/',path);
+  assert.equal(screen.fields['recovery-form'].hidden,false);
+  assert.equal(screen.fields['login-link'].href,login);
+  assert.equal(screen.fields['invite-form'].hidden,true);
+  assert.equal(screen.calls.some(c=>c.path.endsWith('/inspect')),false);
+  screen.fields.email.value='fake@example.test';
+  await screen.fields['recovery-form'].submit({preventDefault(){}});
+  const sent=screen.calls.find(c=>c.path.endsWith('/password-recovery'));
+  assert.deepEqual(JSON.parse(sent.options.body),{portal,email:'fake@example.test'});
+  assert.equal(screen.fields['recovery-form'].hidden,true);
 }
 const refreshed=await page('','?invitation='+id);
 assert.equal(refreshed.fields['invite-form'].hidden,false);

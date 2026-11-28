@@ -48,7 +48,23 @@ Relatórios permite selecionar turma e gerar PDF. Exportar cadastro CSV inclui c
 
 ## Acesso e recuperação
 
-O administrador cria usuários e define escolas e perfil. Secretaria opera os cadastros e documentos; Consulta somente lê o conjunto permitido. O botão de avatar altera a senha do próprio usuário. A recuperação por perda de senha é feita por operador com acesso autorizado ao servidor, usando o comando descrito no README. Não há envio de e-mail ou senha automática.
+Selecione a instituição no gestor. Em **Alunos**, **Pais e responsáveis** ou **Professores**, abra a ficha da pessoa e escolha **Gerenciar acesso ao portal**. Esse atalho abre o acesso existente ou inicia a criação com a pessoa e o perfil selecionados. Quem possui permissão de gerenciar usuários também pode abrir **Usuários e acessos** na barra lateral.
+
+1. Confira **E-mail**, **Perfil base** e **Pessoa vinculada**. Para o responsável, confira também os vínculos na ficha de cada aluno. O endereço em **E-mail** deve receber o convite e as mensagens de recuperação.
+2. Clique em **Salvar acesso**. Acompanhe o envio e o primeiro acesso na lista de usuários. O professor abre o convite, define a senha e entra no Portal do Professor. Alunos e responsáveis seguem o mesmo procedimento no Portal do Aluno e Responsável. A instalação usa o domínio configurado para cada portal. Quando a escola usa um único domínio, os caminhos de entrada são `/professor` e `/family`, respectivamente.
+3. Se a pessoa ainda aguarda o primeiro acesso, confira o destinatário e use **Reenviar convite**. O novo envio substitui o link anterior. Quem já ativou o acesso usa **Esqueci minha senha** na tela de entrada do próprio portal e informa o e-mail do cadastro. O gestor também pode escolher **Enviar recuperação de senha** no acesso ativo de quem já usou o convite ou de quem possui conta anterior à implantação dos convites. O link de recuperação pode ser usado uma vez, em até 30 minutos. Para suspender o acesso à escola, use **Gerenciar acesso** na lista do gestor.
+
+### Liberar o trabalho do professor
+
+Em **Usuários e acessos**, clique em **Editar** no cadastro docente. Em **Rotinas do Portal do Professor**, selecione as atividades que ele exercerá nesta escola. **Atividades e trabalhos** depende de **Diário de classe**. O professor sempre tem acesso à **Visão geral**. Para alterar um acesso existente, preencha **Motivo da alteração** e salve.
+
+Para atribuir a turma, abra **Diário Escolar → Configuração → Abrir diário ou vincular professor**. Escolha turma, componente e professor. Clique em **Abrir diário** para um novo diário ou em **Salvar vínculo docente** para um existente. Atribua a mesma pessoa que consta no login. Na visão geral do professor, **Minhas turmas** apresenta o componente atribuído. **Planejar aula** e **Fazer chamada** aparecem conforme as permissões de lançamento do perfil.
+
+### Liberar e-mail institucional
+
+No cadastro de um novo usuário, a escola pode marcar **Criar uma caixa de e-mail institucional**. Para quem já tem conta de acesso, use **Integrações → E-mail → Nova caixa de e-mail**. Se a caixa já existe no servidor com o e-mail cadastrado do usuário, use **Vincular e-mails existentes → Verificar e vincular**. Para o professor, marque também a rotina **E-mail institucional** em **Usuários e acessos**.
+
+O titular abre **E-mail** no próprio portal. Aluno e responsável usam contas individuais. A troca de aluno acompanhado preserva a caixa da pessoa que entrou. [Operação do e-mail institucional](EMAIL-INTEGRADO.md)
 
 ## Sem conexão
 

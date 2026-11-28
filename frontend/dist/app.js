@@ -2631,7 +2631,7 @@ var PigeDiary;
         history.replaceState(history.state, '', url.pathname + url.search + url.hash);
     }
     PigeDiary.clearPilotContext = clearPilotContext;
-    PigeDiary.component = { props: ['schoolId', 'schoolName', 'catalogEnabled', 'permissions', 'teacherPortal', 'requestedDiary'], render: PigeRenders.diary, setup(props) {
+    PigeDiary.component = { props: ['schoolId', 'schoolName', 'catalogEnabled', 'permissions', 'teacherPortal', 'allowMaterials', 'requestedDiary'], render: PigeRenders.diary, setup(props) {
             const state = Vue.reactive({
                 busy: false, error: '', notice: '', tab: 'diaries', page: 'diaries', diaryFilter: '', lessonPeriod: '', dirty: false,
                 diaries: [], selected: null, academicYears: [], periods: [], components: [], groups: [], assignments: [], plans: [],
@@ -2710,7 +2710,8 @@ var PigeDiary;
             }
             const initial = new URLSearchParams(location.search);
             const pilot = props.catalogEnabled === true || pilotForSchool(props.schoolId);
-            const navigation = Vue.computed(() => groups.map(group => ({ ...group, pages: group.pages.filter(page => (!page.permission || can(page.permission)) && (page.id !== 'catalog' || props.catalogEnabled === true)) })).filter(group => group.pages.length));
+            const materialsAllowed = () => !props.teacherPortal || props.allowMaterials !== false;
+            const navigation = Vue.computed(() => groups.map(group => ({ ...group, pages: group.pages.filter(page => (page.id !== 'materials' || materialsAllowed()) && (!page.permission || can(page.permission)) && (page.id !== 'catalog' || props.catalogEnabled === true)) })).filter(group => group.pages.length));
             const activeGroup = Vue.computed(() => navigation.value.find(group => group.pages.some(page => page.id === state.page)));
             const filteredDiaries = Vue.computed(() => {
                 const term = state.diaryFilter.trim().toLocaleLowerCase('pt-BR');
@@ -2762,23 +2763,25 @@ var PigeDiary;
             }
             function show(...pages) { return !pilot || pages.includes(state.page); }
             const draftPages = new Set();
+            const tracksDrafts = pilot || props.teacherPortal === true;
+            const draftSection = () => pilot ? state.page : state.tab;
             async function save(action) {
                 if (state.busy)
                     return;
-                const page = state.page;
+                const page = draftSection();
                 await action();
                 if (!state.error && state.notice) {
                     draftPages.delete(page);
                     state.dirty = draftPages.size > 0;
                 }
             }
-            function beforeUnload(event) { if (state.dirty) {
+            function beforeUnload(event) { if (workspaceDirty.value) {
                 event.preventDefault();
                 event.returnValue = '';
             } }
             function markDraft(event) {
-                if (pilot && event.target.closest('form,.x-form,td')) {
-                    draftPages.add(state.page);
+                if (tracksDrafts && event.target.closest('form,.x-form,td')) {
+                    draftPages.add(draftSection());
                     state.dirty = true;
                 }
             }
@@ -2845,7 +2848,8 @@ var PigeDiary;
                     PigeAPI.request(base() + '/curriculum-plans?class_group_id=' + encodeURIComponent(d.class_group_id) + '&component_id=' + encodeURIComponent(d.component_id)),
                     PigeAPI.request(endpoint + '/assessments'), PigeAPI.request(endpoint + '/assessment-rules'),
                     PigeAPI.request(endpoint + '/occurrences'), PigeAPI.request(endpoint + '/opinions'),
-                    PigeAPI.request(endpoint + '/pedagogical-records'), PigeAPI.request(endpoint + '/communications'), PigeAPI.request(endpoint + '/materials')
+                    PigeAPI.request(endpoint + '/pedagogical-records'), PigeAPI.request(endpoint + '/communications'),
+                    materialsAllowed() ? PigeAPI.request(endpoint + '/materials') : Promise.resolve([])
                 ]);
                 const changed = state.selected?.id !== d.id;
                 state.reopenPeriod = '';
@@ -3330,7 +3334,7 @@ var PigeDiary;
             let handled;
             function openRequestedDiary() {
                 const request = props.requestedDiary;
-                if (!request || handled === request || state.busy)
+                if (!request || handled === request || state.busy || (request.tab === 'materials' && !materialsAllowed()))
                     return;
                 const diary = state.diaries.find(item => item.id === request.id);
                 if (!diary)
@@ -3349,7 +3353,7 @@ var PigeDiary;
             Vue.watch(() => props.requestedDiary, openRequestedDiary);
             Vue.watch(() => state.busy, openRequestedDiary);
             Vue.onMounted(async () => {
-                if (pilot)
+                if (tracksDrafts)
                     window.addEventListener('beforeunload', beforeUnload);
                 await load();
                 if (pilot && state.page === 'catalog')
@@ -3372,7 +3376,7 @@ var PigeDiary;
                         syncLink();
                 }
             });
-            Vue.onUnmounted(() => { if (pilot)
+            Vue.onUnmounted(() => { if (tracksDrafts)
                 window.removeEventListener('beforeunload', beforeUnload); });
             return { props, state, workspaceDirty, existingDiary, matchingAssignments, configureTeacher, syncDiaryAssignment, resetTeacherSearch, searchTeachers, compositionDirty, setComposition, restorableFields, restoreField, addField, moveField, saveFields, editComponent, resetComponent, removeComponent, editLesson, resetLesson, removeLesson, editPlan, resetPlan, storedFields, markPendingPresent, pendingAttendance, changedAttendance, closeAttendance, periodsFor, loadCalendar, saveCalendar, pilot, catalog, catalogImpact, suggest, decide, lessons, filterPeriod, save, navigation, activeGroup, filteredDiaries, pageLink, go, show, chooseAnother, markDraft, publishMaterial, printMaterial, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, editAssessment, cancelAssessmentEdit, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, resumeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
         } };
@@ -4338,7 +4342,11 @@ var PigeLearning;
             const base = () => (props.rootPath || '/profile') + '/learning';
             const student = () => state.students.find(s => s.student_id === state.studentId);
             const enrollment = () => student()?.enrollments.find(e => e.enrollment_id === state.enrollmentId);
-            function selectStudent() { state.enrollmentId = student()?.enrollments[0]?.enrollment_id || ''; state.groupId = ''; }
+            function selectStudent() {
+                const enrollments = student()?.enrollments || [];
+                state.enrollmentId = (enrollments.find(item => item.status === 'active') || enrollments[0])?.enrollment_id || '';
+                state.groupId = '';
+            }
             async function run(action) { if (state.busy)
                 return; state.busy = true; state.error = ''; try {
                 await action();
@@ -5185,7 +5193,7 @@ var PigeLifecycle;
 })(PigeLifecycle || (PigeLifecycle = {}));
 var PigeUsers;
 (function (PigeUsers) {
-    const emptyForm = () => ({ id: '', version: 1, name: '', email: '', password: '', role: 'secretary', person_id: '', active: true, access_profile_id: '', reason: '', create_mailbox: false, mailbox_local_part: '', mailbox_quota_mb: null });
+    const emptyForm = () => ({ teacher_routines: [], id: '', version: 1, name: '', email: '', password: '', role: 'secretary', person_id: '', active: true, access_profile_id: '', reason: '', create_mailbox: false, mailbox_local_part: '', mailbox_quota_mb: null });
     PigeUsers.component = { props: ['schoolId', 'currentUserId', 'portalTarget'], emits: ['changed'], render: PigeRenders.users, setup(props, context) {
             const s = Vue.reactive({ busy: false, error: '', notice: '', tab: 'users', search: '', status: 'all', portalFilter: null, users: [], profiles: [], catalog: { roles: {}, permissions: [], can_manage_admin: false }, editing: false, form: emptyForm(), personSearch: '', people: [], profileEditing: false, profile: { id: '', version: 1, name: '', description: '', base_role: 'secretary', permissions: [], active: true, reason: '', users_count: 0 }, actionTarget: null, preview: null, action: 'deactivate', actionReason: '', confirmation: '', deleteProfile: null });
             const base = () => '/schools/' + encodeURIComponent(props.schoolId);
@@ -5224,6 +5232,8 @@ var PigeUsers;
                     s.form.email = target.email;
                     s.form.role = target.role;
                     s.form.person_id = target.personId;
+                    if (target.role === 'teacher')
+                        s.form.teacher_routines = Object.keys(s.catalog.teacher_routines || {});
                     s.people = [{ id: target.personId, name: target.name, cpf: null }];
                 }
             }
@@ -5231,14 +5241,25 @@ var PigeUsers;
             const roleOptions = () => ({ ...s.catalog.roles, ...(s.catalog.can_manage_admin ? { admin: { label: 'Administrador', permissions: [] } } : {}) });
             const matchingProfiles = () => s.profiles.filter(p => p.active && p.base_role === s.form.role);
             const individual = () => ['teacher', 'student', 'guardian'].includes(s.form.role);
-            function editUser(user) { s.error = ''; s.notice = ''; s.profileEditing = false; s.actionTarget = null; s.editing = true; s.people = []; s.personSearch = ''; s.form = user ? { ...emptyForm(), ...user, person_id: user.person_id || '', access_profile_id: user.access_profile_id || '', password: '', reason: '' } : emptyForm(); document.querySelector('.users-workspace')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
-            function changeRole() { s.form.access_profile_id = ''; s.form.person_id = ''; s.people = []; s.personSearch = ''; }
+            function editUser(user) { s.error = ''; s.notice = ''; s.profileEditing = false; s.actionTarget = null; s.editing = true; s.people = []; s.personSearch = ''; s.form = user ? { ...emptyForm(), ...user, teacher_routines: [...(user.teacher_routines || Object.keys(s.catalog.teacher_routines || {}))], person_id: user.person_id || '', access_profile_id: user.access_profile_id || '', password: '', reason: '' } : emptyForm(); document.querySelector('.users-workspace')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+            function changeRole() { s.form.teacher_routines = s.form.role === 'teacher' ? Object.keys(s.catalog.teacher_routines || {}) : []; s.form.access_profile_id = ''; s.form.person_id = ''; s.people = []; s.personSearch = ''; }
+            function changeRoutine(id, event) {
+                const routines = new Set(s.form.teacher_routines);
+                if (event.target.checked)
+                    routines.add(id);
+                else {
+                    routines.delete(id);
+                    if (id === 'diary')
+                        routines.delete('materials');
+                }
+                s.form.teacher_routines = [...routines];
+            }
             async function searchPeople() { if (s.personSearch.trim().length < 2)
                 return; await run(async () => { const data = await PigeAPI.request(base() + '/persons?q=' + encodeURIComponent(s.personSearch.trim()) + '&page_size=30'); s.people = data.items; }); }
             async function saveUser() {
                 await run(async () => {
                     const f = s.form;
-                    const payload = { name: f.name, role: f.role, school_ids: [props.schoolId], person_id: f.person_id || null, access_profile_id: f.access_profile_id || null };
+                    const payload = { ...(f.role === 'teacher' && s.catalog.teacher_routines ? { teacher_routines: f.teacher_routines } : {}), name: f.name, role: f.role, school_ids: [props.schoolId], person_id: f.person_id || null, access_profile_id: f.access_profile_id || null };
                     let notice = 'Acesso atualizado.';
                     if (f.id) {
                         await PigeAPI.patch(base() + '/users/' + f.id, { ...payload, active: f.active, version: f.version, reason: f.reason });
@@ -5257,7 +5278,7 @@ var PigeUsers;
                     context.emit('changed');
                 });
             }
-            async function invitation(user, action) { await run(async () => { await PigeAPI.post(base() + '/users/' + user.id + '/invitation/' + action, {}); await refresh(); s.notice = action === 'resend' ? 'Novo convite enfileirado; o anterior foi revogado.' : 'Convite revogado.'; }); }
+            async function invitation(user, action) { await run(async () => { await PigeAPI.post(base() + '/users/' + user.id + '/invitation/' + action, {}); await refresh(); s.notice = action === 'recover' ? 'Recuperação enfileirada para o e-mail de acesso.' : action === 'resend' ? 'Novo convite enfileirado; o anterior foi revogado.' : 'Convite revogado.'; }); }
             async function actionUser(user) { s.actionTarget = user; s.action = user.archived_at ? 'restore' : user.active ? 'deactivate' : 'activate'; s.actionReason = ''; s.confirmation = ''; s.preview = null; s.editing = false; await run(async () => { s.preview = await PigeAPI.request(base() + '/users/' + user.id + '/lifecycle'); }); }
             async function applyAction() { if (!s.actionTarget || !s.preview)
                 return; await run(async () => { await PigeAPI.post(base() + '/users/' + s.actionTarget.id + '/lifecycle', { action: s.action, version: s.preview.version, reason: s.actionReason, confirmation: s.confirmation }); s.actionTarget = null; await refresh(); s.notice = 'Alteração de acesso concluída.'; context.emit('changed'); }); }
@@ -5280,7 +5301,7 @@ var PigeUsers;
             const statusLabel = (u) => u.archived_at ? 'Arquivado' : !u.account_active ? 'Conta inativa' : !u.profile_active ? 'Perfil inativo' : u.active ? 'Ativo' : 'Inativo';
             Vue.onMounted(() => { void load(); });
             Vue.onBeforeUnmount(() => { epoch++; });
-            return { s, invitation, load, rows, linkedUsers, startUser, roleOptions, matchingProfiles, individual, editUser, changeRole, searchPeople, saveUser, actionUser, applyAction, editProfile, duplicateRole, duplicateProfile, profileBase, permissionGroups, toggleGroup, saveProfile, requestDeleteProfile, removeProfile, statusLabel, invitationLabel, mailboxLabel };
+            return { s, invitation, load, rows, linkedUsers, startUser, roleOptions, matchingProfiles, individual, editUser, changeRole, changeRoutine, searchPeople, saveUser, actionUser, applyAction, editProfile, duplicateRole, duplicateProfile, profileBase, permissionGroups, toggleGroup, saveProfile, requestDeleteProfile, removeProfile, statusLabel, invitationLabel, mailboxLabel };
         } };
 })(PigeUsers || (PigeUsers = {}));
 var PigeAcademicPreparation;
@@ -5477,20 +5498,22 @@ var PigeUI;
             caption: 'Com o menu recolhido, as guias continuam acessíveis no alto da tela.' },
         { id: 'users', page: 'users', title: 'Criar o acesso ao portal', image: 'usuarios',
             steps: ['Cadastre a pessoa em Alunos, Professores ou Pais e responsáveis. Na ficha do aluno, use Responsáveis para registrar os vínculos legal e financeiro que se aplicam àquela pessoa.',
-                'Abra Gerenciar acesso ao portal na ficha da pessoa. Pela barra lateral, você também pode entrar em Usuários e acessos e escolher + Criar usuário. Confira o e-mail individual, o perfil e a Pessoa vinculada.',
-                'Selecione Salvar acesso. Na lista, confira a situação do convite e do envio. Em um primeiro acesso pendente, Reenviar convite substitui o link anterior. Para suspender um login, use Gerenciar acesso.'],
+                'Abra Gerenciar acesso ao portal na ficha ou entre em Usuários e acessos e escolha + Criar usuário. Confira o e-mail que receberá o convite, o Perfil base e a Pessoa vinculada.',
+                'Para o perfil Professor, marque as Rotinas do Portal do Professor que a pessoa poderá usar. Para liberar E-mail institucional, vincule também a caixa pessoal da escola. Para uma caixa nova, marque Criar uma caixa de e-mail institucional.',
+                'Selecione Salvar acesso e confira a situação do convite na lista. O professor define a senha no Portal do Professor. Alunos e responsáveis fazem isso no Portal do Aluno e Responsável.',
+                'Se o primeiro acesso estiver pendente, use Reenviar convite e oriente a pessoa a abrir a mensagem mais recente. Quem já ativou a conta pode escolher Esqueci minha senha no próprio portal. Você também pode usar Enviar recuperação de senha na lista de usuários.'],
             alt: 'Formulário Criar usuário com perfil Professor e uma pessoa fictícia selecionada em Pessoa vinculada.',
             caption: 'O perfil define as permissões. A pessoa vinculada identifica de quem são a ficha e as atribuições.' },
         { id: 'diary', page: 'diary', title: 'Preparar a turma para o diário do professor', image: 'diario',
             steps: ['No Diário Escolar, abra Configuração. Cadastre o componente curricular e os períodos letivos da escola.',
                 'Em Abrir diário ou vincular professor, escolha a turma e o componente. Selecione uma atribuição existente ou pesquise um professor cadastrado.',
-                'Use Abrir diário. Se o diário já existir, confira a pessoa selecionada e use Salvar vínculo docente. O professor pode então abrir a turma no portal e lançar as aulas e a frequência.'],
+                'Use Abrir diário. Se o diário já existir, confira a pessoa selecionada e use Salvar vínculo docente. Para o professor lançar as aulas e a frequência, confira também se a rotina Diário de classe está liberada em Usuários e acessos.'],
             alt: 'Configuração do diário mostrando turma, componente e uma professora fictícia selecionada para a atribuição.',
             caption: 'A mesma pessoa vinculada ao login do professor precisa estar atribuída a esta turma e componente.' },
         { id: 'teacher', page: 'diary', title: 'Fazer chamada e planejar uma aula no Portal do Professor', image: 'professor',
-            steps: ['Entre no Portal do Professor e localize a turma e o componente em Minhas turmas. Se a turma não aparecer, peça à coordenação que confira a atribuição e o diário.',
+            steps: ['Entre no Portal do Professor e localize a turma e o componente em Minhas turmas. Se a turma estiver ausente, peça à coordenação que confira a pessoa, a turma e o componente vinculados. Se faltar a rotina Diário de classe no menu, peça ao gestor que confira o acesso docente.',
                 'Escolha Planejar aula para registrar o planejamento da turma. Use Abrir diário para selecionar a aula e conferir seu conteúdo.',
-                'Em Fazer chamada, selecione a aula e registre a frequência de cada aluno. Confira os lançamentos antes de salvar.'],
+                'Em Fazer chamada, selecione a aula e registre a frequência de cada aluno. Confira os lançamentos antes de salvar. Se sua turma aparece e falta um desses atalhos, peça ao gestor que confira as permissões de lançamento do seu perfil.'],
             alt: 'Portal do Professor com a turma atribuída e os botões Abrir diário, Fazer chamada e Planejar aula para Ciências.',
             caption: 'Os atalhos abrem a atividade na turma e no componente do professor.' },
         { id: 'online', page: 'online', title: 'Abrir e acompanhar a matrícula online', image: 'matricula-online',
@@ -6012,7 +6035,7 @@ var PigeUI;
         async function refreshAccess() {
             const sid = state.schoolId;
             const user = await PigeAPI.request('/auth/me');
-            if (sid !== state.schoolId)
+            if (sid !== state.schoolId || openProfilePortal(user.role))
                 return;
             state.user = user;
             if (shell && !primaryDesk.context.pageAllowed(taskState.home)) {
@@ -6038,6 +6061,13 @@ var PigeUI;
             }
             void loadPersonalTools();
         }
+        function openProfilePortal(role) {
+            const path = role === 'teacher' ? '/professor' : role === 'student' || role === 'guardian' ? '/family' : '';
+            if (!path)
+                return false;
+            window.location.replace(path);
+            return true;
+        }
         async function initialize() {
             await PigeInstitution.load();
             await safe(async () => {
@@ -6048,6 +6078,8 @@ var PigeUI;
                 if (info.configured) {
                     try {
                         const session = await PigeAPI.refresh();
+                        if (openProfilePortal(session.user.role))
+                            return;
                         state.user = session.user;
                         state.ready = true;
                         await loadShell();
@@ -6066,11 +6098,14 @@ var PigeUI;
             state.error = '';
             state.loginPasswordVisible = false;
             try {
-                const result = await PigeAPI.post('/auth/login', state.login);
+                const result = await PigeAPI.request('/auth/login', { method: 'POST', headers: { 'X-Pige-Login-Surface': 'management' }, body: JSON.stringify(state.login) });
                 state.login.password = '';
-                if (await PigeMFA.accept(result))
+                if (result.portal_path === '/professor' || result.portal_path === '/family') {
+                    window.location.replace(result.portal_path);
                     return;
-                await afterMFA(result);
+                }
+                if (!await PigeMFA.accept(result))
+                    await afterMFA(result);
             }
             catch (error) {
                 notify(error);
@@ -6081,6 +6116,8 @@ var PigeUI;
         }
         async function afterMFA(result) {
             const session = result;
+            if (openProfilePortal(session.user.role))
+                return;
             PigeAPI.useSession(session);
             const origin = currentDesk?.context.state ?? state;
             if (origin.modal.kind === 'mfa-manage' && state.user?.id === session.user.id && session.user.school_ids.includes(state.schoolId)) {

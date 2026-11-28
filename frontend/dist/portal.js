@@ -338,7 +338,11 @@ var PigeLearning;
             const base = () => (props.rootPath || '/profile') + '/learning';
             const student = () => state.students.find(s => s.student_id === state.studentId);
             const enrollment = () => student()?.enrollments.find(e => e.enrollment_id === state.enrollmentId);
-            function selectStudent() { state.enrollmentId = student()?.enrollments[0]?.enrollment_id || ''; state.groupId = ''; }
+            function selectStudent() {
+                const enrollments = student()?.enrollments || [];
+                state.enrollmentId = (enrollments.find(item => item.status === 'active') || enrollments[0])?.enrollment_id || '';
+                state.groupId = '';
+            }
             async function run(action) { if (state.busy)
                 return; state.busy = true; state.error = ''; try {
                 await action();

@@ -15,7 +15,9 @@ def branded_html(path, db):
     raw = json.dumps(bootstrap, ensure_ascii=True).replace('<', chr(92)+'u003c').replace('>', chr(92)+'u003e').replace('&', chr(92)+'u0026')
     html = path.read_text(encoding='utf-8')
     import re
-    title = identity['display_name'] + (' · Portal dos responsáveis' if path.name == 'online.html' else ' · Gestão escolar')
+    suffix = {'online.html':'Portal dos responsáveis', 'professor.html':'Portal do Professor',
+              'family.html':'Portal do aluno e responsável','first-access.html':'Primeiro acesso'}.get(path.name,'Gestão escolar')
+    title = identity['display_name'] + ' · ' + suffix
     html = re.sub(r'<title>.*?</title>', lambda _: '<title>'+escape(title)+'</title>', html, count=1)
     html = html.replace('content="#006d77"', 'content="'+identity['primary_color']+'"')
     html = html.replace('/api/v1/institution/theme.css"', '/api/v1/institution/theme.css?v='+str(identity['version'])+'"')

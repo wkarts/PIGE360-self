@@ -42,7 +42,7 @@ from .db import Base, Record, SessionLocal, now
 from .integration_core import IntegrationFailure, seal, unseal
 from .mailcow import MailcowConfig, SchoolMailbox, _base_url, reconciliation_candidate, reconcile_mailbox
 from .schemas import Input
-from .security import Actor, DB, fail, lock_school, request_csrf, utc
+from .security import Actor, DB, fail, lock_school, request_csrf, require_portal_role, utc
 
 router = APIRouter(prefix='/api/v1/schools/{school_id}/email', tags=['Meu e-mail'])
 webmail_router = APIRouter()
@@ -100,6 +100,8 @@ class EmailSubmission(Record, m.Scoped, Base):
 class WebmailSession(Record, m.Scoped, Base):
     """Ticket de uso único e sessão webmail, vinculados a uma caixa e escola."""
     __tablename__ = 'email_webmail_sessions'
+    auth_session_id: Mapped[str | None] = mapped_column(ForeignKey('auth_sessions.id', ondelete='CASCADE'))
+    surface: Mapped[str] = mapped_column(String(12), default='manager', server_default='manager')
     user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
     mailbox_id: Mapped[str] = mapped_column(ForeignKey('school_mailboxes.id'), index=True)
     token_hash: Mapped[str] = mapped_column(String(64))
@@ -116,11 +118,9 @@ class WebmailPreference(Record, m.Scoped, Base):
     __table_args__ = (UniqueConstraint('school_id', 'user_id'),)
 
 
-class ConnectionInput(Input):
+class LinkedConnectionInput(Input):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=False)
     password: str = Field(min_length=1, max_length=512)
-    # The configured school domain is authoritative; accept internal/test TLDs too.
-    address: str | None = Field(default=None, min_length=3, max_length=254)
 
     @field_validator('password')
     @classmethod
@@ -128,6 +128,9 @@ class ConnectionInput(Input):
         if any(ord(c) < 32 or ord(c) == 127 for c in value):
             raise ValueError('A senha contém caracteres não permitidos.')
         return value
+
+class ConnectionInput(LinkedConnectionInput):
+    address: str | None = Field(default=None, min_length=3, max_length=254)
 
     @field_validator('address')
     @classmethod
@@ -212,7 +215,8 @@ class ComposeInput(Input):
         return value
 
 
-def _school(school_id: str, db: DB, user: Actor):
+def _school(school_id: str, db: DB, user: Actor, request: Request):
+    require_portal_role(request, user)
     # Meu e-mail é pessoal inclusive para professores, alunos e responsáveis.
     school = db.get(m.School, school_id)
     if not school or not school.active:
@@ -220,6 +224,9 @@ def _school(school_id: str, db: DB, user: Actor):
     membership = db.get(m.SchoolAccess, (user.id, school_id))
     if not membership or not membership.active:
         fail(403, 'Acesso não autorizado a esta escola.')
+    if user.role == 'teacher' and not request.url.path.endswith('/email/account'):
+        from .access_security import require_teacher_routine
+        require_teacher_routine(db, user, school.id, 'mail')
     return school
 
 
@@ -869,6 +876,10 @@ def _compose(data, mailbox, message_id, draft=False, sender_address=None):
 @router.get('/account')
 def account(db: DB, user: Actor, school: EmailScope):
     mailbox = _owned(db, user, school, False)
+    if user.role == 'teacher':
+        from .access_security import teacher_routines_for
+        if 'mail' not in teacher_routines_for(db, user, school.id):
+            return {**_account_output(db, None), 'can_reconcile': False, 'candidate_address': ''}
     candidate = reconciliation_candidate(db, school.id, user) if not mailbox else ''
     return {**_account_output(db, mailbox), 'can_reconcile': bool(candidate), 'candidate_address': candidate}
 
@@ -926,6 +937,23 @@ def save_webmail_default(data: WebmailDefaultInput, db: DB, user: Actor, school:
     return _webmail_preference(db, school.id, user.id)
 
 
+def _mail_surface(request, cfg):
+    origin = request.headers.get('origin', '').rstrip('/')
+    if origin and origin == getattr(cfg, 'teacher_portal_public_url', '').rstrip('/'):
+        return 'teacher'
+    if origin and origin == getattr(cfg, 'portal_public_url', '').rstrip('/'):
+        return 'family'
+    return 'manager'
+
+
+def _authorized_webmail_login(db, row, request):
+    login = db.get(m.AuthSession, row.auth_session_id) if row.auth_session_id else None
+    if not login or login.user_id != row.user_id or login.revoked or utc(login.expires_at) <= now():
+        fail(401, 'A sessão escolar terminou. Entre novamente para abrir seu e-mail.')
+    if row.surface != _mail_surface(request, settings()):
+        fail(403, 'Abra a caixa pelo portal que iniciou esta sessão.')
+
+
 @router.post('/webmail-ticket')
 def create_webmail_ticket(db: DB, user: Actor, school: EmailScope, request: Request):
     """Gera um ticket curto para abrir o webmail sem expor a senha da caixa."""
@@ -933,11 +961,15 @@ def create_webmail_ticket(db: DB, user: Actor, school: EmailScope, request: Requ
     if not settings().sogo_upstream_url:
         fail(503, 'O webmail integrado ainda não está habilitado nesta instalação.')
     mailbox = _owned(db, user, school)
+    config = db.get(MailcowConfig, mailbox.config_id)
+    if not config or not config.enabled or config.school_id != school.id:
+        fail(409, 'O e-mail institucional está desativado nesta escola.')
     connection = _connection(db, mailbox)
     if not connection or not connection.encrypted_secret or not connection.validated_at or connection.last_error:
         fail(409, 'Conecte e valide sua caixa antes de abrir o webmail.')
     raw = secrets.token_urlsafe(32)
     db.add(WebmailSession(school_id=school.id, user_id=user.id, mailbox_id=mailbox.id,
+                          auth_session_id=request.state.auth_session_id, surface=_mail_surface(request, settings()),
                           token_hash=hashlib.sha256(raw.encode()).hexdigest(),
                           expires_at=now() + timedelta(seconds=90)))
     db.flush()
@@ -978,14 +1010,15 @@ async def _webmail_http_client(request: Request):
 
 
 @webmail_router.post('/webmail/{school_id}/launch', include_in_schema=False)
-def redeem_webmail_ticket(school_id: str, ticket: str = Form(...)):
+def redeem_webmail_ticket(school_id: str, request: Request, ticket: str = Form(...)):
     """Consome o ticket POST e cria cookie HttpOnly vinculado a uma escola."""
     ticket_hash = hashlib.sha256(ticket.encode()).hexdigest()
     with SessionLocal() as db:
         row = db.scalar(select(WebmailSession).where(WebmailSession.token_hash == ticket_hash,
-                         WebmailSession.school_id == school_id, WebmailSession.redeemed_at.is_(None)))
+                         WebmailSession.school_id == school_id, WebmailSession.redeemed_at.is_(None)).with_for_update())
         if not row or utc(row.expires_at) <= now():
             fail(401, 'A sessão do e-mail expirou. Abra o E-mail novamente.')
+        _authorized_webmail_login(db, row, request)
         cookie_token = secrets.token_urlsafe(48)
         row.token_hash = hashlib.sha256(cookie_token.encode()).hexdigest()
         row.redeemed_at = now()
@@ -1022,6 +1055,7 @@ async def proxy_webmail(school_id: str, resource: str, request: Request):
                             WebmailSession.school_id == school_id, WebmailSession.redeemed_at.is_not(None)))
         if not session or utc(session.expires_at) <= now():
             fail(401, 'Sua sessão do e-mail expirou. Abra o E-mail novamente.')
+        _authorized_webmail_login(db, session, request)
         school = db.get(m.School, school_id)
         membership = db.get(m.SchoolAccess, (session.user_id, school_id))
         user = db.get(m.User, session.user_id)
@@ -1029,9 +1063,17 @@ async def proxy_webmail(school_id: str, resource: str, request: Request):
                               SchoolMailbox.school_id == school_id, SchoolMailbox.user_id == session.user_id,
                               SchoolMailbox.provisioned_at.is_not(None), SchoolMailbox.remote_active.is_(True)))
         connection = _connection(db, mailbox) if mailbox else None
-        if (not school or not school.active or not membership or not membership.active or not user or not user.active
+        config = db.get(MailcowConfig, mailbox.config_id) if mailbox else None
+        if (not school or not school.active or not user or not user.active
+                or not membership or not membership.active or membership.archived_at
+                or not config or not config.enabled or config.school_id != school_id
                 or not connection or not connection.encrypted_secret or not connection.validated_at or connection.last_error):
             fail(403, 'A caixa não está mais autorizada para esta instituição.')
+        require_portal_role(request, user)
+        from .access_security import require_teacher_routine
+        require_teacher_routine(db, user, school_id, 'mail')
+        public_origin = (cfg.teacher_portal_public_url if session.surface == 'teacher' else
+                         cfg.portal_public_url if session.surface == 'family' else cfg.app_url).rstrip('/')
         try:
             password = unseal(connection.encrypted_secret).get('password')
         except IntegrationFailure:
@@ -1058,8 +1100,8 @@ async def proxy_webmail(school_id: str, resource: str, request: Request):
         if cookie_pairs:
             headers['cookie'] = '; '.join(cookie_pairs)
         from .webmail_proxy import auth_headers
-        public_url = urlsplit(cfg.app_url)
-        proxy_base = cfg.app_url.rstrip('/') + '/webmail/' + quote(school_id, safe='')
+        public_url = urlsplit(public_origin)
+        proxy_base = public_origin + '/webmail/' + quote(school_id, safe='')
         headers.update({**auth_headers(principal, password), 'x-webobjects-server-url': proxy_base,
                         'x-webobjects-server-name': public_url.hostname or '',
                         'x-webobjects-server-port': str(public_url.port or (443 if public_url.scheme == 'https' else 80)),
@@ -1089,7 +1131,7 @@ async def proxy_webmail(school_id: str, resource: str, request: Request):
     from .webmail_proxy import is_rewritable_content_type, rewrite_resource_urls, safe_theme_color
     if is_rewritable_content_type(content_type):
         rendered = rewrite_resource_urls(content.decode('utf-8', errors='replace'), prefix,
-                                         trusted_origins=(cfg.app_url, upstream))
+                                         trusted_origins=(public_origin, upstream))
         if content_type.partition(';')[0].strip().lower() == 'text/html':
             title = identity['display_name'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
             primary = safe_theme_color(identity.get('primary_color'), '#006D77')
@@ -1119,7 +1161,7 @@ async def proxy_webmail(school_id: str, resource: str, request: Request):
     if location:
         from .webmail_proxy import rewrite_location
         try:
-            response_headers['location'] = rewrite_location(location, target, upstream, cfg.app_url, prefix)
+            response_headers['location'] = rewrite_location(location, target, upstream, public_origin, prefix)
         except ValueError:
             fail(502, 'O webmail retornou um redirecionamento inválido.')
         if response_headers['location'] == request.url.path and upstream_response.status_code in (301, 302, 303, 307, 308):
@@ -1243,6 +1285,13 @@ def connect(data: ConnectionInput, db: DB, user: Actor, school: EmailScope, requ
         connection.checked_at, connection.last_error = now(), ''
         db.flush(); audit(db, request, user, 'email.connected', connection, school.id, details={'mailbox_changed': address != mailbox.address.casefold()})
         return _account_output(db, mailbox)
+
+
+@router.post('/connection/linked')
+def connect_linked(data: LinkedConnectionInput, db: DB, user: Actor, school: EmailScope, request: Request):
+    mailbox = _owned(db, user, school)
+    return connect(ConnectionInput(password=data.password, address=_mailbox_address(db, mailbox)),
+                   db, user, school, request)
 
 
 @router.post('/connection/repair')

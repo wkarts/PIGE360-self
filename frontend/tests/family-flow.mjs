@@ -44,7 +44,7 @@ const account={id:'guardian',name:'Responsável Teste',role:'guardian',school_id
 }
 {
  const {ctx,render}=fixture();render();ctx.s.ready=true;let tree=render();
- assert.equal(nodes(tree).filter(n=>n.type==='form').length,1);assert.match(text(tree),/Acesse seu portal/);assert.match(text(tree),/secretaria da escola/);
+ assert.equal(nodes(tree).filter(n=>n.type==='form').length,1);assert.match(text(tree),/Acesse seu portal/);assert.ok(nodes(tree).some(n=>n.type==='a'&&n.props.href.includes('recuperar-senha')&&text(n)==='Esqueci minha senha'));
  assert.equal(nodes(tree).filter(n=>n.type==='input'&&n.props?.type==='password').length,1);
  ctx.s.passwordVisible=true;tree=render();assert.equal(nodes(tree).find(n=>n.props?.id==='family-password').props.type,'text');
  ctx.mfa.state.challenge='challenge';tree=render();assert.equal(nodes(tree).filter(n=>n.type==='form').length,0,'Login não concorre com desafio MFA');
@@ -57,7 +57,7 @@ const account={id:'guardian',name:'Responsável Teste',role:'guardian',school_id
   assert.equal(nodes(caption).some(n=>n.type==='select'),false,'Label explícito separado das opções');
  }
  for(const name of ['overview','students','academic','documents','finance','agenda','news','support']){ctx.s.section=name;tree=render();assert.ok(nodes(tree).find(n=>n.props?.id==='family-navigation'));assert.ok(nodes(tree).find(n=>n.props?.['aria-current']==='page'));}
- ctx.s.section='overview';ctx.s.students=[student('a',false)];assert.match(text(render()),/Restrito/);assert.doesNotMatch(text(render()),/98%|Mariana|Lucas/);
+ ctx.s.section='overview';ctx.s.students=[student('a',false)];assert.ok(!nodes(render()).some(n=>n.type==='button'&&/Financeiro|Consultar financeiro/.test(text(n))),'O painel não oferece ações de cobrança sem autorização');assert.doesNotMatch(text(render()),/98%|Mariana|Lucas/);
  ctx.s.financeError='falha';ctx.s.students=[student('a')];assert.match(text(render()),/Indisponível/);ctx.s.contextError=true;assert.match(text(render()),/Não foi possível carregar seu vínculo/);
 }
 {
@@ -200,7 +200,7 @@ console.log('Family drawer: immediate visibility, deferred focus and rapid open/
  const term=(id,index)=>({period_id:id,period_name:index+'º Bimestre',order_index:index,starts_on:'2026-03-01',
   class_group_id:'turma',class_label:'Turma A · Unidade Centro',grade_display:'0',result_label:'Consolidado',
   attendance:{total:4,absent:1,justified_absence:0,unrecorded:0,percentage:75}});
- const enrollment=(id,periods)=>({enrollment_id:id,number:id,class_name:'Turma A',year_name:'2026',bulletin_model:'panel',
+ const enrollment=(id,periods)=>({enrollment_id:id,number:id,status:id==='atual'?'active':'completed',class_name:'Turma A',year_name:'2026',bulletin_model:'panel',
   subjects:[{diary_id:'diario',component_name:'Planejamento estratégico',periods}],official_editions:[],display_sections:[]});
  const pupil={student_id:'aluno',student_name:'Aluno de teste',student_number:'001',school_name:'Escola A',
   enrollments:[enrollment('anterior',[term('p1',1)]),enrollment('atual',[term('p1',1),term('p2',2)])]};
@@ -208,7 +208,7 @@ console.log('Family drawer: immediate visibility, deferred focus and rapid open/
  const ctx=component.setup({schoolId:'escola',request:async path=>{requested.push(path);return {students:[pupil],note:'Resultados publicados'};},
   download:async path=>{downloaded.push(path);}});
  await ctx.load();
- ctx.state.enrollmentId='atual';
+ assert.equal(ctx.state.enrollmentId,'atual','O boletim abre na matrícula ativa mesmo que o histórico venha primeiro');
  ctx.state.groupId=ctx.periodGroups.value[1].id;
  await ctx.load();
  assert.equal(ctx.state.enrollmentId,'atual');
@@ -295,3 +295,39 @@ for(const academic of [false,true]){
  assert.deepEqual(calls.filter(([,method])=>method==='POST').map(([url])=>url.split('/').at(-1)),['refresh','authorize','revoke']);
 }
 console.log('Portal da família: navegação e histórico por vínculo, adesão e revogação do cartão pela fatura.');
+
+// A síntese da turma carrega independentemente e nunca reaproveita o resultado de outro aluno.
+{
+ const {ctx,sandbox}=fixture();
+ const a=student('a',false),b=student('b',false);
+ ctx.s.account=account;ctx.s.schoolId='school-a';ctx.s.studentId=a.id;
+ let releaseA;
+ const summaries=[];
+ sandbox.fetch=async(url)=>{
+   if(url.endsWith('/family/context'))return Response.json({students:[a,b],schools:[]});
+   if(url.includes('/email/account'))return Response.json({available:false});
+   if(url.includes('/community-feed'))return Response.json({items:[],total:0});
+   if(url.endsWith('/materials?view=recent')){
+     summaries.push(url);
+     if(url.includes('/students/a/'))return new Promise(resolve=>releaseA=resolve);
+     return Response.json([{id:'demo-b',title:'Leitura',kind:'Orientação',created_at:'2026-11-27T15:00:00Z'}]);
+   }
+   if(url.endsWith('/materials'))return Response.json([{id:'demo-b',title:'Leitura',kind:'Orientação',body:'Texto para o aluno B'}]);
+   throw new Error('Consulta inesperada '+url);
+ };
+ await ctx.load();
+ assert.ok(releaseA);assert.equal(ctx.recentMaterials.loading,true);
+ assert.equal(ctx.s.contextError,false);
+ ctx.s.studentId=b.id;await ctx.changeStudent();await tick();
+ releaseA(Response.json([{id:'privado-a',title:'Somente A'}]));await tick();
+ assert.deepEqual(Array.from(ctx.recentMaterials.items,row=>row.id),['demo-b']);
+ const focused=[];
+ sandbox.document.getElementById=id=>({focus:()=>focused.push(id)});
+ ctx.schoolwork.filter='Outro título';
+ ctx.section('materials','demo-b');await tick();await sandbox.Vue.nextTick();
+ assert.equal(ctx.s.section,'materials');assert.equal(ctx.schoolwork.filter,'');
+ assert.equal(focused.at(-1),'material-demo-b');
+ ctx.s.section='overview';ctx.s.students=[{...b,academic_authorized:false,financial_authorized:true}];
+ await ctx.loadRecentMaterials();
+ assert.equal(summaries.length,2);assert.equal(ctx.recentMaterials.items.length,0);
+}

@@ -6,6 +6,7 @@ from contextlib import contextmanager
 import httpx
 from playwright.sync_api import sync_playwright, expect
 from datetime import date, timedelta
+from qa.portal_access import accept_local_access_link, check_sogo_frame, check_teacher_layout, link_test_mailbox, start_sogo_fixture
 ROOT=Path(__file__).resolve().parents[1]
 OUT=Path(os.getenv('PIGE_E2E_EVIDENCE_DIR',str(ROOT/'evidence/qa/online')));OUT.mkdir(parents=True,exist_ok=True)
 TEMP=Path(tempfile.mkdtemp(prefix='pige-online-e2e-'))
@@ -18,6 +19,8 @@ password='Synthetic-Only-Password-2026!';website_token='synthetic-website-servic
 teacher_port=free_port()
 TEACHER_URL=f'http://localhost:{teacher_port}'
 env={**os.environ,'TEACHER_PORTAL_PUBLIC_URL':TEACHER_URL,'PYTHONPATH':str(ROOT/'backend'),'DATABASE_URL':'sqlite:///'+str(TEMP/'e2e.db'),'ALLOW_SQLITE':'true','APP_ENV':'test','APP_URL':URL,'PORTAL_PUBLIC_URL':PORTAL_URL,'PORTAL_INTERNAL_TOKEN':portal_token,'WEBSITE_INTERNAL_TOKEN':website_token,'ALLOWED_HOSTS':'127.0.0.1,localhost','APP_SECRET_KEY':'test-only-online-secret-key-01234567890123456789','SETUP_TOKEN':'test-only-online-setup-token-0123456789','STORAGE_PATH':str(TEMP/'files'),'FRONTEND_PATH':str(TEMP/'frontend'),'COOKIE_SECURE':'false','INTEGRATION_ENCRYPTION_KEY':base64.urlsafe_b64encode(b'0'*32).decode(),'CONNECT_ALLOWED_HOSTS':'connect.example.test'}
+sogo_fixture=start_sogo_fixture()
+env['SOGO_UPSTREAM_URL']=f'http://127.0.0.1:{sogo_fixture.server_port}'
 subprocess.run([sys.executable,'-m','alembic','upgrade','head'],cwd=ROOT/'backend',env=env,check=True)
 log=(OUT/'server.log').open('w');proc=subprocess.Popen([sys.executable,'-m','uvicorn','app.main:app','--host','127.0.0.1','--port',str(port)],cwd=ROOT/'backend',env=env,stdout=log,stderr=log)
 checks=[];errors=[];responsive={};bridge=os.getenv('PIGE_UI_BRIDGE')=='1';page=None;website_proc=None;portal_proc=None;teacher_proc=None;website_log=None;portal_log=None
@@ -115,6 +118,12 @@ try:
     operator('coordination')
     teacher_profile = post('/teachers', {'person': {'name': 'Docente de Matemática'}})
     teacher = operator('teacher', teacher_profile['person']['id'])
+    response = client.put(base + '/mailcow/config', headers=headers, json={
+        'enabled':True, 'base_url':'https://mail.example.test', 'domain':'example.com',
+        'api_key':'synthetic-mailcow-key-for-local-portals'
+    })
+    assert response.status_code == 200, response.text
+    link_test_mailbox(client, base, headers, teacher['id'], 'professor-teste', TEMP/'e2e.db')
     for origin, email in [(PORTAL_URL, teacher['email']), (PORTAL_URL, 'secretaria@example.com'), (TEACHER_URL, 'secretaria@example.com')]:
         denied = httpx.post(origin+'/api/v1/auth/login', json={'email':email,'password':password},
                             headers={'Origin':origin,'X-CSRF-Protection':'1'})
@@ -291,23 +300,31 @@ try:
         teacher_page.goto(PORTAL_URL)
         expect(teacher_page.get_by_role('link',name='Portal do Professor')).to_have_count(0)
         teacher_page.goto(TEACHER_URL)
+        login_page(teacher_page, teacher['email'])
+        teacher_page.wait_for_url(TEACHER_URL+'/**')
         expect(teacher_page.get_by_role('heading',name='Acesso do professor')).to_be_visible()
         teacher_page.wait_for_url(TEACHER_URL+'/')
         expect(teacher_page.get_by_role('link',name='Portal do aluno e responsável')).to_have_count(0)
         teacher_page.get_by_label('E-mail',exact=True).fill(teacher['email'])
         teacher_page.get_by_label('Senha',exact=True).fill(password)
+        teacher_page.get_by_role('button',name='Entrar como professor').click()
+        expect(teacher_page.get_by_role('heading',name='Minhas turmas')).to_be_visible()
+        expect(teacher_page.locator('.teacher-overview')).to_contain_text(group['name'])
+        check_teacher_layout(teacher_page, OUT, responsive)
+        record('Portal docente com cabeçalho no topo e conteúdo alinhado a 320, 390 e 1440 px, menu acessível e fechamento confirmado das guias.')
+        teacher_nav = teacher_page.locator('#teacher-navigation')
+        check_sogo_frame(teacher_page, teacher_nav, TEACHER_URL, school['id'], teacher['id'], sogo_fixture)
+        teacher_nav.get_by_role('button', name='Visão geral', exact=True).click()
+        record('O professor encaminhado pelo gestor abre seu portal e sua própria caixa pelo proxy SOGo do docente.')
+        expect(teacher_page.locator('#teacher-navigation').get_by_role('button',name='Diário de classe',exact=True)).to_be_enabled()
+        expect(teacher_page.get_by_role('button',name='Fazer chamada · Matemática')).to_be_visible()
+        expect(teacher_page.get_by_role('button',name='Planejar aula · Matemática')).to_be_visible()
         with teacher_page.expect_response(lambda r: r.url.endswith('/diary-entry-fields') and r.request.method=='GET') as composition_request:
-            teacher_page.get_by_role('button',name='Entrar como professor').click()
+            teacher_page.get_by_role('button',name='Abrir diário · Matemática').click()
         composition = composition_request.value
         assert composition.ok, (composition.status, composition.url)
         default_fields = composition.json()['fields']
         assert any(field['id']=='standard-plan-objectives' and field['label']=='Objetivos' for field in default_fields)
-        expect(teacher_page.get_by_role('heading',name='Minhas turmas')).to_be_visible()
-        expect(teacher_page.locator('.teacher-overview')).to_contain_text(group['name'])
-        expect(teacher_page.get_by_role('button',name='Diário de classe')).to_be_enabled()
-        expect(teacher_page.get_by_role('button',name='Fazer chamada · Matemática')).to_be_visible()
-        expect(teacher_page.get_by_role('button',name='Planejar aula · Matemática')).to_be_visible()
-        teacher_page.get_by_role('button',name='Abrir diário · Matemática').click()
         workspace = teacher_page.locator('.diary-workspace')
         workspace.get_by_role('button',name='Planejamento',exact=True).click()
         expect(workspace.get_by_role('heading',name=re.compile('Planejamento curricular ·'))).to_be_visible()
@@ -434,19 +451,53 @@ try:
         expect(teacher_page.locator('.teacher-overview')).to_contain_text('Operações fundamentais')
         assert teacher_page.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
         teacher_page.screenshot(path=str(OUT/'professor-programacao-mobile.png'))
+        manager = browser.new_page(viewport={'width': 1440, 'height': 950}, locale='pt-BR')
+        login_page(manager, 'secretaria@example.com')
+        expect(manager.get_by_role('heading', name='Visão geral', exact=True)).to_be_visible()
+        manager.goto(URL+'/#/users')
+        teacher_card = manager.get_by_role('article').filter(has_text=teacher['email'])
+        teacher_card.get_by_role('button', name='Editar', exact=True).click()
+        routines = manager.get_by_role('group', name='Rotinas do Portal do Professor')
+        for label in ['Minha programação', 'Avisos e publicações', 'E-mail institucional']:
+            routines.get_by_role('checkbox', name=label, exact=True).uncheck()
+        manager.get_by_label('Motivo da alteração', exact=True).fill('Conferência de rotinas com dados fictícios')
+        with manager.expect_response(lambda res: res.url.endswith('/users/'+teacher['id']) and res.request.method=='PATCH') as saved:
+            manager.get_by_role('button', name='Salvar acesso').click()
+        assert saved.value.ok, saved.value.text()
+        manager.close()
+        teacher_page.reload()
+        expect(teacher_page.get_by_role('heading',name='Minhas turmas')).to_be_visible()
+        teacher_page.get_by_role('button', name='Abrir menu', exact=True).click()
+        teacher_nav = teacher_page.locator('#teacher-navigation')
+        for label in ['Minha programação', 'Avisos e publicações', 'E-mail']:
+            expect(teacher_nav.get_by_role('button', name=label, exact=True)).to_have_count(0)
+        expect(teacher_nav.get_by_role('button', name='Diário de classe', exact=True)).to_be_enabled()
+        assert teacher_page.request.get(TEACHER_URL + '/webmail/' + school['id'] + '/SOGo/').status in (401,403)
+        teacher_page.keyboard.press('Escape')
+        record('Gestor restringe três rotinas do docente; o menu atualizado preserva o diário e o servidor bloqueia a caixa já aberta.')
+
         teacher_page.get_by_role('button',name='Sair',exact=True).click()
         expect(teacher_page.get_by_role('heading',name='Acesso do professor')).to_be_visible()
         # Conta docente válida antes da atribuição. A Secretaria usa seu próprio acesso.
         spare_person=post('/persons', {'name':'Docente aguardando atribuição'})
-        spare=client.post('/api/v1/users',headers=headers,json={'name':'Docente sem turma','role':'teacher',
-            'email':'sem-turma@example.com','school_ids':[school['id']],'password':password,'person_id':spare_person['id']})
-        assert spare.status_code==201
+        spare=client.post(base+'/users',headers=headers,json={'name':'Docente sem turma','role':'teacher',
+            'email':'sem-turma@example.com','person_id':spare_person['id']})
+        assert spare.status_code==201,spare.text
+        first_access={'root':ROOT,'env':env,'user_id':spare.json()['id'],'origin':TEACHER_URL}
+        accept_local_access_link(teacher_page, **first_access, purpose='first_access', password='Primeira-Senha-Sintetica!')
+        teacher_page.get_by_role('link', name='Esqueci minha senha').click()
+        expect(teacher_page.get_by_role('heading', name='Recuperar senha')).to_be_visible()
+        teacher_page.get_by_label('E-mail de acesso').fill('sem-turma@example.com')
+        teacher_page.get_by_role('button', name='Enviar link de recuperação').click()
+        expect(teacher_page.get_by_role('status')).to_contain_text('Se houver uma conta habilitada')
+        accept_local_access_link(teacher_page, **first_access, purpose='password_reset', password=password)
+        record('Convite e recuperação abrem a definição de senha no domínio docente e voltam ao login do professor.')
         teacher_page.get_by_label('E-mail',exact=True).fill('sem-turma@example.com')
         teacher_page.get_by_label('Senha',exact=True).fill(password)
         teacher_page.get_by_role('button',name='Entrar como professor').click()
         expect(teacher_page.get_by_text('A Coordenação precisa associar',exact=False)).to_be_visible()
         teacher_page.get_by_role('button',name='Abrir menu').click()
-        expect(teacher_page.get_by_role('button',name='Diário de classe')).to_be_disabled()
+        expect(teacher_page.locator('#teacher-navigation').get_by_role('button',name='Diário de classe',exact=True)).to_be_disabled()
         teacher_page.keyboard.press('Escape')
         expect(teacher_page.locator('.teacher-overview')).not_to_contain_text(group['name'])
         teacher_page.screenshot(path=str(OUT/'professor-sem-atribuicao.png'))
@@ -552,6 +603,8 @@ try:
         student_record=client.get(base+'/students/'+student_id,headers=headers).json()
         response=client.post('/api/v1/users',headers=headers,json={'name':'Lucas Almeida — Teste','email':'aluno@example.com','password':password,'role':'student','school_ids':[school['id']],'person_id':student_record['person']['id']})
         assert response.status_code==201,response.text
+        student_user = response.json()
+        link_test_mailbox(client, base, headers, student_user['id'], 'aluno-teste', TEMP/'e2e.db')
         guardian=post('/persons',{'name':'Mariana Almeida — Teste','email':'responsavel-escolar@example.com','phone':'75999990000','is_guardian':True})
         post('/students/'+student_id+'/guardians',{'person_id':guardian['id'],'relationship':'Mãe','legal':True,'financial':True})
         response=client.post('/api/v1/users',headers=headers,json={'name':'Mariana Almeida — Teste','email':'responsavel-escolar@example.com','password':password,'role':'guardian','school_ids':[school['id']],'person_id':guardian['id']})
@@ -571,10 +624,20 @@ try:
         record('API bloqueia financeiro para aluno e permite apenas ao responsável com vínculo financeiro ativo')
         studentContext=browser.new_context(viewport={'width':1366,'height':950},locale='pt-BR',accept_downloads=True)
         studentPage=studentContext.new_page();studentPage.on('pageerror',lambda e:errors.append('aluno: '+str(e)));page=studentPage
-        studentPage.goto(URL);studentPage.get_by_label('E-mail',exact=True).fill('aluno@example.com');studentPage.get_by_label('Senha',exact=True).fill(password);studentPage.get_by_role('button',name='Entrar na aplicação').click()
-        expect(studentPage.get_by_role('table', name=re.compile('^Rendimento e frequência'))).to_contain_text('Matemática')
-        expect(studentPage.get_by_role('table', name=re.compile('^Rendimento e frequência'))).to_contain_text('8,5')
-        expect(studentPage.locator('.learning-workspace td[data-label="Frequência"]')).to_contain_text('100%')
+        login_page(studentPage, 'aluno@example.com')
+        studentPage.wait_for_url(PORTAL_URL+'/**')
+        expect(studentPage.get_by_role('heading', name='Acesse seu portal')).to_be_visible()
+        studentPage.get_by_label('E-mail', exact=True).fill('aluno@example.com')
+        studentPage.get_by_label('Senha', exact=True).fill(password)
+        studentPage.get_by_role('button', name='Entrar no portal', exact=True).click()
+        student_nav = studentPage.locator('#family-navigation')
+        check_sogo_frame(studentPage, student_nav, PORTAL_URL, school['id'], student_user['id'], sogo_fixture)
+        student_nav.get_by_role('button', name='Minha vida escolar', exact=True).click()
+        bulletin = studentPage.get_by_role('table', name=re.compile('^Rendimento e frequência'))
+        expect(bulletin).to_contain_text('Matemática')
+        expect(bulletin).to_contain_text('8,5')
+        expect(bulletin).to_contain_text(re.compile(r'100(?:[,.]0+)?%'))
+        record('O aluno encaminhado pelo gestor acessa seu próprio webmail SOGo e o boletim no domínio da família.')
         studentPage.screenshot(path=str(OUT/'07-portal-aluno-boletim.png'),full_page=True)
         record('Aluno autenticado consulta apenas seu boletim no espaço pessoal')
         familyContext=browser.new_context(viewport={'width':320,'height':740},locale='pt-BR')
@@ -590,14 +653,20 @@ try:
             familyPage.wait_for_timeout(250)
             measurement=familyPage.evaluate("""() => {
               const root=document.documentElement;
+              const tabstrip=document.querySelector('.family-main [role="tablist"]');
+              const visibleTab=tabstrip?.querySelector('[role="tab"][aria-selected="true"]');
+              const tabBounds=tabstrip?.getBoundingClientRect(), activeBounds=visibleTab?.getBoundingClientRect();
+              const activeTabVisible=!activeBounds || (activeBounds.left>=tabBounds.left-1 && activeBounds.right<=tabBounds.right+1);
+              const stripFits=!tabBounds || (tabBounds.left>=-1 && tabBounds.right<=root.clientWidth+1);
               const outside=[...document.querySelectorAll('.family-root input,.family-root select,.family-root textarea,.family-root button,.family-root a')]
-                .filter(el=>!el.classList.contains('skip')&&el.getClientRects().length&&getComputedStyle(el).visibility!=='hidden')
+                .filter(el=>!el.closest('.work-tabs-list')&&!el.classList.contains('skip')&&el.getClientRects().length&&getComputedStyle(el).visibility!=='hidden')
                 .map(el=>({tag:el.tagName,text:(el.innerText||el.getAttribute('aria-label')||'').slice(0,50),left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right}))
                 .filter(el=>el.left < -1 || el.right > root.clientWidth + 1);
-              return {clientWidth:root.clientWidth,scrollWidth:root.scrollWidth,outside};
+              return {clientWidth:root.clientWidth,scrollWidth:root.scrollWidth,outside,activeTabVisible,stripFits};
             }""")
             assert measurement['scrollWidth']<=measurement['clientWidth']+1,(label,measurement)
             assert not measurement['outside'],(label,measurement['outside'])
+            assert measurement['stripFits'] and measurement['activeTabVisible'],(label,measurement)
             responsive[label]={'viewport':f'{width}x{height}','document_width':measurement['scrollWidth'],'horizontal_overflow':False}
             if label in {'login-320','login-1440','family-390','family-1440','family-landscape-844','zoom-200-equivalent-720','family-dashboard-390','family-dashboard-1440','family-menu-390'}:
                 familyPage.screenshot(path=str(OUT/f'{label}.png'),full_page=True)
@@ -628,10 +697,23 @@ try:
         familyPage.get_by_role('button',name='Entrar no portal',exact=True).click()
         expect(familyPage.locator('#family-title')).to_have_text('Visão geral')
         expect(familyPage.get_by_role('heading',name='Olá, Lucas.',exact=True)).to_be_visible()
-        expect(familyPage.get_by_label('Aluno',exact=True)).to_have_value(student_id)
-        expect(familyPage.get_by_role('combobox',name='Aluno',exact=True)).to_have_value(student_id)
-        # The student selector appears before the dashboard feed finishes loading.
+        expect(familyPage.get_by_role('combobox',name='Aluno',exact=True)).to_have_count(0)
         expect(familyPage.locator('.family-root')).to_have_attribute('aria-busy','false')
+        expect(familyPage.get_by_role('button', name='Consultar boletim', exact=True)).to_be_visible()
+        expect(familyPage.get_by_role('button', name='Ver atividades', exact=True)).to_be_visible()
+        expect(familyPage.get_by_role('button', name='Consultar financeiro', exact=False)).to_have_count(0)
+        familyPage.set_viewport_size({'width':1440,'height':950})
+        family_sidebar = familyPage.locator('#family-navigation')
+        expect(family_sidebar.get_by_role('button', name='Meu cadastro', exact=True)).to_be_visible()
+        expect(family_sidebar.get_by_role('button', name='Meus alunos', exact=True)).to_have_count(0)
+        expect(family_sidebar.get_by_role('button', name='Financeiro', exact=True)).to_have_count(0)
+        sidebar_width = family_sidebar.bounding_box()['width']
+        familyPage.get_by_role('button', name='Recolher menu lateral', exact=True).click()
+        expect(familyPage.get_by_role('button', name='Expandir menu lateral', exact=True)).to_be_visible()
+        familyPage.wait_for_function('limit => document.getElementById("family-navigation").getBoundingClientRect().width < limit', arg=sidebar_width*.75)
+        familyPage.reload()
+        familyPage.get_by_role('button', name='Expandir menu lateral', exact=True).click()
+        record('Aluno vê seu cadastro e atalhos de boletim e atividades; navegação financeira segue seu vínculo e a barra lateral conserva a preferência.')
         familyPage.reload();expect(familyPage.locator('#family-title')).to_have_text('Visão geral')
         expect(familyPage.get_by_role('heading',name='Olá, Lucas.',exact=True)).to_be_visible()
         family_nav('Atividades')
@@ -641,6 +723,14 @@ try:
             familyPage.get_by_role('button',name='Baixar para imprimir').first.click()
         assert Path(material.value.path()).read_bytes().startswith(b'%PDF')
         family_nav('Visão geral')
+        recent = familyPage.get_by_role('region', name='Atividades recentes', exact=True)
+        expect(recent.get_by_role('button', name='Exercícios da turma', exact=True)).to_be_visible()
+        expect(recent.get_by_role('button', name='Orientação individual', exact=True)).to_be_visible()
+        recent.get_by_role('button', name='Orientação individual', exact=True).click()
+        expect(familyPage.get_by_role('heading', name='Orientação individual', exact=True)).to_be_focused()
+        family_nav('Visão geral')
+        expect(recent.get_by_role('button', name='Exercícios da turma', exact=True)).to_be_visible()
+        record('Painel do aluno resume as atividades da turma e individuais; abrir um item posiciona o foco no material correto.')
         check_family_viewport(1440,950,'family-dashboard-1440')
         check_family_viewport(390,844,'family-dashboard-390')
         familyPage.get_by_role('button',name='Abrir menu',exact=True).click()
@@ -657,7 +747,8 @@ try:
         expect(familyPage.get_by_role('button',name='Abrir menu',exact=True)).to_have_attribute('aria-expanded','false')
         family_nav('Minha vida escolar');expect(familyPage.get_by_role('table', name=re.compile('^Rendimento e frequência'))).to_contain_text('Matemática')
         family_nav('Documentos');expect(familyPage.get_by_role('heading',name='Documentos de Lucas Almeida — Teste')).to_be_visible()
-        family_nav('Financeiro');expect(familyPage.get_by_role('heading',name='Financeiro de Lucas Almeida — Teste')).to_be_visible()
+        familyPage.goto(PORTAL_URL+'/family?view=finance&student='+student_id)
+        expect(familyPage.get_by_role('heading',name='Financeiro de Lucas Almeida — Teste')).to_be_visible()
         expect(familyPage.get_by_text('Seu vínculo não autoriza a consulta financeira.',exact=False)).to_be_visible()
         familyPage.go_back();expect(familyPage.locator('#family-title')).to_have_text('Documentos')
         familyPage.go_forward();expect(familyPage.locator('#family-title')).to_have_text('Financeiro')
@@ -675,15 +766,44 @@ try:
         familyPage.get_by_label('E-mail',exact=True).fill('responsavel-escolar@example.com')
         familyPage.get_by_label('Senha',exact=True).fill(password)
         familyPage.get_by_role('button',name='Entrar no portal',exact=True).click()
-        # The current deep link is retained across sign-out/sign-in.
-        expect(familyPage.locator('#family-title')).to_have_text('Vida acadêmica')
+        # A nova identidade recebe seu próprio painel e não herda as abas do aluno.
+        expect(familyPage.locator('#family-title')).to_have_text('Visão geral')
+        expect(familyPage.get_by_role('tablist',name='Tarefas abertas').get_by_role('tab')).to_have_count(1)
         expect(familyPage.get_by_label('Você está acompanhando',exact=True)).to_have_value(student_id)
         expect(familyPage.get_by_role('combobox',name='Você está acompanhando',exact=True)).to_have_value(student_id)
+        expect(familyPage.locator('.family-root')).to_have_attribute('aria-busy','false')
+        expect(familyPage.locator('#family-navigation button').filter(has_text=re.compile('^E-mail$'))).to_have_count(0)
+        record('Responsável sem caixa vinculada acompanha o aluno sem herdar o e-mail institucional dele.')
         family_nav('Atividades')
         expect(familyPage.get_by_text('Orientação individual',exact=True)).to_be_visible()
         family_nav('Justificativas de ausência')
         familyPage.get_by_label('Data da ausência').fill('2027-02-01')
         familyPage.get_by_label('Motivo',exact=True).fill('Justificativa fictícia de teste')
+        # Alternar mantém o formulário. O único descarte ocorre após confirmação.
+        tabs = familyPage.get_by_role('tablist', name='Tarefas abertas')
+        absence_tab = tabs.get_by_role('tab', name='Justificativas de ausência', exact=True)
+        overview_tab = tabs.get_by_role('tab', name='Visão geral', exact=True)
+        overview_tab.click()
+        prompts = []
+        def cancel_close(dialog):
+            prompts.append(dialog.message)
+            dialog.dismiss()
+        familyPage.once('dialog', cancel_close)
+        overview_tab.dblclick()
+        expect(absence_tab).to_be_visible()
+        assert prompts and re.search(r'rascunho|alteraç|não salv', prompts[-1], re.I), prompts
+        absence_tab.click()
+        expect(familyPage.get_by_label('Motivo',exact=True)).to_have_value('Justificativa fictícia de teste')
+        overview_tab.click()
+        familyPage.once('dialog',lambda dialog:dialog.accept())
+        familyPage.get_by_role('button',name='Fechar outras guias',exact=True).click()
+        expect(tabs.get_by_role('tab')).to_have_count(1)
+        family_nav('Justificativas de ausência')
+        expect(familyPage.get_by_label('Motivo',exact=True)).to_have_value('')
+        familyPage.get_by_label('Data da ausência').fill('2027-02-01')
+        familyPage.get_by_label('Motivo',exact=True).fill('Justificativa fictícia de teste')
+        record('Abas da família preservam o rascunho ao alternar e cancelar; fechar as outras guias com confirmação limpa a justificativa e mantém Visão geral.')
+
         sample=ROOT/'frontend/public/icons/icon-192.png'
         familyPage.get_by_label('Atestado ou comprovante').set_input_files(str(sample))
         familyPage.get_by_role('button',name='Enviar à Secretaria').click()
@@ -768,6 +888,19 @@ try:
         check_family_viewport(320,740,'guardian-320')
         check_family_viewport(390,844,'guardian-390')
         record('Responsável autenticado consulta somente o aluno vinculado e a permissão financeira correspondente')
+        sibling = post('/students',{'person':{'name':'Clara Almeida — Teste', 'birth_date':'2016-05-15'}})
+        post('/students/'+sibling['id']+'/guardians',{'person_id':guardian['id'],'legal':True,'financial':False})
+        familyPage.reload()
+        family_nav('Atividades')
+        expect(familyPage.get_by_role('heading',name='Orientação individual',exact=True)).to_be_visible()
+        selector = familyPage.get_by_label('Você está acompanhando',exact=True)
+        selector.select_option(sibling['id'])
+        expect(familyPage.locator('.family-root')).to_have_attribute('aria-busy','false')
+        expect(familyPage.get_by_role('heading',name='Orientação individual',exact=True)).to_have_count(0)
+        family_nav('Documentos')
+        expect(familyPage.get_by_role('heading',name='Documentos de Clara Almeida — Teste')).to_be_visible()
+        record('Troca de dependente atualiza as abas: o segundo aluno abre seus documentos e nenhum material individual do primeiro.')
+
         import importlib.util
         spec=importlib.util.spec_from_file_location('school_workflows',ROOT/'scripts/e2e-school-workflows.py');extra=importlib.util.module_from_spec(spec);spec.loader.exec_module(extra)
         extra.verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,post,year,group,WEBSITE_URL)
@@ -789,6 +922,8 @@ except Exception:
     (OUT/'results.json').write_text(json.dumps({'status':'failed','checks':checks,'errors':errors},ensure_ascii=False,indent=2))
     raise
 finally:
+    sogo_fixture.shutdown()
+    sogo_fixture.server_close()
     for child in (website_proc,portal_proc,teacher_proc,proc):
         if child and child.poll() is None:child.terminate()
         if child:

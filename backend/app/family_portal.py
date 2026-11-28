@@ -1,6 +1,7 @@
 """Superfície privada de alunos e responsáveis; vínculos revalidados a cada acesso."""
 import hashlib
 from datetime import date
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile
@@ -109,8 +110,14 @@ def document(student_id:str,document_id:str,db:DB,user:Actor,request:Request):
 
 
 @router.get('/students/{student_id}/materials')
-def materials(student_id: str, db: DB, user: Actor):
-    return class_materials.listed(db, class_materials.visible_to(own_student(db, user, student_id)))
+def materials(student_id: str, db: DB, user: Actor, view: Literal['full', 'recent'] = 'full'):
+    visible = class_materials.visible_to(own_student(db, user, student_id))
+    if view == 'recent':
+        material = m.ClassMaterial
+        recent = visible.with_only_columns(material.id, material.kind, material.title, material.created_at)
+        rows = db.execute(recent.order_by(material.created_at.desc(), material.id.desc()).limit(3))
+        return [dict(row) for row in rows.mappings()]
+    return class_materials.listed(db, visible)
 
 
 @router.get('/students/{student_id}/materials/{material_id}/print.pdf')

@@ -6,7 +6,7 @@ from sqlalchemy import select, func, update, delete
 from .db import Base
 from .models import SchoolAccess, School, User, AuthSession, UserProfile
 from .access_models import SchoolAccessProfile
-from .access_security import bind_access, permissions_for
+from .access_security import TEACHER_ROUTINES, bind_access, permissions_for, selected_teacher_routines
 from .schemas import Input, UserInput, UserEdit
 from .security import Actor, DB, Scope, PERMISSIONS, ROLE_LABELS, check_version, fail, hash_password, lock_school, require
 from .common import output, audit
@@ -107,6 +107,7 @@ def scoped_output(db, obj, access):
             'account_active': obj.active, 'access_active': access.active,
             'archived_at': access.archived_at.isoformat() if access.archived_at else None,
             'version': access.version, 'school_ids': [access.school_id],
+            **({'teacher_routines': sorted(selected_teacher_routines(access.teacher_routines))} if obj.role == 'teacher' else {}),
             'access_profile_id': access.access_profile_id,
             'access_profile_name': profile.name if profile else ROLE_LABELS.get(obj.role, obj.role),
             'profile_active': profile.active if profile else True,
@@ -150,14 +151,14 @@ def create_in_school(data, db, user, request, school):
     if existing:
         if db.get(SchoolAccess,(existing.id,school.id)) or not existing.active or existing.role!=data.role or existing.person_id!=data.person_id or data.create_mailbox:
             fail(409,'Não foi possível criar este acesso. Confira o e-mail ou solicite a revisão ao administrador.')
-        access=SchoolAccess(user_id=existing.id,school_id=school.id,access_profile_id=data.access_profile_id)
+        access=SchoolAccess(user_id=existing.id,school_id=school.id,access_profile_id=data.access_profile_id,teacher_routines=data.teacher_routines)
         db.add(access);db.flush()
         audit(db,request,user,'users.school_access_added',existing,school.id)
         return {**scoped_output(db,existing,access),'existing_account':True}
 
     obj = User(name=data.name, email=email, password_hash=hash_password(data.password or __import__('secrets').token_urlsafe(48)), role=data.role, person_id=data.person_id)
     db.add(obj); db.flush()
-    access = SchoolAccess(user_id=obj.id, school_id=school.id, access_profile_id=data.access_profile_id)
+    access = SchoolAccess(user_id=obj.id, school_id=school.id, access_profile_id=data.access_profile_id, teacher_routines=data.teacher_routines)
     db.add(access); db.flush()
     mailbox = None
     if data.create_mailbox:
@@ -169,7 +170,7 @@ def create_in_school(data, db, user, request, school):
         mailbox = queue_mailbox(db, school.id, obj, data.mailbox_local_part, data.mailbox_quota_mb)
     from .user_invitations import issue
     issue(db,obj,school)
-    audit(db, request, user, 'users.created', obj, school.id, details={'role': obj.role, 'access_profile_id': access.access_profile_id})
+    audit(db, request, user, 'users.created', obj, school.id, details={'role': obj.role, 'access_profile_id': access.access_profile_id, 'teacher_routines': access.teacher_routines})
     result = scoped_output(db, obj, access)
     if mailbox:
         result['mailbox'] = mailbox_output(db, mailbox)
@@ -200,9 +201,19 @@ def edit_in_school(user_id, data, db, user, request, school):
         fail(422, 'Edite somente o acesso da instituição ativa.')
     if access.archived_at:
         fail(422, 'Restaure este acesso antes de editar.')
-    check_grant(db, user, school.id, data.role, data.access_profile_id)
+    profile_id = data.access_profile_id
+    if 'access_profile_id' not in data.model_fields_set and data.role == obj.role:
+        profile_id = access.access_profile_id
+    check_grant(db, user, school.id, data.role, profile_id)
     before = {'role': obj.role, 'active': access.active, 'access_profile_id': access.access_profile_id}
-    sensitive = data.role != obj.role or not data.active or data.access_profile_id != access.access_profile_id
+    next_routines = access.teacher_routines
+    if data.role != 'teacher':
+        next_routines = None
+    elif 'teacher_routines' in data.model_fields_set:
+        next_routines = data.teacher_routines
+    routines_changed = selected_teacher_routines(next_routines) != selected_teacher_routines(access.teacher_routines)
+    before['teacher_routines'] = access.teacher_routines
+    sensitive = data.role != obj.role or not data.active or profile_id != access.access_profile_id or routines_changed
     if sensitive:
         guard_removal(db, user, obj, access, school.id)
         if len(data.reason.strip()) < 3:
@@ -216,16 +227,17 @@ def edit_in_school(user_id, data, db, user, request, school):
         person = db.get(Person, data.person_id)
         if not person or person.school_id != school.id:
             fail(422, 'A pessoa vinculada não pertence à instituição ativa.')
-    if not data.active or data.role!=obj.role or data.access_profile_id!=access.access_profile_id:
+    if not data.active or data.role!=obj.role or profile_id!=access.access_profile_id:
         from .user_invitations import revoke_access
         revoke_access(db,obj.id,school.id)
     obj.name, obj.role, obj.person_id = data.name, data.role, data.person_id
     obj.version += 1
-    access.active, access.access_profile_id = data.active, data.access_profile_id
+    access.teacher_routines = next_routines
+    access.active, access.access_profile_id = data.active, profile_id
     access.version += 1
     # Autorizações são calculadas no servidor a cada chamada, sem revogar sessões
     # utilizadas pela mesma conta em outras instituições.
-    audit(db, request, user, 'users.access_updated', obj, school.id, details={'before': before, 'after': {'role': obj.role, 'active': access.active, 'access_profile_id': access.access_profile_id}, 'reason': data.reason.strip()})
+    audit(db, request, user, 'users.access_updated', obj, school.id, details={'before': before, 'after': {'role': obj.role, 'active': access.active, 'access_profile_id': access.access_profile_id, 'teacher_routines': access.teacher_routines}, 'reason': data.reason.strip()})
     db.flush()
     return scoped_output(db, obj, access)
 
@@ -345,7 +357,7 @@ def profile_catalog(db: DB, user: Actor, scope: Scope):
         parts = permission.split('.')
         group, label = PERMISSION_GROUPS.get(permission, (RESOURCE_LABELS.get(parts[0], parts[0]), ACTION_LABELS.get(parts[-1], 'Consultar') + (' turmas' if 'classes' in parts else ' alunos' if 'students' in parts else ' atribuições' if 'assignments' in parts else ' próprios dados' if 'self' in parts else '')))
         permissions.append({'id': permission, 'group': group, 'label': label})
-    return {'roles': roles, 'permissions': permissions, 'can_manage_admin': user.role == 'admin'}
+    return {'roles': roles, 'permissions': permissions, 'teacher_routines': TEACHER_ROUTINES, 'can_manage_admin': user.role == 'admin'}
 
 
 def profile_output(db, obj):

@@ -125,6 +125,7 @@ class SchoolAccess(Base):
     school_id: Mapped[str] = mapped_column(ForeignKey('schools.id'), primary_key=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
+    teacher_routines: Mapped[list[str] | None] = mapped_column(JSON(none_as_null=True))
     portability_granted: Mapped[bool] = mapped_column(Boolean,default=False,server_default='false')
     access_profile_id: Mapped[str | None] = mapped_column(ForeignKey('school_access_profiles.id'), index=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

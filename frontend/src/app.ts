@@ -59,20 +59,22 @@ namespace PigeUI {
       caption:'Com o menu recolhido, as guias continuam acessíveis no alto da tela.'},
     {id:'users',page:'users',title:'Criar o acesso ao portal',image:'usuarios',
       steps:['Cadastre a pessoa em Alunos, Professores ou Pais e responsáveis. Na ficha do aluno, use Responsáveis para registrar os vínculos legal e financeiro que se aplicam àquela pessoa.',
-        'Abra Gerenciar acesso ao portal na ficha da pessoa. Pela barra lateral, você também pode entrar em Usuários e acessos e escolher + Criar usuário. Confira o e-mail individual, o perfil e a Pessoa vinculada.',
-        'Selecione Salvar acesso. Na lista, confira a situação do convite e do envio. Em um primeiro acesso pendente, Reenviar convite substitui o link anterior. Para suspender um login, use Gerenciar acesso.'],
+        'Abra Gerenciar acesso ao portal na ficha ou entre em Usuários e acessos e escolha + Criar usuário. Confira o e-mail que receberá o convite, o Perfil base e a Pessoa vinculada.',
+        'Para o perfil Professor, marque as Rotinas do Portal do Professor que a pessoa poderá usar. Para liberar E-mail institucional, vincule também a caixa pessoal da escola. Para uma caixa nova, marque Criar uma caixa de e-mail institucional.',
+        'Selecione Salvar acesso e confira a situação do convite na lista. O professor define a senha no Portal do Professor. Alunos e responsáveis fazem isso no Portal do Aluno e Responsável.',
+        'Se o primeiro acesso estiver pendente, use Reenviar convite e oriente a pessoa a abrir a mensagem mais recente. Quem já ativou a conta pode escolher Esqueci minha senha no próprio portal. Você também pode usar Enviar recuperação de senha na lista de usuários.'],
       alt:'Formulário Criar usuário com perfil Professor e uma pessoa fictícia selecionada em Pessoa vinculada.',
       caption:'O perfil define as permissões. A pessoa vinculada identifica de quem são a ficha e as atribuições.'},
     {id:'diary',page:'diary',title:'Preparar a turma para o diário do professor',image:'diario',
       steps:['No Diário Escolar, abra Configuração. Cadastre o componente curricular e os períodos letivos da escola.',
         'Em Abrir diário ou vincular professor, escolha a turma e o componente. Selecione uma atribuição existente ou pesquise um professor cadastrado.',
-        'Use Abrir diário. Se o diário já existir, confira a pessoa selecionada e use Salvar vínculo docente. O professor pode então abrir a turma no portal e lançar as aulas e a frequência.'],
+        'Use Abrir diário. Se o diário já existir, confira a pessoa selecionada e use Salvar vínculo docente. Para o professor lançar as aulas e a frequência, confira também se a rotina Diário de classe está liberada em Usuários e acessos.'],
       alt:'Configuração do diário mostrando turma, componente e uma professora fictícia selecionada para a atribuição.',
       caption:'A mesma pessoa vinculada ao login do professor precisa estar atribuída a esta turma e componente.'},
     {id:'teacher',page:'diary',title:'Fazer chamada e planejar uma aula no Portal do Professor',image:'professor',
-      steps:['Entre no Portal do Professor e localize a turma e o componente em Minhas turmas. Se a turma não aparecer, peça à coordenação que confira a atribuição e o diário.',
+      steps:['Entre no Portal do Professor e localize a turma e o componente em Minhas turmas. Se a turma estiver ausente, peça à coordenação que confira a pessoa, a turma e o componente vinculados. Se faltar a rotina Diário de classe no menu, peça ao gestor que confira o acesso docente.',
         'Escolha Planejar aula para registrar o planejamento da turma. Use Abrir diário para selecionar a aula e conferir seu conteúdo.',
-        'Em Fazer chamada, selecione a aula e registre a frequência de cada aluno. Confira os lançamentos antes de salvar.'],
+        'Em Fazer chamada, selecione a aula e registre a frequência de cada aluno. Confira os lançamentos antes de salvar. Se sua turma aparece e falta um desses atalhos, peça ao gestor que confira as permissões de lançamento do seu perfil.'],
       alt:'Portal do Professor com a turma atribuída e os botões Abrir diário, Fazer chamada e Planejar aula para Ciências.',
       caption:'Os atalhos abrem a atividade na turma e no componente do professor.'},
     {id:'online',page:'online',title:'Abrir e acompanhar a matrícula online',image:'matricula-online',
@@ -470,7 +472,7 @@ namespace PigeUI {
   function landingPage():string{if(state.user?.role==='finance'&&pageAllowed('banking'))return 'banking';return ['dashboard','people','enrollments','diary','documents','reports','users','banking','help'].find(pageAllowed)||'help';}
   async function academicPrepared():Promise<void>{await safe(async()=>{await loadCatalogs();await loadPage();});}
   async function importedDataChanged():Promise<void>{await safe(async()=>{await loadCatalogs();state.success='Importação concluída. Cadastros atualizados para consulta.';});}
-  async function refreshAccess():Promise<void>{const sid=state.schoolId;const user=await PigeAPI.request<PigeAPI.User>('/auth/me');if(sid!==state.schoolId)return;state.user=user;
+  async function refreshAccess():Promise<void>{const sid=state.schoolId;const user=await PigeAPI.request<PigeAPI.User>('/auth/me');if(sid!==state.schoolId||openProfilePortal(user.role))return;state.user=user;
     if(shell&&!primaryDesk.context.pageAllowed(taskState.home)){
       resetDesks();primaryDesk.context.state.page=primaryDesk.context.landingPage();pinHome(primaryDesk.context.state.page);
       history.replaceState({},'','#/'+taskState.home);await primaryDesk.context.loadPage();
@@ -483,21 +485,33 @@ namespace PigeUI {
       }
     }else if(!pageAllowed(state.page)){state.page=landingPage();history.replaceState({},'','#/'+state.page);await loadPage();}
     void loadPersonalTools();}
+  function openProfilePortal(role: string):boolean {
+    const path=role==='teacher'?'/professor':role==='student'||role==='guardian'?'/family':'';
+    if(!path)return false;
+    window.location.replace(path);
+    return true;
+  }
   async function initialize():Promise<void> {
     await PigeInstitution.load();
     await safe(async()=>{
       const info=typeof PigeInstitution.state.configured==='boolean'?{configured:PigeInstitution.state.configured}:await PigeAPI.request<{configured:boolean;version?:string}>('/setup/status');state.configured=info.configured;if('version' in info)PigeInstitution.state.app_version=String(info.version);
-      if(info.configured){try{const session=await PigeAPI.refresh();state.user=session.user;state.ready=true;await loadShell();void loadMyPhoto();}catch{state.user=null;}}
+      if(info.configured){try{const session=await PigeAPI.refresh();if(openProfilePortal(session.user.role))return;state.user=session.user;state.ready=true;await loadShell();void loadMyPhoto();}catch{state.user=null;}}
     });
     state.ready=true;refreshSupport();
   }
   async function login():Promise<void> {
     state.loginBusy=true;state.error='';state.loginPasswordVisible=false;
-    try{const result=await PigeAPI.post<Record<string,unknown>>('/auth/login',state.login);state.login.password='';if(await PigeMFA.accept(result))return;await afterMFA(result);}
+    try{
+      const result=await PigeAPI.request<Record<string,unknown>>('/auth/login',{method:'POST',headers:{'X-Pige-Login-Surface':'management'},body:JSON.stringify(state.login)});
+      state.login.password='';
+      if(result.portal_path==='/professor'||result.portal_path==='/family'){window.location.replace(result.portal_path);return;}
+      if(!await PigeMFA.accept(result))await afterMFA(result);
+    }
     catch(error){notify(error);}finally{state.loginBusy=false;}
   }
   async function afterMFA(result:Record<string,unknown>):Promise<void>{
     const session=result as unknown as PigeAPI.SessionResponse;
+    if(openProfilePortal(session.user.role))return;
     PigeAPI.useSession(session);
     const origin=currentDesk?.context.state??state;
     if(origin.modal.kind==='mfa-manage' && state.user?.id===session.user.id && session.user.school_ids.includes(state.schoolId)){

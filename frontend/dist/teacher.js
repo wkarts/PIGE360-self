@@ -409,7 +409,7 @@ var PigeDiary;
         history.replaceState(history.state, '', url.pathname + url.search + url.hash);
     }
     PigeDiary.clearPilotContext = clearPilotContext;
-    PigeDiary.component = { props: ['schoolId', 'schoolName', 'catalogEnabled', 'permissions', 'teacherPortal', 'requestedDiary'], render: PigeRenders.diary, setup(props) {
+    PigeDiary.component = { props: ['schoolId', 'schoolName', 'catalogEnabled', 'permissions', 'teacherPortal', 'allowMaterials', 'requestedDiary'], render: PigeRenders.diary, setup(props) {
             const state = Vue.reactive({
                 busy: false, error: '', notice: '', tab: 'diaries', page: 'diaries', diaryFilter: '', lessonPeriod: '', dirty: false,
                 diaries: [], selected: null, academicYears: [], periods: [], components: [], groups: [], assignments: [], plans: [],
@@ -488,7 +488,8 @@ var PigeDiary;
             }
             const initial = new URLSearchParams(location.search);
             const pilot = props.catalogEnabled === true || pilotForSchool(props.schoolId);
-            const navigation = Vue.computed(() => groups.map(group => ({ ...group, pages: group.pages.filter(page => (!page.permission || can(page.permission)) && (page.id !== 'catalog' || props.catalogEnabled === true)) })).filter(group => group.pages.length));
+            const materialsAllowed = () => !props.teacherPortal || props.allowMaterials !== false;
+            const navigation = Vue.computed(() => groups.map(group => ({ ...group, pages: group.pages.filter(page => (page.id !== 'materials' || materialsAllowed()) && (!page.permission || can(page.permission)) && (page.id !== 'catalog' || props.catalogEnabled === true)) })).filter(group => group.pages.length));
             const activeGroup = Vue.computed(() => navigation.value.find(group => group.pages.some(page => page.id === state.page)));
             const filteredDiaries = Vue.computed(() => {
                 const term = state.diaryFilter.trim().toLocaleLowerCase('pt-BR');
@@ -540,23 +541,25 @@ var PigeDiary;
             }
             function show(...pages) { return !pilot || pages.includes(state.page); }
             const draftPages = new Set();
+            const tracksDrafts = pilot || props.teacherPortal === true;
+            const draftSection = () => pilot ? state.page : state.tab;
             async function save(action) {
                 if (state.busy)
                     return;
-                const page = state.page;
+                const page = draftSection();
                 await action();
                 if (!state.error && state.notice) {
                     draftPages.delete(page);
                     state.dirty = draftPages.size > 0;
                 }
             }
-            function beforeUnload(event) { if (state.dirty) {
+            function beforeUnload(event) { if (workspaceDirty.value) {
                 event.preventDefault();
                 event.returnValue = '';
             } }
             function markDraft(event) {
-                if (pilot && event.target.closest('form,.x-form,td')) {
-                    draftPages.add(state.page);
+                if (tracksDrafts && event.target.closest('form,.x-form,td')) {
+                    draftPages.add(draftSection());
                     state.dirty = true;
                 }
             }
@@ -623,7 +626,8 @@ var PigeDiary;
                     PigeAPI.request(base() + '/curriculum-plans?class_group_id=' + encodeURIComponent(d.class_group_id) + '&component_id=' + encodeURIComponent(d.component_id)),
                     PigeAPI.request(endpoint + '/assessments'), PigeAPI.request(endpoint + '/assessment-rules'),
                     PigeAPI.request(endpoint + '/occurrences'), PigeAPI.request(endpoint + '/opinions'),
-                    PigeAPI.request(endpoint + '/pedagogical-records'), PigeAPI.request(endpoint + '/communications'), PigeAPI.request(endpoint + '/materials')
+                    PigeAPI.request(endpoint + '/pedagogical-records'), PigeAPI.request(endpoint + '/communications'),
+                    materialsAllowed() ? PigeAPI.request(endpoint + '/materials') : Promise.resolve([])
                 ]);
                 const changed = state.selected?.id !== d.id;
                 state.reopenPeriod = '';
@@ -1108,7 +1112,7 @@ var PigeDiary;
             let handled;
             function openRequestedDiary() {
                 const request = props.requestedDiary;
-                if (!request || handled === request || state.busy)
+                if (!request || handled === request || state.busy || (request.tab === 'materials' && !materialsAllowed()))
                     return;
                 const diary = state.diaries.find(item => item.id === request.id);
                 if (!diary)
@@ -1127,7 +1131,7 @@ var PigeDiary;
             Vue.watch(() => props.requestedDiary, openRequestedDiary);
             Vue.watch(() => state.busy, openRequestedDiary);
             Vue.onMounted(async () => {
-                if (pilot)
+                if (tracksDrafts)
                     window.addEventListener('beforeunload', beforeUnload);
                 await load();
                 if (pilot && state.page === 'catalog')
@@ -1150,7 +1154,7 @@ var PigeDiary;
                         syncLink();
                 }
             });
-            Vue.onUnmounted(() => { if (pilot)
+            Vue.onUnmounted(() => { if (tracksDrafts)
                 window.removeEventListener('beforeunload', beforeUnload); });
             return { props, state, workspaceDirty, existingDiary, matchingAssignments, configureTeacher, syncDiaryAssignment, resetTeacherSearch, searchTeachers, compositionDirty, setComposition, restorableFields, restoreField, addField, moveField, saveFields, editComponent, resetComponent, removeComponent, editLesson, resetLesson, removeLesson, editPlan, resetPlan, storedFields, markPendingPresent, pendingAttendance, changedAttendance, closeAttendance, periodsFor, loadCalendar, saveCalendar, pilot, catalog, catalogImpact, suggest, decide, lessons, filterPeriod, save, navigation, activeGroup, filteredDiaries, pageLink, go, show, chooseAnother, markDraft, publishMaterial, printMaterial, can, str, date, label, load, selectDiary, loadCommunicationRecipients, communicationOccurrenceChanged, sendCommunication, createPeriod, createComponent, createDiary, createPlan, createLesson, openAttendance, saveAttendance, createAssessment, editAssessment, cancelAssessmentEdit, openAssessment, saveAssessmentResults, saveOpinion, createPedagogicalRecord, submitDiary, reviewDiary, closeDiary, resumeDiary, reopenDiary, report, selectRulePeriod, saveAssessmentRule, loadPeriodResults, consolidatePeriod, saveOccurrence };
         } };
@@ -1404,14 +1408,179 @@ var PigeSupport;
     }
     window.addEventListener('pagehide', () => { ++generation; release(); setChecking(false); });
 })(PigeSupport || (PigeSupport = {}));
+/** Caixa pessoal já vinculada à conta escolar. O SOGo autentica pelo proxy da própria origem. */
+var PigePortalMail;
+(function (PigePortalMail) {
+    const base = (school) => '/schools/' + encodeURIComponent(school) + '/email';
+    function use(request) {
+        const state = Vue.reactive({ available: false });
+        let version = 0;
+        function clear() { version++; state.available = false; }
+        async function load(school) {
+            clear();
+            const current = version;
+            if (!school)
+                return;
+            try {
+                const account = await request(base(school) + '/account');
+                if (current === version)
+                    state.available = account.available === true;
+            }
+            catch { /* A indisponibilidade do e-mail não interrompe a rotina escolar. */ }
+        }
+        return { state, clear, load, request };
+    }
+    PigePortalMail.use = use;
+    PigePortalMail.component = { props: ['schoolId', 'request'], render: PigeRenders.portalMail, setup(props) {
+            const m = Vue.reactive({ busy: false, opening: false, error: '', password: '', address: '', needsPassword: false });
+            const frame = Vue.reactive({ src: 'about:blank' });
+            let active = true, timer;
+            async function open(connect = false) {
+                if (m.busy || m.opening)
+                    return;
+                m.busy = true;
+                m.error = '';
+                frame.src = 'about:blank';
+                const password = m.password;
+                m.password = '';
+                try {
+                    const path = base(props.schoolId);
+                    let account = await props.request(path + '/account');
+                    if (!active)
+                        return;
+                    if (!account.available)
+                        throw new Error('Sua caixa institucional está indisponível. Consulte a secretaria.');
+                    m.address = account.address;
+                    if (connect) {
+                        account = await props.request(path + '/connection/linked', { method: 'POST', body: JSON.stringify({ password }) });
+                    }
+                    else if (account.can_auto_connect) {
+                        account = await props.request(path + '/connection/automatic', { method: 'POST' });
+                    }
+                    if (!active)
+                        return;
+                    m.needsPassword = !account.connected && !account.can_auto_connect;
+                    if (!account.connected) {
+                        m.error = account.connection_error || (!m.needsPassword ? 'A conexão ainda está sendo preparada. Tente novamente em instantes.' : '');
+                        return;
+                    }
+                    const result = await props.request(path + '/webmail-ticket', { method: 'POST' });
+                    if (!active)
+                        return;
+                    const action = '/webmail/' + encodeURIComponent(props.schoolId) + '/launch';
+                    if (result.action !== action || !result.ticket)
+                        throw new Error('Não foi possível iniciar a sessão de e-mail.');
+                    // Navegação de formulários pode enviar Origin:null em páginas com no-referrer.
+                    // O POST de mesma origem recebe o cookie HttpOnly antes de navegar o quadro.
+                    const launch = await fetch(action, {
+                        method: 'POST', body: new URLSearchParams({ ticket: result.ticket }), credentials: 'same-origin',
+                        mode: 'same-origin', redirect: 'manual', referrerPolicy: 'same-origin', cache: 'no-store'
+                    });
+                    if (!active)
+                        return;
+                    if (launch.type !== 'opaqueredirect')
+                        throw new Error('O webmail não aceitou o convite de sessão. Tente abrir a caixa novamente.');
+                    frame.src = action.replace(/launch$/, 'SOGo/');
+                    m.opening = true;
+                    timer = window.setTimeout(() => { if (active && m.opening) {
+                        m.opening = false;
+                        m.error = 'O webmail demorou para responder. Tente abrir a caixa novamente.';
+                    } }, 30000);
+                }
+                catch (error) {
+                    if (active) {
+                        m.opening = false;
+                        m.error = error instanceof Error ? error.message : 'Não foi possível abrir sua caixa institucional.';
+                    }
+                }
+                finally {
+                    if (active)
+                        m.busy = false;
+                }
+            }
+            function loaded(event) {
+                if (!active)
+                    return;
+                const page = event.target.contentDocument;
+                if (!page || page.URL === 'about:blank')
+                    return;
+                window.clearTimeout(timer);
+                m.opening = false;
+                if (page.contentType === 'application/json' || page.contentType === 'text/plain') {
+                    m.error = 'O webmail não pôde carregar. Tente abrir a caixa novamente.';
+                    if (page.contentType === 'application/json') {
+                        try {
+                            const { detail } = JSON.parse(page.body.innerText);
+                            if (typeof detail === 'string')
+                                m.error = detail;
+                        }
+                        catch { /* resposta sem detalhe */ }
+                    }
+                }
+            }
+            Vue.onMounted(() => { void open(); });
+            Vue.onUnmounted(() => { active = false; window.clearTimeout(timer); m.password = ''; });
+            return { m, frame, open, loaded };
+        } };
+})(PigePortalMail || (PigePortalMail = {}));
+/** Interação da faixa de guias compartilhada pelos portais da escola. */
+var PigePortalTabs;
+(function (PigePortalTabs) {
+    function reveal() {
+        void Vue.nextTick(() => {
+            const tab = window.document.querySelector('.work-tabs-list [role="tab"][aria-selected="true"]');
+            const rail = tab?.closest('.work-tabs-list');
+            if (!tab || !rail)
+                return;
+            const selected = tab.getBoundingClientRect(), viewport = rail.getBoundingClientRect();
+            if (selected.left < viewport.left)
+                rail.scrollLeft += selected.left - viewport.left;
+            else if (selected.right > viewport.right)
+                rail.scrollLeft += selected.right - viewport.right;
+        });
+    }
+    PigePortalTabs.reveal = reveal;
+    function keyTarget(event, tabs, section) {
+        if (event.target.getAttribute('role') !== 'tab')
+            return;
+        const i = tabs.indexOf(section), n = tabs.length;
+        const index = { ArrowRight: (i + 1) % n, ArrowLeft: (i + n - 1) % n, Home: 0, End: n - 1 }[event.key];
+        if (index === undefined)
+            return;
+        event.preventDefault();
+        return tabs[index];
+    }
+    PigePortalTabs.keyTarget = keyTarget;
+})(PigePortalTabs || (PigePortalTabs = {}));
 var PigeTeacher;
 (function (PigeTeacher) {
+    const pages = [
+        { id: 'overview', label: 'Visão geral', icon: 'dashboard' },
+        { id: 'agenda', label: 'Minha programação', icon: 'clock' },
+        { id: 'diary', label: 'Diário de classe', icon: 'academic' },
+        { id: 'materials', label: 'Atividades e trabalhos', icon: 'documents' },
+        { id: 'news', label: 'Avisos e publicações', icon: 'bell' },
+        { id: 'webmail', label: 'E-mail', icon: 'email' },
+    ];
+    const mail = PigePortalMail.use(PigeAPI.request);
+    const sidebarKey = 'pige.teacher.sidebar.collapsed';
+    function savedSidebar() {
+        try {
+            return localStorage.getItem(sidebarKey) === 'true';
+        }
+        catch {
+            return false;
+        }
+    }
     const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bahia' }).format(new Date());
     const s = Vue.reactive({ ready: false, busy: false, error: '', email: '', password: '', passwordVisible: false,
         user: null, schools: [], schoolId: '',
-        requestedDiary: undefined, section: 'overview', menuOpen: false,
+        requestedDiary: undefined, section: 'overview', tabs: ['overview'], sidebarCollapsed: savedSidebar(), menuOpen: false,
         news: [], newsPage: 1, newsTotal: 0, week: today(), agenda: null });
+    let loadedSchoolId = '';
     function clear() {
+        loadedSchoolId = '';
+        mail.clear();
         PigeAPI.clear();
         PigeMFA.clear();
         s.user = null;
@@ -1420,6 +1589,8 @@ var PigeTeacher;
         s.password = '';
         s.passwordVisible = false;
         s.section = 'overview';
+        s.tabs = ['overview'];
+        s.requestedDiary = undefined;
         s.menuOpen = false;
         s.news = [];
         s.agenda = null;
@@ -1443,33 +1614,45 @@ var PigeTeacher;
         }
     }
     async function agenda() {
-        if (!s.schoolId || !s.week)
+        const id = s.schoolId, week = s.week;
+        if (!id || !week || (!available('agenda') && !available('diary')))
             return;
-        const data = await PigeAPI.request('/teacher/schools/' + s.schoolId + '/programacao?week=' + encodeURIComponent(s.week));
-        s.agenda = data;
+        const resource = available('agenda') ? 'programacao' : 'atribuicoes';
+        const data = await PigeAPI.request('/teacher/schools/' + id + '/' + resource + '?week=' + encodeURIComponent(week));
+        if (id === s.schoolId && week === s.week)
+            s.agenda = data;
     }
     async function school(id) {
         if (s.schoolId && s.schoolId !== id)
             PigeDiary.clearPilotContext(s.schoolId);
+        loadedSchoolId = '';
+        mail.clear();
         s.agenda = null;
         s.news = [];
         s.newsPage = 1;
+        s.newsTotal = 0;
         s.section = 'overview';
+        s.tabs = ['overview'];
         s.requestedDiary = undefined;
         s.schoolId = id;
         PigeAPI.setActiveSchool(id);
+        if (s.user)
+            s.user = { ...s.user, permissions: [], teacher_routines: [] };
         if (!id)
             return;
         s.user = await PigeAPI.request('/auth/me');
-        await agenda();
+        loadedSchoolId = id;
+        await Promise.all([agenda(), s.user.teacher_routines?.includes('mail') ? mail.load(id) : Promise.resolve()]);
     }
     async function workspace() {
         s.schools = await PigeAPI.request('/teacher/schools');
         const link = new URLSearchParams(location.search);
         const linked = location.hash === '#diario' && s.schools.find(item => item.id === link.get('diarioPiloto'));
         await school((linked && linked.id) || s.schools.find(item => item.id === s.schoolId)?.id || s.schools[0]?.id || '');
-        if (linked)
+        if (linked && available('diary') && !unavailable('diary')) {
+            s.tabs.push('diary');
             s.section = 'diary';
+        }
     }
     async function enter(session) {
         if (session.user.role !== 'teacher') {
@@ -1491,7 +1674,8 @@ var PigeTeacher;
                 await enter(data);
         });
     }
-    async function logout() { await run(async () => { await PigeAPI.post('/auth/logout', {}); clear(); }); }
+    async function logout() { if (canDiscardDiary())
+        await run(async () => { await PigeAPI.post('/auth/logout', {}); clear(); }); }
     async function start() {
         await PigeInstitution.load();
         try {
@@ -1506,9 +1690,18 @@ var PigeTeacher;
             s.ready = true;
         }
     }
-    function selectSchool(event) { void run(() => school(event.target.value)); }
+    function selectSchool(event) {
+        const select = event.target;
+        if (!canDiscardDiary()) {
+            select.value = s.schoolId;
+            return;
+        }
+        void run(() => school(select.value));
+    }
     async function publications(page = 1) {
         const id = s.schoolId;
+        if (!available('news'))
+            return;
         const feed = await PigeAPI.request('/schools/' + id + '/community-feed?kind=news&page_size=10&page=' + page);
         if (id === s.schoolId) {
             s.news = feed.items;
@@ -1516,17 +1709,123 @@ var PigeTeacher;
             s.newsPage = page;
         }
     }
-    function navigate(section) {
+    function can(permission) { return s.user?.permissions.includes(permission) === true; }
+    function available(section) {
+        if (section === 'overview' || section === 'help')
+            return true;
+        if (!s.schoolId || !s.user)
+            return false;
+        const routines = s.user.teacher_routines;
+        if (section === 'webmail')
+            return Boolean(routines?.includes('mail') && mail.state.available);
+        if (routines)
+            return routines.includes(section);
+        return section === 'news' || (['agenda', 'diary', 'materials'].includes(section) && can('diary.read'));
+    }
+    function unavailable(section) {
+        return ['diary', 'materials'].includes(section) && !s.agenda?.diaries.length;
+    }
+    function navigation() { return pages.filter(item => available(item.id)); }
+    function title(section) {
+        return section === 'help' ? 'Guia de uso' : pages.find(item => item.id === section)?.label || '';
+    }
+    function initials(name) {
+        const words = name.trim().split(/\s+/);
+        return ((words[0]?.[0] || '') + (words.length > 1 ? words[words.length - 1][0] : '')).toLocaleUpperCase('pt-BR');
+    }
+    function metrics() {
+        const data = s.agenda;
+        if (!data)
+            return [];
+        const result = [];
+        if (available('diary')) {
+            result.push({ label: 'Turmas', value: new Set(data.assignments.map(a => a.class_group_id)).size, icon: 'students', caption: 'Com atribuição docente' }, { label: 'Diários vinculados', value: data.diaries.length, icon: 'academic', caption: 'Nas suas disciplinas' });
+        }
+        if (available('agenda')) {
+            result.push({ label: 'Aulas registradas', value: data.events.filter(e => e.kind === 'Aula registrada').length, icon: 'clock', caption: 'Na semana selecionada' }, { label: 'Avaliações', value: data.events.filter(e => e.kind === 'Avaliação').length, icon: 'enrollment', caption: 'Na semana selecionada' });
+        }
+        return result;
+    }
+    function focusTab() {
+        Vue.nextTick(() => document.getElementById('teacher-tab-' + s.section)?.focus());
+    }
+    function navigate(section, focusHeading = true) {
+        if (s.busy || !available(section) || unavailable(section))
+            return;
         if (section !== 'diary' && location.hash === '#diario')
             history.replaceState(history.state, '', location.pathname + location.search);
+        if (!s.tabs.includes(section))
+            s.tabs.push(section);
         s.menuOpen = false;
         s.section = section;
-        void Vue.nextTick(() => { if (!s.menuOpen && s.section === section)
-            document.getElementById('teacher-title')?.focus(); });
+        PigePortalTabs.reveal();
+        if (focusHeading)
+            void Vue.nextTick(() => document.getElementById('teacher-title')?.focus());
         if (section === 'news')
             void run(() => publications());
         if (section === 'agenda')
             void run(agenda);
+    }
+    function canDiscardDiary() {
+        if (document.querySelector('#teacher-diary [aria-busy="true"]'))
+            return false;
+        return !document.querySelector('#teacher-diary [data-workspace-dirty="true"]') ||
+            window.confirm('Descartar as alterações do diário que ainda não foram salvas?');
+    }
+    function openDiary(id, tab) {
+        if (s.busy || !available('diary') || !s.agenda?.diaries.some(d => d.id === id))
+            return;
+        if ((tab === 'materials' && !available('materials')) || !canDiscardDiary())
+            return;
+        s.requestedDiary = { id, tab };
+        navigate('diary', false);
+    }
+    function closeTabs(section) {
+        if (s.busy || section === 'overview' || s.tabs.length < 2)
+            return;
+        const closingDiary = s.tabs.includes('diary') && (!section || section === 'diary');
+        if (closingDiary && document.querySelector('#teacher-diary [aria-busy="true"]'))
+            return;
+        const dirty = closingDiary && document.querySelector('#teacher-diary [data-workspace-dirty="true"]');
+        const closingMail = s.tabs.includes('webmail') && (!section || section === 'webmail');
+        const message = section ? 'Fechar a guia ' + title(section) + '?' : 'Fechar todas as outras guias e manter a Visão geral aberta?';
+        const diaryWarning = dirty ? ' As alterações do diário que ainda não foram salvas serão descartadas.' : '';
+        const mailWarning = closingMail ? ' Confira se as mensagens em edição foram salvas em Rascunhos.' : '';
+        if ((!section || dirty || closingMail) && !window.confirm(message + diaryWarning + mailWarning))
+            return;
+        const previous = s.section;
+        s.tabs = section ? s.tabs.filter(id => id !== section) : ['overview'];
+        if (closingDiary)
+            s.requestedDiary = undefined;
+        if (!s.tabs.includes(previous))
+            navigate('overview', false);
+        focusTab();
+    }
+    function tabKeys(event) {
+        const key = PigePortalTabs.keyTarget(event, s.tabs, s.section);
+        if (key) {
+            navigate(key, false);
+            focusTab();
+        }
+    }
+    function toggleSidebar() {
+        s.sidebarCollapsed = !s.sidebarCollapsed;
+        PigePortalTabs.reveal();
+        try {
+            localStorage.setItem(sidebarKey, String(s.sidebarCollapsed));
+        }
+        catch { /* A escolha continua válida nesta janela. */ }
+    }
+    async function retry() {
+        if (!s.schools.length || !s.schoolId || loadedSchoolId !== s.schoolId) {
+            await workspace();
+            return;
+        }
+        if (s.section === 'news') {
+            await publications(s.newsPage);
+            return;
+        }
+        await agenda();
     }
     function toggleMenu(open) {
         s.menuOpen = open;
@@ -1540,7 +1839,7 @@ var PigeTeacher;
             toggleMenu(false);
         }
         if (e.key === 'Tab') {
-            const items = document.querySelectorAll('#teacher-navigation button:not([disabled])');
+            const items = document.querySelectorAll('#teacher-navigation button:not([disabled]), #teacher-navigation a[href]');
             const first = items[0], last = items[items.length - 1];
             if (e.shiftKey && document.activeElement === first) {
                 e.preventDefault();
@@ -1558,7 +1857,7 @@ var PigeTeacher;
         const assignment = s.agenda?.assignments.find(item => item.id === diary?.teacher_assignment_id);
         return [assignment?.class_name, diary?.component].filter(Boolean).join(' · ');
     }
-    Vue.createApp({ render: PigeRenders.teacherPortal, components: { 'school-diary': PigeDiary.component }, setup() {
+    Vue.createApp({ render: PigeRenders.teacherPortal, components: { 'school-diary': PigeDiary.component, 'portal-mail': PigePortalMail.component }, setup() {
             Vue.watch(() => [s.ready, s.user?.id, s.user?.role, s.schoolId].join('|'), () => {
                 if (s.user && s.schoolId)
                     void PigeSupport.load(s.schoolId, 'teacher_portal', s.user.id);
@@ -1572,9 +1871,9 @@ var PigeTeacher;
                 PigeMFA.init(PigeAPI.request, data => enter(data), logout);
                 window.addEventListener('pige-session-expired', () => { clear(); s.error = 'Sessão encerrada. Entre novamente.'; });
                 window.addEventListener('resize', () => { if (innerWidth > 800)
-                    s.menuOpen = false; });
+                    s.menuOpen = false; PigePortalTabs.reveal(); });
                 void start();
             });
-            return { s, pilotForSchool: PigeDiary.pilotForSchool, navigate, toggleMenu, menuKey, publications, identity: PigeInstitution.state, mfa: PigeMFA, login, logout, run, agenda, workspace, date, group, selectSchool };
+            return { s, mail, available, unavailable, can, navigation, title, initials, metrics, openDiary, closeTabs, tabKeys, toggleSidebar, retry, pilotForSchool: PigeDiary.pilotForSchool, navigate, toggleMenu, menuKey, publications, identity: PigeInstitution.state, mfa: PigeMFA, login, logout, run, agenda, workspace, date, group, selectSchool };
         } }).mount('#teacher');
 })(PigeTeacher || (PigeTeacher = {}));

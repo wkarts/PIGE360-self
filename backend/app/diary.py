@@ -18,6 +18,7 @@ from . import diary_schemas as s, models as m
 from .common import audit, output
 from .db import now
 from .portal_access import PORTAL_DIARY_ACCESS_CONSENT_VERSION, verified_guardian_contact_matches
+from .access_security import require_teacher_routine
 from .security import Actor, DB, check_version, current_user, fail, lock_school, require
 from .lifecycle_models import require_available
 
@@ -38,6 +39,7 @@ def diary_school_scope(school_id: str, db: DB, user: Actor):
             fail(403, "Acesso não autorizado a esta escola.")
         return school
     if user.role == "teacher":
+        require_teacher_routine(db, user, school_id, "diary")
         ownership = [m.TeacherAssignment.teacher_user_id == user.id]
         if user.person_id:
             ownership.append(m.TeacherAssignment.teacher_person_id == user.person_id)
@@ -1893,6 +1895,7 @@ def edit_diary_occurrence(diary_id: str,occurrence_id: str,data: s.DiaryOccurren
 
 @router.get('/diaries/{diary_id}/materials')
 def class_material_list(diary_id: str, db: DB, user: Actor, school: DiaryScope):
+    require_teacher_routine(db, user, school.id, 'materials')
     diary = _scoped(db, m.SchoolDiary, diary_id, school.id)
     _require_diary(db, user, diary, 'diary.read')
     return class_materials.listed(db, select(m.ClassMaterial).where(m.ClassMaterial.diary_id == diary.id))
@@ -1902,6 +1905,7 @@ def class_material_list(diary_id: str, db: DB, user: Actor, school: DiaryScope):
 def publish_material(diary_id: str, data: class_materials.MaterialInput, db: DB, user: Actor,
                      school: DiaryScope, request: Request):
     lock_school(db, school.id)
+    require_teacher_routine(db, user, school.id, 'materials')
     diary = _scoped(db, m.SchoolDiary, diary_id, school.id)
     _require_diary(db, user, diary, 'diary.write')
     values = data.model_dump(exclude={'client_key'})
@@ -1929,6 +1933,7 @@ def publish_material(diary_id: str, data: class_materials.MaterialInput, db: DB,
 
 @router.get('/diaries/{diary_id}/materials/{material_id}/print.pdf')
 def print_class_material(diary_id: str, material_id: str, db: DB, user: Actor, school: DiaryScope, request: Request):
+    require_teacher_routine(db, user, school.id, 'materials')
     diary = _scoped(db, m.SchoolDiary, diary_id, school.id)
     _require_diary(db, user, diary, 'diary.read')
     material = _scoped(db, m.ClassMaterial, material_id, school.id)
