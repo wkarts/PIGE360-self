@@ -786,19 +786,18 @@ try:
         absence_tab = tabs.get_by_role('tab', name='Justificativas de ausência', exact=True)
         overview_tab = tabs.get_by_role('tab', name='Visão geral', exact=True)
         overview_tab.click()
-        prompts = []
-        def cancel_close(dialog):
-            prompts.append(dialog.message)
-            dialog.dismiss()
-        familyPage.once('dialog', cancel_close)
+        confirmation = familyPage.get_by_role('dialog', name='Fechar as outras guias?')
         overview_tab.dblclick()
+        expect(confirmation).to_contain_text('justificativa de ausência')
+        expect(confirmation.get_by_role('button', name='Voltar')).to_be_focused()
+        confirmation.get_by_role('button', name='Voltar').click()
         expect(absence_tab).to_be_visible()
-        assert prompts and re.search(r'rascunho|alteraç|não salv', prompts[-1], re.I), prompts
+        expect(overview_tab).to_be_focused()
         absence_tab.click()
         expect(familyPage.get_by_label('Motivo',exact=True)).to_have_value('Justificativa fictícia de teste')
         overview_tab.click()
-        familyPage.once('dialog',lambda dialog:dialog.accept())
         familyPage.get_by_role('button',name='Fechar outras guias',exact=True).click()
+        confirmation.get_by_role('button',name='Fechar outras guias',exact=True).click()
         expect(tabs.get_by_role('tab')).to_have_count(1)
         family_nav('Justificativas de ausência')
         expect(familyPage.get_by_label('Motivo',exact=True)).to_have_value('')
@@ -835,13 +834,11 @@ try:
         manager_diary = manager.locator('.diary-workspace')
         manager_diary.get_by_role('button', name=re.compile(r'^Mover .+ para baixo')).first.click()
         expect(manager_diary).to_have_attribute('data-workspace-dirty', 'true')
-        warnings = []
-        def keep_draft(dialog):
-            warnings.append(dialog.message)
-            dialog.dismiss()
-        manager.once('dialog', keep_draft)
         manager.get_by_role('button', name='Fechar outras guias', exact=True).click()
-        assert len(warnings) == 1 and 'Diário Escolar' in warnings[0] and 'não salvas' in warnings[0], warnings
+        manager_confirmation = manager.get_by_role('dialog', name='Fechar as outras guias?')
+        expect(manager_confirmation).to_contain_text('Diário Escolar')
+        expect(manager_confirmation).to_contain_text('ainda não salvos')
+        manager_confirmation.get_by_role('button', name='Voltar').click()
         expect(manager_diary).to_be_visible()
         manager_diary.get_by_role('button', name='Descartar alterações na composição').click()
         expect(manager_diary).to_have_attribute('data-workspace-dirty', 'false')

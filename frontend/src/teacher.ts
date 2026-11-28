@@ -21,8 +21,11 @@ namespace PigeTeacher {
     user:null as PigeAPI.User|null,schools:[] as {id:string;name:string}[],schoolId:'',
     requestedDiary:undefined as {id:string;tab?:string}|undefined,section:'overview',tabs:['overview'],sidebarCollapsed:savedSidebar(),menuOpen:false,
     news:[] as {id:string;title:string;content:string;summary:string}[],newsPage:1,newsTotal:0,week:today(),agenda:null as Agenda|null});
+  const rail=PigeSidebarRail.use(()=>s.sidebarCollapsed);
   let loadedSchoolId='';
   function clear(){
+    rail.close();
+    PigePortalTabs.cancelClose();
     loadedSchoolId='';mail.clear();PigeAPI.clear();PigeMFA.clear();s.user=null;s.schools=[];s.schoolId='';s.password='';s.passwordVisible=false;
     s.section='overview';s.tabs=['overview'];s.requestedDiary=undefined;s.menuOpen=false;s.news=[];s.agenda=null;s.week=today();s.error='';
   }
@@ -38,6 +41,7 @@ namespace PigeTeacher {
     if(id===s.schoolId && week===s.week)s.agenda=data;
   }
   async function school(id:string){
+    rail.close();
     if(s.schoolId && s.schoolId!==id)PigeDiary.clearPilotContext(s.schoolId);
     loadedSchoolId='';mail.clear();s.agenda=null;s.news=[];s.newsPage=1;s.newsTotal=0;
     s.section='overview';s.tabs=['overview'];s.requestedDiary=undefined;s.schoolId=id;PigeAPI.setActiveSchool(id);
@@ -97,6 +101,13 @@ namespace PigeTeacher {
     return ['diary','materials'].includes(section) && !s.agenda?.diaries.length;
   }
   function navigation(){return pages.filter(item=>available(item.id));}
+  function sidebarGroups(){
+    const links=navigation();
+    return [
+      {id:'teacher-routine-menu',label:'Rotina docente',icon:'academic',items:links.filter(item=>['agenda','diary','materials'].includes(item.id))},
+      {id:'teacher-services-menu',label:'Comunicação',icon:'bell',items:links.filter(item=>['news','support','webmail'].includes(item.id))},
+    ].filter(group=>group.items.length);
+  }
   function title(section:string):string {
     return section==='help'?'Guia de uso':pages.find(item=>item.id===section)?.label || '';
   }
@@ -123,6 +134,7 @@ namespace PigeTeacher {
   }
   function navigate(section:string,focusHeading=true){
     if(s.busy || !available(section) || unavailable(section))return;
+    rail.close();
     if(section!=='diary' && location.hash==='#diario')history.replaceState(history.state,'',location.pathname+location.search);
     if(!s.tabs.includes(section))s.tabs.push(section);
     s.menuOpen=false;s.section=section;PigePortalTabs.reveal();
@@ -147,7 +159,7 @@ namespace PigeTeacher {
     s.requestedDiary={id,tab};
     navigate('diary',false);
   }
-  function closeTabs(section?:string){
+  async function closeTabs(section?:string){
     if(s.busy || section==='overview' || s.tabs.length<2)return;
     const closingDiary=s.tabs.includes('diary') && (!section || section==='diary');
     if(closingDiary && document.querySelector('#teacher-diary [aria-busy="true"]'))return;
@@ -156,10 +168,20 @@ namespace PigeTeacher {
     if(closingSupport && supportBusy())return;
     const supportWarning=closingSupport&&supportDraft()?' A mensagem de atendimento ainda não enviada será descartada.':'';
     const closingMail=s.tabs.includes('webmail') && (!section || section==='webmail');
-    const message=section?'Fechar a guia '+title(section)+'?':'Fechar todas as outras guias e manter a Visão geral aberta?';
-    const diaryWarning=dirty?' As alterações do diário que ainda não foram salvas serão descartadas.':'';
-    const mailWarning=closingMail?' Confira se as mensagens em edição foram salvas em Rascunhos.':'';
-    if((!section || dirty || closingMail || supportWarning) && !window.confirm(message+diaryWarning+mailWarning+supportWarning))return;
+    if(section){
+      const diaryWarning=dirty?' As alterações do diário que ainda não foram salvas serão descartadas.':'';
+      const mailWarning=closingMail?' Confira se as mensagens em edição foram salvas em Rascunhos.':'';
+      if((dirty || closingMail || supportWarning) && !window.confirm('Fechar a guia '+title(section)+'?'+diaryWarning+mailWarning+supportWarning))return;
+    }else{
+      const school=s.schoolId,user=s.user;
+      const pending=[];
+      if(dirty)pending.push('alterações no diário de classe');
+      if(supportWarning)pending.push('mensagem de atendimento');
+      if(closingMail)pending.push('mensagens em edição no E-mail');
+      if(!await PigePortalTabs.confirmClose(title('overview'),pending))return;
+      if(school!==s.schoolId || user!==s.user || s.busy || (closingSupport&&supportBusy()) ||
+          (closingDiary&&document.querySelector('#teacher-diary [aria-busy="true"]')))return;
+    }
     const previous=s.section;
     s.tabs=section?s.tabs.filter(id=>id!==section):['overview'];
     if(closingDiary)s.requestedDiary=undefined;
@@ -171,6 +193,7 @@ namespace PigeTeacher {
     if(key){navigate(key,false);focusTab();}
   }
   function toggleSidebar(){
+    rail.close();
     s.sidebarCollapsed=!s.sidebarCollapsed;PigePortalTabs.reveal();
     try{localStorage.setItem(sidebarKey,String(s.sidebarCollapsed));}catch{/* A escolha continua válida nesta janela. */}
   }
@@ -200,11 +223,13 @@ namespace PigeTeacher {
     return [assignment?.class_name,diary?.component].filter(Boolean).join(' · ');
   }
   Vue.createApp({render:PigeRenders.teacherPortal,components:{'portal-protocols':PigePortalProtocols.component,'school-diary':PigeDiary.component,'portal-mail':PigePortalMail.component},setup(){
+    Vue.watch(()=>[s.schoolId,s.user?.id,s.user?.permissions.join(','),s.user?.teacher_routines?.join(','),mail.state.available].join('|'),()=>rail.close());
     Vue.watch(()=>[s.ready,s.user?.id,s.user?.role,s.schoolId].join('|'),()=>{
       if(s.user&&s.schoolId)void PigeSupport.load(s.schoolId,'teacher_portal',s.user.id);
       else if(s.ready&&!s.user)void PigeSupport.load(undefined,'login');
       else PigeSupport.dispose();
     });
+    Vue.onMounted(rail.mount);Vue.onUnmounted(rail.dispose);
     Vue.onUnmounted(PigeSupport.dispose);
 
     Vue.onMounted(()=>{
@@ -213,6 +238,6 @@ namespace PigeTeacher {
       window.addEventListener('resize',()=>{if(innerWidth>800)s.menuOpen=false;PigePortalTabs.reveal();});
       void start();
     });
-    return {s,mail,download:PigeAPI.download,available,unavailable,can,navigation,title,initials,metrics,openDiary,closeTabs,tabKeys,toggleSidebar,retry,pilotForSchool:PigeDiary.pilotForSchool,navigate,toggleMenu,menuKey,publications,identity:PigeInstitution.state,mfa:PigeMFA,login,logout,run,agenda,workspace,date,group,selectSchool};
+    return {s,rail,sidebarGroups,mail,download:PigeAPI.download,available,unavailable,can,navigation,title,initials,metrics,openDiary,closeTabs,tabKeys,toggleSidebar,retry,pilotForSchool:PigeDiary.pilotForSchool,navigate,toggleMenu,menuKey,publications,identity:PigeInstitution.state,mfa:PigeMFA,login,logout,run,agenda,workspace,date,group,selectSchool};
   }}).mount('#teacher');
 }

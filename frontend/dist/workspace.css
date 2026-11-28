@@ -1,6 +1,5 @@
 /* Estrutura da aplicação escolar, com identidade e navegação independentes. */
 .workspace {
-  --sidebar-width: 260px;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   height: 100vh;
@@ -58,6 +57,8 @@
   color: var(--muted);
 }
 .sidebar nav { gap: 4px; margin-bottom: 24px; }
+.sidebar-scroll > nav:not(:has(a,button)),
+.sidebar-label:has(+ nav:not(:has(a,button))) { display: none; }
 .sidebar nav a, .sidebar .nav-group-toggle {
   min-height: 44px;
   padding: 11px 12px;
@@ -175,8 +176,7 @@
 .main-content:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; }
 .skip-content { position: fixed; top: -100px; left: 12px; z-index: 120; padding: 12px 18px; border: 2px solid var(--primary); background: var(--surface, #fff); border-radius: 8px; }
 .skip-content:focus { top: 12px; }
-@media (max-width: 1150px) and (min-width: 801px) {
-  .workspace { --sidebar-width: 240px; }
+@media (800px < width <= 1150px) {
   .workspace .main-content { padding: 24px; }
   .workspace .topbar { padding-inline: 24px; }
 }
@@ -384,7 +384,6 @@ html[data-dialog-short-viewport] .modal .modal-workspace { height: auto; max-hei
 html[data-dialog-short-viewport] .modal .modal-footer { padding-block: 8px; min-height: 0; }
 
 /* Preferência compartilhada pelas guias do gestor. No celular o menu é um painel sobre o conteúdo. */
-.topbar .sidebar-toggle { display: none; }
 .work-tabs .work-close-others {
   display: grid;
   place-items: center;
@@ -394,28 +393,33 @@ html[data-dialog-short-viewport] .modal .modal-footer { padding-block: 8px; min-
 }
 .work-tabs .work-close-others:hover { color: var(--ink); background: var(--background); }
 .work-close-others .ui-icon { width: 17px; height: 17px; }
-@media (min-width: 801px) {
-  .workspace .topbar { padding-inline-start: 12px; }
-  .topbar .sidebar-toggle {
-    display: grid;
-    place-items: center;
-    border: 1px solid var(--border);
-    border-radius: 50%;
-    color: var(--primary);
-    background: var(--surface, #fff);
-  }
-  .sidebar-toggle[aria-expanded="false"] .ui-icon { transform: rotate(180deg); }
-  .workspace.sidebar-collapsed { --sidebar-width: 68px; }
-  .sidebar-collapsed .sidebar { grid-template-rows: auto minmax(0, 1fr); }
-  .sidebar-collapsed .sidebar-brand { padding: 12px 7px; }
-  .sidebar-collapsed .sidebar-logo { height: 48px; }
+@media (width > 800px) {
+  .workspace .topbar { min-height: var(--sidebar-header-height); padding-inline-start: 32px; }
+  .workspace .sidebar-brand { padding: 0 20px; }
+  .workspace .sidebar .brand-line { justify-content: flex-start; }
+  .workspace .sidebar-scroll { padding: 14px 10px; }
+  .workspace .sidebar nav { gap: 3px; }
+  .workspace .sidebar :is(nav > a, .nav-group-toggle) { min-height: 42px; padding: 9px 10px; }
+  .workspace.sidebar-collapsed .sidebar { grid-template-rows: auto minmax(0, 1fr); }
+  .sidebar-collapsed .sidebar-brand { padding: 0; }
+  .workspace.sidebar-collapsed .sidebar .brand-line { justify-content: center; }
   .sidebar-collapsed .sidebar-scroll { padding: 12px 8px; }
-  .sidebar-collapsed .sidebar :is(.sidebar-label, .sidebar-footer, .nav-group-items, .nav-chevron) { display: none; }
-  .sidebar-collapsed .sidebar nav { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .sidebar-collapsed .sidebar :is(.sidebar-label, .sidebar-footer, .nav-chevron),
+  .sidebar-collapsed .sidebar .nav-group-items:not([data-rail-open]) { display: none; }
+  .sidebar-collapsed .sidebar nav { margin-bottom: 9px; padding-bottom: 9px; border-bottom: 1px solid var(--border); }
   .sidebar-collapsed .sidebar nav:last-child { border: 0; }
-  .sidebar-collapsed .sidebar :is(nav > a, .nav-group-toggle) { position: relative; justify-content: center; padding: 9px 6px; gap: 0; }
-  .sidebar-collapsed .sidebar :is(.nav-label, .nav-group-toggle > span) {
+  .workspace.sidebar-collapsed .sidebar :is(nav > a, .nav-group-toggle) {
+    position: relative;
+    justify-content: center;
+    padding: 8px;
+    gap: 0;
+  }
+  .sidebar-collapsed .sidebar :is(nav > a > .nav-label, .nav-group-toggle > span) {
     position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  .sidebar-collapsed .sidebar .nav-group:is(.selected, :has([data-rail-open])) > .nav-group-toggle {
+    color: var(--primary);
+    background: var(--sidebar-active);
   }
 }
 @media (max-width: 800px) {

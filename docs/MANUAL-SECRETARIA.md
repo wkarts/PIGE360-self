@@ -6,6 +6,18 @@ A mantenedora é cadastrada em Instituição. Uma mantenedora pode ter várias e
 
 O primeiro acesso cria uma escola, uma unidade e um ano. Cadastre os demais elementos em Estrutura acadêmica. Inative cadastros que não devem ser oferecidos em novas operações, sem excluí-los. Não altere a identidade acadêmica de uma turma com matrículas: movimente os alunos pelo fluxo de matrícula.
 
+## Navegar no gestor e nos portais
+
+No computador, **Recolher menu lateral** deixa os ícones visíveis e libera espaço para cadastros e lançamentos. No gestor, aponte para o ícone de **Cadastros** ou clique nele. O painel ao lado mostra **Alunos**, **Professores** e os demais cadastros permitidos ao seu perfil. Escolha **Alunos** para abrir a lista. **Expandir menu lateral** volta a mostrar os nomes na própria barra. [Ver o menu Cadastros recolhido](../frontend/public/guia/navegacao.webp)
+
+Para navegar com o teclado, use **Tab** até o ícone do grupo e pressione **→** para ir à primeira opção. As teclas **↑** e **↓** percorrem a lista. Pressione **Enter** para abrir a opção ou **Esc** para fechar o painel e voltar ao ícone. Com o mouse, clique fora do painel para fechá-lo.
+
+No Portal do Aluno e Responsável, quem tem acesso acadêmico encontra as tarefas em **Acompanhamento escolar → Atividades**. Para falar com a escola, use **Serviços escolares → Atendimento**. No Portal do Professor, consulte a agenda em **Rotina docente → Minha programação** e acompanhe os protocolos em **Comunicação → Atendimento**, conforme as rotinas liberadas.
+
+No celular, toque em **Abrir menu**, escolha o grupo e a opção desejada. Para voltar ao conteúdo sem escolher outra área, use **Fechar menu**.
+
+As áreas abertas ficam nas guias do alto da tela. Selecione o nome da guia para retomar a tarefa ou o **×** ao lado desse nome para fechá-la. Para manter só a guia inicial, dê um duplo clique nela ou use **Fechar outras guias**, inclusive no celular. No aviso, selecione **Voltar** se ainda precisar salvar um lançamento. **Fechar outras guias** confirma o descarte dos rascunhos nas guias que serão fechadas.
+
 ## Aluno e responsáveis
 
 Em Cadastro único, mantenha os dados pessoais da pessoa. CPF pode ficar vazio; um CPF informado é validado e não pode repetir dentro da escola. Em Alunos, informe pelo menos nome e nascimento. A matrícula do cadastro (AL-) é distinta do número do vínculo anual (MAT-).

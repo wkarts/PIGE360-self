@@ -230,6 +230,175 @@ var PigeOnline;
     } }
     PigeOnline.safeLink = safeLink;
 })(PigeOnline || (PigeOnline = {}));
+/** Utiliza a própria lista do menu no painel lateral. Os links conservam ordem, filtros de acesso e ação. */
+var PigeSidebarRail;
+(function (PigeSidebarRail) {
+    function use(collapsed) {
+        const media = window.matchMedia?.('(width > 800px)');
+        const state = Vue.reactive({ desktop: media?.matches ?? true, active: '' });
+        const brand = Vue.reactive({ failed: '', wide: '' });
+        let trigger = null, panel = null, pinned = false, suppressFocus = false;
+        let leaveTimer;
+        const enabled = () => state.desktop && collapsed();
+        function brandLoad(e) { const img = e.currentTarget; brand.failed = ''; brand.wide = img.naturalWidth >= 2 * img.naturalHeight ? img.getAttribute('src') || '' : ''; }
+        function brandError(e) { brand.failed = e.currentTarget.getAttribute('src') || ''; brand.wide = ''; }
+        function cancelLeave() { if (leaveTimer !== undefined) {
+            window.clearTimeout(leaveTimer);
+            leaveTimer = undefined;
+        } }
+        function inside(node) { return Boolean(node instanceof Node && (trigger?.contains(node) || panel?.contains(node))); }
+        function outside(e) { if (!inside(e.target))
+            close(); }
+        function dismiss(e) { if (e.key === 'Escape' && trigger) {
+            e.preventDefault();
+            e.stopPropagation();
+            close(true);
+        } }
+        function scroll(e) { if (!panel?.contains(e.target))
+            position(); }
+        function listen(add) {
+            const method = add ? 'addEventListener' : 'removeEventListener';
+            document[method]('pointerdown', outside, true);
+            document[method]('focusin', outside, true);
+            document[method]('keydown', dismiss, true);
+            document[method]('scroll', scroll, true);
+            window[method]('resize', position);
+        }
+        function close(returnFocus = false) {
+            cancelLeave();
+            const old = trigger;
+            if (trigger)
+                listen(false);
+            if (panel?.hidePopover && panel.matches(':popover-open'))
+                panel.hidePopover();
+            trigger = null;
+            panel = null;
+            pinned = false;
+            state.active = '';
+            if (returnFocus && old?.isConnected) {
+                suppressFocus = true;
+                old.focus({ preventScroll: true });
+                suppressFocus = false;
+            }
+        }
+        function position() {
+            if (!trigger || !panel)
+                return;
+            const nav = trigger.closest('aside'), viewport = trigger.closest('.sidebar-scroll,.family-sidebar-scroll');
+            if (!nav || !viewport || !trigger.isConnected || !enabled()) {
+                close();
+                return;
+            }
+            const button = trigger.getBoundingClientRect(), bounds = viewport.getBoundingClientRect();
+            if (button.bottom <= bounds.top || button.top >= bounds.bottom) {
+                close();
+                return;
+            }
+            const left = Math.ceil(nav.getBoundingClientRect().right) + 4;
+            const top = Math.max(8, Math.min(button.top, window.innerHeight - 8 - panel.getBoundingClientRect().height));
+            panel.style.setProperty('--rail-flyout-left', left + 'px');
+            panel.style.setProperty('--rail-flyout-top', Math.round(top) + 'px');
+        }
+        function launcher(target) { return target instanceof Element ? target.closest('[data-rail-trigger]') : null; }
+        function items() { return Array.from(panel?.querySelectorAll('a[href],button:not(:disabled)') || []).filter(el => el.getClientRects().length); }
+        function open(button, focusFirst = false) {
+            if (!enabled())
+                return;
+            cancelLeave();
+            if (button !== trigger) {
+                close();
+                const group = button.parentElement?.querySelector('.sidebar-flyout');
+                if (!group)
+                    return;
+                trigger = button;
+                panel = group;
+                state.active = group.id;
+                listen(true);
+            }
+            const current = panel;
+            void Vue.nextTick(() => {
+                if (trigger !== button || panel !== current || !current?.isConnected)
+                    return;
+                // O top layer do navegador deixa o painel escapar do recorte da rolagem da barra.
+                if (current.showPopover && !current.matches(':popover-open'))
+                    current.showPopover();
+                position();
+                if (focusFirst && trigger === button)
+                    items()[0]?.focus({ preventScroll: true });
+            });
+        }
+        function pointerover(e) {
+            if (e.pointerType === 'touch' || !enabled())
+                return;
+            const btn = launcher(e.target);
+            if (btn)
+                open(btn);
+            else if (inside(e.target))
+                cancelLeave();
+        }
+        function pointerout(e) {
+            if (!trigger || e.pointerType === 'touch' || pinned || inside(e.relatedTarget) || panel?.contains(document.activeElement))
+                return;
+            cancelLeave();
+            leaveTimer = window.setTimeout(() => close(), 180);
+        }
+        function focusin(e) { const btn = launcher(e.target); if (!suppressFocus && btn)
+            open(btn);
+        else if (inside(e.target))
+            cancelLeave(); }
+        function click(e) {
+            if (!enabled())
+                return;
+            const btn = launcher(e.target);
+            if (btn) {
+                if (btn === trigger && pinned) {
+                    close();
+                    return;
+                }
+                open(btn, e.detail === 0);
+                pinned = true;
+            }
+            else if (panel?.contains(e.target))
+                close();
+        }
+        function keydown(e) {
+            if (!enabled())
+                return;
+            const btn = launcher(e.target);
+            if (e.key === 'Escape' && trigger) {
+                e.preventDefault();
+                e.stopPropagation();
+                close(true);
+                return;
+            }
+            if (btn && ['ArrowRight', 'ArrowDown'].includes(e.key)) {
+                e.preventDefault();
+                open(btn, true);
+                return;
+            }
+            if (!panel?.contains(e.target))
+                return;
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                close(true);
+                return;
+            }
+            const links = items(), n = links.length, index = links.indexOf(e.target);
+            if (!n || index < 0)
+                return;
+            const to = { ArrowDown: (index + 1) % n, ArrowUp: (index + n - 1) % n, Home: 0, End: n - 1 }[e.key];
+            if (to !== undefined) {
+                e.preventDefault();
+                links[to].focus();
+            }
+        }
+        function changeViewport() { close(); state.desktop = media?.matches ?? true; }
+        function mount() { changeViewport(); media?.addEventListener('change', changeViewport); }
+        function dispose() { close(); media?.removeEventListener('change', changeViewport); }
+        return { state, brand, enabled, close, mount, dispose, brandLoad, brandError, events: { pointerover, pointerout, focusin, keydown, click } };
+    }
+    PigeSidebarRail.use = use;
+})(PigeSidebarRail || (PigeSidebarRail = {}));
 /** Identidade pública da escola. Sem segredos, rotas bancárias ou seleção de cliente. */
 var PigeInstitution;
 (function (PigeInstitution) {
@@ -1743,6 +1912,51 @@ var PigePortalMail;
 /** Interação da faixa de guias compartilhada pelos portais da escola. */
 var PigePortalTabs;
 (function (PigePortalTabs) {
+    let dismissClose;
+    function cancelClose() { dismissClose?.(); }
+    PigePortalTabs.cancelClose = cancelClose;
+    function confirmClose(home, drafts) {
+        if (dismissClose)
+            return Promise.resolve(false);
+        const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        return new Promise(resolve => {
+            function finish(accepted) {
+                if (dismissClose !== cancel)
+                    return;
+                dismissClose = undefined;
+                dialog.close();
+                app.unmount();
+                host.remove();
+                if (opener?.isConnected)
+                    opener.focus({ preventScroll: true });
+                resolve(accepted);
+            }
+            const cancel = () => finish(false);
+            const app = Vue.createApp({ render: PigeRenders.confirmTabs, setup: () => ({ home, drafts, finish }) });
+            app.mount(host);
+            const dialog = host.querySelector('dialog');
+            dialog.addEventListener('keydown', event => {
+                if (event.key !== 'Tab')
+                    return;
+                const buttons = dialog.querySelectorAll('button');
+                const first = buttons[0], last = buttons[buttons.length - 1];
+                if (event.shiftKey && document.activeElement === first) {
+                    event.preventDefault();
+                    last.focus();
+                }
+                if (!event.shiftKey && document.activeElement === last) {
+                    event.preventDefault();
+                    first.focus();
+                }
+            });
+            dismissClose = cancel;
+            dialog.showModal();
+            dialog.querySelector('[data-work-close-back]')?.focus({ preventScroll: true });
+        });
+    }
+    PigePortalTabs.confirmClose = confirmClose;
     function reveal() {
         void Vue.nextTick(() => {
             const tab = window.document.querySelector('.work-tabs-list [role="tab"][aria-selected="true"]');
@@ -1795,8 +2009,11 @@ var PigeTeacher;
         user: null, schools: [], schoolId: '',
         requestedDiary: undefined, section: 'overview', tabs: ['overview'], sidebarCollapsed: savedSidebar(), menuOpen: false,
         news: [], newsPage: 1, newsTotal: 0, week: today(), agenda: null });
+    const rail = PigeSidebarRail.use(() => s.sidebarCollapsed);
     let loadedSchoolId = '';
     function clear() {
+        rail.close();
+        PigePortalTabs.cancelClose();
         loadedSchoolId = '';
         mail.clear();
         PigeAPI.clear();
@@ -1841,6 +2058,7 @@ var PigeTeacher;
             s.agenda = data;
     }
     async function school(id) {
+        rail.close();
         if (s.schoolId && s.schoolId !== id)
             PigeDiary.clearPilotContext(s.schoolId);
         loadedSchoolId = '';
@@ -1946,6 +2164,13 @@ var PigeTeacher;
         return ['diary', 'materials'].includes(section) && !s.agenda?.diaries.length;
     }
     function navigation() { return pages.filter(item => available(item.id)); }
+    function sidebarGroups() {
+        const links = navigation();
+        return [
+            { id: 'teacher-routine-menu', label: 'Rotina docente', icon: 'academic', items: links.filter(item => ['agenda', 'diary', 'materials'].includes(item.id)) },
+            { id: 'teacher-services-menu', label: 'Comunicação', icon: 'bell', items: links.filter(item => ['news', 'support', 'webmail'].includes(item.id)) },
+        ].filter(group => group.items.length);
+    }
     function title(section) {
         return section === 'help' ? 'Guia de uso' : pages.find(item => item.id === section)?.label || '';
     }
@@ -1972,6 +2197,7 @@ var PigeTeacher;
     function navigate(section, focusHeading = true) {
         if (s.busy || !available(section) || unavailable(section))
             return;
+        rail.close();
         if (section !== 'diary' && location.hash === '#diario')
             history.replaceState(history.state, '', location.pathname + location.search);
         if (!s.tabs.includes(section))
@@ -2007,7 +2233,7 @@ var PigeTeacher;
         s.requestedDiary = { id, tab };
         navigate('diary', false);
     }
-    function closeTabs(section) {
+    async function closeTabs(section) {
         if (s.busy || section === 'overview' || s.tabs.length < 2)
             return;
         const closingDiary = s.tabs.includes('diary') && (!section || section === 'diary');
@@ -2019,11 +2245,27 @@ var PigeTeacher;
             return;
         const supportWarning = closingSupport && supportDraft() ? ' A mensagem de atendimento ainda não enviada será descartada.' : '';
         const closingMail = s.tabs.includes('webmail') && (!section || section === 'webmail');
-        const message = section ? 'Fechar a guia ' + title(section) + '?' : 'Fechar todas as outras guias e manter a Visão geral aberta?';
-        const diaryWarning = dirty ? ' As alterações do diário que ainda não foram salvas serão descartadas.' : '';
-        const mailWarning = closingMail ? ' Confira se as mensagens em edição foram salvas em Rascunhos.' : '';
-        if ((!section || dirty || closingMail || supportWarning) && !window.confirm(message + diaryWarning + mailWarning + supportWarning))
-            return;
+        if (section) {
+            const diaryWarning = dirty ? ' As alterações do diário que ainda não foram salvas serão descartadas.' : '';
+            const mailWarning = closingMail ? ' Confira se as mensagens em edição foram salvas em Rascunhos.' : '';
+            if ((dirty || closingMail || supportWarning) && !window.confirm('Fechar a guia ' + title(section) + '?' + diaryWarning + mailWarning + supportWarning))
+                return;
+        }
+        else {
+            const school = s.schoolId, user = s.user;
+            const pending = [];
+            if (dirty)
+                pending.push('alterações no diário de classe');
+            if (supportWarning)
+                pending.push('mensagem de atendimento');
+            if (closingMail)
+                pending.push('mensagens em edição no E-mail');
+            if (!await PigePortalTabs.confirmClose(title('overview'), pending))
+                return;
+            if (school !== s.schoolId || user !== s.user || s.busy || (closingSupport && supportBusy()) ||
+                (closingDiary && document.querySelector('#teacher-diary [aria-busy="true"]')))
+                return;
+        }
         const previous = s.section;
         s.tabs = section ? s.tabs.filter(id => id !== section) : ['overview'];
         if (closingDiary)
@@ -2040,6 +2282,7 @@ var PigeTeacher;
         }
     }
     function toggleSidebar() {
+        rail.close();
         s.sidebarCollapsed = !s.sidebarCollapsed;
         PigePortalTabs.reveal();
         try {
@@ -2089,6 +2332,7 @@ var PigeTeacher;
         return [assignment?.class_name, diary?.component].filter(Boolean).join(' · ');
     }
     Vue.createApp({ render: PigeRenders.teacherPortal, components: { 'portal-protocols': PigePortalProtocols.component, 'school-diary': PigeDiary.component, 'portal-mail': PigePortalMail.component }, setup() {
+            Vue.watch(() => [s.schoolId, s.user?.id, s.user?.permissions.join(','), s.user?.teacher_routines?.join(','), mail.state.available].join('|'), () => rail.close());
             Vue.watch(() => [s.ready, s.user?.id, s.user?.role, s.schoolId].join('|'), () => {
                 if (s.user && s.schoolId)
                     void PigeSupport.load(s.schoolId, 'teacher_portal', s.user.id);
@@ -2097,6 +2341,8 @@ var PigeTeacher;
                 else
                     PigeSupport.dispose();
             });
+            Vue.onMounted(rail.mount);
+            Vue.onUnmounted(rail.dispose);
             Vue.onUnmounted(PigeSupport.dispose);
             Vue.onMounted(() => {
                 PigeMFA.init(PigeAPI.request, data => enter(data), logout);
@@ -2105,6 +2351,6 @@ var PigeTeacher;
                     s.menuOpen = false; PigePortalTabs.reveal(); });
                 void start();
             });
-            return { s, mail, download: PigeAPI.download, available, unavailable, can, navigation, title, initials, metrics, openDiary, closeTabs, tabKeys, toggleSidebar, retry, pilotForSchool: PigeDiary.pilotForSchool, navigate, toggleMenu, menuKey, publications, identity: PigeInstitution.state, mfa: PigeMFA, login, logout, run, agenda, workspace, date, group, selectSchool };
+            return { s, rail, sidebarGroups, mail, download: PigeAPI.download, available, unavailable, can, navigation, title, initials, metrics, openDiary, closeTabs, tabKeys, toggleSidebar, retry, pilotForSchool: PigeDiary.pilotForSchool, navigate, toggleMenu, menuKey, publications, identity: PigeInstitution.state, mfa: PigeMFA, login, logout, run, agenda, workspace, date, group, selectSchool };
         } }).mount('#teacher');
 })(PigeTeacher || (PigeTeacher = {}));

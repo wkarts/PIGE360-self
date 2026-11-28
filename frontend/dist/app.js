@@ -1,4 +1,173 @@
 "use strict";
+/** Utiliza a própria lista do menu no painel lateral. Os links conservam ordem, filtros de acesso e ação. */
+var PigeSidebarRail;
+(function (PigeSidebarRail) {
+    function use(collapsed) {
+        const media = window.matchMedia?.('(width > 800px)');
+        const state = Vue.reactive({ desktop: media?.matches ?? true, active: '' });
+        const brand = Vue.reactive({ failed: '', wide: '' });
+        let trigger = null, panel = null, pinned = false, suppressFocus = false;
+        let leaveTimer;
+        const enabled = () => state.desktop && collapsed();
+        function brandLoad(e) { const img = e.currentTarget; brand.failed = ''; brand.wide = img.naturalWidth >= 2 * img.naturalHeight ? img.getAttribute('src') || '' : ''; }
+        function brandError(e) { brand.failed = e.currentTarget.getAttribute('src') || ''; brand.wide = ''; }
+        function cancelLeave() { if (leaveTimer !== undefined) {
+            window.clearTimeout(leaveTimer);
+            leaveTimer = undefined;
+        } }
+        function inside(node) { return Boolean(node instanceof Node && (trigger?.contains(node) || panel?.contains(node))); }
+        function outside(e) { if (!inside(e.target))
+            close(); }
+        function dismiss(e) { if (e.key === 'Escape' && trigger) {
+            e.preventDefault();
+            e.stopPropagation();
+            close(true);
+        } }
+        function scroll(e) { if (!panel?.contains(e.target))
+            position(); }
+        function listen(add) {
+            const method = add ? 'addEventListener' : 'removeEventListener';
+            document[method]('pointerdown', outside, true);
+            document[method]('focusin', outside, true);
+            document[method]('keydown', dismiss, true);
+            document[method]('scroll', scroll, true);
+            window[method]('resize', position);
+        }
+        function close(returnFocus = false) {
+            cancelLeave();
+            const old = trigger;
+            if (trigger)
+                listen(false);
+            if (panel?.hidePopover && panel.matches(':popover-open'))
+                panel.hidePopover();
+            trigger = null;
+            panel = null;
+            pinned = false;
+            state.active = '';
+            if (returnFocus && old?.isConnected) {
+                suppressFocus = true;
+                old.focus({ preventScroll: true });
+                suppressFocus = false;
+            }
+        }
+        function position() {
+            if (!trigger || !panel)
+                return;
+            const nav = trigger.closest('aside'), viewport = trigger.closest('.sidebar-scroll,.family-sidebar-scroll');
+            if (!nav || !viewport || !trigger.isConnected || !enabled()) {
+                close();
+                return;
+            }
+            const button = trigger.getBoundingClientRect(), bounds = viewport.getBoundingClientRect();
+            if (button.bottom <= bounds.top || button.top >= bounds.bottom) {
+                close();
+                return;
+            }
+            const left = Math.ceil(nav.getBoundingClientRect().right) + 4;
+            const top = Math.max(8, Math.min(button.top, window.innerHeight - 8 - panel.getBoundingClientRect().height));
+            panel.style.setProperty('--rail-flyout-left', left + 'px');
+            panel.style.setProperty('--rail-flyout-top', Math.round(top) + 'px');
+        }
+        function launcher(target) { return target instanceof Element ? target.closest('[data-rail-trigger]') : null; }
+        function items() { return Array.from(panel?.querySelectorAll('a[href],button:not(:disabled)') || []).filter(el => el.getClientRects().length); }
+        function open(button, focusFirst = false) {
+            if (!enabled())
+                return;
+            cancelLeave();
+            if (button !== trigger) {
+                close();
+                const group = button.parentElement?.querySelector('.sidebar-flyout');
+                if (!group)
+                    return;
+                trigger = button;
+                panel = group;
+                state.active = group.id;
+                listen(true);
+            }
+            const current = panel;
+            void Vue.nextTick(() => {
+                if (trigger !== button || panel !== current || !current?.isConnected)
+                    return;
+                // O top layer do navegador deixa o painel escapar do recorte da rolagem da barra.
+                if (current.showPopover && !current.matches(':popover-open'))
+                    current.showPopover();
+                position();
+                if (focusFirst && trigger === button)
+                    items()[0]?.focus({ preventScroll: true });
+            });
+        }
+        function pointerover(e) {
+            if (e.pointerType === 'touch' || !enabled())
+                return;
+            const btn = launcher(e.target);
+            if (btn)
+                open(btn);
+            else if (inside(e.target))
+                cancelLeave();
+        }
+        function pointerout(e) {
+            if (!trigger || e.pointerType === 'touch' || pinned || inside(e.relatedTarget) || panel?.contains(document.activeElement))
+                return;
+            cancelLeave();
+            leaveTimer = window.setTimeout(() => close(), 180);
+        }
+        function focusin(e) { const btn = launcher(e.target); if (!suppressFocus && btn)
+            open(btn);
+        else if (inside(e.target))
+            cancelLeave(); }
+        function click(e) {
+            if (!enabled())
+                return;
+            const btn = launcher(e.target);
+            if (btn) {
+                if (btn === trigger && pinned) {
+                    close();
+                    return;
+                }
+                open(btn, e.detail === 0);
+                pinned = true;
+            }
+            else if (panel?.contains(e.target))
+                close();
+        }
+        function keydown(e) {
+            if (!enabled())
+                return;
+            const btn = launcher(e.target);
+            if (e.key === 'Escape' && trigger) {
+                e.preventDefault();
+                e.stopPropagation();
+                close(true);
+                return;
+            }
+            if (btn && ['ArrowRight', 'ArrowDown'].includes(e.key)) {
+                e.preventDefault();
+                open(btn, true);
+                return;
+            }
+            if (!panel?.contains(e.target))
+                return;
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                close(true);
+                return;
+            }
+            const links = items(), n = links.length, index = links.indexOf(e.target);
+            if (!n || index < 0)
+                return;
+            const to = { ArrowDown: (index + 1) % n, ArrowUp: (index + n - 1) % n, Home: 0, End: n - 1 }[e.key];
+            if (to !== undefined) {
+                e.preventDefault();
+                links[to].focus();
+            }
+        }
+        function changeViewport() { close(); state.desktop = media?.matches ?? true; }
+        function mount() { changeViewport(); media?.addEventListener('change', changeViewport); }
+        function dispose() { close(); media?.removeEventListener('change', changeViewport); }
+        return { state, brand, enabled, close, mount, dispose, brandLoad, brandError, events: { pointerover, pointerout, focusin, keydown, click } };
+    }
+    PigeSidebarRail.use = use;
+})(PigeSidebarRail || (PigeSidebarRail = {}));
 /** Identidade pública da escola. Sem segredos, rotas bancárias ou seleção de cliente. */
 var PigeInstitution;
 (function (PigeInstitution) {
@@ -1785,6 +1954,80 @@ var PigeWorkspace;
     if (typeof document !== 'undefined' && document.body)
         install();
 })(PigeWorkspace || (PigeWorkspace = {}));
+/** Interação da faixa de guias compartilhada pelos portais da escola. */
+var PigePortalTabs;
+(function (PigePortalTabs) {
+    let dismissClose;
+    function cancelClose() { dismissClose?.(); }
+    PigePortalTabs.cancelClose = cancelClose;
+    function confirmClose(home, drafts) {
+        if (dismissClose)
+            return Promise.resolve(false);
+        const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        return new Promise(resolve => {
+            function finish(accepted) {
+                if (dismissClose !== cancel)
+                    return;
+                dismissClose = undefined;
+                dialog.close();
+                app.unmount();
+                host.remove();
+                if (opener?.isConnected)
+                    opener.focus({ preventScroll: true });
+                resolve(accepted);
+            }
+            const cancel = () => finish(false);
+            const app = Vue.createApp({ render: PigeRenders.confirmTabs, setup: () => ({ home, drafts, finish }) });
+            app.mount(host);
+            const dialog = host.querySelector('dialog');
+            dialog.addEventListener('keydown', event => {
+                if (event.key !== 'Tab')
+                    return;
+                const buttons = dialog.querySelectorAll('button');
+                const first = buttons[0], last = buttons[buttons.length - 1];
+                if (event.shiftKey && document.activeElement === first) {
+                    event.preventDefault();
+                    last.focus();
+                }
+                if (!event.shiftKey && document.activeElement === last) {
+                    event.preventDefault();
+                    first.focus();
+                }
+            });
+            dismissClose = cancel;
+            dialog.showModal();
+            dialog.querySelector('[data-work-close-back]')?.focus({ preventScroll: true });
+        });
+    }
+    PigePortalTabs.confirmClose = confirmClose;
+    function reveal() {
+        void Vue.nextTick(() => {
+            const tab = window.document.querySelector('.work-tabs-list [role="tab"][aria-selected="true"]');
+            const rail = tab?.closest('.work-tabs-list');
+            if (!tab || !rail)
+                return;
+            const selected = tab.getBoundingClientRect(), viewport = rail.getBoundingClientRect();
+            if (selected.left < viewport.left)
+                rail.scrollLeft += selected.left - viewport.left;
+            else if (selected.right > viewport.right)
+                rail.scrollLeft += selected.right - viewport.right;
+        });
+    }
+    PigePortalTabs.reveal = reveal;
+    function keyTarget(event, tabs, section) {
+        if (event.target.getAttribute('role') !== 'tab')
+            return;
+        const i = tabs.indexOf(section), n = tabs.length;
+        const index = { ArrowRight: (i + 1) % n, ArrowLeft: (i + n - 1) % n, Home: 0, End: n - 1 }[event.key];
+        if (index === undefined)
+            return;
+        event.preventDefault();
+        return tabs[index];
+    }
+    PigePortalTabs.keyTarget = keyTarget;
+})(PigePortalTabs || (PigePortalTabs = {}));
 /** Segredos transitórios ficam apenas na memória da tela, nunca no armazenamento do navegador. */
 var PigeMFA;
 (function (PigeMFA) {
@@ -5544,7 +5787,6 @@ var PigeUI;
     const catalogDescriptions = { 'units': 'Locais de atendimento da escola', 'academic-years': 'Calendário e períodos de matrícula', 'grades': 'Etapas e séries oferecidas', 'shifts': 'Horários de funcionamento', 'class-groups': 'Turmas, capacidade e ocupação', 'document-types': 'Documentos exigidos dos alunos' };
     const blankModal = () => ({ kind: '', title: '', fields: [], form: {}, target: null, action: '', error: '' });
     const sidebarStorageKey = 'pige-sidebar-collapsed';
-    const compactViewport = window.matchMedia?.('(max-width: 800px)');
     function savedSidebarPreference() {
         try {
             return localStorage.getItem(sidebarStorageKey) === 'true';
@@ -5554,24 +5796,28 @@ var PigeUI;
         }
     }
     const taskState = Vue.reactive({ pages: [], active: 'dashboard', home: 'dashboard', paused: false,
-        sidebarCollapsed: savedSidebarPreference(), mobileMenu: compactViewport?.matches ?? false });
-    compactViewport?.addEventListener('change', event => { taskState.mobileMenu = event.matches; });
+        sidebarCollapsed: savedSidebarPreference() });
+    const rail = PigeSidebarRail.use(() => taskState.sidebarCollapsed);
     function toggleSidebar() {
+        rail.close();
         taskState.sidebarCollapsed = !taskState.sidebarCollapsed;
         try {
             localStorage.setItem(sidebarStorageKey, String(taskState.sidebarCollapsed));
         }
         catch { /* A preferência permanece nesta sessão se o navegador restringir o armazenamento. */ }
     }
-    function sidebarRail() { return taskState.sidebarCollapsed && !taskState.mobileMenu; }
+    function sidebarRail() { return rail.enabled(); }
     const guideSelection = Vue.reactive({ topic: 'navigation' });
     const walkthroughs = [
         { id: 'navigation', title: 'Organizar o menu e as guias', image: 'navegacao',
-            steps: ['No computador, pressione Recolher menu lateral para ampliar a área de trabalho. Use Expandir menu lateral para voltar. No celular, use Abrir menu e escolha o módulo.',
-                'Clique em uma guia para retomar sua tarefa. Use o × ao lado do título para fechar apenas aquela guia.',
-                'Para voltar à guia inicial, use Fechar outras guias ou clique duas vezes na guia inicial e confira a confirmação. Salve antes de fechar formulários em edição.'],
-            alt: 'Barra superior da aplicação com o menu lateral recolhido, guias abertas e controles de fechamento.',
-            caption: 'Com o menu recolhido, as guias continuam acessíveis no alto da tela.' },
+            steps: ['No computador, selecione Recolher menu lateral. Aponte para o ícone de um grupo ou clique nele para ver as opções ao lado da barra. No gestor, abra Cadastros e escolha Alunos. Para voltar a ver todos os nomes na barra, use Expandir menu lateral.',
+                'Pelo teclado, use Tab até o ícone do grupo, pressione a seta para a direita e percorra as opções com as setas para cima e para baixo. Esc fecha o painel e devolve o foco ao ícone. Com o mouse, você também pode clicar fora para fechar.',
+                'No Portal do Aluno e Responsável, procure as atividades em Acompanhamento escolar → Atividades. No Portal do Professor, abra Rotina docente → Minha programação para consultar a agenda. Cada acesso mostra as rotinas liberadas pela escola.',
+                'No celular, toque em Abrir menu e escolha a área. Use Fechar menu para voltar ao conteúdo sem sair da guia atual.',
+                'Selecione o nome de uma guia para retomar a tarefa. O × ao lado do nome fecha essa guia. Para manter só a inicial, dê um duplo clique em Visão geral ou use Fechar outras guias.',
+                'Ao ver o aviso, escolha Voltar se precisar salvar algo. Para descartar os rascunhos das guias que serão fechadas e manter a inicial, confirme em Fechar outras guias.'],
+            alt: 'Menu do gestor recolhido, com o painel Cadastros aberto e a opção Alunos ao lado dos ícones.',
+            caption: 'Gestor da escola de demonstração com o grupo Cadastros aberto. Selecione Alunos no painel para abrir a lista.' },
         { id: 'users', page: 'users', title: 'Criar o acesso ao portal', image: 'usuarios',
             steps: ['Cadastre a pessoa em Alunos, Professores ou Pais e responsáveis. Na ficha do aluno, use Responsáveis para registrar os vínculos legal e financeiro que se aplicam àquela pessoa.',
                 'Abra Gerenciar acesso ao portal na ficha ou entre em Usuários e acessos e escolha + Criar usuário. Confira o e-mail que receberá o convite, o Perfil base e a Pessoa vinculada.',
@@ -5654,6 +5900,7 @@ var PigeUI;
     function activateDesk(desk) {
         if (!shell || desk === currentDesk)
             return;
+        rail.close();
         rememberMenu(currentDesk);
         currentDesk.scroll = currentDesk.node.querySelector('main')?.scrollTop || 0;
         currentDesk.context.state.menuOpen = false;
@@ -5687,6 +5934,7 @@ var PigeUI;
         taskState.pages = taskState.pages.filter(page => page !== key);
     }
     function resetDesks() {
+        PigePortalTabs.cancelClose();
         if (!shell || !primaryDesk)
             return;
         activateDesk(primaryDesk);
@@ -5759,7 +6007,7 @@ var PigeUI;
             activateDesk(primaryDesk);
         removeDesk(page);
     }
-    function closeOtherDesks() {
+    async function closeOtherDesks() {
         const others = [...desks.entries()].filter(([, desk]) => desk !== primaryDesk);
         if (!others.length)
             return;
@@ -5770,9 +6018,9 @@ var PigeUI;
         const drafts = others.filter(([, desk]) => hasDraft(desk) || desk.context.state.modal.kind ||
             (desk.context.state.page === 'webmail' && PigeEmail.hasUnsavedWork()));
         const home = pageLabels[taskState.home];
-        const question = others.length === 1 ? 'Fechar a outra guia aberta?' : `Fechar as ${others.length} outras guias abertas?`;
-        const warning = drafts.length ? ' Alterações não salvas serão descartadas em: ' + drafts.map(([key]) => pageLabels[key]).join(', ') + '.' : '';
-        if (!window.confirm(question + ' A guia ' + home + ' continuará aberta.' + warning))
+        if (!await PigePortalTabs.confirmClose(home, drafts.map(([key]) => pageLabels[key])))
+            return;
+        if (others.some(([key, desk]) => desks.get(key) !== desk || deskBusy(desk)))
             return;
         activateDesk(primaryDesk);
         for (const [key] of others)
@@ -6136,6 +6384,7 @@ var PigeUI;
             const user = await PigeAPI.request('/auth/me');
             if (sid !== state.schoolId || openProfilePortal(user.role))
                 return;
+            rail.close();
             state.user = user;
             if (shell && !primaryDesk.context.pageAllowed(taskState.home)) {
                 resetDesks();
@@ -6337,6 +6586,7 @@ var PigeUI;
             ++studentSearchSequence;
             clearTimeout(personSearchTimer);
             clearTimeout(studentSearchTimer);
+            rail.close();
             PigeSupport.dispose();
             PigeAPI.setActiveSchool(sid);
             state.cameraTarget = '';
@@ -6457,6 +6707,7 @@ var PigeUI;
                 currentDesk.context.state.websiteRequest++;
         }
         async function navigate(page) {
+            rail.close();
             page = canonicalPage(page);
             if (state.busy || state.schoolLoading || (!taskState.paused && (state.modal.kind || document.querySelector('.modal-backdrop'))))
                 return;
@@ -7003,11 +7254,7 @@ var PigeUI;
                 state.modalInitial = JSON.stringify(state.modal.form); });
         }
         function toggleMenuGroup(key) {
-            if (sidebarRail()) {
-                toggleSidebar();
-                state[key] = true;
-            }
-            else
+            if (!sidebarRail())
                 state[key] = !state[key];
         }
         function modalDirty() { return dossier.dirty() || JSON.stringify(state.modal.form) !== state.modalInitial || Boolean(selectedFile) || Boolean(identityFiles.logo) || Boolean(identityFiles.font); }
@@ -8127,6 +8374,7 @@ var PigeUI;
             }
             ++schoolSequence;
             ++sequence;
+            rail.close();
             PigeSupport.dispose();
             state.cameraTarget = '';
             state.captureName = '';
@@ -8221,7 +8469,7 @@ var PigeUI;
             clearPhotos();
             clearProfilePreview();
         }
-        return { portalRole, openPortalAccess, printStaff, editorPhoto, personPhotoChange, viewPersonRecord, recordKind, recordTabs, recordDetails, editRecord, closePersonRecord, moreRecordFamily, openSiteEditor, studentList, studentSection, selectSchool, taskState, openDesk, closeDesk, closeOtherDesks, selectWorkspaceTab, toggleMenuGroup, toggleSidebar, sidebarRail, resumeForm, keyTabs, scrollTabs, pageAllowed, loadShell, landingPage, safe, initialize, setupPWA, dispose, afterMFA, dialogHost, academicPrepared, importedDataChanged, openCamera, photoCaptured, documentPages, configurationPages, supportAreas, supportAreaLabels, refreshAccess, isEnrollmentForm, enrollmentStudent, enrollmentClass, administrationPages, institutionTabs, catalogDescriptions, adminTool, manageRecord, lifecycleCompleted, request: PigeAPI.request, download: PigeAPI.download, state, base, familyAssistFields, assistRequest, assistFields, assistEligible, assistCompany, setupCompany, setupCompanyFields, companyExtra, setupLookup, readStudentDocument, readResponsibleDocument, editIntake, mfa: PigeMFA, dossier, selectedPersonTypes, availablePersonTypes, togglePersonType, lockedPersonType, familyRelevant, manageMFA, editMFAPolicy, editEmbedding, probeEmbedding, editMyProfile, myPhotoChange, profilePassword, registryPages, integrationPages, businessTypes, isBusiness, newBusiness, reusePerson, personDocument, modalSections, modalTab, visibleSection, modalFieldLabel, modalFieldRelevant, advancedPersonField, isPersonModal, personTypeOptions, personTypeLabel, modalDirty, contractDirty, identity: PigeInstitution.state, supportStatus: PigeSupport.status, editIdentity, identityFileChange, manageUnits, editMaintainer, text, can, isProfileRole, school, label, enrollmentLabel, date, cpf, initials, photoSrc, getName, options, pageLabels, catalogLabels, configure, login, logout, navigate, changeSchool, setCatalog, search, page, loadPage, openSogoWebmail, webmailFrameLoaded, saveWebmailPreference, saveWebmailDefault, legacyImportFileChange, previewLegacyImport, applyLegacyImport, populatedImportTables, downloadLegacyArchive, viewStudent, newPerson, newStudent, editStudent, newGuardian, newTeacher, editTeacher, newEmployee, editEmployee, editPerson, newCatalog, newEnrollment, viewEnrollment, contractsForEnrollment, startMovement, reenroll, newLink, enrollmentLinkStudentId, linkFromEnrollment, editLink, uploadDocument, fileChange, reviewDocument, waiveDocument, issueDocument, downloadFile, newProtocol, newCompany, newSchool, editSupportHub, password, archiveStudent, closeModal, saveModal, loadReport, exportStudents, exportClass, searchStudents, searchPersons, filteredClasses, clearFilters, yearChanged, editDraft, viewProtocol, protocolNote, timestamp, protocolReceipt, replyProtocol, startPortalProtocol, protocolLabels, protocolQueryChanged, searchProtocolRequesters, chooseProtocolRequester, eligibleProtocolStudents, syncProtocolStudent, protocolNoticeLabel, protocolEvents, protocolAttachment, exportPendencies, install, updateApp };
+        return { rail, portalRole, openPortalAccess, printStaff, editorPhoto, personPhotoChange, viewPersonRecord, recordKind, recordTabs, recordDetails, editRecord, closePersonRecord, moreRecordFamily, openSiteEditor, studentList, studentSection, selectSchool, taskState, openDesk, closeDesk, closeOtherDesks, selectWorkspaceTab, toggleMenuGroup, toggleSidebar, sidebarRail, resumeForm, keyTabs, scrollTabs, pageAllowed, loadShell, landingPage, safe, initialize, setupPWA, dispose, afterMFA, dialogHost, academicPrepared, importedDataChanged, openCamera, photoCaptured, documentPages, configurationPages, supportAreas, supportAreaLabels, refreshAccess, isEnrollmentForm, enrollmentStudent, enrollmentClass, administrationPages, institutionTabs, catalogDescriptions, adminTool, manageRecord, lifecycleCompleted, request: PigeAPI.request, download: PigeAPI.download, state, base, familyAssistFields, assistRequest, assistFields, assistEligible, assistCompany, setupCompany, setupCompanyFields, companyExtra, setupLookup, readStudentDocument, readResponsibleDocument, editIntake, mfa: PigeMFA, dossier, selectedPersonTypes, availablePersonTypes, togglePersonType, lockedPersonType, familyRelevant, manageMFA, editMFAPolicy, editEmbedding, probeEmbedding, editMyProfile, myPhotoChange, profilePassword, registryPages, integrationPages, businessTypes, isBusiness, newBusiness, reusePerson, personDocument, modalSections, modalTab, visibleSection, modalFieldLabel, modalFieldRelevant, advancedPersonField, isPersonModal, personTypeOptions, personTypeLabel, modalDirty, contractDirty, identity: PigeInstitution.state, supportStatus: PigeSupport.status, editIdentity, identityFileChange, manageUnits, editMaintainer, text, can, isProfileRole, school, label, enrollmentLabel, date, cpf, initials, photoSrc, getName, options, pageLabels, catalogLabels, configure, login, logout, navigate, changeSchool, setCatalog, search, page, loadPage, openSogoWebmail, webmailFrameLoaded, saveWebmailPreference, saveWebmailDefault, legacyImportFileChange, previewLegacyImport, applyLegacyImport, populatedImportTables, downloadLegacyArchive, viewStudent, newPerson, newStudent, editStudent, newGuardian, newTeacher, editTeacher, newEmployee, editEmployee, editPerson, newCatalog, newEnrollment, viewEnrollment, contractsForEnrollment, startMovement, reenroll, newLink, enrollmentLinkStudentId, linkFromEnrollment, editLink, uploadDocument, fileChange, reviewDocument, waiveDocument, issueDocument, downloadFile, newProtocol, newCompany, newSchool, editSupportHub, password, archiveStudent, closeModal, saveModal, loadReport, exportStudents, exportClass, searchStudents, searchPersons, filteredClasses, clearFilters, yearChanged, editDraft, viewProtocol, protocolNote, timestamp, protocolReceipt, replyProtocol, startPortalProtocol, protocolLabels, protocolQueryChanged, searchProtocolRequesters, chooseProtocolRequester, eligibleProtocolStudents, syncProtocolStudent, protocolNoticeLabel, protocolEvents, protocolAttachment, exportPendencies, install, updateApp };
     }
     const components = { 'educacenso-panel': PigeEducacenso.component, 'contract-value-field': PigeContractFields.component, 'enrollment-workflow': PigeEnrollmentWorkflow.component, 'academic-preparation': PigeAcademicPreparation.component, 'notification-email': PigeNotificationEmail.component, 'camera-capture': PigeCamera.component, 'users-panel': PigeUsers.component, 'institutional-email': PigeEmail.component, 'audit-panel': PigeAudit.component, 'lifecycle-panel': PigeLifecycle.component, 'mailcow-panel': PigeMailcow.component, 'school-community': PigeCommunity.component, 'learning-panel': PigeLearning.component, 'reports-panel': PigeReports.component, 'legacy-import-panel': PigeLegacyImport.component, 'diagnostics-panel': PigeDiagnostics.component, 'expansion-panel': PigeExpansion.component, 'diary-panel': PigeDiary.component, 'contracts-panel': PigeContracts.component, 'signing-panel': PigeSigning.component, 'assist-panel': PigeAssist.component };
     function mountDesk(page, shared, portalTarget) {
@@ -8240,6 +8488,10 @@ var PigeUI;
         const app = Vue.createApp({ components, render: PigeRenders.app, setup() {
                 if (layer)
                     Vue.provide('school-dialog-host', layer);
+                if (!shared) {
+                    Vue.onUnmounted(rail.dispose);
+                    Vue.onMounted(rail.mount);
+                }
                 if (!shared)
                     Vue.onMounted(() => { PigeMFA.init(PigeAPI.request, context.afterMFA, context.logout); PigeDialogs.install(); context.setupPWA(); void context.initialize(); });
                 return context;

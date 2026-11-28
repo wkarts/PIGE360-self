@@ -732,3 +732,30 @@ td .link-button { text-align: left; }
 .protocol-search { align-items:end; }
 .protocol-search .field { flex:1 1 13rem;min-width:0; }
 @media(max-width:600px){.protocol-detail .btn,.protocol-history-heading .btn,.protocol-search .btn { max-width:100%;white-space:normal; }}
+
+/* Confirmação compartilhada pelo gestor e pelos portais. */
+.work-close-dialog {
+  width: min(490px, calc(100% - 2rem));
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  color: var(--ink, #193248);
+  background: #fff;
+  border: 1px solid #d9e2e8;
+  border-radius: 14px;
+  box-shadow: 0 18px 62px rgb(19 39 58 / 20%);
+}
+.work-close-dialog::backdrop { background: rgb(23 42 59 / 42%); }
+.work-close-dialog header, .work-close-dialog footer { display: flex; align-items: center; gap: .65rem; padding: .9rem 1.4rem; }
+.work-close-dialog header { justify-content: space-between; border-bottom: 1px solid var(--border); }
+.work-close-dialog h2 { margin: 0; color: inherit; font-size: 1.16rem; line-height: 1.35; }
+.work-close-dialog #work-close-description { padding: 1.3rem 1.4rem; }
+.work-close-dialog p { margin: 0; color: #435569; font-size: .94rem; line-height: 1.6; }
+.work-close-dialog p + p { margin-top: .65rem; }
+.work-close-dialog footer { justify-content: flex-end; flex-wrap: wrap; background: #f7f9fb; border-top: 1px solid var(--border); }
+.work-close-dialog .btn { min-height: 44px; }
+.work-close-dialog .work-close-dismiss { width: 44px; height: 44px; flex: none; margin: -.4rem -.65rem -.4rem 0; color: #44566a; background: transparent; border: 0; border-radius: 6px; font: inherit; font-size: 1.35rem; cursor: pointer; }
+.work-close-dialog .work-close-confirm { color: #a53028; background: #fff6f4; border: 1px solid #e7b2ad; }
+.work-close-dialog .work-close-confirm:hover { color: #81251e; background: #fbe8e5; }
+.work-close-dialog button:focus-visible { outline: 2px solid var(--primary, #006d77); outline-offset: 2px; }

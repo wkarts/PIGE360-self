@@ -23,7 +23,7 @@ execFileSync(compiler,['-p',path.join(root,'tsconfig.news.json')],{stdio:'inheri
 execFileSync(compiler,['-p',path.join(root,'tsconfig.family.json')],{stdio:'inherit'});
 execFileSync(compiler,['-p',path.join(root,'tsconfig.teacher.json')],{stdio:'inherit'});
 const renders={};
-for(const name of ['asaas','contractValue','enrollmentWorkflow','academicPreparation','notificationEmail','app','portal','familyPortal','teacherPortal','portalMail','portalProtocols','expansion','camera','users','assist','diagnostics','diary','educacenso','contracts','signing','reports','legacyImport','learning','community','news','mailcow','audit','email','lifecycle']){
+for(const name of ['asaas','contractValue','enrollmentWorkflow','academicPreparation','notificationEmail','app','portal','familyPortal','teacherPortal','portalMail','portalProtocols','confirmTabs','expansion','camera','users','assist','diagnostics','diary','educacenso','contracts','signing','reports','legacyImport','learning','community','news','mailcow','audit','email','lifecycle']){
  const fragment=key=>fs.readFileSync(path.join(root,'templates',key+'.html'),'utf8');
  const template=fs.readFileSync(path.join(root,'templates',name+'.html'),'utf8').replaceAll('<!-- MFA-MANAGE -->',fragment('mfa-manage')).replaceAll('<!-- MFA-CHALLENGE -->',fragment('mfa-challenge')).replaceAll('<!-- FAMILY -->',fragment('family')).replaceAll('<!-- FAMILY-AUTO-PIX -->',fragment('family-auto-pix')).replaceAll('<!-- FAMILY-CARD -->',fragment('family-card')).replaceAll('<!-- FORM-FIELDS -->',fragment('form-fields'));
  const errors=[];
@@ -37,8 +37,8 @@ function writeRenders(filename, names) {
  fs.writeFileSync(path.join(dist,filename),'/* Vue pré-compilado; sem eval em runtime. */\nvar _Vue=Vue; var PigeRenders={'+entries.join(',')+'};\n');
 }
 writeRenders('renders.js',Object.keys(renders));
-writeRenders('family-renders.js',['familyPortal','learning','portalMail','portalProtocols']);
-writeRenders('teacher-renders.js',['teacherPortal','diary','portalMail','portalProtocols']);
+writeRenders('family-renders.js',['familyPortal','learning','portalMail','portalProtocols','confirmTabs']);
+writeRenders('teacher-renders.js',['teacherPortal','diary','portalMail','portalProtocols','confirmTabs']);
 fs.cpSync(path.join(root,'public'),dist,{recursive:true});
 fs.mkdirSync(path.join(dist,'vendor'),{recursive:true});fs.copyFileSync(path.join(root,'vendor/vue-3.5.13.global.prod.js'),path.join(dist,'vendor/vue-3.5.13.global.prod.js'));
 fs.copyFileSync(path.join(root,'src/app.css'),path.join(dist,'app.css'));
