@@ -36,4 +36,6 @@
   <symbol id="portability" viewBox="0 0 24 24"><path d="M4 8h16l-4-4m4 4-4 4M20 16H4l4-4m-4 4 4 4"/></symbol>
   <symbol id="certificate" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="13" rx="2"/><path d="M7 7h10M7 11h3m5 5-2 6-2-2-3 1 2-5m5 0 2 6 2-2 3 1-2-5"/></symbol>
   <symbol id="bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM9 21h6"/></symbol>
+  <symbol id="sidebar-toggle" viewBox="0 0 24 24"><path d="m12 7-5 5 5 5m6-10-5 5 5 5"/></symbol>
+  <symbol id="close-tabs" viewBox="0 0 24 24"><path d="M5 16H3V4h14v2"/><rect x="7" y="8" width="14" height="12" rx="2"/><path d="m12 12 4 4m0-4-4 4"/></symbol>
 </svg>

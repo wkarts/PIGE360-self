@@ -1,4 +1,5 @@
 """Preferências visuais por escola, independentes do currículo e do fechamento."""
+from base64 import b64encode
 from typing import Literal
 from pydantic import Field
 from fastapi import APIRouter, Request, UploadFile, File, Form
@@ -17,6 +18,11 @@ class Preferences(Input):
     student: Orientation = 'portrait'
     employee: Orientation = 'portrait'
     teacher: Orientation = 'portrait'
+    watermark_documents: list[Literal['bulletins', 'records', 'diary', 'management']] = Field(default_factory=list, max_length=4)
+
+
+def school_logo_url(school):
+    return 'data:image/png;base64,' + b64encode(school.report_logo).decode('ascii') if school.report_logo else ''
 
 
 def preferences(school):
@@ -39,7 +45,10 @@ def update_preferences(data: UpdatePreferences, request: Request, db: DB, user: 
     school = lock_school(db, school.id)
     check_version(school, data.version)
     before = preferences(school)
-    school.report_preferences = data.model_dump(exclude={'version'})
+    updated = data.model_dump(exclude={'version'})
+    if 'watermark_documents' not in data.model_fields_set:
+        updated['watermark_documents'] = before['watermark_documents']
+    school.report_preferences = updated
     school.version += 1
     audit(db, request, user, 'school.report_preferences.updated', school, school.id,
           {'before': before, 'after': school.report_preferences})
@@ -69,4 +78,4 @@ def set_logo(request: Request, db: DB, user: Actor, school: Scope, version: int 
     school.report_logo = normalized.getvalue()
     school.version += 1
     audit(db, request, user, 'school.report_logo.updated', school, school.id)
-    return {'version': school.version}
+    return {'version': school.version, 'report_logo': school_logo_url(school)}

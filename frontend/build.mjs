@@ -23,20 +23,26 @@ execFileSync(compiler,['-p',path.join(root,'tsconfig.news.json')],{stdio:'inheri
 execFileSync(compiler,['-p',path.join(root,'tsconfig.family.json')],{stdio:'inherit'});
 execFileSync(compiler,['-p',path.join(root,'tsconfig.teacher.json')],{stdio:'inherit'});
 const renders={};
-for(const name of ['contractValue','enrollmentWorkflow','academicPreparation','notificationEmail','app','portal','familyPortal','teacherPortal','expansion','camera','users','assist','diagnostics','diary','educacenso','contracts','signing','reports','legacyImport','learning','community','news','mailcow','audit','email','lifecycle']){
+for(const name of ['asaas','contractValue','enrollmentWorkflow','academicPreparation','notificationEmail','app','portal','familyPortal','teacherPortal','portalMail','expansion','camera','users','assist','diagnostics','diary','educacenso','contracts','signing','reports','legacyImport','learning','community','news','mailcow','audit','email','lifecycle']){
  const fragment=key=>fs.readFileSync(path.join(root,'templates',key+'.html'),'utf8');
- const template=fs.readFileSync(path.join(root,'templates',name+'.html'),'utf8').replaceAll('<!-- MFA-MANAGE -->',fragment('mfa-manage')).replaceAll('<!-- MFA-CHALLENGE -->',fragment('mfa-challenge')).replaceAll('<!-- FAMILY -->',fragment('family')).replaceAll('<!-- FORM-FIELDS -->',fragment('form-fields'));
+ const template=fs.readFileSync(path.join(root,'templates',name+'.html'),'utf8').replaceAll('<!-- MFA-MANAGE -->',fragment('mfa-manage')).replaceAll('<!-- MFA-CHALLENGE -->',fragment('mfa-challenge')).replaceAll('<!-- FAMILY -->',fragment('family')).replaceAll('<!-- FAMILY-AUTO-PIX -->',fragment('family-auto-pix')).replaceAll('<!-- FAMILY-CARD -->',fragment('family-card')).replaceAll('<!-- FORM-FIELDS -->',fragment('form-fields'));
  const errors=[];
  const render=sandbox.Vue.compile(template,{hoistStatic:false,onError:error=>errors.push(String(error))});
  if(errors.length)throw new Error(name+': '+errors.join('; '));
  const code=render.toString();if(code.includes('_hoisted_'))throw new Error('Render contém constantes externas.');
  renders[name]=code;
 }
-fs.writeFileSync(path.join(dist,'renders.js'),'/* Vue pré-compilado; sem eval em runtime. */\nvar _Vue=Vue; var PigeRenders={'+Object.entries(renders).map(([key,code])=>key+':'+code).join(',')+'};\n');
+function writeRenders(filename, names) {
+ const entries=names.map(name=>name+':'+renders[name]);
+ fs.writeFileSync(path.join(dist,filename),'/* Vue pré-compilado; sem eval em runtime. */\nvar _Vue=Vue; var PigeRenders={'+entries.join(',')+'};\n');
+}
+writeRenders('renders.js',Object.keys(renders));
+writeRenders('family-renders.js',['familyPortal','learning','portalMail']);
+writeRenders('teacher-renders.js',['teacherPortal','diary','portalMail']);
 fs.cpSync(path.join(root,'public'),dist,{recursive:true});
 fs.mkdirSync(path.join(dist,'vendor'),{recursive:true});fs.copyFileSync(path.join(root,'vendor/vue-3.5.13.global.prod.js'),path.join(dist,'vendor/vue-3.5.13.global.prod.js'));
 fs.copyFileSync(path.join(root,'src/app.css'),path.join(dist,'app.css'));
-const staticFiles=['/','/index.html','/app.js','/portal.js','/family.js','/teacher.js','/news.js','/renders.js','/app.css','/vendor/vue-3.5.13.global.prod.js'];
+const staticFiles=['/','/index.html','/app.js','/portal.js','/family.js','/teacher.js','/news.js','/renders.js','/family-renders.js','/teacher-renders.js','/app.css','/vendor/vue-3.5.13.global.prod.js'];
 function collectPublic(dir,prefix='') { for(const entry of fs.readdirSync(dir,{withFileTypes:true})) {
  const name=prefix+'/'+entry.name;
  if(entry.isDirectory()){if(!['/branding','/fonts'].includes(name))collectPublic(path.join(dir,entry.name),name);}
@@ -70,7 +76,9 @@ self.addEventListener('fetch',event=>{
 fs.writeFileSync(path.join(dist,'sw.js'),sw);
 fs.writeFileSync(path.join(dist,'build-info.json'),JSON.stringify({product:'PIGE360 Self',version,vue:'3.5.13',build_id:hash,pipeline:'typescript-vue-precompiled',external_cdn:false},null,2)+'\n');
 execFileSync(process.execPath,[path.join(root,'tests/render-smoke.mjs')],{stdio:'inherit'});
+execFileSync(process.execPath,[path.join(root,'tests/admission-fee-flow.mjs')],{stdio:'inherit'});
 execFileSync(process.execPath,[path.join(root,'tests/integration-navigation.mjs')],{stdio:'inherit'});
+execFileSync(process.execPath,[path.join(root,'tests/asaas-flow.mjs')],{stdio:'inherit'});
 execFileSync(process.execPath,[path.join(root,'tests/diary-flow.mjs')],{stdio:'inherit'});
 execFileSync(process.execPath,[path.join(root,'tests/mailcow-flow.mjs')],{stdio:'inherit'});
 execFileSync(process.execPath,[path.join(root,'tests/api-download.mjs')],{stdio:'inherit'});

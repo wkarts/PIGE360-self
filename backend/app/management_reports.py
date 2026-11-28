@@ -27,7 +27,8 @@ MAX_PDF_ROWS = 2000
 LABELS = {
     'active': 'Ativo', 'inactive': 'Inativo', 'archived': 'Arquivado', 'draft': 'Rascunho', 'suspended': 'Suspenso',
     'transferred': 'Transferido', 'cancelled': 'Cancelado', 'completed': 'Concluído',
-    'new': 'Nova matrícula', 'reenrollment': 'Rematrícula', 'transfer': 'Transferência',
+    'new': 'Nova matrícula', 'renewal': 'Rematrícula', 'transfer_in': 'Transferência recebida', 'returning': 'Retorno',
+    'reenrollment': 'Rematrícula', 'transfer': 'Transferência',
     'queued': 'Aguardando emissão', 'pending': 'Pendente', 'confirmed': 'Confirmado',
     'received': 'Recebido', 'received_external': 'Recebido externamente', 'overdue': 'Vencido',
     'refunded': 'Estornado', 'refund_requested': 'Estorno solicitado',
@@ -187,21 +188,30 @@ def students(db, school_id, f):
     data = limited(db, stmt.order_by(m.Person.name, m.Student.id))
     ids = [student.id for student, _ in data]
     current = {}
-    # Busca por subconsulta evita limite de bind parameters e N+1 para escolas grandes.
+    in_preparation = {}
+    today = local_date(now())
     matched_ids = stmt.with_only_columns(m.Student.id).order_by(None)
-    for enrollment, group in db.execute(select(m.Enrollment, m.ClassGroup.name).join(m.ClassGroup,
-        and_(m.ClassGroup.id == m.Enrollment.class_group_id, m.ClassGroup.school_id == school_id)).where(
+    enrollments = select(m.Enrollment, m.ClassGroup.name, m.AcademicYear).join(
+        m.ClassGroup, and_(m.ClassGroup.id == m.Enrollment.class_group_id, m.ClassGroup.school_id == school_id)).join(
+        m.AcademicYear, and_(m.AcademicYear.id == m.Enrollment.academic_year_id, m.AcademicYear.school_id == school_id)).where(
         m.Enrollment.school_id == school_id, m.Enrollment.student_id.in_(matched_ids),
         m.Enrollment.class_group_id.in_(scoped_groups(db, school_id, f)),
-        m.Enrollment.status.in_(['draft', 'active', 'suspended'])).order_by(m.Enrollment.enrolled_on.desc(), m.Enrollment.created_at.desc(), m.Enrollment.id.desc())):
-        current.setdefault(enrollment.student_id, group)
+        m.Enrollment.status.in_(['draft', 'active', 'suspended'])).order_by(
+        case((m.Enrollment.status == 'active', 0), else_=1), m.Enrollment.enrolled_on.desc(),
+        m.Enrollment.created_at.desc(), m.Enrollment.id.desc())
+    for enrollment, group, year in db.execute(enrollments):
+        if enrollment.status == 'draft':
+            in_preparation.setdefault(enrollment.student_id, group + ' · ' + year.name)
+        elif year.starts_on <= today <= year.ends_on and enrollment.enrolled_on <= today:
+            current.setdefault(enrollment.student_id, group)
     rows = [dict(number=student.number, name=person.name, birth_date=iso(person.birth_date),
-                 class_name=current.get(student.id, 'Sem matrícula vigente'), created_on=iso(student.created_at),
+                 class_name=current.get(student.id, 'Sem matrícula vigente'),
+                 draft_class=in_preparation.get(student.id, ''), created_on=iso(student.created_at),
                  status=label(student.status), _date=iso(student.created_at)) for student, person in data]
     summary = [metric('total', 'Alunos cadastrados', len(rows)), metric('active', 'Ativos', sum(s.status == 'active' for s, _ in data)),
                metric('enrolled', 'Com matrícula vigente', sum(ident in current for ident in ids))]
-    columns = [col('number', 'Código'), col('name', 'Aluno', width=2.5), col('birth_date', 'Nascimento', 'date'), col('class_name', 'Turma', width=1.7), col('created_on', 'Cadastro', 'date'), col('status', 'Situação')]
-    return rows, columns, summary, ['Quando há mais de uma matrícula vigente, a turma exibida é a da matrícula mais recente dentro dos filtros.']
+    columns = [col('number', 'Código'), col('name', 'Aluno', width=2.5), col('birth_date', 'Nascimento', 'date'), col('class_name', 'Turma vigente', width=1.7), col('draft_class', 'Em preparação', width=1.7), col('created_on', 'Cadastro', 'date'), col('status', 'Situação')]
+    return rows, columns, summary, ['Vigência em ' + today.strftime('%d/%m/%Y') + ': vínculo ativo ou suspenso no ano letivo em curso. A turma ativa tem prioridade. Rascunhos aparecem em preparação.']
 
 
 def financial(db, school_id, f):
@@ -427,7 +437,8 @@ def report_catalog(db: DB, user: Actor, school: Scope):
         if data['permission'] not in permissions: continue
         items.append({'id': ident, **{k: v for k, v in data.items() if k not in {'permission', 'statuses'}},
                       'statuses': [{'value': state, 'label': 'Aguardando análise' if ident == 'document-pendencies' and state == 'received' else label(state)} for state in data['statuses']]})
-    return {'items': items, 'default_period': {'date_from': str(start), 'date_to': str(end)}}
+    from .report_preferences import school_logo_url
+    return {'items': items, 'report_logo': school_logo_url(school), 'default_period': {'date_from': str(start), 'date_to': str(end)}}
 
 
 def csv_safe(value):
@@ -467,7 +478,7 @@ def management_pdf(kind: str, db: DB, user: Actor, school: Scope, request: Reque
         fail(422, 'O relatório excede 2.000 registros para PDF. Refine os filtros ou exporte o relatório completo em CSV.')
     payload = render_table(school, report['title'], report['columns'], report['items'],
                            summary=report['summary'], period=report['period']['label'], filters=report['filters'],
-                           module=report['module'], status_summary=report['status_summary'], notes=[report['description'], report['date_basis'], *report['notes']], monthly=report['monthly'], issuer=user.name, db=db)
+                           module=report['module'], report_family='management', status_summary=report['status_summary'], notes=[report['description'], report['date_basis'], *report['notes']], monthly=report['monthly'], issuer=user.name, db=db)
     audit(db, request, user, 'report.management_exported', school, school.id, {'kind': kind, 'format': 'pdf', 'count': report['total'], 'period': report['period']})
     return Response(payload, media_type='application/pdf', headers={'Content-Disposition': f'attachment; filename="relatorio-{kind}-{filters["date_from"]}-{filters["date_to"]}.pdf"', 'Cache-Control': 'no-store'})
 

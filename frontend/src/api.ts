@@ -12,7 +12,7 @@ namespace PigeAPI {
     emergency_contact_name: string; emergency_contact_phone: string;
     photo_file_id?: string | null; role_keys?: string[]; roles?: string[]; access_role_keys?: string[]; person_types?: string[]; person_type_labels?: string[]; student_id?: string | null; active: boolean;
   }
-  export interface User { id: string; version: number; name: string; email: string; role: string; role_label?: string; active: boolean; person_id?: string | null; has_photo?:boolean; photo_revision?:string; created_at?:string; permissions: string[]; school_ids: string[]; admin_tools?: {portability:boolean;diagnostics:boolean;audit:boolean;develop_build:boolean} }
+  export interface User { id: string; version: number; name: string; email: string; role: string; role_label?: string; active: boolean; person_id?: string | null; has_photo?:boolean; photo_revision?:string; created_at?:string; permissions: string[]; teacher_routines?:string[]; school_ids: string[]; admin_tools?: {portability:boolean;diagnostics:boolean;audit:boolean;develop_build:boolean} }
   export type Value = string | number | boolean | null | string[];
   export type FormDataMap = Record<string, Value>;
   // Registros de catálogo usam um mapa tipado; dados pessoais têm contrato próprio acima.

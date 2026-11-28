@@ -156,7 +156,7 @@ class AsaasProvider:
     def create_payment(self,charge):
         return self.request('/payments','POST',{'customer':charge.remote_customer_id,'billingType':charge.billing_type,
             'value':float(charge.amount),'dueDate':charge.due_on.isoformat(),'description':charge.description,
-            'externalReference':charge.external_reference})
+            'externalReference':charge.external_reference, **(charge.payer_snapshot or {}).get('asaas_terms', {})})
     def get_payment(self,id): return self.request('/payments/'+quote(id,safe=''))
     def cancel(self,id): return self.request('/payments/'+quote(id,safe=''),'DELETE')
     def pix(self,id): return self.request('/payments/'+quote(id,safe='')+'/pixQrCode')

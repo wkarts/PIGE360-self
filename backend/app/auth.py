@@ -8,7 +8,7 @@ from .models import Installation, Company, School, Unit, AcademicYear, User, Per
 from .schemas import Login, Setup, UserInput, UserEdit, PasswordChange
 from .security import Actor, DB, PERMISSIONS, ROLE_LABELS, access_token, check_version, digest, fail, hash_password, require, request_csrf, utc, verify
 from .common import audit, output
-from .security import allowed_request_origin
+from .security import PORTAL_LOGIN_PATHS, allowed_request_origin, portal_origin
 
 router = APIRouter(prefix='/api/v1', tags=['Autenticação e instalação'])
 DUMMY_PASSWORD_HASH = hash_password('not-an-account-password-93401980')
@@ -17,12 +17,13 @@ def user_output(db, user):
     from .models import UserProfile
     from .admin_tools import capabilities
     profile = db.get(UserProfile, user.id)
-    from .access_security import permissions_for
+    from .access_security import permissions_for, teacher_routines_for
     from .access_models import SchoolAccessProfile
     school_id = getattr(user, '_active_school_id', None)
     access = db.get(SchoolAccess, (user.id, school_id)) if school_id else None
     access_profile = db.get(SchoolAccessProfile, access.access_profile_id) if access and access.access_profile_id else None
     return {**output(user, ('password_hash',)),
+            **({'teacher_routines': sorted(teacher_routines_for(db, user, school_id))} if user.role == 'teacher' else {}),
             'has_photo': bool(profile and profile.photo_hash),
             'photo_revision': profile.photo_hash if profile else '',
             'role_label': ROLE_LABELS.get(user.role, user.role),
@@ -101,6 +102,10 @@ def login(data: Login, request: Request, response: Response, db: DB):
     from .security import require_portal_role
     require_portal_role(request, user)
     counters[0].count = 0
+    if request.headers.get('X-Pige-Login-Surface') == 'management' and portal_origin(user.role):
+        # Os cookies são por domínio. Não conceder uma sessão no gestor nem
+        # transportar a senha ou um token de sessão para a origem do portal.
+        return {'portal_path': PORTAL_LOGIN_PATHS[user.role]}
     from .mfa import before_login
     challenge = before_login(db, request, 'user', user)
     if challenge:

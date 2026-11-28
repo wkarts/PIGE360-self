@@ -11,46 +11,143 @@
         <label class="field">E-mail<input type="email" v-model="s.email" inputmode="email" autocapitalize="none" :spellcheck="false" enterkeyhint="next" required autocomplete="username" placeholder="seu.email@exemplo.com" :disabled="s.busy"></label>
         <div class="field"><label for="teacher-password">Senha</label><div class="password-control"><input id="teacher-password" v-model="s.password" :type="s.passwordVisible?'text':'password'" required maxlength="128" autocomplete="current-password" enterkeyhint="go" placeholder="Sua senha de acesso" :disabled="s.busy"><button class="password-toggle" type="button" :aria-label="s.passwordVisible?'Ocultar senha':'Mostrar senha'" :aria-pressed="s.passwordVisible" aria-controls="teacher-password" @click="s.passwordVisible=!s.passwordVisible">{{s.passwordVisible?'Ocultar':'Mostrar'}}</button></div></div>
         <button class="btn btn-primary full" :disabled="s.busy">{{s.busy?'Autenticando…':'Entrar como professor'}} <span aria-hidden="true">→</span></button>
-        <p class="auth-help muted">Precisa recuperar seu acesso? Fale com a secretaria da escola.</p>
+        <p class="auth-help muted"><a href="/professor/recuperar-senha">Esqueci minha senha</a></p>
       </form>
     </section>
   </main>
-  <div v-else class="family-shell" @keydown="menuKey">
-    <button v-if="s.menuOpen" class="family-shade" aria-label="Fechar navegação" @click="toggleMenu(false)"></button>
-    <aside id="teacher-navigation" class="family-sidebar" :class="{visible:s.menuOpen}">
-      <div class="family-sidebar-brand"><button id="teacher-menu-close" type="button" class="icon-button family-menu-close" @click="toggleMenu(false)" aria-label="Fechar menu">×</button><div><strong>{{identity.display_name}}</strong><small>PORTAL DO PROFESSOR</small></div></div>
-      <div class="family-sidebar-scroll"><p class="family-nav-label">ROTINA DOCENTE</p><nav aria-label="Rotina do professor">
-      <button v-for="item in [{id:'overview',label:'Visão geral',icon:'dashboard'},{id:'agenda',label:'Minha programação',icon:'clock'},{id:'diary',label:'Diário de classe',icon:'academic'},{id:'materials',label:'Atividades e trabalhos',icon:'documents'},{id:'news',label:'Avisos e publicações',icon:'bell'}]" :key="item.id" :aria-current="s.section===item.id?'page':undefined" :disabled="s.busy || (['diary','materials'].includes(item.id) && !s.agenda?.diaries.length) || (!s.schoolId && item.id!=='overview')" @click="navigate(item.id)"><svg class="ui-icon" aria-hidden="true"><use :href="'/ui-icons.svg#'+item.icon"/></svg>{{item.label}}</button>
-      </nav></div><footer class="family-sidebar-footer">{{identity.short_name}}<small>Portal do Professor</small></footer>
+  <div v-else class="family-shell teacher-shell" :class="{'sidebar-collapsed':s.sidebarCollapsed,'family-shell-collapsed':s.sidebarCollapsed}" @keydown="menuKey">
+    <div v-if="s.menuOpen" class="family-shade" aria-hidden="true" @click="toggleMenu(false)"></div>
+    <aside id="teacher-navigation" class="family-sidebar" :class="{visible:s.menuOpen}" aria-label="Navegação do professor">
+      <div class="family-sidebar-brand">
+        <button id="teacher-menu-close" type="button" class="icon-button family-menu-close" aria-label="Fechar menu" @click="toggleMenu(false)"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#close"/></svg></button>
+        <a href="#teacher-content" aria-label="Visão geral do professor" @click.prevent="navigate('overview')">
+          <img v-if="identity.logo_url" :src="identity.logo_url" :alt="identity.display_name">
+          <strong v-else>{{s.sidebarCollapsed && !s.menuOpen ? initials(identity.short_name) : identity.display_name}}</strong>
+          <small>PORTAL DO PROFESSOR</small>
+        </a>
+      </div>
+      <div class="family-sidebar-scroll">
+        <p class="family-nav-label">ROTINA DOCENTE</p>
+        <nav aria-label="Rotina do professor">
+          <button v-for="item in navigation()" :key="item.id" type="button"
+            :title="item.label" :aria-label="item.label" :aria-current="s.section===item.id?'page':undefined"
+            :disabled="s.busy || unavailable(item.id)" @click="navigate(item.id)">
+            <svg class="ui-icon" aria-hidden="true"><use :href="'/ui-icons.svg#'+item.icon"/></svg>
+            <span>{{item.label}}</span>
+          </button>
+        </nav>
+      </div>
+      <footer class="family-sidebar-footer">{{identity.short_name}}<small>Portal do Professor</small></footer>
     </aside>
-    <div class="family-main" :inert="s.menuOpen?true:undefined"><main id="teacher-content" class="teacher-main">
-    <header class="teacher-header">
-      <button id="teacher-menu-toggle" class="icon-button family-menu-toggle" aria-label="Abrir menu" aria-controls="teacher-navigation" :aria-expanded="s.menuOpen" @click="toggleMenu(true)"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#menu"/></svg></button><div class="teacher-brand"><img v-if="identity.logo_url" :src="identity.logo_url" alt=""><span>{{identity.display_name}}</span></div>
-      <div class="teacher-account"><span>{{s.user.name}}</span><button class="btn btn-secondary" :disabled="s.busy" @click="logout">Sair</button></div>
-    </header>
-    <div class="teacher-heading"><h1>{{({overview:'Visão geral',agenda:'Minha programação',diary:'Diário de classe',materials:'Atividades e trabalhos',news:'Avisos e publicações'})[s.section]}}</h1><label v-if="s.schools.length>1">Instituição<select :value="s.schoolId" :disabled="s.busy" @change="selectSchool"><option v-for="item in s.schools" :key="item.id" :value="item.id">{{item.name}}</option></select></label></div>
-    <p v-if="s.error" class="alert error" role="alert">{{s.error}} <button class="btn" :disabled="s.busy" @click="run(workspace)">Tentar novamente</button></p>
-    <p v-if="!s.schools.length&&!s.error&&!s.busy" class="alert">Peça à Secretaria que vincule sua conta de Professor à instituição.</p>
-    <section v-if="s.section==='news'" class="panel x-card"><h2>Comunicados da escola</h2><p v-if="!s.news.length&&!s.busy">Nenhuma publicação disponível.</p><article v-for="item in s.news" :key="item.id"><h3>{{item.title}}</h3><p class="preserve">{{item.content||item.summary}}</p></article><div v-if="s.newsTotal>10" class="actions"><button :disabled="s.busy||s.newsPage===1" @click="run(()=>publications(s.newsPage-1))">Anterior</button><button :disabled="s.busy||s.newsPage*10>=s.newsTotal" @click="run(()=>publications(s.newsPage+1))">Próxima</button></div></section>
-    <p v-if="s.agenda && !s.agenda.diaries.length && s.section==='diary'" class="alert">Peça à Coordenação que confira sua atribuição e abra o diário da turma.</p>
-    <section v-if="s.agenda" v-show="['overview','agenda','materials'].includes(s.section)" class="teacher-overview">
-      <section v-show="s.section!=='agenda'" class="panel x-card"><h2>Minhas turmas</h2>
-        <p v-if="!s.agenda.assignments.length">A Coordenação precisa associar seu cadastro à turma e à disciplina em Atribuições docentes.</p>
-        <ul class="teacher-list"><li v-for="a in s.agenda.assignments" :key="a.id"><strong>{{a.class_name}} · {{a.subject_name}}</strong><span>{{[a.shift_name,a.year_name].filter(Boolean).join(' · ')}}</span>
-          <template v-for="d in s.agenda.diaries.filter(item=>item.teacher_assignment_id===a.id)" :key="d.id">
-            <button class="btn btn-secondary teacher-open" @click="s.requestedDiary={id:d.id,tab:s.section==='materials'?'materials':'diaries'};s.section='diary'">{{s.section==='materials'?'Abrir materiais':'Abrir diário'}} · {{d.component}}</button>
-            <button v-if="s.section==='overview' && pilotForSchool(s.schoolId)" class="btn btn-secondary teacher-open" @click="s.requestedDiary={id:d.id,tab:'attendance'};s.section='diary'">Fazer chamada · {{d.component}}</button>
-          </template>
-          <small v-if="!s.agenda.diaries.some(d=>d.teacher_assignment_id===a.id)">Peça à Coordenação que abra o diário desta turma e o vincule à sua atribuição.</small></li></ul>
-      </section>
-      <section v-show="s.section!=='materials'" class="panel x-card"><div class="teacher-week"><h2>Programação da semana</h2><label>Semana de<input type="date" v-model="s.week" :disabled="s.busy" @change="run(agenda)"></label></div>
-        <p>{{date(s.agenda.starts_on)}} a {{date(s.agenda.ends_on)}}</p>
-        <p v-if="!s.agenda.events.length" class="muted">Nenhuma aula registrada ou avaliação marcada para esta semana.</p>
-        <ul class="teacher-list"><li v-for="e in s.agenda.events" :key="e.kind+e.id"><span>{{date(e.date)}} · {{e.kind}}</span><strong>{{e.title}}</strong><small>{{group(e.diary_id)}}</small></li></ul>
-      </section>
-    </section>
-    <section v-if="s.agenda?.diaries.length" v-show="s.section==='diary'" aria-label="Diário de classe">
-      <school-diary :school-name="s.schools.find(item=>item.id===s.schoolId)?.name" :key="s.schoolId" :school-id="s.schoolId" :permissions="s.user.permissions" :teacher-portal="true" :requested-diary="s.requestedDiary"></school-diary>
-    </section>
-  </main></div></div>
+
+    <div class="family-main" :inert="s.menuOpen?true:undefined">
+      <header class="family-header">
+        <button type="button" class="icon-button family-rail-toggle" :aria-label="s.sidebarCollapsed?'Expandir menu lateral':'Recolher menu lateral'" :title="s.sidebarCollapsed?'Expandir menu lateral':'Recolher menu lateral'" aria-controls="teacher-navigation" :aria-expanded="!s.sidebarCollapsed" @click="toggleSidebar"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#sidebar-toggle"/></svg></button>
+        <button id="teacher-menu-toggle" type="button" class="icon-button family-menu-toggle" aria-label="Abrir menu" aria-controls="teacher-navigation" :aria-expanded="s.menuOpen" @click="toggleMenu(true)"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#menu"/></svg></button>
+        <div class="family-header-school">
+          <small>{{s.schools.length>1?'INSTITUIÇÃO ATIVA':'PORTAL DO PROFESSOR'}}</small>
+          <select v-if="s.schools.length>1" aria-label="Selecionar instituição" :value="s.schoolId" :disabled="s.busy" @change="selectSchool"><option v-for="item in s.schools" :key="item.id" :value="item.id">{{item.name}}</option></select>
+          <strong v-else>{{s.schools[0]?.name || identity.display_name}}</strong>
+        </div>
+        <div class="family-account">
+          <div><strong>{{s.user.name}}</strong><small>Professor</small></div>
+          <span class="family-avatar" :title="s.user.name" aria-hidden="true">{{initials(s.user.name)}}</span>
+          <button type="button" class="icon-button" aria-label="Sair" title="Sair" :disabled="s.busy" @click="logout"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#logout"/></svg></button>
+        </div>
+      </header>
+      <div class="work-tabs teacher-tabs">
+        <div class="work-tabs-list" role="tablist" aria-label="Tarefas abertas" @keydown="tabKeys">
+          <div v-for="id in s.tabs" :key="id" class="work-tab" :class="{current:s.section===id}">
+            <button type="button" role="tab" :id="'teacher-tab-'+id" :aria-selected="s.section===id" :tabindex="s.section===id?0:-1"
+              aria-controls="teacher-view" :title="id==='overview' && s.tabs.length>1?'Duplo clique para fechar as outras guias':undefined"
+              @click="navigate(id,false)" @dblclick="id==='overview' && closeTabs()">{{title(id)}}</button>
+            <button v-if="id!=='overview'" type="button" class="work-tab-close" :aria-label="'Fechar guia '+title(id)" @click="closeTabs(id)">×</button>
+          </div>
+        </div>
+        <button v-if="s.tabs.length>1" type="button" class="icon-button teacher-close-others" aria-label="Fechar outras guias" title="Fechar outras guias" @click="closeTabs()"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#close-tabs"/></svg></button>
+      </div>
+      <main id="teacher-content" class="family-content teacher-content" tabindex="-1">
+        <div id="teacher-view" role="tabpanel" :aria-labelledby="'teacher-tab-'+s.section">
+          <div class="family-heading">
+            <div><p class="family-breadcrumb">Portal do professor / {{title(s.section)}}</p><h1 id="teacher-title" tabindex="-1">{{title(s.section)}}</h1></div>
+            <button v-if="s.section!=='help'" type="button" class="btn btn-secondary" @click="navigate('help')">Guia de uso</button>
+          </div>
+          <p v-if="s.error" class="alert error" role="alert">{{s.error}} <button class="link-button" :disabled="s.busy" @click="run(retry)">Tentar novamente</button></p>
+          <p v-if="!s.schools.length&&!s.error&&!s.busy" class="alert">Peça à Secretaria que vincule sua conta de Professor à instituição.</p>
+
+          <section v-if="s.section==='overview'" class="family-welcome">
+            <div><h2>Olá, {{s.user.name.split(' ')[0]}}.</h2>
+            <p v-if="available('agenda') && available('diary')">Consulte a programação e registre aulas, chamadas e avaliações das suas turmas.</p>
+            <p v-else-if="navigation().length>1">Consulte as rotinas liberadas pela escola para o seu acesso.</p>
+            <p v-else-if="s.schoolId && !s.busy">Ainda não há rotinas liberadas para esta conta. Solicite a liberação à coordenação.</p></div>
+            <div v-if="navigation().length>1" class="actions">
+              <button v-if="available('diary') && s.agenda?.diaries.length" class="btn btn-primary" @click="navigate('diary')">Acessar meus diários</button>
+              <button v-if="available('agenda')" class="btn" :class="available('diary') && s.agenda?.diaries.length?'btn-secondary':'btn-primary'" @click="navigate('agenda')">Consultar programação</button>
+              <template v-if="!available('agenda') && !(available('diary') && s.agenda?.diaries.length)">
+                <button v-if="available('news')" class="btn btn-primary" @click="navigate('news')">Consultar avisos</button>
+                <button v-if="available('webmail')" class="btn btn-secondary" @click="navigate('webmail')">Abrir caixa institucional</button>
+              </template>
+            </div>
+          </section>
+          <div v-if="s.section==='overview' && s.agenda" class="family-stats teacher-stats">
+            <article v-for="metric in metrics()" :key="metric.label" class="family-stat">
+              <span>{{metric.label}}</span><svg class="ui-icon" aria-hidden="true"><use :href="'/ui-icons.svg#'+metric.icon"/></svg>
+              <strong>{{metric.value}}</strong><small>{{metric.caption}}</small>
+            </article>
+          </div>
+
+          <div v-if="s.agenda && ['overview','agenda','materials'].includes(s.section)" class="teacher-overview" :class="{'family-dashboard-grid':s.section==='overview' && available('agenda') && available('diary')}">
+            <section v-if="available('diary') && s.section!=='agenda'" class="panel">
+              <div class="family-panel-heading"><h2>Minhas turmas</h2></div>
+              <p v-if="!s.agenda.assignments.length" class="family-empty">A Coordenação precisa associar seu cadastro à turma e à disciplina no Diário Escolar.</p>
+              <ul class="teacher-list"><li v-for="a in s.agenda.assignments" :key="a.id" class="family-attention">
+                <h3>{{a.class_name}} · {{a.subject_name}}</h3><p>{{[a.shift_name,a.year_name].filter(Boolean).join(' · ')}}</p>
+                <div v-for="d in s.agenda.diaries.filter(item=>item.teacher_assignment_id===a.id)" :key="d.id" class="actions teacher-class-actions">
+                  <button class="btn btn-secondary" @click="openDiary(d.id,s.section==='materials'?'materials':'diaries')">{{s.section==='materials'?'Abrir materiais':'Abrir diário'}} · {{d.component}}</button>
+                  <button v-if="s.section==='overview' && can('diary.attendance')" class="btn btn-secondary" @click="openDiary(d.id,'attendance')">Fazer chamada · {{d.component}}</button>
+                  <button v-if="s.section==='overview' && can('diary.write')" class="btn btn-secondary" @click="openDiary(d.id,'planning')">Planejar aula · {{d.component}}</button>
+                </div>
+                <small v-if="!s.agenda.diaries.some(d=>d.teacher_assignment_id===a.id)">Peça à Coordenação que abra o diário desta turma e o vincule à sua atribuição.</small>
+              </li></ul>
+            </section>
+            <section v-if="available('agenda') && s.section!=='materials'" class="panel">
+              <div class="family-panel-heading teacher-week"><div><h2>Programação da semana</h2><p class="muted">{{date(s.agenda.starts_on)}} a {{date(s.agenda.ends_on)}}</p></div>
+              <label class="field">Semana de<input type="date" v-model="s.week" :disabled="s.busy" @change="run(agenda)"></label></div>
+              <p v-if="!s.agenda.events.length" class="family-empty">Nenhuma aula registrada ou avaliação marcada para esta semana.</p>
+              <ul class="teacher-list"><li v-for="e in s.agenda.events" :key="e.kind+e.id" class="family-post">
+                <svg class="ui-icon" aria-hidden="true"><use :href="'/ui-icons.svg#'+(e.kind==='Avaliação'?'enrollment':'academic')"/></svg>
+                <div><small>{{date(e.date)}} · {{e.kind}}</small><h3>{{e.title}}</h3><p>{{group(e.diary_id)}}</p></div>
+              </li></ul>
+            </section>
+          </div>
+          <section v-if="s.tabs.includes('diary') && s.agenda?.diaries.length && available('diary')" v-show="s.section==='diary'" id="teacher-diary" aria-label="Diário de classe">
+            <school-diary :school-name="s.schools.find(item=>item.id===s.schoolId)?.name" :key="s.schoolId" :school-id="s.schoolId" :permissions="s.user.permissions" :teacher-portal="true" :allow-materials="available('materials')" :requested-diary="s.requestedDiary"></school-diary>
+          </section>
+          <section v-if="s.section==='news' && available('news')" class="panel">
+            <div class="family-panel-heading"><h2>Comunicados da escola</h2></div>
+            <p v-if="!s.news.length&&!s.busy&&!s.error" class="family-empty">Nenhuma publicação disponível.</p>
+            <article v-for="item in s.news" :key="item.id" class="family-post"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#bell"/></svg><div><h3>{{item.title}}</h3><p class="family-post-content">{{item.content||item.summary}}</p></div></article>
+            <div v-if="s.newsTotal>10" class="family-pagination"><button class="btn btn-secondary" :disabled="s.busy||s.newsPage===1" @click="run(()=>publications(s.newsPage-1))">Anterior</button><span>Página {{s.newsPage}}</span><button class="btn btn-secondary" :disabled="s.busy||s.newsPage*10>=s.newsTotal" @click="run(()=>publications(s.newsPage+1))">Próxima</button></div>
+          </section>
+          <section v-if="s.tabs.includes('webmail') && available('webmail')" v-show="s.section==='webmail'" aria-label="E-mail institucional">
+            <portal-mail :key="s.schoolId" :school-id="s.schoolId" :request="mail.request"></portal-mail>
+          </section>
+          <section v-if="s.section==='help'" class="panel family-detail-panel teacher-guide">
+            <h2>Guia de uso do diário</h2>
+            <div class="teacher-guide-content">
+              <ol>
+                <li>Na Visão geral, localize a turma e a disciplina em <strong>Minhas turmas</strong>. A coordenação confere o vínculo no Diário Escolar.</li>
+                <li>Use <strong>Planejar aula</strong> para preparar o planejamento. Para registrar uma aula ou consultar seu conteúdo, escolha <strong>Abrir diário</strong>.</li>
+                <li>Use <strong>Fazer chamada</strong>, selecione a aula e registre a frequência dos alunos. Confira os lançamentos antes de salvar.</li>
+                <li>Consulte aulas e avaliações em <strong>Minha programação</strong>. O campo <strong>Semana de</strong> muda o período exibido.</li>
+                <li>As rotinas que aparecem no menu dependem da liberação da escola. A opção <strong>E-mail</strong> exige uma caixa institucional vinculada à sua conta.</li>
+              </ol>
+              <figure><a href="/guia/professor.webp" target="_blank" rel="noopener" aria-label="Ampliar imagem de Minhas turmas (nova aba)"><img src="/guia/professor.webp" width="646" height="206" loading="lazy" alt="Exemplo de Minhas turmas com os botões Abrir diário, Fazer chamada e Planejar aula para Ciências."></a><figcaption>Atalhos da turma e da disciplina.</figcaption></figure>
+            </div>
+          </section>
+        </div>
+      </main>
+      <footer class="family-footer">{{identity.display_name}}<span>Portal do Professor</span></footer>
+    </div>
+  </div>
 </div>

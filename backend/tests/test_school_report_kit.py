@@ -66,7 +66,9 @@ def test_eleven_rendered_school_documents(api, client, admin, tmp_path):
     for model,title in [('integrated','Grade integrada'),('panel','Painel do aluno'),('journey','Percurso acadêmico')]:
         content=api.get('/reports/bulletins/'+enrollment['id']+'/preview.pdf?model='+model).content
         assert_document(content,tmp_path/(model+'.pdf'),True,title,'Matemática','8,5','66,67%','Horizonte')
-        assert len(PdfReader(BytesIO(content)).pages[0].images)>=2
+        pages = PdfReader(BytesIO(content)).pages
+        assert all('PRÉVIA' in page.extract_text() for page in pages)
+        assert len(pages[0].images)>=2
     for kind in ('student','employee','teacher'):
         for orient in ('portrait','landscape'):
             if kind=='student':
@@ -76,6 +78,10 @@ def test_eleven_rendered_school_documents(api, client, admin, tmp_path):
                 content=api.get('/persons/'+person['id']+'/records/'+kind+'.pdf?orientation='+orient).content
             assert_document(content,tmp_path/(kind+'-'+orient+'.pdf'),orient=='landscape',
                             'Mariana' if kind=='student' else 'Beatriz','Horizonte')
+            if kind == 'teacher':
+                pages = PdfReader(BytesIO(content)).pages
+                assert any('Carga horária cadastrada' in page.extract_text() and '\n0\n' in page.extract_text() for page in pages)
+                assert 'Atribuições docentes' in pages[-1].extract_text()
     for kind,title in [('attendance','Chamada'),('pedagogical_register','Registro cronológico')]:
         content=api.get('/diaries/'+diary+'/reports/'+kind+'.pdf?academic_period_id='+period).content
         assert_document(content,tmp_path/(kind+'.pdf'),True,title,'Matemática','Horizonte')
@@ -124,7 +130,12 @@ def test_official_bulletin_a1_revisions_and_rollback(api, client, tmp_path, monk
         assert not db.scalar(select(func.count()).select_from(m.IssuedDocument).where(m.IssuedDocument.kind=='official_bulletin',m.IssuedDocument.school_id==api.school['id']))
     first=api.post(route+op,{},200)
     assert first['revision']==1 and first['status']=='company_signed'
-    assert first==api.post(route+op,{},200)
+    assert first==api.post(route+op+'&expected_revision=0',{},200)
+    api.post(route+str(uuid4())+'&expected_revision=0',{},409)
+    listing = '/reports/bulletins/enrollments?academic_year_id=' + enrollment['academic_year_id']
+    def listed():
+        return next(row for row in api.get(listing)['items'] if row['id'] == eid)
+    assert listed()['revision'] == listed()['last_revision'] == 1
     from test_profiles import create_user, login
     email=str(uuid4())+'@example.com'
     create_user(client,api.headers,name='Consulta de ensaio',email=email,role='viewer',school_id=api.school['id'],person_id=None)
@@ -136,7 +147,9 @@ def test_official_bulletin_a1_revisions_and_rollback(api, client, tmp_path, monk
     portal_call(client,cookies,'GET',path,expected=404)
     activate(client,cookies,student)
     signed=portal_call(client,cookies,'GET',path).content
-    assert len(PdfReader(BytesIO(signed)).pages) > 1
+    signed_pages = PdfReader(BytesIO(signed)).pages
+    assert len(signed_pages) > 1
+    assert all('PRÉVIA' not in page.extract_text() for page in signed_pages)
     result=inspect_signatures(signed,roots=trust_roots(roots))
     assert result['chain_trusted'] and result['cryptographic_valid'] and len(result['signatures'])==1
     (tmp_path/'boletim-oficial-A1-ensaio.pdf').write_bytes(signed)
@@ -145,12 +158,14 @@ def test_official_bulletin_a1_revisions_and_rollback(api, client, tmp_path, monk
         assert signed==_read_verified(db.get(m.FileRecord,revision.file_id))
     pref=api.get('/report-preferences')
     api.call('PUT','/report-preferences',{**pref,'bulletin':'journey','color':'#295436','student':'landscape'})
-    second=api.post(route+str(uuid4()),{},200)
+    second=api.post(route+str(uuid4())+'&expected_revision=1',{},200)
+    assert listed()['revision'] == 2
     assert second['revision']==2 and second['id']!=first['id']
     assert portal_call(client,cookies,'GET',path).content==signed
     portal_call(client,cookies,'GET',path.replace(student['id'],other['id']),expected=404)
     with SessionLocal.begin() as db:
         db.get(m.DiaryClosure,cid).active=False
+    assert listed()['last_revision'] == 2 and 'revision' not in listed()
     portal_call(client,cookies,'GET',path,expected=404)
 
 

@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from .schemas import Input
+from .diary_entry_fields import FieldValues
 
 
 class CalendarInput(Input):
@@ -33,7 +34,17 @@ class CurriculumComponentInput(Input):
     active: bool = True
 
 
+class ComponentEdit(CurriculumComponentInput):
+    version: int = Field(ge=1)
+
+
+class DiaryRemoval(Input):
+    version: int = Field(ge=1)
+    reason: str = Field(min_length=3, max_length=1000)
+
+
 class CurriculumPlanInput(Input):
+    field_values: FieldValues | None = None
     class_group_id: str
     component_id: str
     academic_period_id: str | None = None
@@ -56,7 +67,13 @@ class DiaryInput(Input):
     notes: str = Field(default="",max_length=4000)
 
 
+class DiaryAssignmentInput(Input):
+    version: int = Field(ge=1)
+    teacher_assignment_id: str | None
+
+
 class LessonInput(Input):
+    field_values: FieldValues | None = None
     academic_period_id: str | None = None
     lesson_date: date
     lesson_count: int = Field(default=1,ge=1,le=20)
@@ -69,6 +86,7 @@ class LessonInput(Input):
 
 
 class AttendanceItem(Input):
+    expected_empty: bool = False
     enrollment_id: str
     status: Literal["present","absent","justified_absence"] = "present"
     note: str = Field(default="",max_length=500)
@@ -76,7 +94,7 @@ class AttendanceItem(Input):
 
 
 class AttendanceInput(Input):
-    items: list[AttendanceItem] = Field(min_length=1,max_length=300)
+    items: list[AttendanceItem] = Field(min_length=1,max_length=2000)
 
 
 class DiaryTransitionInput(Input):

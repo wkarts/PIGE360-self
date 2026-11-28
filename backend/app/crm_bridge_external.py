@@ -20,6 +20,11 @@ def output(row):
         'provider':provider_for(decode(row.raw_body.encode())['data']),'native_payment_effect_applied':False,'academic_effect_applied':False}
 
 
+def supports_external_issue(charge):
+    return (charge.collection_mode == 'manual' and not charge.connection_id
+            and not charge.remote_payment_id and not charge.payment_attempted)
+
+
 class IssueInput(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True)
     invoice_request_id:str=Field(min_length=36,max_length=36)
@@ -50,6 +55,10 @@ def queue(data:IssueInput,db:DB,user:Actor,school:Scope,request:Request):
         prior=decode(old.raw_body.encode())['data']
         if old.invoice_request_id!=invoice.id or prior!=fields:fail(409,'Origem externa já fixada. Não altere pagador ou modalidade para reemitir.')
         return output(old)
+    from .asaas_native import lock_issuance_channel
+    lock_issuance_channel(db, school.id, native.id, 'crm')
+    if not supports_external_issue(native):
+        fail(409,'Esta cobrança pertence ao canal bancário nativo e não admite outra emissão no CRM.')
     event=envelope(invoice.scope,uid(),'issue',fields);raw=encode(event)
     row=CRMBridgeExternalRequest(id=event['event_id'],school_id=school.id,charge_id=invoice.charge_id,invoice_request_id=invoice.id,connection_id=invoice.connection_id,scope=invoice.scope,raw_body=raw.decode(),payload_hash=hashlib.sha256(raw).hexdigest(),status='queued')
     db.add(row);db.flush();audit(db,request,user,'crm.charge.queued',row,school.id)
@@ -127,6 +136,8 @@ def process_one():
             if not cfg or cfg['scope']!=row.scope or hashlib.sha256(raw).hexdigest()!=row.payload_hash or not invoice or invoice.scope!=row.scope:raise ContractError('CRM_EXTERNAL_SCOPE_CHANGED')
             original=decode(invoice.raw_body.encode())['data']
             if not native or native.status not in ('pending','overdue','queued') or int(native.amount*100)!=original['amount_cents'] or native.due_on.isoformat()!=original['due_date']:raise ContractError('CRM_NATIVE_CHARGE_CHANGED')
+            if not supports_external_issue(native):
+                row.status='failed';row.error_code='CRM_NATIVE_ISSUE_CHANNEL';db.commit();return True
             if envelope(row.scope,row.id,'issue',event['data'])!=event:raise ContractError('CRM_EXTERNAL_BODY_CHANGED')
         except ContractError:
             row.status='failed';row.error_code='CRM_EXTERNAL_PREFLIGHT_DENIED';db.commit();return True

@@ -287,6 +287,27 @@ def test_invalid_optional_config_does_not_stop_native_worker(api, monkeypatch):
     assert calls == ['native']
 
 
+def test_worker_fairness_under_sustained_load_and_failed_queue():
+    from collections import deque
+    from app.integration_worker import process_next_queue
+
+    calls = []
+    def busy(name):
+        calls.append(name)
+        return True
+
+    def unavailable():
+        raise RuntimeError('synthetic outage')
+
+    queues = deque([('integrations', lambda: busy('integrations')),
+                    ('connect', lambda: busy('connect')), ('crm', unavailable),
+                    ('crm_external', lambda: False), ('backup', lambda: busy('backup'))])
+    for _ in range(60):
+        assert process_next_queue(queues)
+    assert calls == ['integrations', 'connect', 'backup'] * 20
+    assert not process_next_queue(deque([('empty', lambda: False), ('failed', unavailable)]))
+
+
 @pytest.mark.parametrize('field,value,error', [
     ('status','received','CRM_NATIVE_CHARGE_SETTLED_OR_UNAVAILABLE'),
     ('status','cancelled','CRM_NATIVE_CHARGE_SETTLED_OR_UNAVAILABLE'),

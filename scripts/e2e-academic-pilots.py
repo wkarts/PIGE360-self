@@ -87,7 +87,7 @@ def main():
                     if cadastros.get_attribute('aria-expanded') == 'true':
                         cadastros.click()
                     menu = page.locator('#app .sidebar-scroll[role="region"]')
-                    link = page.get_by_role('link', name='Inscrições online', exact=True)
+                    link = menu.get_by_role('link', name='Inscrições online', exact=True)
                     link.scroll_into_view_if_needed()
                     y = menu.evaluate('(el)=>{el.scrollTop=45;return el.scrollTop}')
                     assert y > 0
@@ -125,7 +125,7 @@ def main():
                 page.get_by_role('button', name='Salvar', exact=True).click()
                 expect(diary_option).to_have_count(0)
                 expect(page.get_by_label('Selecionar escola')).to_be_enabled()
-                page.get_by_role('link', name='Diário Escolar', exact=True).click()
+                page.locator('aside').get_by_role('link', name='Diário Escolar', exact=True).click()
                 page.get_by_role('link', name='Configuração', exact=True).click()
                 page.get_by_role('link', name='Catálogo e vigência', exact=True).click()
                 catalog = page.locator('.diary-workspace')

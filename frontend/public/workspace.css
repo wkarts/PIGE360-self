@@ -382,3 +382,180 @@ html[data-dialog-short-viewport] .modal .modal-footer > span { display: none; }
 html[data-dialog-short-viewport] .modal .modal-form { flex: 1 1 auto; }
 html[data-dialog-short-viewport] .modal .modal-workspace { height: auto; max-height: none; flex: 1 1 auto; }
 html[data-dialog-short-viewport] .modal .modal-footer { padding-block: 8px; min-height: 0; }
+
+/* Preferência compartilhada pelas guias do gestor. No celular o menu é um painel sobre o conteúdo. */
+.topbar .sidebar-toggle { display: none; }
+.work-tabs .work-close-others {
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  border-inline-start: 1px solid var(--border);
+  color: var(--muted);
+}
+.work-tabs .work-close-others:hover { color: var(--ink); background: var(--background); }
+.work-close-others .ui-icon { width: 17px; height: 17px; }
+@media (min-width: 801px) {
+  .workspace .topbar { padding-inline-start: 12px; }
+  .topbar .sidebar-toggle {
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    color: var(--primary);
+    background: var(--surface, #fff);
+  }
+  .sidebar-toggle[aria-expanded="false"] .ui-icon { transform: rotate(180deg); }
+  .workspace.sidebar-collapsed { --sidebar-width: 68px; }
+  .sidebar-collapsed .sidebar { grid-template-rows: auto minmax(0, 1fr); }
+  .sidebar-collapsed .sidebar-brand { padding: 12px 7px; }
+  .sidebar-collapsed .sidebar-logo { height: 48px; }
+  .sidebar-collapsed .sidebar-scroll { padding: 12px 8px; }
+  .sidebar-collapsed .sidebar :is(.sidebar-label, .sidebar-footer, .nav-group-items, .nav-chevron) { display: none; }
+  .sidebar-collapsed .sidebar nav { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .sidebar-collapsed .sidebar nav:last-child { border: 0; }
+  .sidebar-collapsed .sidebar :is(nav > a, .nav-group-toggle) { position: relative; justify-content: center; padding: 9px 6px; gap: 0; }
+  .sidebar-collapsed .sidebar :is(.nav-label, .nav-group-toggle > span) {
+    position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+}
+@media (max-width: 800px) {
+  .work-tabs .work-close-others { min-height: 44px; flex-basis: 44px; }
+  .work-tabs .work-tab > [role=tab], .work-tabs .work-tab-close { min-height: 44px; }
+}
+
+.school-dashboard {
+  container-type: inline-size;
+  display: grid;
+  gap: 18px;
+  color: var(--ink);
+}
+.school-dashboard .dash-toolbar,
+.school-dashboard .dash-primary,
+.school-dashboard .dash-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.school-dashboard .dash-toolbar {
+  justify-content: space-between;
+  gap: 8px 18px;
+}
+.school-dashboard a { color: var(--primary); }
+.school-dashboard .dash-shortcuts a,
+.school-dashboard .dash-recent .panel-header a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  gap: .35em;
+  font-size: .8125rem;
+  font-weight: 600;
+  text-underline-offset: .2em;
+}
+.school-dashboard .dash-shortcuts { gap: 2px 16px; }
+.school-dashboard .dash-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: 12px;
+  margin: 0;
+}
+.school-dashboard .dash-metric { min-width: 0; padding: 16px 18px; }
+.school-dashboard .dash-metric dt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 2.5em;
+  color: var(--muted);
+  font-size: .8125rem;
+  line-height: 1.25;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.school-dashboard .dash-metric .ui-icon { flex: none; width: 19px; height: 19px; color: var(--primary); }
+.school-dashboard .dash-metric dd {
+  margin: 4px 0 0;
+  font-size: clamp(1.6rem, 3vw, 2.125rem);
+  line-height: 1.1;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.school-dashboard .dash-sections {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.school-dashboard .dash-sections > :only-child { grid-column: 1 / -1; }
+.school-dashboard .dash-sections .panel { min-width: 0; }
+.school-dashboard .dash-sections .panel-header {
+  padding: 7px 18px;
+  min-height: 58px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.school-dashboard .dash-notice { margin: 0; padding: 18px; color: var(--muted); }
+.school-dashboard .dash-recent ul { list-style: none; margin: 0; padding: 0; }
+.school-dashboard .dash-row {
+  display: grid;
+  grid-template-columns: minmax(0,1.45fr) minmax(0,1fr) minmax(0,.9fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px 18px;
+}
+.school-dashboard .dash-labels { color: var(--muted); font-size: .75rem; }
+.school-dashboard button.dash-row {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink);
+  text-align: start;
+  font: inherit;
+  font-size: .8125rem;
+  overflow-wrap: anywhere;
+}
+.school-dashboard .dash-row .badge { justify-self: start; max-width: 100%; white-space: normal; }
+.school-dashboard .dash-row small,
+.school-dashboard .dash-followup small { display: block; margin-top: 3px; color: var(--muted); font-size: .75rem; }
+.school-dashboard .dash-followup a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 12px 18px;
+  font-size: .875rem;
+  text-decoration: none;
+  color: var(--ink);
+}
+.school-dashboard .dash-followup a + a { border-top: 1px solid var(--border); }
+.school-dashboard .dash-followup strong { color: var(--primary); font-variant-numeric: tabular-nums; }
+.school-dashboard button.dash-row:hover,
+.school-dashboard .dash-followup a:hover { background: var(--teal-soft); }
+.school-dashboard :is(a,button):focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+
+@container (max-width: 51rem) {
+  .school-dashboard .dash-sections { grid-template-columns: minmax(0,1fr); }
+}
+@container (max-width: 40rem) {
+  .school-dashboard .dash-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@container (max-width: 31rem) {
+  .school-dashboard .dash-toolbar { align-items: flex-start; }
+  .school-dashboard .dash-primary { width: 100%; }
+  .school-dashboard .dash-primary .btn { flex: 1 1 auto; }
+  .school-dashboard .dash-shortcuts { gap: 0 12px; }
+  .school-dashboard .dash-metric { padding: 12px; }
+  .school-dashboard .dash-metric dt { align-items: flex-start; }
+  .school-dashboard .dash-sections .panel-header { padding-inline: 12px; }
+  .school-dashboard .dash-labels { display: none; }
+  .school-dashboard .dash-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, .65fr);
+    gap: 6px 8px;
+    padding: 12px;
+  }
+  .school-dashboard .dash-class { grid-row: 2; grid-column: 1 / -1; color: var(--muted); }
+  .school-dashboard .dash-class small { display: inline; margin-inline-start: .5em; }
+  .school-dashboard .dash-row .badge { grid-row: 1; grid-column: 2; justify-self: end; }
+}

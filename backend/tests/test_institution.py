@@ -91,3 +91,19 @@ def test_maintainer_document_can_be_edited_without_recreating_school(client,admi
     assert result.json()['id']==company['id'] and result.json()['document']=='11222333000181'
     assert len(client.get('/api/v1/companies',headers=admin).json())==count
     assert client.get('/api/v1/schools',headers=admin).json()==before_schools
+
+
+def test_light_brand_uses_readable_control_colors(client, admin):
+    original = data(client)['primary_color']
+    try:
+        assert save(client, admin, {'primary_color': '#FFD166'}).status_code == 200
+        css = client.get('/api/v1/institution/theme.css').text
+        assert '--primary:#FFD166;' in css
+        readable = css.split('--primary-readable:')[1].split(';')[0]
+        channels = [int(readable[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        linear = [c / 12.92 if c <= .04045 else ((c + .055) / 1.055) ** 2.4 for c in channels]
+        luminance = sum(c * w for c, w in zip(linear, (.2126, .7152, .0722)))
+        assert 1.05 / (luminance + .05) >= 4.5
+        assert '--primary-on:#000000;' in css
+    finally:
+        assert save(client, admin, {'primary_color': original}).status_code == 200

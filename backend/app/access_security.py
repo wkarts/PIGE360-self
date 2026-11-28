@@ -4,6 +4,43 @@ from .models import SchoolAccess
 from .access_models import SchoolAccessProfile
 
 
+TEACHER_ROUTINES = {
+    'agenda': 'Minha programação',
+    'diary': 'Diário de classe',
+    'materials': 'Atividades e trabalhos',
+    'news': 'Avisos e publicações',
+    'mail': 'E-mail institucional',
+}
+
+
+def selected_teacher_routines(configured):
+    """NULL mantém os recursos legados. Uma lista vazia libera apenas a visão geral."""
+    return set(TEACHER_ROUTINES if configured is None else configured)
+
+
+def teacher_routines_for(db, user, school_id):
+    if user.role != 'teacher' or not school_id:
+        return set()
+    access = db.get(SchoolAccess, (user.id, school_id))
+    if not access or not access.active or access.archived_at:
+        return set()
+    permissions = permissions_for(user, db, school_id)
+    if not permissions:
+        return set()
+    routines = selected_teacher_routines(access.teacher_routines)
+    if 'diary.read' not in permissions:
+        routines.difference_update({'agenda', 'diary', 'materials'})
+    if 'diary' not in routines:
+        routines.discard('materials')
+    return routines.intersection(TEACHER_ROUTINES)
+
+
+def require_teacher_routine(db, user, school_id, routine):
+    if user.role == 'teacher' and routine not in teacher_routines_for(db, user, school_id):
+        from .security import fail
+        fail(403, 'Esta rotina do Portal do Professor não está liberada nesta instituição.')
+
+
 def bind_access(db, user, school_id):
     from .security import fail
     access = db.get(SchoolAccess, (user.id, school_id))

@@ -32,7 +32,9 @@ def enrollment_readiness(id: str, db: DB, user: Actor, school: Scope):
         checks.append({'code': code, 'label': label, 'ready': ready, 'message': message,
                        'stage': stage, 'owner': owners[code]})
     if admission.status == 'enrolled':
-        return {'ready': True, 'checks': [], 'enrolled': True}
+        enrollment = scoped(db, m.Enrollment, admission.enrollment_id, school.id)
+        return {'ready': enrollment.status == 'active', 'checks': [], 'enrolled': True,
+                'enrollment_status': enrollment.status}
     if admission.status != 'approved' or not admission.enrollment_id:
         add('approval', 'Aprovação', False, 'Confira os dados e aprove a inscrição para preparar a matrícula.', 'documents')
         return {'ready': False, 'checks': checks, 'enrolled': False}
@@ -64,10 +66,29 @@ def enrollment_readiness(id: str, db: DB, user: Actor, school: Scope):
             'Perfil autorizado' if allowed else 'A assinatura institucional final exige Direção ou Administração com permissão de emissão.', 'finalize')
     return {'ready': all(item['ready'] for item in checks), 'checks': checks, 'enrolled': False}
 
+@router.get('/admission-fee-accounts')
+def admission_fee_accounts(db: DB, user: Actor, school: Scope):
+    require(user, 'admissions.manage')
+    rows = db.execute(select(m.IntegrationConnection.id, m.IntegrationConnection.environment).where(
+        m.IntegrationConnection.school_id == school.id, m.IntegrationConnection.provider == 'asaas',
+        m.IntegrationConnection.enabled.is_(True)).order_by(m.IntegrationConnection.id))
+    return {'items': [{'id': row.id, 'environment': row.environment} for row in rows]}
+
+
 @router.get('/admission-campaigns')
 def campaigns(db:DB,user:Actor,school:Scope):
     require(user,'admissions.read')
-    return [campaign_output(db,x) for x in db.scalars(select(m.AdmissionCampaign).where(m.AdmissionCampaign.school_id==school.id).order_by(m.AdmissionCampaign.created_at.desc()))]
+    return [campaign_output(db,x,private=True) for x in db.scalars(select(m.AdmissionCampaign).where(m.AdmissionCampaign.school_id==school.id).order_by(m.AdmissionCampaign.created_at.desc()))]
+
+def validate_campaign_contract(template, year_id, starts_on, ends_on, status_code):
+    from .contract_templates import _is_contract_kind
+    if not template.active or not template.require_signature or not _is_contract_kind(template.kind):
+        fail(status_code, 'Selecione um modelo de contrato ativo que exija assinatura.')
+    if template.academic_year_id and template.academic_year_id != year_id:
+        fail(status_code, 'O contrato deve pertencer ao mesmo ano letivo da turma.')
+    if (template.valid_from and template.valid_from > ends_on) or (template.valid_until and template.valid_until < starts_on):
+        fail(status_code, 'A vigência do contrato não abrange a data ou o período selecionado.')
+
 
 def validate_campaign(db,school,data):
     from .enrollments import check_group
@@ -81,17 +102,17 @@ def validate_campaign(db,school,data):
     data.academic_year_id=next(iter(years))
     if data.contract_template_id:
         template=scoped(db,m.DocumentTemplate,data.contract_template_id,school.id)
-        if not template.active or not template.require_signature:
-            fail(422,'Selecione um modelo de contrato ativo que exija assinatura.')
-        if template.academic_year_id and template.academic_year_id not in years:
-            fail(422,'O contrato deve pertencer ao mesmo ano letivo das turmas oferecidas.')
+        validate_campaign_contract(template, data.academic_year_id, data.opens_on, data.closes_on, 422)
 
 @router.post('/admission-campaigns',status_code=201)
 def create_campaign(data:s.CampaignInput,db:DB,user:Actor,school:Scope,request:Request):
     require(user,'admissions.manage');validate_campaign(db,school,data)
-    obj=m.AdmissionCampaign(school_id=school.id,**data.model_dump());db.add(obj);db.flush()
+    from .admission_fees import configure
+    obj=m.AdmissionCampaign(school_id=school.id,**data.model_dump())
+    configure(db,school,obj,user)
+    db.add(obj);db.flush()
     audit(db,request,user,'admission_campaign.created',obj,school.id)
-    return campaign_output(db,obj)
+    return campaign_output(db,obj,private=True)
 
 @router.patch('/admission-campaigns/{id}')
 def edit_campaign(id:str,data:s.CampaignEdit,db:DB,user:Actor,school:Scope,request:Request):
@@ -102,10 +123,15 @@ def edit_campaign(id:str,data:s.CampaignEdit,db:DB,user:Actor,school:Scope,reque
     if obj.privacy_notice!=data.privacy_notice and obj.terms_version==data.terms_version:fail(422,'Incremente a versão dos termos ao alterar o aviso de privacidade.')
     # Older clients must not reset a publication's explicit visibility choice.
     excluded={'version'}
+    fee_fields={'fee_enabled','fee_amount','fee_billing_type','fee_due_days','fee_connection_id'}
+    excluded.update(fee_fields - data.model_fields_set)
     if 'show_student_portal_button' not in data.model_fields_set:excluded.add('show_student_portal_button')
     for key,value in data.model_dump(exclude=excluded).items():setattr(obj,key,value)
+    if fee_fields & data.model_fields_set:
+        from .admission_fees import configure
+        configure(db,school,obj,user)
     obj.version+=1;audit(db,request,user,'admission_campaign.updated',obj,school.id)
-    return campaign_output(db,obj)
+    return campaign_output(db,obj,private=True)
 
 @router.get('/admissions-summary')
 def summary(db:DB,user:Actor,school:Scope):
@@ -176,17 +202,18 @@ def attachment_review(id:str,attachment_id:str,data:s.AttachmentReview,db:DB,use
 def approve(id:str,data:s.Approval,db:DB,user:Actor,school:Scope,request:Request):
     require(user,'admissions.write');require(user,'enrollments.write');lock_school(db,school.id)
     obj=scoped(db,m.Admission,id,school.id)
-    if obj.status in ('approved','enrolled') and obj.enrollment_id:return admission_output(db,obj,False)
+    if obj.status in ('approved','enrolled') and obj.enrollment_id:
+        if data.financial_person_id and db.get(m.Enrollment, obj.enrollment_id).financial_person_id != data.financial_person_id:
+            fail(409, 'A inscrição já foi aprovada com outro pagador.')
+        return admission_output(db,obj,False)
     check_version(obj,data.version)
     if obj.status not in ('submitted','under_review','waitlisted'):fail(409,'Inscrição não está pronta para aprovação.')
     campaign=db.get(m.AdmissionCampaign,obj.campaign_id)
     group=valid_group(db,campaign,data.class_group_id or obj.class_group_id)
     if campaign.contract_template_id:
         template=scoped(db,m.DocumentTemplate,campaign.contract_template_id,school.id)
-        if not template.active or not template.require_signature:
-            fail(409,'O contrato da campanha foi desativado ou deixou de exigir assinatura.')
-        if template.academic_year_id and template.academic_year_id!=group.academic_year_id:
-            fail(409,'O contrato da campanha não corresponde ao ano letivo da turma.')
+        approval_day = date.today()
+        validate_campaign_contract(template, group.academic_year_id, approval_day, approval_day, 409)
         revision=db.scalar(select(m.DocumentTemplateRevision).where(
             m.DocumentTemplateRevision.school_id==school.id,
             m.DocumentTemplateRevision.template_id==template.id,
@@ -229,13 +256,36 @@ def approve(id:str,data:s.Approval,db:DB,user:Actor,school:Scope,request:Request
     ensure_person_type(db, person, 'student')
     if guardian.id==student.person_id:fail(422,'Responsável e aluno devem ser pessoas distintas neste fluxo.')
     link=db.scalar(select(m.GuardianLink).where(m.GuardianLink.student_id==student.id,m.GuardianLink.person_id==guardian.id))
-    if not link:
-        link=m.GuardianLink(school_id=school.id,student_id=student.id,person_id=guardian.id,relationship=obj.relationship,legal=True,financial=True,primary_contact=True)
+    payer_id = data.financial_person_id or guardian.id
+    separate = payer_id != guardian.id
+    if separate:
+        if not guardian.active or not guardian.cpf or guardian.cpf != guardian_data.get('cpf') or guardian.cpf != parent.cpf:
+            fail(409, 'Confirme o CPF do titular da inscrição antes de selecionar outro pagador.')
+        payer = db.scalar(select(m.Person).join(m.GuardianLink, m.GuardianLink.person_id == m.Person.id).where(
+            m.Person.id == payer_id, m.Person.school_id == school.id, m.Person.active.is_(True),
+            m.GuardianLink.student_id == student.id, m.GuardianLink.school_id == school.id,
+            m.GuardianLink.active.is_(True), m.GuardianLink.financial.is_(True)))
+        if not payer:
+            fail(422, 'Selecione um responsável financeiro ativo já vinculado a este aluno.')
+        obj.guardian_snapshot = {**guardian_data, 'signer_person_id': guardian.id}
+    if link:
+        if not (link.active and link.legal and (separate or link.financial)):
+            fail(409, 'O vínculo cadastrado do titular não reúne responsabilidade legal e financeira ativa. '
+                      'Confira os papéis na ficha do aluno antes de aprovar a inscrição.')
+    else:
+        active_links = select(m.GuardianLink).where(m.GuardianLink.school_id == school.id,
+                         m.GuardianLink.student_id == student.id, m.GuardianLink.active.is_(True))
+        current_links = db.scalars(active_links).all() if data.existing_student_id else []
+        if not separate and any(current.financial for current in current_links):
+            fail(409, 'O aluno já tem outro responsável financeiro. Confira os vínculos na ficha do aluno '
+                      'antes de atribuir ao titular a responsabilidade por esta matrícula.')
+        link = m.GuardianLink(school_id=school.id, student_id=student.id, person_id=guardian.id,
+                              relationship=obj.relationship, legal=True, financial=not separate,
+                              primary_contact=not any(current.primary_contact for current in current_links))
         db.add(link)
-    else:link.active=True;link.legal=True;link.financial=True;link.version+=1
     db.flush()
     from .enrollments import create_record
-    enrollment=create_record(schemas.EnrollmentInput(student_id=student.id,class_group_id=group.id,enrolled_on=date.today(),financial_person_id=guardian.id,notes='Origem online: '+obj.number),school,db,user,request)
+    enrollment=create_record(schemas.EnrollmentInput(student_id=student.id,class_group_id=group.id,enrolled_on=date.today(),financial_person_id=payer_id,notes='Origem online: '+obj.number),school,db,user,request)
     from .documents import write_file
     from .config import settings
     import hashlib
@@ -258,7 +308,7 @@ def approve(id:str,data:s.Approval,db:DB,user:Actor,school:Scope,request:Request
     # Vincula apenas cobranças deste processo, nunca as de outros alunos da família.
     for charge in db.scalars(select(m.BankCharge).where(m.BankCharge.admission_id==obj.id,m.BankCharge.school_id==school.id)):charge.enrollment_id=enrollment.id
     add_message(db,obj,'Inscrição aprovada. A Secretaria está concluindo a matrícula.','approved',user=user)
-    audit(db,request,user,'admission.approved',obj,school.id,{'reason':data.reason,'identity_confirmed':True,'student_id':student.id,'guardian_id':guardian.id,'enrollment_id':enrollment.id})
+    audit(db,request,user,'admission.approved',obj,school.id,{'reason':data.reason,'identity_confirmed':True,'student_id':student.id,'guardian_id':guardian.id,'financial_person_id':payer_id,'enrollment_id':enrollment.id})
     admission_notification(db,obj,f'Inscrição {obj.number} aprovada. A matrícula está em preparação.','approved')
     db.flush();return admission_output(db,obj,False)
 
@@ -306,8 +356,8 @@ def payment_gate(db,school_id,enrollment_id):
     campaign=db.get(m.AdmissionCampaign,obj.campaign_id) if obj else None
     if campaign and campaign.require_payment_before_enrollment and not charges:
         fail(409,'Cadastre a cobrança obrigatória antes de efetivar a matrícula.')
-    if any(x.status!='received' and not (x.collection_mode=='manual' and x.status=='received_external'
-            and x.manual_paid_on and x.manual_paid_amount==x.amount and x.manual_received_by) for x in charges):
+    from .admission_reservations import received
+    if any(not received(charge) for charge in charges):
         fail(409,'Pagamento obrigatório ainda não recebido/conciliado. Confirmado não equivale a recebido.')
 
 
@@ -329,9 +379,10 @@ def contract_gate(db, school_id, enrollment_id, institution_required=False):
         fail(409,'A revisão do contrato emitido difere daquela aprovada para a inscrição.')
     from .contract_signatures import contract_signature_ready
     enrollment=db.get(m.Enrollment,enrollment_id)
-    guardian=db.get(m.Person,enrollment.financial_person_id) if enrollment.financial_person_id else None
+    from .admission_parties import signer
+    guardian = signer(db, admission, enrollment)
     if not guardian or not guardian.cpf:
-        fail(409,'Confirme o CPF do responsável financeiro antes da assinatura do contrato.')
+        fail(409,'Confirme o CPF do titular signatário antes da assinatura do contrato.')
     if institution_required and admission.contract_signing_order=='applicant_first':
         from .contract_signatures import _company_revision
         if not _company_revision(db,issued):fail(409,'Conclua a inscrição online para aplicar a assinatura A1 institucional final.')
@@ -347,14 +398,21 @@ def renew_reservation(id:str,data:s.FinalizeAdmission,db:DB,user:Actor,school:Sc
     from .admission_reservations import start, state
     from .registry import occupancy
     enrollment=scoped(db,m.Enrollment,obj.enrollment_id,school.id)
-    group=valid_group(db,db.get(m.AdmissionCampaign,obj.campaign_id),obj.class_group_id)
+    campaign = db.get(m.AdmissionCampaign, obj.campaign_id)
+    group=valid_group(db,campaign,obj.class_group_id)
     if enrollment.status not in ('draft','cancelled'):fail(409,'A matrícula não está em preparação ou cancelada para revisão.')
-    if state(obj) in ('held','paid'):fail(409,'A reserva ainda está válida.')
+    previous_state = state(obj)
+    if previous_state in ('held','paid'):fail(409,'A reserva ainda está válida.')
+    if previous_state == 'none' and not campaign.require_payment_before_enrollment:
+        fail(409, 'Esta inscrição não possui reserva de pagamento para revisar.')
     if occupancy(db,group.id,enrollment.id)>=group.capacity:fail(409,'Turma sem vagas. Não foi possível renovar a reserva.')
-    start(db,obj,db.get(m.AdmissionCampaign,obj.campaign_id),reviewed=True)
+    start(db, obj, campaign, reviewed=True)
     obj.version+=1
-    add_message(db,obj,'Reserva de vaga revista pela Secretaria. Confira o prazo para pagamento.','reservation',user=user)
-    audit(db,request,user,'admission.reservation_renewed',obj,school.id,{'reason':data.reason})
+    message = ('A Secretaria conferiu a disponibilidade de vaga. O processo não exige mais reserva para pagamento.'
+               if obj.reservation_status == 'none' else 'Reserva de vaga revista pela Secretaria. Confira o prazo para pagamento.')
+    add_message(db, obj, message, 'reservation', user=user)
+    audit(db, request, user, 'admission.reservation_renewed', obj, school.id,
+          {'reason': data.reason, 'before': previous_state, 'after': obj.reservation_status})
     db.flush();return admission_output(db,obj,False)
 
 

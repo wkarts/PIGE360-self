@@ -143,3 +143,16 @@ def test_financial_operator_permissions(api):
         assert api.client.get(api.base + path, headers=headers).status_code == 403
     post = api.client.post(api.base + '/units', headers=headers, json={'name': 'Unidade de teste'})
     assert post.status_code == 403
+
+
+def test_portal_access_from_person_record_reuses_linked_account(api):
+    person = api.post('/persons', {'name': 'Docente de teste', 'person_types': ['teacher']})
+    original = create(api, role='teacher', person_id=person['id'], reuse_person_access=True)
+    action(api, original, 'deactivate')
+    repeated = create(api, role='teacher', person_id=person['id'], reuse_person_access=True)
+    assert repeated['existing_person_access'] is True
+    assert repeated['id'] == original['id']
+    assert repeated['email'] == original['email']
+    assert repeated['invitation']['id'] == original['invitation']['id']
+    assert not repeated['active']
+    assert [u['id'] for u in api.get('/users') if u['person_id'] == person['id']] == [original['id']]

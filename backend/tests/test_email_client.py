@@ -882,3 +882,57 @@ def test_sogo_proxy_rejects_cookie_replayed_for_another_school(mailbox_api, monk
     name,value=cookie.split('=',1)
     wrong=a['client'].get('/webmail/another-school/SOGo/',cookies={name:value})
     assert wrong.status_code==401
+
+
+@pytest.mark.parametrize('role,surface', [('teacher','teacher'), ('student','family'), ('guardian','family')])
+def test_portal_sogo_keeps_origin_login_and_personal_mailbox(mailbox_api, monkeypatch, role, surface):
+    from app.config import settings
+    import httpx
+    a = mailbox_api
+    cfg = settings().model_copy(update={'portal_public_url': 'https://familia.example.test',
+                                        'teacher_portal_public_url': 'https://professor.example.test',
+                                        'sogo_upstream_url': 'http://sogo:20000'})
+    from app import security
+    monkeypatch.setattr(security, 'settings', lambda: cfg)
+    monkeypatch.setattr(e, 'settings', lambda: cfg)
+    with SessionLocal() as db:
+        db.get(m.User, a['user']['id']).role = role
+        db.commit()
+    origin = cfg.teacher_portal_public_url if surface == 'teacher' else cfg.portal_public_url
+    other = cfg.portal_public_url if surface == 'teacher' else cfg.teacher_portal_public_url
+    headers = {**a['headers'], 'Origin': origin, 'X-CSRF-Protection': '1'}
+    account = a['client'].get(a['base']+'/account', headers=headers).json()
+    assert account['available'] and account['address'] == a['user']['mailbox']['address']
+    # Conta de login não autoriza escolher a caixa do aluno, responsável ou colega.
+    assert a['client'].post(a['base']+'/connection/linked', headers=headers,
+                            json={'password': 'example', 'address': 'other@example.test'}).status_code == 422
+    linked = a['client'].post(a['base']+'/connection/linked', headers=headers, json={'password': a['state']['password']})
+    assert linked.status_code == 200 and linked.json()['address'] == account['address'] and linked.json()['connected']
+    assert not a['state']['sent']
+    assert a['client'].get(a['base']+'/account', headers={**headers, 'Origin': other}).status_code == 403
+    ticket = a['client'].post(a['base']+'/webmail-ticket', headers=headers, json={}).json()
+    action = ticket['action']
+    payload = {'ticket': ticket['ticket']}
+    client = a['client']
+    assert client.post(action, data=payload, headers={'Origin': other}, follow_redirects=False).status_code == 403
+    launch = client.post(action, data=payload, headers={'Origin': origin}, follow_redirects=False)
+    assert launch.status_code == 303 and launch.headers['location'].endswith('/SOGo/')
+    frame = {'Origin':origin, 'Cookie':launch.headers['set-cookie'].split(';', 1)[0]}
+
+    def mailbox(upstream):
+        assert upstream.headers['x-webobjects-server-url'] == origin+action.removesuffix('/launch')
+        assert upstream.headers['x-webobjects-remote-user'] == a['user']['id']+'@'+a['school']['id']
+        return httpx.Response(200, text='<html><head></head><body>SOGo</body></html>',
+                              headers={'content-type':'text/html'})
+    mock = httpx.AsyncClient(transport=httpx.MockTransport(mailbox))
+    monkeypatch.setattr(client.app.state, 'webmail_http', mock)
+    assert client.get(launch.headers['location'], headers=frame).status_code == 200
+    if role == 'teacher':
+        with SessionLocal() as db:
+            access = db.get(m.SchoolAccess, (a['user']['id'], a['school']['id']))
+            access.teacher_routines = []
+            db.commit()
+        assert not client.get(a['base']+'/account', headers=headers).json()['available']
+        assert client.get(launch.headers['location'], headers=frame).status_code == 403
+    assert client.post('/api/v1/auth/logout', headers=headers).status_code == 200
+    assert client.get(launch.headers['location'], headers=frame).status_code == 401

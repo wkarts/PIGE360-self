@@ -122,18 +122,23 @@ jobs:
           npm run build --prefix frontend
           node --check frontend/dist/sw.js
           python scripts/ci/validate.py
+      - name: Matrícula, diário e boletim no Chromium
+        run: |
+          python -m playwright install --with-deps chromium
+          python scripts/e2e-online.py
       - name: Testes FastAPI com PostgreSQL real
         working-directory: backend
         env:
           PIGE_TEST_DATABASE_URL: postgresql+psycopg://pige_test:disposable-test-password@127.0.0.1:5432/pige_test
           PYTHONPATH: .
-        run: python -m pytest -q -vv -o faulthandler_timeout=90 --junitxml=../ci-evidence/postgresql-tests.xml
+        run: |
+          set -o pipefail
+          python -m pytest -q --tb=line --disable-warnings -o faulthandler_timeout=90 --junitxml=../ci-evidence/postgresql-tests.xml \
+            | awk '{ print substr($0,1,1000); fflush(); }'
       - name: E2E HTTP no Chromium (sem bridge)
         run: |
-          python -m playwright install --with-deps chromium
           python scripts/qa/capture-site-models.py
           python scripts/e2e.py
-          python scripts/e2e-online.py
           python scripts/e2e-management.py
           python scripts/e2e-community.py
           python scripts/e2e-cadastres.py
@@ -153,6 +158,7 @@ jobs:
           PIGE_E2E_EVIDENCE_DIR=ci-evidence/online-verification python scripts/e2e-online-verification.py
           python scripts/e2e-support.py
           python scripts/e2e-school-operations.py
+          python scripts/e2e-academic-pilots.py
           python scripts/e2e-assisted.py
           python scripts/e2e-completion.py
           python scripts/e2e-continuity.py
@@ -165,6 +171,10 @@ jobs:
           if [[ -d evidence/0.10.0 ]]; then cp -a evidence/0.10.0/. ci-evidence/browser/; fi
           # Checkpoint sanitizado do código efetivamente testado; sem .env real ou fontes.
           python scripts/ci/package.py --version "$(cat VERSION)" --commit "$(git rev-parse HEAD)" --output ci-evidence/checkpoint/PIGE360-Self-source.zip
+          checkpoint_dir="$(mktemp -d)"
+          unzip -q ci-evidence/checkpoint/PIGE360-Self-source.zip -d "$checkpoint_dir"
+          python "$checkpoint_dir/pige360-self/scripts/verify_package.py"
+          python "$checkpoint_dir/pige360-self/scripts/verify-signature-trust.py"
       - name: Docker Compose e teste de inicialização
         env:
           NODE_BASE_IMAGE: ${{ inputs.node_ref || 'ghcr.io/wkarts/pige360-self-base-node:22-alpine' }}

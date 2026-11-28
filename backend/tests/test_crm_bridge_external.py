@@ -7,6 +7,7 @@ from app.crm_bridge_charge_contract import PATHS,validate_receipt
 from app.crm_bridge_contract import ContractError
 from app.crm_bridge_models import CRMBridgeExternalRequest,CRMBridgeRequest
 from app.db import SessionLocal
+from test_online import online
 from test_crm_bridge import configured,charge
 from test_crm_bridge_invoices import queue as queue_invoice,receipt as invoice_receipt
 
@@ -144,3 +145,51 @@ def test_v3_transport_is_signed_to_exact_explicit_path(action,monkeypatch):
     monkeypatch.setattr(bridge.socket,'getaddrinfo',lambda *a,**kw:[(2,1,6,'',('8.8.8.8',443))])
     monkeypatch.setattr(bridge.httpx,'Client',lambda **kw:original(transport=httpx.MockTransport(handler),**kw))
     assert bridge.send_request(cfg,event['event_id'],raw,path=PATHS[action],validator=lambda value:validate_receipt(value,event,action))['provider']=='asaas'
+
+
+@pytest.mark.parametrize('legacy_state', ['queued', 'sending', 'uncertain', 'observed'])
+def test_single_provider_channel_also_covers_preexisting_requests(online, monkeypatch, legacy_state):
+    import hashlib
+    from uuid import uuid4
+    from test_online import bank, draft, submit, charge as native_charge, provider_mock, run_issue
+
+    api = online['api']
+    config = configured(api, monkeypatch)
+    bank(online)
+    native = native_charge(online, submit(online, draft(online)))
+    invoice = queue_invoice(api, native)
+    with SessionLocal.begin() as db:
+        row = db.get(CRMBridgeRequest, invoice['id'])
+        row.receipt = invoice_receipt(json.loads(row.raw_body))
+        row.status = 'invoice_created'
+
+    params = {'invoice_request_id': invoice['id'], 'payer_id': 81, 'billing_type': 'PIX'}
+    api.post('/crm-bridge/charges', params, 409)
+    assert api.get('/crm-bridge/charges')['items'] == []
+
+    # An installation upgraded with an external request already recorded for a native title.
+    event_id = str(uuid4())
+    fields = {'charge_id': native['id'], 'payer_id': 81, 'billing_type': 'PIX'}
+    raw = external.encode(external.envelope(config['scope'], event_id, 'issue', fields))
+    with SessionLocal.begin() as db:
+        db.add(CRMBridgeExternalRequest(id=event_id, school_id=api.school['id'], charge_id=native['id'],
+            invoice_request_id=invoice['id'], connection_id='test', scope=config['scope'],
+            raw_body=raw.decode(), payload_hash=hashlib.sha256(raw).hexdigest(), status=legacy_state))
+
+    def forbid_crm(*args, **kwargs):
+        pytest.fail('A emissão externa concorrente chegou ao transporte.')
+
+    monkeypatch.setattr(bridge, 'send_request', forbid_crm)
+    calls, _ = provider_mock(monkeypatch)
+    if legacy_state == 'queued':
+        assert external.process_one()
+        assert api.get('/crm-bridge/charges/' + event_id)['error_code'] == 'CRM_NATIVE_ISSUE_CHANNEL'
+        _, job = run_issue(native)
+        assert job.status == 'completed'
+        assert len([call for call in calls if call[1:3] == ('/payments', 'POST')]) == 1
+    else:
+        _, job = run_issue(native)
+        assert job.status == 'uncertain'
+        assert job.error_code == 'CRM_EXTERNAL_ISSUE_REQUIRES_REVIEW'
+        api.post('/bank-charges/' + native['id'] + '/authorize-reissue', {'reason':'Verificar o canal financeiro.'}, 409)
+        assert all(call[2] == 'GET' for call in calls)

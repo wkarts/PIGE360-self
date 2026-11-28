@@ -1,11 +1,12 @@
 """Superfície privada de alunos e responsáveis; vínculos revalidados a cada acesso."""
 import hashlib
 from datetime import date
+from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, File, Form, Request, UploadFile
+from fastapi import APIRouter, File, Form, Query, Request, UploadFile
 from fastapi.responses import Response
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 
 from . import class_materials, models as m
 from .common import audit, number
@@ -13,7 +14,7 @@ from .config import settings
 from .documents import validate_upload, write_file
 from .learning_portal import own_profile_students
 from .profiles import student_summary
-from .reports import protocol_event
+from .reports import collect_pendencies, protocol_event
 from .security import Actor, DB, fail, lock_school
 from .storage import read_bytes
 
@@ -29,6 +30,16 @@ def own_student(db,user,ident):
     return row
 
 
+def own_finance_student(db,user,student_id):
+    if user.role == 'guardian':
+        financial = own_profile_students(db,user,financial=True)
+        student = next((item for item in financial if item.id == student_id),None)
+        if student:
+            return student
+    own_student(db,user,student_id)
+    fail(403,'Vínculo financeiro não autorizado.')
+
+
 def may_finance(db,user,student):
     # Dados financeiros seguem o vínculo financeiro explícito. Aluno menor não os herda.
     if user.role!='guardian':return False
@@ -37,22 +48,53 @@ def may_finance(db,user,student):
 
 @router.get('/context')
 def context(db:DB,user:Actor):
+    linked = students(db, user)
+    pending_by_student = {}
+    if linked:
+        # own_profile_students já resolveu a instituição ativa e os vínculos autorizados.
+        ids = [student.id for student in linked]
+        pending = collect_pendencies(db, linked[0].school_id, {'_student_ids': ids}, student_limit=len(ids))
+        pending_by_student = {row['student_id']: row['documents'] for row in pending['items']}
     result=[]
-    for student in students(db,user):
+    for student in linked:
         item=student_summary(db,student,student.school_id,include_documents=True)
+        item['document_pendencies'] = pending_by_student.get(student.id, [])
         item['financial_authorized']=may_finance(db,user,student)
         result.append(item)
+    if user.role == 'guardian':
+        academic_ids = {student.id for student in linked}
+        for student in own_profile_students(db,user,financial=True):
+            if student.id in academic_ids:
+                continue
+            person = db.get(m.Person,student.person_id)
+            result.append({'id':student.id,'name':person.name,'number':'','enrollments':[],'documents':[],
+                           'academic_authorized':False,'financial_authorized':True})
     schools=db.execute(select(m.School.id,m.School.name).join(m.SchoolAccess,m.SchoolAccess.school_id==m.School.id).where(m.SchoolAccess.user_id==user.id,m.SchoolAccess.active.is_(True),m.SchoolAccess.archived_at.is_(None),m.School.active.is_(True)).order_by(m.School.name)).all()
     return {'schools':[{'id':ident,'name':name} for ident,name in schools],'role':user.role,'name':user.name,'students':result,'note':'Inscrição online utiliza a conta de inscrição já existente. Não compartilha automaticamente sua senha de acesso escolar.'}
 
 
 @router.get('/students/{student_id}/charges')
-def charges(student_id:str,db:DB,user:Actor):
-    student=own_student(db,user,student_id)
-    if not may_finance(db,user,student):fail(403,'Vínculo financeiro não autorizado.')
-    ids=select(m.Enrollment.id).where(m.Enrollment.student_id==student.id,m.Enrollment.school_id==student.school_id)
-    rows=db.scalars(select(m.BankCharge).where(m.BankCharge.school_id==student.school_id,m.BankCharge.enrollment_id.in_(ids)).order_by(m.BankCharge.due_on.desc()).limit(200))
-    return {'items':[{'id':r.id,'description':r.description,'amount':str(r.amount),'due_on':r.due_on,'status':r.status,'collection_mode':r.collection_mode} for r in rows], 'note':'Somente cobranças registradas para estas matrículas. O status exibido não executa cobrança ou baixa.'}
+def charges(student_id: str, db: DB, user: Actor, page: int = Query(1, ge=1), page_size: int = Query(200, ge=1, le=200)):
+    from .banking import charge_for_payer, effective_status_expression
+    student = own_finance_student(db, user, student_id)
+    charge = m.BankCharge
+    ids = select(m.Enrollment.id).where(m.Enrollment.student_id == student.id, m.Enrollment.school_id == student.school_id)
+    scope = (charge.school_id == student.school_id, charge.enrollment_id.in_(ids),
+             or_(charge.payer_snapshot['private_payer'].as_boolean().is_not(True),
+                 charge.payer_snapshot['person_id'].as_string() == user.person_id))
+    if not any(item.id == student.id for item in students(db,user)):
+        person = db.get(m.Person,user.person_id)
+        scope += (charge_for_payer(person),)
+    status = effective_status_expression()
+    total, overdue_count = db.execute(select(func.count(charge.id), func.count(charge.id).filter(status == 'overdue')).where(*scope)).one()
+    from .asaas_card_models import CardCheckout
+    has_checkout=select(CardCheckout.id).where(CardCheckout.school_id==student.school_id,CardCheckout.charge_id==charge.id,CardCheckout.payer_id==user.person_id).exists()
+    rows = db.execute(select(charge.id, has_checkout.label('has_card_checkout'), charge.billing_type, charge.description, charge.amount, charge.due_on, status.label('status'), charge.collection_mode)
+                      .where(*scope).order_by(charge.due_on.desc(), charge.id.desc())
+                      .offset((page - 1) * page_size).limit(page_size))
+    return {'items': [dict(row._mapping, amount=format(row.amount, '.2f')) for row in rows],
+            'total': total, 'overdue_count': overdue_count, 'page': page, 'page_size': page_size,
+            'note': 'Somente cobranças registradas para estas matrículas. O status exibido não executa cobrança ou baixa.'}
 
 
 @router.get('/students/{student_id}/documents/{document_id}')
@@ -68,8 +110,14 @@ def document(student_id:str,document_id:str,db:DB,user:Actor,request:Request):
 
 
 @router.get('/students/{student_id}/materials')
-def materials(student_id: str, db: DB, user: Actor):
-    return class_materials.listed(db, class_materials.visible_to(own_student(db, user, student_id)))
+def materials(student_id: str, db: DB, user: Actor, view: Literal['full', 'recent'] = 'full'):
+    visible = class_materials.visible_to(own_student(db, user, student_id))
+    if view == 'recent':
+        material = m.ClassMaterial
+        recent = visible.with_only_columns(material.id, material.kind, material.title, material.created_at)
+        rows = db.execute(recent.order_by(material.created_at.desc(), material.id.desc()).limit(3))
+        return [dict(row) for row in rows.mappings()]
+    return class_materials.listed(db, visible)
 
 
 @router.get('/students/{student_id}/materials/{material_id}/print.pdf')

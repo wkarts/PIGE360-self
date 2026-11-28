@@ -39,6 +39,7 @@ class CurriculumComponent(Record, Scoped, Base):
 
 
 class CurriculumPlan(Record, Scoped, Base):
+    extra_fields: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     __tablename__ = "curriculum_plans"
     class_group_id: Mapped[str] = mapped_column(ForeignKey("class_groups.id"), index=True)
     component_id: Mapped[str] = mapped_column(ForeignKey("curriculum_components.id"), index=True)
@@ -76,6 +77,7 @@ class SchoolDiary(Record, Scoped, Base):
 
 
 class DiaryLesson(Record, Scoped, Base):
+    extra_fields: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     __tablename__ = "diary_lessons"
     diary_id: Mapped[str] = mapped_column(ForeignKey("school_diaries.id"), index=True)
     academic_period_id: Mapped[str | None] = mapped_column(ForeignKey("academic_periods.id"), index=True)

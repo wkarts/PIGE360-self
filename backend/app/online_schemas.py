@@ -23,6 +23,11 @@ class CampaignInput(Input):
     require_verified_contact: bool = True
     require_documents: bool = False
     require_payment_before_enrollment: bool = False
+    fee_enabled: bool = False
+    fee_amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
+    fee_billing_type: Literal['PIX', 'BOLETO'] = 'PIX'
+    fee_due_days: int = Field(default=3, ge=0, le=365)
+    fee_connection_id: str | None = Field(default=None, max_length=36)
     payment_reservation_hours: int | None = Field(default=None,ge=1,le=8760)
     contract_template_id: str | None = None
     @model_validator(mode='after')
@@ -127,6 +132,7 @@ class Approval(Input):
     identity_confirmed: Literal[True]
     existing_student_id: str | None = None
     existing_guardian_id: str | None = None
+    financial_person_id: str | None = Field(default=None, min_length=1, max_length=36)
     class_group_id: str | None = None
 
 class FinalizeAdmission(Input):
@@ -200,10 +206,13 @@ class ChargeInput(Input):
     billing_type: Literal['PIX','BOLETO','MANUAL'] = 'PIX'
     client_key: str = Field(min_length=12,max_length=80)
     installment_count: int = Field(default=1,ge=1,le=24)
+    use_recurring_card: bool = False
     required_for_enrollment: bool = False
     @model_validator(mode='after')
     def links(self):
         if bool(self.admission_id) == bool(self.enrollment_id): raise ValueError('Selecione uma inscrição OU uma matrícula.')
+        if self.use_recurring_card and (self.collection_mode != 'manual' or self.required_for_enrollment):
+            raise ValueError('Selecione mensalidade interna para usar autorização de cartão por fatura.')
         if self.collection_mode == 'manual': self.billing_type = 'MANUAL'
         elif self.billing_type == 'MANUAL': raise ValueError('Selecione Pix ou boleto para emissão bancária.')
         if self.collection_mode == 'provider' and self.due_on < date.today(): raise ValueError('Informe vencimento atual ou futuro para emissão bancária.')
@@ -312,3 +321,7 @@ class PortalAccountRegistration(Input):
         if self.whatsapp_opt_in and not self.phone:
             raise ValueError('Informe um telefone para receber avisos por WhatsApp.')
         return self
+
+
+class AdmissionFeeIssue(Input):
+    quote: str = Field(pattern=r'^[a-f0-9]{64}$')
