@@ -108,6 +108,18 @@ assert.equal(diaryProps()['data-workspace-dirty'],true,'Marcação em lote prote
 assert.equal(ctx.state.attendance[0].attendance.status,'absent');
 assert.equal(ctx.state.attendance[1].attendance.status,'justified_absence');
 assert.equal(ctx.state.attendance[2].attendance.status,'present');
+const originalConfirm=sandbox.PigeDialogs.confirm;
+let answerDiscard;
+sandbox.PigeDialogs.confirm=(message,options)=>{
+  assert.equal(options.title,'Descartar as alterações desta chamada?');
+  return new Promise(resolve=>{answerDiscard=resolve;});
+};
+const canceledClose=ctx.closeAttendance();
+assert.equal(ctx.state.attendance.length,3,'A chamada continua aberta enquanto a decisão está pendente.');
+answerDiscard(false);
+assert.equal(await canceledClose,false);
+assert.equal(ctx.state.attendance[2].attendance.status,'present','Voltar preserva o lançamento ainda não salvo.');
+sandbox.PigeDialogs.confirm=originalConfirm;
 await ctx.saveAttendance();
 assert.equal(attendancePayload.items[0].enrollment_id,'e3');
 await ctx.openAssessment({id:'assessment-one'});

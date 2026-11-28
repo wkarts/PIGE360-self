@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile
 from fastapi.responses import Response
-from sqlalchemy import func, or_, select
+from sqlalchemy import select
 
 from . import class_materials, models as m
 from .common import audit, number
@@ -75,26 +75,14 @@ def context(db:DB,user:Actor):
 
 @router.get('/students/{student_id}/charges')
 def charges(student_id: str, db: DB, user: Actor, page: int = Query(1, ge=1), page_size: int = Query(200, ge=1, le=200)):
-    from .banking import charge_for_payer, effective_status_expression
-    student = own_finance_student(db, user, student_id)
-    charge = m.BankCharge
-    ids = select(m.Enrollment.id).where(m.Enrollment.student_id == student.id, m.Enrollment.school_id == student.school_id)
-    scope = (charge.school_id == student.school_id, charge.enrollment_id.in_(ids),
-             or_(charge.payer_snapshot['private_payer'].as_boolean().is_not(True),
-                 charge.payer_snapshot['person_id'].as_string() == user.person_id))
-    if not any(item.id == student.id for item in students(db,user)):
-        person = db.get(m.Person,user.person_id)
-        scope += (charge_for_payer(person),)
-    status = effective_status_expression()
-    total, overdue_count = db.execute(select(func.count(charge.id), func.count(charge.id).filter(status == 'overdue')).where(*scope)).one()
-    from .asaas_card_models import CardCheckout
-    has_checkout=select(CardCheckout.id).where(CardCheckout.school_id==student.school_id,CardCheckout.charge_id==charge.id,CardCheckout.payer_id==user.person_id).exists()
-    rows = db.execute(select(charge.id, has_checkout.label('has_card_checkout'), charge.billing_type, charge.description, charge.amount, charge.due_on, status.label('status'), charge.collection_mode)
-                      .where(*scope).order_by(charge.due_on.desc(), charge.id.desc())
-                      .offset((page - 1) * page_size).limit(page_size))
-    return {'items': [dict(row._mapping, amount=format(row.amount, '.2f')) for row in rows],
-            'total': total, 'overdue_count': overdue_count, 'page': page, 'page_size': page_size,
-            'note': 'Somente cobranças registradas para estas matrículas. O status exibido não executa cobrança ou baixa.'}
+    from .family_finance import charge_page
+    return charge_page(db, user, own_finance_student(db, user, student_id), page, page_size)
+
+
+@router.get('/students/{student_id}/charges/{charge_id}/documents')
+def payment_documents(student_id: str, charge_id: str, db: DB, user: Actor):
+    from .family_finance import charge_documents
+    return charge_documents(db, user, own_finance_student(db, user, student_id), charge_id)
 
 
 @router.get('/students/{student_id}/documents/{document_id}')
@@ -173,7 +161,7 @@ def submit_absence(student_id: str, db: DB, user: Actor, request: Request, absen
     if evidence:
         suffix = {'application/pdf':'pdf','image/png':'png','image/jpeg':'jpg'}[mime]
         attachment = write_file(db, student.school_id, user.id, 'comprovante.' + suffix, mime, data, 'absence_evidence')
-    protocol = m.Protocol(school_id=student.school_id, student_id=student.id, kind='Justificativa de ausência',
+    protocol = m.Protocol(school_id=student.school_id, student_id=student.id, source='family', category='pedagogico', kind='Justificativa de ausência',
                           number=number(db, student.school_id, 'protocol', 'PRO-'), status='open',
                           description=f'{absence_date:%d/%m/%Y} — {reason}')
     db.add(protocol)

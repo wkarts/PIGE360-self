@@ -1,4 +1,204 @@
 "use strict";
+var PigeDialogs;
+(function (PigeDialogs) {
+    let contextVersion = 0;
+    let pending;
+    function cancelPending() { contextVersion++; pending?.cancel(); }
+    PigeDialogs.cancelPending = cancelPending;
+    function ask(kind, message, options) {
+        // Um segundo acionamento não pode aproveitar a decisão do primeiro.
+        if (pending) {
+            if (kind !== 'alert')
+                return Promise.resolve(null);
+            if (pending.kind === 'alert' && pending.message === message)
+                return pending.closed.then(() => null);
+            const version = contextVersion;
+            return pending.closed.then(() => version === contextVersion ? ask(kind, message, options) : null);
+        }
+        const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const minimum = Math.max(0, options.minLength || 0);
+        const maximum = options.maxLength;
+        const state = Vue.reactive({ value: options.initialValue || '', error: '' });
+        let signalClosed;
+        const closed = new Promise(resolve => { signalClosed = resolve; });
+        return new Promise(resolve => {
+            function finish(accepted) {
+                if (pending?.cancel !== cancel)
+                    return;
+                if (accepted && kind !== 'alert' && opener && !opener.isConnected)
+                    accepted = false;
+                if (accepted && kind === 'prompt' && state.value.trim().length < minimum) {
+                    state.error = 'Informe pelo menos ' + minimum + (minimum === 1 ? ' caractere.' : ' caracteres.');
+                    dialog.querySelector('textarea')?.focus();
+                    return;
+                }
+                if (accepted && kind === 'prompt' && maximum !== undefined && state.value.length > maximum) {
+                    state.error = 'Use no máximo ' + maximum + (maximum === 1 ? ' caractere.' : ' caracteres.');
+                    dialog.querySelector('textarea')?.focus();
+                    return;
+                }
+                pending = undefined;
+                window.removeEventListener('pagehide', cancelPending);
+                window.removeEventListener('popstate', cancelPending);
+                window.removeEventListener('hashchange', cancelPending);
+                dialog.close();
+                app.unmount();
+                host.remove();
+                if (opener?.isConnected)
+                    opener.focus({ preventScroll: true });
+                resolve(accepted ? (kind === 'prompt' ? state.value : 'ok') : null);
+                signalClosed();
+            }
+            const cancel = () => finish(false);
+            const app = Vue.createApp({ render: PigeRenders.actionDialog, setup: () => ({
+                    kind, message, minimum, maximum, state, finish,
+                    title: options.title || ({ confirm: 'Confirmar ação', alert: 'Aviso', prompt: 'Informe um valor' })[kind],
+                    inputLabel: options.inputLabel || 'Resposta',
+                    confirmLabel: options.confirmLabel || (kind === 'alert' ? 'Entendi' : 'Confirmar'),
+                    cancelLabel: options.cancelLabel || 'Voltar', destructive: Boolean(options.destructive),
+                }) });
+            app.mount(host);
+            const dialog = host.querySelector('dialog');
+            dialog.addEventListener('keydown', event => {
+                if (event.key !== 'Tab')
+                    return;
+                const controls = dialog.querySelectorAll('button,textarea');
+                const first = controls[0], last = controls[controls.length - 1];
+                if (event.shiftKey && document.activeElement === first) {
+                    event.preventDefault();
+                    last.focus();
+                }
+                if (!event.shiftKey && document.activeElement === last) {
+                    event.preventDefault();
+                    first.focus();
+                }
+            });
+            pending = { cancel, closed, kind, message };
+            window.addEventListener('pagehide', cancelPending);
+            window.addEventListener('popstate', cancelPending);
+            window.addEventListener('hashchange', cancelPending);
+            dialog.showModal();
+            const selector = kind === 'prompt' ? 'textarea' : kind === 'alert' ? '[type="submit"]' : '[data-dialog-back]';
+            dialog.querySelector(selector)?.focus({ preventScroll: true });
+        });
+    }
+    async function confirm(message, options = {}) {
+        return await ask('confirm', message, options) !== null;
+    }
+    PigeDialogs.confirm = confirm;
+    async function alert(message, options = {}) {
+        await ask('alert', message, options);
+    }
+    PigeDialogs.alert = alert;
+    function prompt(message, options = {}) {
+        return ask('prompt', message, options);
+    }
+    PigeDialogs.prompt = prompt;
+    let installed = false;
+    function install() {
+        if (installed)
+            return;
+        installed = true;
+        let current = null, opener = null;
+        let saved = [], previousOverflow = '';
+        function restore() { for (const item of saved)
+            item.element.inert = item.inert; saved = []; document.body.style.overflow = previousOverflow; }
+        function update() {
+            if (pending)
+                return;
+            const dialogs = Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]'));
+            const next = dialogs.filter(element => element.getClientRects().length > 0).at(-1) || null;
+            if (next === current)
+                return;
+            if (current) {
+                restore();
+                current = null;
+                if (!next && opener?.isConnected)
+                    opener.focus({ preventScroll: true });
+            }
+            if (!next) {
+                opener = null;
+                return;
+            }
+            if (next.closest('.school-task') && !next.querySelector('[data-task-minimize]') && !next.querySelector('video') && !next.closest('.camera-dialog')) {
+                const header = next.querySelector('.modal-header');
+                if (header) {
+                    const minimize = document.createElement('button');
+                    minimize.type = 'button';
+                    minimize.className = 'btn task-minimize';
+                    minimize.dataset.taskMinimize = '';
+                    minimize.textContent = 'Minimizar';
+                    minimize.title = 'Manter o formulário aberto e voltar às guias';
+                    minimize.onclick = () => {
+                        const backdrop = next.closest('.modal-backdrop');
+                        if (!backdrop)
+                            return;
+                        backdrop.dataset.taskPaused = '';
+                        document.dispatchEvent(new Event('pige-pause-form'));
+                    };
+                    header.appendChild(minimize);
+                }
+            }
+            opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            current = next;
+            previousOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            let branch = next;
+            while (branch.parentElement) {
+                for (const sibling of Array.from(branch.parentElement.children)) {
+                    if (sibling !== branch && sibling instanceof HTMLElement) {
+                        saved.push({ element: sibling, inert: sibling.inert });
+                        sibling.inert = true;
+                    }
+                }
+                if (branch.parentElement === document.body)
+                    break;
+                branch = branch.parentElement;
+            }
+            const heading = next.querySelector('[data-dialog-title]');
+            if (heading) {
+                heading.tabIndex = -1;
+                heading.focus({ preventScroll: true });
+            }
+            else
+                next.querySelector('button,input,select,textarea')?.focus({ preventScroll: true });
+        }
+        new MutationObserver(update).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-task-paused'] });
+        document.addEventListener('keydown', event => {
+            if (!current || pending)
+                return;
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                current.querySelector('[data-dialog-close]')?.click();
+                return;
+            }
+            if (event.key !== 'Tab')
+                return;
+            const controls = Array.from(current.querySelectorAll('button,a[href],input,select,textarea,summary,[tabindex="0"]'))
+                .filter(el => !el.matches(':disabled') && el.getClientRects().length > 0 && !el.closest('[inert]'));
+            const first = controls[0], last = controls.at(-1);
+            if (!first) {
+                event.preventDefault();
+                return;
+            }
+            if (event.shiftKey && (document.activeElement === first || !controls.includes(document.activeElement))) {
+                event.preventDefault();
+                last?.focus();
+            }
+            else if (!event.shiftKey && (document.activeElement === last || !controls.includes(document.activeElement))) {
+                event.preventDefault();
+                first.focus();
+            }
+        }, true);
+        document.addEventListener('focusin', event => { if (!pending && current && !current.contains(event.target))
+            current.querySelector('[data-dialog-title],button')?.focus(); });
+        update();
+    }
+    PigeDialogs.install = install;
+})(PigeDialogs || (PigeDialogs = {}));
 /** Identidade pública da escola. Sem segredos, rotas bancárias ou seleção de cliente. */
 var PigeInstitution;
 (function (PigeInstitution) {
@@ -50,7 +250,7 @@ var PigeInstitution;
 var PigeSupport;
 (function (PigeSupport) {
     const runtime = window;
-    PigeSupport.status = Vue.reactive({ error: '' });
+    PigeSupport.status = Vue.reactive({ error: '', canOpen: false });
     const busyMessage = 'O atendimento recebeu muitas solicitações. Aguarde antes de tentar novamente.';
     const roots = '#hub-widget-holder,#hub-bubble-holder';
     // A URL sem versão pode continuar em cache por um ano após atualizar o HUB.
@@ -64,8 +264,21 @@ var PigeSupport;
     let recovery = null, checkingArea = false, retryArea = null;
     let visibilityStyle = null;
     let listeningReady = false;
+    function launcher() { return document.querySelector?.('button#hub-bubble-holder, #hub-bubble-holder button, #hub-bubble-holder[role="button"]'); }
+    function checkLauncher() { PigeSupport.status.canOpen = Boolean(activeSDK && !checkingArea && runtime.$hub?.hasLoaded && (typeof runtime.$hub.toggle === 'function' || launcher())); }
+    function openChat() {
+        checkLauncher();
+        if (!PigeSupport.status.canOpen)
+            return;
+        if (typeof runtime.$hub?.toggle === 'function')
+            runtime.$hub.toggle('open');
+        else
+            launcher()?.click();
+    }
+    PigeSupport.openChat = openChat;
     function setChecking(checking) {
         checkingArea = checking;
+        checkLauncher();
         visibilityStyle?.remove();
         visibilityStyle = null;
         if (checking) {
@@ -89,6 +302,7 @@ var PigeSupport;
     function onReady() {
         if (!activeSDK || !runtime.$hub?.hasLoaded)
             return;
+        checkLauncher();
         cancelStartup();
         recovery?.remove();
         recovery = null;
@@ -106,6 +320,7 @@ var PigeSupport;
         }
         activeSDK = null;
         loadedSource = '';
+        PigeSupport.status.canOpen = false;
     }
     function dispose() {
         ++generation;
@@ -333,6 +548,47 @@ var PigeOnline;
 })(PigeOnline || (PigeOnline = {}));
 var PigeLearning;
 (function (PigeLearning) {
+    function orderPeriod(a, b) {
+        return (a.order_index ?? 0) - (b.order_index ?? 0) || (a.starts_on || '').localeCompare(b.starts_on || '') || a.period_id.localeCompare(b.period_id);
+    }
+    // Um diário pertence a uma turma de origem; nomes iguais podem identificar diários distintos.
+    function matrices(groups, calendars, filtered) {
+        const classes = new Map();
+        for (const group of groups) {
+            let matrix = classes.get(group.classId);
+            if (!matrix) {
+                const periods = new Map();
+                if (!filtered)
+                    for (const period of calendars?.[group.classId] || [])
+                        periods.set(period.period_id, period);
+                matrix = { className: group.className, periods, components: new Map(), published: new Set() };
+                classes.set(group.classId, matrix);
+            }
+            for (const item of group.items) {
+                matrix.periods.set(item.period_id, item);
+                matrix.published.add(item.period_id);
+                const key = JSON.stringify([item.diary_id, item.component_name]);
+                const component = matrix.components.get(key) || { id: key, name: item.component_name, results: new Map() };
+                component.results.set(item.period_id, item);
+                matrix.components.set(key, component);
+            }
+        }
+        const windows = [];
+        for (const [classId, matrix] of classes) {
+            const periods = Array.from(matrix.periods.values()).sort(orderPeriod);
+            const components = Array.from(matrix.components.values()).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+            for (let start = 0; start < periods.length; start += 4) {
+                const window = periods.slice(start, start + 4);
+                windows.push({ key: JSON.stringify([classId, window[0].period_id]), className: matrix.className, periods: window,
+                    periodLabel: window.map(p => p.period_name).join(', '), rows: components.map(component => ({
+                        id: component.id, name: component.name, cells: window.map(p => ({
+                            period: p, result: component.results.get(p.period_id), empty: matrix.published.has(p.period_id) ? 'Sem resultado publicado' : 'Não publicado',
+                        })),
+                    })) });
+            }
+        }
+        return windows;
+    }
     PigeLearning.component = { props: ['request', 'download', 'rootPath', 'schoolId', 'studentId', 'identity'], render: PigeRenders.learning, setup(props) {
             const state = Vue.reactive({ busy: false, error: '', students: [], studentId: '', enrollmentId: '', groupId: '', note: '' });
             const base = () => (props.rootPath || '/profile') + '/learning';
@@ -369,27 +625,41 @@ var PigeLearning;
                         state.groupId = '';
                 });
             }
-            const rows = () => (enrollment()?.subjects || []).flatMap(subject => subject.periods.map(period => ({ ...period, component_name: period.component_name || subject.component_name, diary_id: subject.diary_id })));
             const periodGroups = Vue.computed(() => {
                 const groups = new Map();
-                for (const row of rows()) {
-                    const className = row.class_label || row.class_name || enrollment()?.class_name || '';
-                    const id = JSON.stringify([row.period_id, row.class_group_id || className]);
-                    const group = groups.get(id) || { id, label: row.period_name, className, items: [] };
-                    group.items.push(row);
-                    groups.set(id, group);
+                for (const subject of enrollment()?.subjects || []) {
+                    for (const period of subject.periods) {
+                        const className = period.class_label || period.class_name || enrollment()?.class_name || '';
+                        const classId = period.class_group_id || className;
+                        const id = JSON.stringify([period.period_id, classId]);
+                        const group = groups.get(id) || { id, label: period.period_name, classId, className, items: [] };
+                        group.items.push({ ...period, component_name: period.component_name || subject.component_name, diary_id: subject.diary_id });
+                        groups.set(id, group);
+                    }
                 }
-                return Array.from(groups.values()).sort((left, right) => {
-                    const a = left.items[0], b = right.items[0];
-                    return (a.order_index ?? 0) - (b.order_index ?? 0) || (a.starts_on || '').localeCompare(b.starts_on || '') || left.className.localeCompare(right.className, 'pt-BR');
-                });
+                return Array.from(groups.values()).sort((a, b) => orderPeriod(a.items[0], b.items[0]) || a.className.localeCompare(b.className, 'pt-BR'));
             });
             const visibleGroups = Vue.computed(() => periodGroups.value.filter(group => !state.groupId || group.id === state.groupId));
+            const model = Vue.computed(() => enrollment()?.bulletin_model || 'integrated');
+            const tables = Vue.computed(() => matrices(visibleGroups.value, enrollment()?.class_calendars, Boolean(state.groupId)));
+            const tableKinds = Vue.computed(() => model.value === 'panel' ? ['grade', 'attendance'] : [model.value]);
+            const titles = { integrated: 'Rendimento e frequência', grade: 'Rendimento por componente', attendance: 'Aulas, faltas e frequência', journey: 'Percurso por componente' };
+            const modelNames = { integrated: 'Grade integrada', panel: 'Painel do aluno', journey: 'Percurso acadêmico' };
+            const fonts = { system: 'system-ui, sans-serif', arial: 'Arial, sans-serif', verdana: 'Verdana, sans-serif', georgia: 'Georgia, serif', times: 'Times New Roman, serif' };
+            const facts = Vue.computed(() => {
+                const e = enrollment();
+                return [['Registro escolar', student()?.student_number], ['Matrícula', e?.number], ['Ano letivo', e?.year_name], ['Etapa', e?.stage], ['Unidade', e?.unit], ['Turno', e?.shift]].filter(([, value]) => value);
+            });
+            const uniformStatus = Vue.computed(() => {
+                const values = new Set(visibleGroups.value.flatMap(group => group.items.map(item => item.result_label)));
+                return values.size === 1 ? Array.from(values)[0] : '';
+            });
+            const opinions = Vue.computed(() => visibleGroups.value.flatMap(group => group.items.filter(item => item.opinions?.length)));
             const percent = (value) => value === null || value === undefined ? 'Não apurada' : Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%';
             async function download(documentId = '') { await run(async () => { if (!student() || !enrollment())
                 return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId) + (documentId ? '&document_id=' + encodeURIComponent(documentId) : '') + (props.schoolId ? '&school_id=' + encodeURIComponent(props.schoolId) : ''), 'boletim-' + student().student_number + '.pdf'); }); }
             Vue.onMounted(() => { void load(); });
-            return { props, state, student, enrollment, selectStudent, rows, periodGroups, visibleGroups, percent, load, download };
+            return { props, state, student, enrollment, selectStudent, model, modelNames, fonts, facts, periodGroups, visibleGroups, tables, tableKinds, titles, uniformStatus, opinions, percent, load, download };
         } };
 })(PigeLearning || (PigeLearning = {}));
 /** Notícias e agenda com transporte compartilhável entre gestão, portal e página pública. */
@@ -424,7 +694,7 @@ var PigeCommunity;
                 { id: 'media', number: '2', label: 'Imagem', description: 'Adicione uma fotografia acessível ou reutilize uma imagem da biblioteca.' },
                 { id: 'publish', number: '3', label: 'Publicação', description: 'Escolha o período, destaque e situação da publicação antes de salvar.' },
             ];
-            const s = Vue.reactive({ siteGuide: 'models', models: [], modelChoice: '', resolvedModel: null, modelPreviewInput: '', modelPreviewPage: '', modelPreviewActive: false, hasModelCheckpoint: false, demoConfirmed: false, sitePageIndex: -1, assets: [], admissionReadiness: null, websiteInitial: '', sectionKind: 'cards', previewHtml: '', previewWidth: '100%', publishedVersion: 0, publishedUrl: '', published: false, hasDraft: false, website: { design: newDesign(), enabled: false, theme: 'horizon', headline: '', introduction: '', about: '', public_url: '', portal_url: '', notice: '', admission_url: '', brand: { display_name: '', primary_color: '', secondary_color: '', font_family: '' } }, websiteOpen: false, busy: false, error: '', notice: '', items: [], page: 1, total: 0, q: '', kind: '', status: '', upcoming: false, selected: null, editing: false, savedPostStatus: '', editorStep: 'content', discard: false, deleteConfirm: false, initial: '', form: empty() });
+            const s = Vue.reactive({ siteGuide: 'models', models: [], modelChoice: '', resolvedModel: null, modelPreviewInput: '', modelPreviewPage: '', modelPreviewActive: false, hasModelCheckpoint: false, demoConfirmed: false, sitePageIndex: -1, assets: [], admissionReadiness: null, websiteInitial: '', sectionKind: 'cards', previewHtml: '', previewWidth: '100%', publishedVersion: 0, publishedUrl: '', published: false, hasDraft: false, website: { design: newDesign(), enabled: false, theme: 'horizon', headline: '', introduction: '', about: '', public_url: '', portal_url: '', notice: '', admission_url: '', brand: { display_name: '', primary_color: '', secondary_color: '', font_family: '' } }, websiteOpen: false, busy: false, error: '', notice: '', items: [], page: 1, total: 0, q: '', kind: '', status: '', upcoming: false, selected: null, editing: false, savedPostStatus: '', editorStep: 'content', initial: '', form: empty() });
             const manage = () => !props.publicMode && !props.portalMode && Boolean(props.permissions?.includes('schools.manage'));
             const endpoint = () => props.portalMode ? '/portal/community-feed' : props.publicMode ? '/public/schools/' + props.schoolId + '/community-feed' : '/schools/' + props.schoolId + (manage() ? '/community-posts' : '/community-feed');
             const transport = (path, options) => (props.request || request)(path, options);
@@ -500,10 +770,26 @@ var PigeCommunity;
                 }
             } }
             function websitePayload() { const { version, enabled, theme, headline, introduction, about, public_url, portal_url, notice, admission_url, brand, design } = s.website; return { version, enabled, theme, headline, introduction, about, public_url, portal_url, notice, admission_url, brand, design }; }
+            let disposed = false;
+            Vue.onUnmounted(() => { disposed = true; });
+            function hasUnsavedChanges() {
+                return (s.editing && JSON.stringify(s.form) !== s.initial) ||
+                    Boolean(s.websiteInitial && JSON.stringify(websitePayload()) !== s.websiteInitial);
+            }
+            async function confirmWebsite(message, confirmLabel, destructive = false) {
+                if (disposed || s.busy || !manage())
+                    return false;
+                const current = () => JSON.stringify([props.schoolId, websitePayload(), s.sitePageIndex, s.modelChoice,
+                    s.demoConfirmed, s.websiteOpen, s.modelPreviewInput, s.hasModelCheckpoint]);
+                const expected = current();
+                const accepted = await PigeDialogs.confirm(message, { title: 'Site institucional', confirmLabel, cancelLabel: 'Voltar', destructive });
+                return accepted && !disposed && !s.busy && manage() && current() === expected;
+            }
             async function loadSiteAssets() { await run(async () => { const data = await transport('/schools/' + props.schoolId + '/website/assets'); s.assets = data.items; }); }
             async function loadAdmissionReadiness() { if (!manage() || !props.permissions?.includes('admissions.read'))
                 return; await run(async () => { s.admissionReadiness = await transport('/schools/' + props.schoolId + '/admission-readiness'); s.notice = 'Situação da matrícula atualizada. O CTA continua apontando para o endereço configurado, sem criar outro processo.'; }); }
-            async function removeSiteAsset(asset) { if (!window.confirm('Excluir esta fotografia da biblioteca? Somente fotos sem uso em rascunhos, sites ou publicações podem ser excluídas.'))
+            async function removeSiteAsset(asset) { if (!await confirmWebsite('Excluir esta fotografia da biblioteca? Somente fotos sem uso em rascunhos, sites ou publicações podem ser excluídas.', 'Excluir fotografia', true))
+                return; if (!s.assets.some(item => item.id === asset.id))
                 return; await run(async () => { await transport('/schools/' + props.schoolId + '/website/assets/' + asset.id, { method: 'DELETE' }); s.assets = s.assets.filter(x => x.id !== asset.id); s.notice = 'Fotografia sem uso excluída.'; }); }
             async function uploadSiteImage(event, target) { const input = event.target; const file = input.files?.[0]; if (!file)
                 return; await run(async () => { if (file.size > 3 * 1024 * 1024)
@@ -529,13 +815,15 @@ var PigeCommunity;
                 void Vue.nextTick(() => field.focus());
             }
             async function toggleWebsite() { if (s.busy)
-                return; if (s.websiteOpen && s.websiteInitial && JSON.stringify(websitePayload()) !== s.websiteInitial && !window.confirm('Fechar a configuração com alterações ainda não salvas? Os campos permanecem nesta tela, mas serão perdidos ao sair.'))
+                return; if (s.websiteOpen && s.websiteInitial && JSON.stringify(websitePayload()) !== s.websiteInitial && !await confirmWebsite('Fechar a configuração com alterações ainda não salvas? Os campos permanecem nesta tela, mas serão perdidos ao sair.', 'Fechar configuração'))
                 return; s.websiteOpen = !s.websiteOpen; if (s.websiteOpen && !s.models.length)
                 await loadSiteModels(); if (s.websiteOpen && !s.websiteInitial)
                 s.websiteInitial = JSON.stringify(websitePayload()); }
             function move(items, index, delta) { const target = index + delta; if (target < 0 || target >= items.length)
                 return; [items[index], items[target]] = [items[target], items[index]]; s.previewHtml = ''; }
-            function removeSiteItem(items, index) { if (!window.confirm('Remover este item do rascunho? A publicação atual não será alterada até você publicar.'))
+            async function removeSiteItem(items, index) { const target = items[index]; if (target === undefined)
+                return; if (!await confirmWebsite('Remover este item do rascunho? A publicação atual não será alterada até você publicar.', 'Remover item', true))
+                return; if (items[index] !== target)
                 return; items.splice(index, 1); s.previewHtml = ''; }
             async function loadSiteModels() { await run(async () => { const result = await transport('/schools/' + props.schoolId + '/website/models'); s.models = result.items; if (!selectedModel())
                 s.modelChoice = ''; }); }
@@ -618,11 +906,11 @@ var PigeCommunity;
                 if (modelReady())
                     s.notice = 'Confira o mapa e as páginas na prévia. Depois clique novamente em Aplicar para confirmar o rascunho.';
                 return;
-            } const added = modelNewPages(); const renamed = modelRenames(); if (!window.confirm('Aplicar ao rascunho a página inicial curta, ' + added.length + ' novas páginas completas e o novo menu? Todas as páginas atuais, identidade e endereços serão preservados.' + (renamed.length ? ' Endereços ajustados para evitar colisões: ' + renamed.join(', ') + '.' : '') + ' O site publicado NÃO muda. As páginas marcadas para inclusão só entrarão no ar após a ação Publicar site. A cópia original antes de testar modelos ficará salva na plataforma, inclusive após sair desta tela.'))
+            } const added = modelNewPages(); const renamed = modelRenames(); if (!await confirmWebsite('Aplicar ao rascunho a página inicial curta, ' + added.length + ' novas páginas completas e o novo menu? Todas as páginas atuais, identidade e endereços serão preservados.' + (renamed.length ? ' Endereços ajustados para evitar colisões: ' + renamed.join(', ') + '.' : '') + ' O site publicado NÃO muda. As páginas marcadas para inclusão só entrarão no ar após a ação Publicar site. A cópia original antes de testar modelos ficará salva na plataforma, inclusive após sair desta tela.', 'Aplicar modelo'))
                 return; await run(async () => { await transport('/schools/' + props.schoolId + '/website/apply-model', { method: 'POST', body: modelInput() }); await loadWebsite(); s.sitePageIndex = -1; s.demoConfirmed = false; clearModelPreview(); s.notice = 'Página inicial, novas páginas e menu salvos somente em rascunho. Páginas anteriores preservadas; cópia original durável disponível. Nada foi publicado.'; }); }
-            async function restoreModelCheckpoint() { if (!s.hasModelCheckpoint || !window.confirm('Restaurar a cópia original antes de testar modelos no rascunho? O site publicado não muda.'))
+            async function restoreModelCheckpoint() { if (!s.hasModelCheckpoint || !await confirmWebsite('Restaurar a cópia original antes de testar modelos no rascunho? O site publicado não muda.', 'Restaurar rascunho', true))
                 return; await run(async () => { await transport('/schools/' + props.schoolId + '/website/restore-model', { method: 'POST', body: JSON.stringify({ version: s.website.version }) }); await loadWebsite(); clearModelPreview(); s.sitePageIndex = -1; s.demoConfirmed = false; s.notice = 'Cópia original restaurada e salva no rascunho.'; }); }
-            function markDemoReplaced() { if (!s.website.design || !window.confirm('Você revisou todos os textos e substituiu as fotografias demonstrativas? A publicação ainda exigirá a ação Publicar site.'))
+            async function markDemoReplaced() { if (!s.website.design || !await confirmWebsite('Você revisou todos os textos e substituiu as fotografias demonstrativas? A publicação ainda exigirá a ação Publicar site.', 'Concluir revisão'))
                 return; const hasDemoAssets = JSON.stringify(s.website.design).includes('/public/website-model-assets/'); if (hasDemoAssets) {
                 s.error = 'Ainda há imagens demonstrativas. Substitua-as antes de concluir a revisão.';
                 return;
@@ -635,7 +923,7 @@ var PigeCommunity;
                 n++; d.pages.push({ slug: 'pagina-' + n, title: 'Nova página', introduction: '', image: null, published: true, sections: [] }); s.sitePageIndex = d.pages.length - 1; s.previewHtml = ''; }
             function moveSitePage(delta) { const pages = s.website.design?.pages; if (!pages)
                 return; const page = editingPage(); move(pages, s.sitePageIndex, delta); s.sitePageIndex = page ? pages.indexOf(page) : -1; }
-            function removeSitePage() { const d = s.website.design, p = editingPage(); if (!d || !p || !window.confirm('Remover esta página do rascunho? Links do menu para ela também serão retirados. Revise botões e outros links antes de publicar.'))
+            async function removeSitePage() { const d = s.website.design, p = editingPage(); if (!d || !p || !await confirmWebsite('Remover esta página do rascunho? Links do menu para ela também serão retirados. Revise botões e outros links antes de publicar.', 'Remover página', true))
                 return; d.pages.splice(s.sitePageIndex, 1); d.menu = d.menu.filter(link => link.url.split(/[?#]/)[0] !== '/' + p.slug); s.sitePageIndex = -1; s.previewHtml = ''; }
             function addPageToMenu() { const d = s.website.design, p = editingPage(); if (!d || !p || d.menu.length >= 8)
                 return; if (!p.published) {
@@ -647,19 +935,33 @@ var PigeCommunity;
                 return; if (!editingPage())
                 d.configured = true; let n = 1; while (sections.some(x => x.id === 'secao-' + n))
                 n++; sections.push({ id: 'secao-' + n, kind: s.sectionKind, visible: true, eyebrow: '', title: '', text: '', image: null, action: null, items: [] }); s.previewHtml = ''; }
-            function inheritBrand() { if (!window.confirm('Restaurar a identidade herdada do PIGE neste rascunho?'))
+            async function inheritBrand() { if (!await confirmWebsite('Restaurar a identidade herdada do PIGE neste rascunho?', 'Restaurar identidade'))
                 return; s.website.brand = { display_name: '', primary_color: '', secondary_color: '', font_family: '' }; s.previewHtml = ''; }
             function editorialCheck() { if (/^(https?:\/\/|www\.)/i.test(s.website.headline.trim()))
                 throw new Error('Use um título na chamada principal. Informe a URL no endereço do botão.'); }
             function admissionReasonLabel(reason) { return { not_published: 'não publicado', not_started: 'abertura futura', closed: 'prazo encerrado', no_active_groups: 'sem turma ativa', inactive_school: 'unidade inativa' }[reason] || reason; }
             async function saveWebsite() { await run(async () => { await transport('/schools/' + props.schoolId + '/website/draft', { method: 'PUT', body: JSON.stringify(websitePayload()) }); await loadWebsite(); s.notice = 'Rascunho salvo. A versão pública permanece a mesma até você publicar.'; }); }
-            async function publishWebsite() { if (s.website.design?.demonstration && !s.demoConfirmed) {
-                s.error = 'Confirme explicitamente a publicação de conteúdo demonstrativo ou substitua e revise os exemplos.';
-                return;
-            } if (!window.confirm(s.website.design?.demonstration ? 'Publicar EXEMPLOS DEMONSTRATIVOS com identificação visível?' : 'Publicar este conteúdo no site da escola?'))
-                return; await run(async () => { editorialCheck(); await transport('/schools/' + props.schoolId + '/website/draft', { method: 'PUT', body: JSON.stringify(websitePayload()) }); await loadWebsite(); await transport('/schools/' + props.schoolId + '/website/publish', { method: 'POST', body: JSON.stringify({ version: s.website.version, confirm_demonstration: s.demoConfirmed }) }); await loadWebsite(); s.notice = 'Site publicado com sucesso.'; }); }
+            async function publishWebsite() {
+                if (s.website.design?.demonstration && !s.demoConfirmed) {
+                    s.error = 'Confirme explicitamente a publicação de conteúdo demonstrativo ou substitua e revise os exemplos.';
+                    return;
+                }
+                if (!await confirmWebsite(s.website.design?.demonstration ? 'Publicar exemplos demonstrativos com identificação visível?' : 'Publicar este conteúdo no site da escola?', 'Publicar site'))
+                    return;
+                const schoolId = props.schoolId, path = '/schools/' + schoolId + '/website';
+                const confirmDemonstration = s.demoConfirmed;
+                await run(async () => {
+                    editorialCheck();
+                    const saved = await transport(path + '/draft', { method: 'PUT', body: JSON.stringify(websitePayload()) });
+                    if (disposed || props.schoolId !== schoolId || !manage())
+                        return;
+                    await transport(path + '/publish', { method: 'POST', body: JSON.stringify({ version: saved.version, confirm_demonstration: confirmDemonstration }) });
+                    await loadWebsite();
+                    s.notice = 'Site publicado com sucesso.';
+                });
+            }
             function previewWebsite() { previewAnchor = ''; return previewPage(editingPage()?.slug || '', false); }
-            async function unpublishWebsite() { if (!window.confirm('Retirar o site do ar? O conteúdo será preservado em rascunho.'))
+            async function unpublishWebsite() { if (!await confirmWebsite('Retirar o site do ar? O conteúdo será preservado em rascunho.', 'Retirar do ar', true))
                 return; await run(async () => { await transport('/schools/' + props.schoolId + '/website/unpublish', { method: 'POST', body: JSON.stringify(websitePayload()) }); await loadWebsite(); s.notice = 'Site retirado da publicação. Rascunho preservado.'; }); }
             async function search() { s.page = 1; await run(load); }
             async function page(delta) { s.page += delta; await run(load); }
@@ -681,8 +983,6 @@ var PigeCommunity;
                 s.initial = JSON.stringify(s.form);
                 s.editing = true;
                 s.editorStep = 'content';
-                s.discard = false;
-                s.deleteConfirm = false;
                 s.selected = null;
                 s.error = '';
             }
@@ -713,12 +1013,23 @@ var PigeCommunity;
                     void Vue.nextTick(() => field.focus());
                 }
             }
-            function closeEditor(force = false) { if (s.busy)
-                return; if (!force && JSON.stringify(s.form) !== s.initial) {
-                s.discard = true;
-                return;
-            } s.editing = false; s.discard = false; s.deleteConfirm = false; }
+            async function confirmPost(message, title, confirmLabel) {
+                const form = s.form, expected = JSON.stringify(form), schoolId = props.schoolId;
+                if (disposed || s.busy || !s.editing || !manage())
+                    return false;
+                const accepted = await PigeDialogs.confirm(message, { title, confirmLabel, cancelLabel: 'Continuar editando', destructive: true });
+                return accepted && !disposed && !s.busy && s.editing && manage() && props.schoolId === schoolId &&
+                    s.form === form && JSON.stringify(form) === expected;
+            }
+            async function closeEditor() {
+                if (s.busy || (JSON.stringify(s.form) !== s.initial && !await confirmPost('O que você alterou desde a última gravação será perdido.', 'Descartar a edição?', 'Descartar alterações')))
+                    return;
+                s.editing = false;
+            }
             async function save() {
+                if (s.savedPostStatus === 'published' && s.form.status === 'draft' &&
+                    !await confirmPost('A notícia ou evento será retirado do mural e continuará disponível em rascunho.', 'Despublicar este conteúdo?', 'Confirmar despublicação'))
+                    return;
                 await run(async () => {
                     const { id, version, ...form } = s.form;
                     const stamp = (value) => value ? value + ':00-03:00' : null;
@@ -729,8 +1040,11 @@ var PigeCommunity;
                     s.notice = form.status === 'published' ? (form.publish_at && new Date(payload.publish_at) > new Date() ? 'Publicação agendada.' : 'Publicação disponível para o público selecionado.') : form.status === 'archived' ? 'Publicação arquivada.' : 'Rascunho salvo.';
                 });
             }
-            async function remove() { await run(async () => { if (!s.deleteConfirm || !canDeleteDraft())
-                return; await transport('/schools/' + props.schoolId + '/community-posts/' + s.form.id + '?version=' + s.form.version, { method: 'DELETE' }); s.editing = false; await load(); s.notice = 'Rascunho excluído.'; }); }
+            async function remove() {
+                if (!canDeleteDraft() || !await confirmPost('O rascunho desta publicação será excluído definitivamente.', 'Excluir rascunho?', 'Confirmar exclusão'))
+                    return;
+                await run(async () => { await transport('/schools/' + props.schoolId + '/community-posts/' + s.form.id + '?version=' + s.form.version, { method: 'DELETE' }); s.editing = false; await load(); s.notice = 'Rascunho excluído.'; });
+            }
             const scheduled = (post) => post.status === 'published' && Boolean(post.publish_at) && new Date(post.publish_at) > new Date();
             const expired = (post) => Boolean(post.expires_at) && new Date(post.expires_at) <= new Date();
             const paragraphs = (value) => value.split(/\n\s*\n/).filter(Boolean);
@@ -746,7 +1060,7 @@ var PigeCommunity;
             Vue.watch(() => props.websiteRequest, openRequestedSite);
             Vue.watch(() => s.busy, openRequestedSite);
             Vue.onMounted(() => { void run(async () => { await load(); await loadWebsite(); }).then(openRequestedSite); });
-            return { dialogTarget: Vue.inject('school-dialog-host', 'body') || 'body', siteGuides, editorSteps, openModelPreview, revealInvalidSiteField, s, props, manage, run, load, toggleWebsite, loadSiteAssets, loadAdmissionReadiness, removeSiteAsset, uploadSiteImage, move, removeSiteItem, addSection, loadSiteModels, selectedModel, modelReady, clearModelPreview, modelNewPages, modelRenames, previewModel, previewDraftPage, previewModelPage, bindPreviewLinks, closePreview, applyModel, restoreModelCheckpoint, markDemoReplaced, editingPage, contentSections, selectSitePage, addSitePage, moveSitePage, removeSitePage, addPageToMenu, inheritBrand, newImage, newLink, newItem, sectionLabels, saveWebsite, publishWebsite, previewWebsite, unpublishWebsite, search, page, open, edit, closeEditor, save, remove, date, audienceLabels, statusLabels, scheduled, expired, paragraphs, prepareUnpublish, canDeleteDraft, postSaveLabel, revealInvalidPostField, admissionReasonLabel, editorStepSummary, setEditorStep, nextEditorStep, previousEditorStep };
+            return { hasUnsavedChanges, dialogTarget: Vue.inject('school-dialog-host', 'body') || 'body', siteGuides, editorSteps, openModelPreview, revealInvalidSiteField, s, props, manage, run, load, toggleWebsite, loadSiteAssets, loadAdmissionReadiness, removeSiteAsset, uploadSiteImage, move, removeSiteItem, addSection, loadSiteModels, selectedModel, modelReady, clearModelPreview, modelNewPages, modelRenames, previewModel, previewDraftPage, previewModelPage, bindPreviewLinks, closePreview, applyModel, restoreModelCheckpoint, markDemoReplaced, editingPage, contentSections, selectSitePage, addSitePage, moveSitePage, removeSitePage, addPageToMenu, inheritBrand, newImage, newLink, newItem, sectionLabels, saveWebsite, publishWebsite, previewWebsite, unpublishWebsite, search, page, open, edit, closeEditor, save, remove, date, audienceLabels, statusLabels, scheduled, expired, paragraphs, prepareUnpublish, canDeleteDraft, postSaveLabel, revealInvalidPostField, admissionReasonLabel, editorStepSummary, setEditorStep, nextEditorStep, previousEditorStep };
         } };
 })(PigeCommunity || (PigeCommunity = {}));
 /** Segredos transitórios ficam apenas na memória da tela, nunca no armazenamento do navegador. */

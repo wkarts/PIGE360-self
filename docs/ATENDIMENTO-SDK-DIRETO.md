@@ -2,6 +2,14 @@
 
 O carregador `frontend/src/support-widget.ts` instala `/packs/js/sdk.js` no documento da página, usando `window.hubSettings` e `window.hubSDK.run`. A bolha e o painel são criados pelo HUB; o portal não cria iframe externo, não recorta a área com `clip-path` e não modifica as sombras do widget.
 
+### Referência do protocolo escolar
+
+Em **Atendimento**, **Abrir chat da escola** abre a conversa pelo método público `window.$hub.toggle('open')` quando o canal está pronto. No detalhe, o solicitante pode copiar o número **PRO-** e enviá-lo ao atendente. A equipe pesquisa esse número em **Protocolos** no gestor. A conversa da central pode abranger vários assuntos da mesma conta.
+
+A versão `b13ce0f` do HUB aplica `setConversationCustomAttributes` à última conversa do contato e substitui todo o conjunto de atributos dessa conversa. O SDK envia a operação sem confirmar o resultado ao portal. Para preservar os atributos de pré-atendimento da escola, a identificação no chat usa a referência comunicada pelo solicitante. Um vínculo automático exigiria uma operação do HUB que atualizasse uma única chave da conversa indicada e confirmasse a gravação. [Métodos públicos do SDK](https://github.com/wkarts/argws-connect-hub/blob/b13ce0f10eff17f038b40491f60a19f46e533b58/app/javascript/packs/sdk.js#L93) · [Gravação de atributos da conversa no HUB](https://github.com/wkarts/argws-connect-hub/blob/b13ce0f10eff17f038b40491f60a19f46e533b58/app/controllers/api/v1/widget/conversations_controller.rb#L66-L68)
+
+O histórico público do PIGE360 recebe as mensagens enviadas pelo próprio portal ou pelo gestor. Para registrar um retorno tratado no chat, WhatsApp ou e-mail, a equipe usa **Responder ao solicitante**. As preferências de aviso por e-mail e WhatsApp são aplicadas aos envios da escola.
+
 Continuam valendo as configurações por instituição/área, o token público da caixa, o tratamento de Retry-After e a preservação da conversa ao navegar entre áreas habilitadas da mesma escola e conta. As respostas atrasadas não montam um widget de um contexto anterior.
 
 O SDK deve oferecer `hubSDK.destroy({ clearSession })`. A desmontagem em uma área desabilitada preserva a sessão; saída e troca de escola/conta solicitam sua limpeza. Downloads de SDK são serializados e reutilizados para evitar instâncias concorrentes. Nenhum token privado ou credencial deve ser colocado no snippet.

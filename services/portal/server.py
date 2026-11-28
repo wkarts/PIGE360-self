@@ -18,7 +18,7 @@ PUBLIC=os.environ.get('PORTAL_PUBLIC_URL','').rstrip('/')
 INTERNAL_TOKEN=os.environ.get('PORTAL_INTERNAL_TOKEN','')
 STATIC=Path(os.environ.get('FRONTEND_PATH','/portal/public')).resolve()
 MAX_BODY=20*1024*1024
-ASSETS={'teacher.js','teacher.css','auth.css','ui-icons.svg','family.js','family.css','portal.js','family-renders.js','teacher-renders.js','renders.js','app.css','institution-layout.css','portal.css','community.css','mfa.css','assist.css','camera.css','diagnostic-client.js','first-access.js','first-access.html','favicon.svg','icons/icon-192.png','icons/icon-512.png','vendor/vue-3.5.13.global.prod.js'}
+ASSETS={'teacher.js','teacher.css','auth.css','ui-icons.svg','family.js','family.css','portal.js','family-renders.js','teacher-renders.js','renders.js','app.css','institution-layout.css','portal.css','community.css','mfa.css','assist.css','camera.css','diagnostic-client.js','first-access.js', 'form-validation.js','first-access.html','favicon.svg','icons/icon-192.png','icons/icon-512.png','vendor/vue-3.5.13.global.prod.js'}
 
 
 TEACHER_ONLY = os.environ.get('PORTAL_SURFACE', '') == 'teacher'
@@ -77,6 +77,21 @@ def webmail_route(path, method):
 
 
 def allowed(path,method):
+    protocols = re.fullmatch(r'/api/v1/(teacher|family)/schools/[0-9a-f-]{36}/protocols(?:/(.*))?', path)
+    if protocols:
+        if (protocols[1] == 'teacher') != TEACHER_ONLY:
+            return False
+        resource = protocols[2]
+        if resource is None:
+            return method in {'GET', 'POST'}
+        if resource == 'opening-channel':
+            return method == 'PUT'
+        identifier = r'[0-9a-f-]{36}'
+        if resource == 'options' or re.fullmatch(identifier, resource) or re.fullmatch(identifier + '/attachments/' + identifier, resource):
+            return method == 'GET'
+        if re.fullmatch(identifier + '/messages', resource):
+            return method == 'POST'
+        return method == 'PATCH' and bool(re.fullmatch(identifier + '/channel', resource))
     mail = re.fullmatch(r'/api/v1/schools/[0-9a-f-]{36}/email/(account|webmail-ticket|connection/(?:automatic|linked))', path)
     if mail:
         return method == ('GET' if mail[1] == 'account' else 'POST')
@@ -207,7 +222,7 @@ class Handler(BaseHTTPRequestHandler):
         name = routes.get(path.rstrip('/') or '/', path.lstrip('/'))
         teacher_files = {'professor.html', 'teacher.js', 'teacher-renders.js', 'teacher.css', 'guia/professor.webp'}
         shared_files = {'auth.css', 'app.css', 'family.css', 'portal.css', 'institution-layout.css', 'mfa.css',
-                        'ui-icons.svg', 'renders.js', 'vendor/vue-3.5.13.global.prod.js', 'favicon.svg', 'first-access.html', 'first-access.js'}
+                        'ui-icons.svg', 'renders.js', 'vendor/vue-3.5.13.global.prod.js', 'favicon.svg', 'first-access.html', 'first-access.js', 'form-validation.js'}
         files = teacher_files | shared_files if TEACHER_ONLY else (ASSETS | {'family.html', 'online.html'}) - teacher_files
         if name not in files:
             return self.respond(404, b'Not found')

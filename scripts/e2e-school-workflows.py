@@ -119,8 +119,8 @@ def verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,pos
     expect(preview.locator('h1')).to_have_text(resolved_model['headline'])
     assert client.get(base+'/website',headers=headers).json()['configuration']==before_model_preview
     assert client.get(public_path).json()==original_public
-    admin.once('dialog',lambda dialog:dialog.accept())
     admin.get_by_role('button',name='Aplicar páginas e menu ao rascunho',exact=True).click()
+    admin.get_by_role('dialog',name='Site institucional').get_by_role('button',name='Aplicar modelo',exact=True).click()
     expect(admin.get_by_text('Página inicial, novas páginas e menu salvos somente em rascunho.',exact=False)).to_be_visible()
     stored=client.get(base+'/website',headers=headers).json()['configuration']
     assert stored['has_checkpoint'] is True and stored['draft']['design']['composition_version']==2
@@ -130,8 +130,8 @@ def verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,pos
     admin.reload()
     admin.get_by_role('button',name='Configurar site',exact=True).click()
     expect(admin.get_by_role('button',name='Restaurar cópia original',exact=True)).to_be_visible()
-    admin.once('dialog',lambda dialog:dialog.accept())
     admin.get_by_role('button',name='Restaurar cópia original',exact=True).click()
+    admin.get_by_role('dialog',name='Site institucional').get_by_role('button',name='Restaurar rascunho',exact=True).click()
     expect(admin.get_by_text('Cópia original restaurada e salva no rascunho.',exact=True)).to_be_visible()
     assert client.get(base+'/website',headers=headers).json()['configuration']['has_checkpoint'] is False
     assert client.get(public_path).json()==original_public
@@ -165,8 +165,8 @@ def verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,pos
     draft_frame.locator('a[href="/"]:visible').first.click()
     expect(draft_frame.locator('h1')).to_have_text('Rascunho privado em revisão')
 
-    admin.once('dialog',lambda dialog:dialog.accept())
     admin.get_by_role('button',name='Publicar site',exact=True).click()
+    admin.get_by_role('dialog',name='Site institucional').get_by_role('button',name='Publicar site',exact=True).click()
     expect(admin.get_by_text('Site publicado com sucesso.',exact=True)).to_be_visible()
     assert client.get('/api/v1/public/schools/'+base.split('/')[-1]+'/website').json()['website']['headline']=='Rascunho privado em revisão'
     assert client.get('/api/v1/public/schools/'+base.split('/')[-1]+'/website?page=sobre').status_code==200
@@ -197,8 +197,8 @@ def verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,pos
         workflow.get_by_role('row').filter(has_text=name).get_by_role('button',name='Selecionar',exact=True).click()
     workflow.get_by_role('button',name='Simular matrículas',exact=True).click()
     expect(workflow.get_by_text('2 elegível(is) · 0 bloqueado(s)',exact=True)).to_be_visible()
-    workflow.get_by_label('Conferi a seleção',exact=False).check()
     workflow.get_by_role('button',name='Confirmar matrículas',exact=True).click()
+    admin.get_by_role('dialog',name='Criar matrículas em preparação?').get_by_role('button',name='Criar matrículas',exact=True).click()
     expect(workflow.get_by_text('Matrícula criada em preparação',exact=False)).to_have_count(2)
     workflow.screenshot(path=str(OUT/'enrollment-batch-result.png'))
     record('Wizard em lote busca pessoas existentes, simula e cria duas matrículas com resultado persistido')
@@ -211,8 +211,8 @@ def verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,pos
     workflow.get_by_role('row').filter(has_text='Pessoa Sintética Manual').get_by_role('button',name='Selecionar',exact=True).click()
     workflow.get_by_role('combobox',name='Responsável financeiro',exact=True).select_option(label='O próprio aluno')
     workflow.get_by_role('button',name='Simular matrículas',exact=True).click()
-    workflow.get_by_label('Conferi a seleção',exact=False).check()
     workflow.get_by_role('button',name='Confirmar matrículas',exact=True).click()
+    admin.get_by_role('dialog',name='Criar matrículas em preparação?').get_by_role('button',name='Criar matrículas',exact=True).click()
     expect(workflow.get_by_role('button',name='4. Financeiro',exact=True)).to_be_visible()
     workflow.get_by_role('button',name='4. Financeiro',exact=True).click()
     workflow.get_by_label('Valor por parcela',exact=True).fill('123.45')
@@ -221,6 +221,14 @@ def verify_workflows(admin,browser,client,headers,base,URL,OUT,record,expect,pos
     workflow.get_by_label('Quantidade de parcelas',exact=True).fill('2')
     workflow.get_by_label('Primeiro vencimento',exact=True).fill('2027-02-10')
     workflow.get_by_label('Descrição',exact=True).fill('Mensalidade sintética')
+    collection_mode=workflow.get_by_label('Forma de cobrança',exact=False)
+    collection_mode.select_option('provider')
+    payment_method=workflow.get_by_label('Meio bancário',exact=False)
+    expect(payment_method.locator('option')).to_have_text(['Pix','Boleto'])
+    payment_method.select_option('BOLETO')
+    workflow.get_by_role('button',name='Solicitar cobranças ao provedor',exact=True).click()
+    admin.get_by_role('dialog',name='Solicitar cobranças ao provedor').get_by_role('button',name='Voltar',exact=True).click()
+    collection_mode.select_option('manual')
     workflow.get_by_role('button',name='Registrar parcelas pendentes',exact=True).click()
     expect(workflow.get_by_text('Obrigações internas registradas como pendentes.',exact=False)).to_be_visible()
     expect(workflow.get_by_text('Financeiro: 2 obrigação(ões), 2 pendente(s)',exact=True)).to_be_visible()

@@ -1,37 +1,92 @@
 <section class="learning-workspace" aria-label="Boletim e frequência" :aria-busy="state.busy">
-  <section class="panel x-card">
-    <div class="x-heading"><div><p class="eyebrow">VIDA ESCOLAR</p><h2>Boletim e frequência</h2><p>Resultados publicados pela escola para acompanhar o aprendizado.</p></div><button class="btn btn-secondary" :disabled="state.busy" @click="load">Atualizar</button></div>
-    <div v-if="state.error" class="alert error" role="alert">{{ state.error }}</div>
-    <p v-if="state.busy" class="muted" role="status">Carregando informações escolares…</p>
-    <div v-if="state.students.length" class="x-grid">
-      <p v-if="props.studentId && student()" class="learning-student-name">{{student().student_name}}</p>
-      <label v-if="!props.studentId">Aluno<select v-model="state.studentId" @change="selectStudent" :disabled="state.busy"><option v-for="item in state.students" :key="item.student_id" :value="item.student_id">{{ item.student_name }}</option></select></label>
-      <label>Matrícula<select v-model="state.enrollmentId" @change="state.groupId=''" :disabled="state.busy"><option v-for="item in student()?.enrollments || []" :key="item.enrollment_id" :value="item.enrollment_id">{{ item.year_name }} · {{ item.class_name }} · {{ item.number }}</option></select></label>
-    </div>
-    <p v-if="student() && !student().enrollments.length" class="empty-state">Este aluno ainda não tem uma matrícula disponível para consulta.</p>
-    <div v-if="!state.students.length && !state.busy && !state.error" class="empty-state"><h3>Nenhum aluno vinculado</h3><p>Solicite à Secretaria a conferência do seu vínculo com o cadastro escolar.</p></div>
-  </section>
-  <section v-if="enrollment()" class="panel bulletin-sheet" :class="'bulletin-'+enrollment().bulletin_model" :style="{'font-family':({arial:'Arial, sans-serif',verdana:'Verdana, sans-serif',georgia:'Georgia, serif',times:'Times New Roman, serif'})[student()?.report_font] || 'inherit','border-top':'3px solid '+(enrollment().report_color||'var(--primary)')}">
-    <div class="panel-header report-masthead"><img v-if="student()?.report_logo || props.identity?.logo_url" :src="student()?.report_logo || props.identity.logo_url" alt=""><img v-if="student()?.photo" :src="student().photo" alt="Foto do aluno" class="avatar large"><span v-else class="avatar" aria-label="Foto não cadastrada">{{student()?.student_name.slice(0,1)}}</span><div><p>{{ student()?.school_name }} · Boletim escolar</p><h2>{{ student()?.student_name }}</h2><p class="muted small">Registro {{ student()?.student_number }} · Matrícula {{ enrollment().number }} · {{ enrollment().year_name }}</p></div><button class="btn btn-primary" :disabled="state.busy || !rows().length" @click="download()">Baixar boletim PDF</button></div>
-    <div v-if="rows().length">
-      <p v-if="enrollment().official_editions?.length" class="small">Escolha a revisão para baixar a via assinada pela escola.</p>
-      <button v-for="edition in enrollment().official_editions" :key="edition.id" class="btn btn-secondary" @click="download(edition.id)">Boletim oficial assinado · revisão {{edition.revision}}</button>
-      <section v-for="(matrix,index) in enrollment().display_sections" :key="index" class="bulletin-period">
-        <h3>{{ matrix.title }}</h3>
-        <p v-if="matrix.text" class="preserve-lines">{{matrix.text}}</p>
-        <dl v-if="matrix.fields" class="data-grid"><div v-for="[label,value] in matrix.fields" :key="label"><dt>{{label}}</dt><dd>{{value}}</dd></div></dl>
-        <div v-if="matrix.columns" class="table-scroll report-records"><table><caption class="sr-only">{{ matrix.title }}</caption>
-          <thead><tr><th v-for="column in matrix.columns" :key="column.key" scope="col">{{ column.label }}</th></tr></thead>
-          <tbody><tr v-for="(record,rowIndex) in matrix.rows" :key="rowIndex">
-            <td v-for="column in matrix.columns" :key="column.key" :data-label="column.label">{{ record[column.key] }}</td>
-          </tr></tbody>
-        </table></div>
+  <div class="bulletin-controls">
+    <label v-if="!props.studentId && state.students.length>1" class="field">Aluno
+      <select v-model="state.studentId" @change="selectStudent" :disabled="state.busy"><option v-for="item in state.students" :key="item.student_id" :value="item.student_id">{{item.student_name}}</option></select>
+    </label>
+    <label v-if="student()?.enrollments.length>1" class="field">Matrícula
+      <select v-model="state.enrollmentId" @change="state.groupId=''" :disabled="state.busy"><option v-for="item in student().enrollments" :key="item.enrollment_id" :value="item.enrollment_id">{{item.year_name}} · {{item.class_name}} · {{item.number}}</option></select>
+    </label>
+    <label v-if="periodGroups.length>1" class="field">Período e turma
+      <select v-model="state.groupId" :disabled="state.busy"><option value="">Todos os períodos</option><option v-for="group in periodGroups" :key="group.id" :value="group.id">{{group.label}} · {{group.className}}</option></select>
+    </label>
+    <button type="button" class="btn btn-secondary" :disabled="state.busy" @click="load">Atualizar boletim</button>
+  </div>
+  <div v-if="state.error" class="alert error" role="alert">{{state.error}}</div>
+  <p v-if="state.busy" class="muted" role="status">Carregando informações escolares…</p>
+  <p v-if="student() && !student().enrollments.length" class="empty-state"><strong class="learning-student-name">{{student().student_name}}</strong> ainda não tem uma matrícula disponível para consulta.</p>
+  <div v-if="!state.students.length && !state.busy && !state.error" class="empty-state"><h3>Nenhum aluno vinculado</h3><p>Solicite à Secretaria a conferência do seu vínculo com o cadastro escolar.</p></div>
+
+  <article v-if="enrollment()" class="bulletin-sheet" :class="'bulletin-'+model" :style="{'--bulletin-color':enrollment().report_color||'var(--primary)','font-family':fonts[student()?.report_font]||'inherit','--bulletin-title-font':fonts[student()?.report_font]||'Georgia, serif'}">
+    <header class="bulletin-heading">
+      <div class="bulletin-school">
+        <img v-if="student()?.report_logo || props.identity?.logo_url" :src="student()?.report_logo || props.identity.logo_url" alt="">
+        <div><p>{{student()?.school_name}}</p><h2>Boletim escolar</h2></div>
+      </div>
+      <div class="bulletin-edition"><strong>{{modelNames[model]}}</strong><span v-if="enrollment().year_name">{{enrollment().year_name}}</span></div>
+    </header>
+    <div class="bulletin-body">
+      <section class="bulletin-profile" aria-label="Identificação do estudante">
+        <div class="bulletin-person">
+          <img v-if="student()?.photo" :src="student().photo" alt="Foto do estudante" class="bulletin-photo">
+          <span v-else class="bulletin-photo bulletin-photo-empty" role="img" aria-label="Foto não cadastrada"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#students"/></svg></span>
+          <div><p class="bulletin-label">Estudante</p><h3 class="learning-student-name">{{student().student_name}}</h3><p v-if="enrollment().grade_name || enrollment().class_name" class="bulletin-class">{{[enrollment().grade_name,enrollment().class_name].filter(Boolean).join(' · ')}}</p></div>
+        </div>
+        <dl class="bulletin-facts"><div v-for="[label,value] in facts" :key="label"><dt>{{label}}</dt><dd>{{value}}</dd></div></dl>
+        <p v-if="uniformStatus" class="bulletin-status"><span class="bulletin-label">Situação dos resultados</span><strong>{{uniformStatus}}</strong></p>
       </section>
-      <label v-if="periodGroups.length>1" class="bulletin-filter">Detalhamento por período e turma
-        <select v-model="state.groupId"><option value="">Todos os períodos publicados</option><option v-for="group in periodGroups" :key="group.id" :value="group.id">{{ group.label }} · {{ group.className }}</option></select>
-      </label>
-      <section v-for="group in visibleGroups" :key="group.id" class="bulletin-period"><h3>{{ group.label }} · {{ group.className }}</h3><div class="table-scroll report-records"><table><caption class="sr-only">Detalhamento de {{ group.label }} · {{ group.className }}</caption><thead><tr><th scope="col">Componente curricular</th><th scope="col">Aulas</th><th scope="col">Nota / conceito</th><th scope="col">Situação</th><th scope="col">Frequência</th><th scope="col">Faltas</th></tr></thead><tbody><tr v-for="item in group.items" :key="item.diary_id+'-'+item.period_id"><td data-label="Componente curricular"><strong>{{ item.component_name }}</strong></td><td data-label="Aulas">{{ item.attendance.total }}</td><td data-label="Nota / conceito"><strong>{{ item.grade_display || '—' }}</strong></td><td data-label="Situação">{{ item.result_label }}</td><td data-label="Frequência">{{ percent(item.attendance.percentage) }}<small v-if="item.attendance.unrecorded">{{ item.attendance.unrecorded }} aula(s) sem registro</small></td><td data-label="Faltas">{{ item.attendance.absent }}<small v-if="item.attendance.justified_absence">{{ item.attendance.justified_absence }} justificada(s)</small></td></tr></tbody></table></div></section></div>
-    <div v-else class="empty-state"><h3>Resultados ainda não publicados</h3><p>As notas e a frequência aparecerão após a conferência e publicação pela escola.</p></div>
-    <footer class="panel-footer report-imprint"><p v-if="state.note">{{ state.note }}</p><span>{{ student()?.school_name }} · Uso restrito ao aluno e aos responsáveis autorizados</span></footer>
-  </section>
+      <div class="bulletin-results">
+        <section v-for="matrix in tables" :key="matrix.key" class="bulletin-matrix">
+          <section v-for="kind in tableKinds" :key="kind" class="bulletin-table-section">
+            <div class="bulletin-table-heading"><h3>{{titles[kind]}}</h3><p v-if="matrix.className">{{matrix.className}}</p></div>
+            <table class="bulletin-table"><caption class="sr-only">{{titles[kind]}} · {{matrix.className}} · {{matrix.periodLabel}}</caption>
+              <thead>
+                <tr><th scope="col" :rowspan="kind==='integrated'?2:1">Componente curricular</th><th :scope="kind==='integrated'?'colgroup':'col'" :colspan="kind==='integrated'?2:1" v-for="period in matrix.periods" :key="period.period_id">{{period.period_name}}</th></tr>
+                <tr v-if="kind==='integrated'" class="bulletin-subhead"><template v-for="period in matrix.periods" :key="period.period_id"><th scope="col">Nota / conceito</th><th scope="col">Frequência</th></template></tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in matrix.rows" :key="row.id">
+                  <th scope="row">{{row.name}}</th>
+                  <template v-for="cell in row.cells" :key="cell.period.period_id">
+                  <td v-for="part in kind==='integrated' && cell.result?['grade','attendance']:[kind]" :key="part" :class="'bulletin-part-'+part" :colspan="kind==='integrated' && !cell.result?2:1">
+                    <span v-if="part!=='attendance' || kind==='attendance'" class="bulletin-mobile-period" aria-hidden="true">{{cell.period.period_name}}</span>
+                    <template v-if="cell.result">
+                      <dl class="bulletin-values">
+                        <div v-if="part!=='attendance'" class="bulletin-grade"><dt>Nota / conceito</dt><dd data-metric="grade">{{cell.result.grade_display ?? 'Não informado'}}</dd></div>
+                        <div v-if="part!=='grade'" class="bulletin-frequency"><dt>Frequência</dt><dd data-metric="frequency">{{percent(cell.result.attendance.percentage)}}</dd></div>
+                        <div v-if="part!=='attendance' && cell.result.recovery?.length" class="bulletin-recovery"><dt>Recuperação</dt><dd>{{cell.result.recovery.join(', ')}}</dd></div>
+                      </dl>
+                      <p v-if="part!=='grade'" class="bulletin-counts">
+                        <span>{{cell.result.attendance.total}} {{cell.result.attendance.total===1?'aula':'aulas'}}</span>
+                        <span>{{cell.result.attendance.absent}} {{cell.result.attendance.absent===1?'falta':'faltas'}}</span>
+                        <span v-if="cell.result.attendance.justified_absence">{{cell.result.attendance.justified_absence}} {{cell.result.attendance.justified_absence===1?'falta justificada':'faltas justificadas'}}</span>
+                        <span v-if="cell.result.attendance.unrecorded">{{cell.result.attendance.unrecorded}} {{cell.result.attendance.unrecorded===1?'aula':'aulas'}} sem chamada</span>
+                      </p>
+                      <p v-if="part!=='attendance' && !uniformStatus && cell.result.result_label" class="bulletin-cell-status">{{cell.result.result_label}}</p>
+                    </template>
+                    <span v-else class="bulletin-pending">{{cell.empty}}</span>
+                  </td></template>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+        </section>
+        <section v-if="opinions.length" class="bulletin-opinions">
+          <h3>Pareceres pedagógicos</h3>
+          <div v-for="item in opinions" :key="JSON.stringify([item.diary_id,item.period_id])">
+            <h4>{{item.component_name}} · {{item.period_name}} <span v-if="item.class_label">· {{item.class_label}}</span></h4>
+            <p v-for="(opinion,index) in item.opinions" :key="index">{{opinion}}</p>
+          </div>
+        </section>
+        <div v-if="!periodGroups.length" class="empty-state"><h3>Resultados ainda não publicados</h3><p>As notas e a frequência aparecerão após a conferência e publicação pela escola.</p></div>
+      </div>
+    </div>
+    <footer class="bulletin-footer">
+      <div v-if="periodGroups.length" class="bulletin-downloads">
+        <div><h3>Boletim em PDF</h3><p>A via de consulta reúne os resultados publicados da matrícula.</p></div>
+        <button class="btn btn-primary" type="button" :disabled="state.busy" @click="download()">Baixar boletim PDF</button>
+        <div v-if="enrollment().official_editions?.length" class="bulletin-signed"><h4>Vias oficiais assinadas</h4><button v-for="edition in enrollment().official_editions" :key="edition.id" class="btn btn-secondary" :disabled="state.busy" type="button" @click="download(edition.id)">Boletim oficial assinado · revisão {{edition.revision}}</button></div>
+      </div>
+      <details v-if="state.note"><summary>Critérios de leitura</summary><p>{{state.note}}</p><p>Na grade, as faltas sem justificativa e as faltas justificadas aparecem separadamente.</p></details>
+    </footer>
+  </article>
 </section>

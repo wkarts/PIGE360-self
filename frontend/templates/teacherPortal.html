@@ -17,32 +17,41 @@
   </main>
   <div v-else class="family-shell teacher-shell" :class="{'sidebar-collapsed':s.sidebarCollapsed,'family-shell-collapsed':s.sidebarCollapsed}" @keydown="menuKey">
     <div v-if="s.menuOpen" class="family-shade" aria-hidden="true" @click="toggleMenu(false)"></div>
-    <aside id="teacher-navigation" class="family-sidebar" :class="{visible:s.menuOpen}" aria-label="Navegação do professor">
+    <aside id="teacher-navigation" class="family-sidebar" v-on="rail.events" :class="{visible:s.menuOpen}" aria-label="Navegação do professor">
       <div class="family-sidebar-brand">
         <button id="teacher-menu-close" type="button" class="icon-button family-menu-close" aria-label="Fechar menu" @click="toggleMenu(false)"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#close"/></svg></button>
-        <a href="#teacher-content" aria-label="Visão geral do professor" @click.prevent="navigate('overview')">
-          <img v-if="identity.logo_url" :src="identity.logo_url" :alt="identity.display_name">
-          <strong v-else>{{s.sidebarCollapsed && !s.menuOpen ? initials(identity.short_name) : identity.display_name}}</strong>
-          <small>PORTAL DO PROFESSOR</small>
+        <a href="#teacher-content" @click.prevent="navigate('overview')" :aria-label="identity.display_name+' · Portal do Professor'" :title="identity.display_name">
+          <img v-if="identity.logo_url && rail.brand.failed!==identity.logo_url" :class="{'sidebar-brand-wordmark':rail.brand.wide===identity.logo_url}" :src="identity.logo_url" alt="" @load="rail.brandLoad" @error="rail.brandError">
+          <span v-if="!identity.logo_url || rail.brand.failed===identity.logo_url || rail.brand.wide===identity.logo_url" aria-hidden="true" class="sidebar-brand-mark">{{initials(identity.short_name)}}</span>
+          <span aria-hidden="true" class="sidebar-brand-details"><strong v-if="!identity.logo_url || rail.brand.wide!==identity.logo_url">{{identity.short_name}}</strong><small>Portal do Professor</small></span>
         </a>
       </div>
       <div class="family-sidebar-scroll">
-        <p class="family-nav-label">ROTINA DOCENTE</p>
-        <nav aria-label="Rotina do professor">
-          <button v-for="item in navigation()" :key="item.id" type="button"
-            :title="item.label" :aria-label="item.label" :aria-current="s.section===item.id?'page':undefined"
-            :disabled="s.busy || unavailable(item.id)" @click="navigate(item.id)">
-            <svg class="ui-icon" aria-hidden="true"><use :href="'/ui-icons.svg#'+item.icon"/></svg>
-            <span>{{item.label}}</span>
-          </button>
-        </nav>
+        <nav aria-label="Página inicial"><button type="button" title="Visão geral" aria-label="Visão geral" :aria-current="s.section==='overview'?'page':undefined" @click="navigate('overview')"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#dashboard"/></svg><span>Visão geral</span></button></nav>
+        <div v-for="group in sidebarGroups()" :key="group.id" class="portal-rail-group">
+          <button v-show="rail.enabled()" type="button" class="portal-rail-trigger" data-rail-trigger
+            :aria-label="group.label" :title="group.label" :aria-controls="group.id" :aria-expanded="rail.state.active===group.id"
+            :class="{active:group.items.some(item=>item.id===s.section)}"><svg class="ui-icon" aria-hidden="true"><use :href="'/ui-icons.svg#'+group.icon"/></svg></button>
+          <p v-show="!rail.enabled()" class="family-nav-label">{{group.label}}</p>
+          <nav :id="group.id" :aria-label="group.label" class="sidebar-flyout" :popover="rail.enabled()?'manual':undefined"
+            :data-rail-open="rail.enabled() && rail.state.active===group.id?'':undefined" v-show="!rail.enabled() || rail.state.active===group.id">
+            <strong v-if="rail.enabled()" class="sidebar-flyout-title">{{group.label}}</strong>
+            <template v-for="item in group.items" :key="item.id">
+
+              <button type="button" :title="item.label" :aria-label="item.label" :aria-current="s.section===item.id?'page':undefined" :disabled="s.busy || unavailable(item.id)" @click="navigate(item.id)">
+                <svg class="ui-icon" aria-hidden="true"><use :href="'/ui-icons.svg#'+item.icon"/></svg><span>{{item.label}}</span>
+              </button>
+            </template>
+          </nav>
+        </div>
       </div>
       <footer class="family-sidebar-footer">{{identity.short_name}}<small>Portal do Professor</small></footer>
     </aside>
 
+    <button type="button" class="icon-button family-rail-toggle sidebar-edge-toggle" :aria-label="s.sidebarCollapsed?'Expandir menu lateral':'Recolher menu lateral'" :title="s.sidebarCollapsed?'Expandir menu lateral':'Recolher menu lateral'" aria-controls="teacher-navigation" :aria-expanded="!s.sidebarCollapsed" @click="toggleSidebar"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#sidebar-toggle"/></svg></button>
     <div class="family-main" :inert="s.menuOpen?true:undefined">
       <header class="family-header">
-        <button type="button" class="icon-button family-rail-toggle" :aria-label="s.sidebarCollapsed?'Expandir menu lateral':'Recolher menu lateral'" :title="s.sidebarCollapsed?'Expandir menu lateral':'Recolher menu lateral'" aria-controls="teacher-navigation" :aria-expanded="!s.sidebarCollapsed" @click="toggleSidebar"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#sidebar-toggle"/></svg></button>
+
         <button id="teacher-menu-toggle" type="button" class="icon-button family-menu-toggle" aria-label="Abrir menu" aria-controls="teacher-navigation" :aria-expanded="s.menuOpen" @click="toggleMenu(true)"><svg class="ui-icon" aria-hidden="true"><use href="/ui-icons.svg#menu"/></svg></button>
         <div class="family-header-school">
           <small>{{s.schools.length>1?'INSTITUIÇÃO ATIVA':'PORTAL DO PROFESSOR'}}</small>
@@ -78,11 +87,12 @@
           <section v-if="s.section==='overview'" class="family-welcome">
             <div><h2>Olá, {{s.user.name.split(' ')[0]}}.</h2>
             <p v-if="available('agenda') && available('diary')">Consulte a programação e registre aulas, chamadas e avaliações das suas turmas.</p>
-            <p v-else-if="navigation().length>1">Consulte as rotinas liberadas pela escola para o seu acesso.</p>
+            <p v-else-if="navigation().some(item=>!['overview','support'].includes(item.id))">Consulte as rotinas liberadas pela escola para o seu acesso.</p>
             <p v-else-if="s.schoolId && !s.busy">Ainda não há rotinas liberadas para esta conta. Solicite a liberação à coordenação.</p></div>
             <div v-if="navigation().length>1" class="actions">
               <button v-if="available('diary') && s.agenda?.diaries.length" class="btn btn-primary" @click="navigate('diary')">Acessar meus diários</button>
               <button v-if="available('agenda')" class="btn" :class="available('diary') && s.agenda?.diaries.length?'btn-secondary':'btn-primary'" @click="navigate('agenda')">Consultar programação</button>
+              <button v-if="available('support')" class="btn btn-secondary" @click="navigate('support')">Fale com o colégio</button>
               <template v-if="!available('agenda') && !(available('diary') && s.agenda?.diaries.length)">
                 <button v-if="available('news')" class="btn btn-primary" @click="navigate('news')">Consultar avisos</button>
                 <button v-if="available('webmail')" class="btn btn-secondary" @click="navigate('webmail')">Abrir caixa institucional</button>
@@ -132,6 +142,9 @@
           <section v-if="s.tabs.includes('webmail') && available('webmail')" v-show="s.section==='webmail'" aria-label="E-mail institucional">
             <portal-mail :key="s.schoolId" :school-id="s.schoolId" :request="mail.request"></portal-mail>
           </section>
+          <div id="teacher-protocols" v-if="s.tabs.includes('support') && available('support')" v-show="s.section==='support'">
+            <portal-protocols :key="s.user.id+':'+s.schoolId" area="teacher" :school-id="s.schoolId" :request="mail.request" :download="download"></portal-protocols>
+          </div>
           <section v-if="s.section==='help'" class="panel family-detail-panel teacher-guide">
             <h2>Guia de uso do diário</h2>
             <div class="teacher-guide-content">

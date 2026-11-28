@@ -10,9 +10,13 @@ fs.mkdirSync(out,{recursive:true});
 const decode=value=>value.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi,(_,entity)=>entity[0]==='#'?String.fromCodePoint(entity[1].toLowerCase()==='x'?parseInt(entity.slice(2),16):parseInt(entity.slice(1),10)):({amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",nbsp:'\u00a0'})[entity.toLowerCase()]);
 const ctx={console,document:{createElement(){return{textContent:'',get innerHTML(){return this.textContent;},set innerHTML(value){this.textContent=decode(value);this.children=[{getAttribute(){return decode(value.slice(10,-2));}}];}};}}};
 vm.createContext(ctx);vm.runInContext(fs.readFileSync(path.join(root,'vendor/vue-3.5.13.global.prod.js'),'utf8'),ctx);
-const errors=[];const render=ctx.Vue.compile(fs.readFileSync(path.join(root,'templates/email.html'),'utf8'),{hoistStatic:false,onError:e=>errors.push(String(e))});
-assertEmpty(errors);function assertEmpty(items){if(items.length)throw new Error(items.join('\n'));}
-fs.writeFileSync(path.join(out,'renders.js'),'var _Vue=Vue;var PigeRenders={email:'+render.toString()+'};');
+const errors=[];
+const renderers=['email','actionDialog'].map(name=>{
+  const render=ctx.Vue.compile(fs.readFileSync(path.join(root,'templates',name+'.html'),'utf8'),{hoistStatic:false,onError:e=>errors.push(String(e))});
+  return name+':'+render.toString();
+});
+if(errors.length)throw new Error(errors.join('\n'));
+fs.writeFileSync(path.join(out,'renders.js'),'var _Vue=Vue;var PigeRenders={'+renderers.join(',')+'};');
 fs.writeFileSync(path.join(out,'email.js'),ts.transpileModule(fs.readFileSync(path.join(root,'src/email.ts'),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText);
 for(const name of ['workspace','dialogs'])fs.writeFileSync(path.join(out,name+'.js'),ts.transpileModule(fs.readFileSync(path.join(root,'src',name+'.ts'),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText);
 fs.copyFileSync(path.join(root,'src/app.css'),path.join(out,'app.css'));

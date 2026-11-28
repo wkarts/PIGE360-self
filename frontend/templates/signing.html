@@ -9,9 +9,8 @@
     <form v-if="canManageA1()" class="contract-certificate-form" autocomplete="off" @submit.prevent="saveCertificate">
       <label class="field">{{state.configured?'Substituir certificado':'Cadastrar certificado'}} P12/PFX (até 1 MB)<input id="a1-certificate-file" type="file" accept=".p12,.pfx,application/x-pkcs12" @change="certificateChanged" required></label>
       <label class="field">Senha do arquivo A1<input v-model="state.certificatePassword" type="password" autocomplete="off" maxlength="256" required placeholder="Senha do P12/PFX"></label>
-      <div class="actions"><button class="btn btn-primary" :disabled="state.busy || !state.certificateName || !state.certificatePassword">{{state.busy?'Enviando…':'Salvar certificado'}}</button><button v-if="state.configured" type="button" class="btn btn-secondary" :disabled="state.busy" @click="state.removeCertificateOpen=true">Desativar certificado</button></div>
+      <div class="actions"><button class="btn btn-primary" :disabled="state.busy || !state.certificateName || !state.certificatePassword">{{state.busy?'Enviando…':'Salvar certificado'}}</button><button v-if="state.configured" type="button" class="btn btn-secondary" :disabled="state.busy" @click="removeCertificate">Desativar certificado</button></div>
     </form>
-    <div v-if="state.removeCertificateOpen" class="alert warning"><p>Desativar o certificado para futuras assinaturas? Os documentos já assinados serão preservados.</p><div class="actions"><button type="button" class="btn btn-secondary" @click="state.removeCertificateOpen=false">Manter certificado</button><button type="button" class="btn btn-danger" :disabled="state.busy" @click="removeCertificate">Desativar</button></div></div>
     <p class="small muted">A substituição preserva os documentos já assinados. O certificado e a senha são enviados ao servidor apenas ao salvar; não são guardados no armazenamento deste navegador.</p>
   </section>
 

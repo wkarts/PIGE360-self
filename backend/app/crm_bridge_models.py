@@ -61,6 +61,7 @@ class CRMBridgeExternalRequest(Record, Base):
     status: Mapped[str] = mapped_column(String(24), default='queued')
     request_id: Mapped[str | None] = mapped_column(String(128))
     receipt: Mapped[dict] = mapped_column(JSON, default=dict)
+    payment_instrument: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
     last_command: Mapped[dict] = mapped_column(JSON, default=dict)
     error_code: Mapped[str] = mapped_column(String(80), default='')
     attempts: Mapped[int] = mapped_column(Integer, default=0)

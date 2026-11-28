@@ -8,7 +8,18 @@ namespace PigeUI {
     modal: Modal; initial: string; student: Student; students: Student[]; people: Row[];
     studentQuery: string; personQuery: string;
   }
-  interface Modal { enrollmentReturn?: EnrollmentReturn; kind: string; title: string; fields: Field[]; form: PigeAPI.FormDataMap; target: Row | null; action: string; error: string }
+  type ProtocolRequester={id:string;name:string;role:'student'|'guardian'|'teacher'};
+  type ProtocolStudent={id:string;name:string;academic_authorized:boolean;financial_authorized:boolean};
+  type ProtocolNotification={channel:'email'|'whatsapp';status:'pending'|'retry'|'processing'|'completed'|'failed'|'uncertain'};
+  type ProtocolEvent={notification?:ProtocolNotification|null;id:string;action:string;visibility?:string;message:string;actor_name:string;created_at:string;attachment?:{id:string;name:string}};
+  interface ProtocolLookup {query:string;requesters:ProtocolRequester[];students:ProtocolStudent[];role:string;page:number;total:number;pageSize:number;busy:boolean;studentsBusy:boolean;searched:boolean;searchEpoch:number;studentEpoch:number;error:string}
+  const protocolLabels={
+    sources:{manager:'Gestão escolar',family:'Portal do aluno e responsável',teacher:'Portal do professor'},
+    categories:{secretaria:'Secretaria',pedagogico:'Pedagógico',financeiro:'Financeiro',tecnico:'Suporte técnico'},
+    channels:{portal:'Portal',email:'E-mail',whatsapp:'WhatsApp'},
+    events:{created:'Protocolo aberto',updated:'Protocolo atualizado',note:'Nota interna',message:'Mensagem',reply:'Resposta da equipe'},
+  };
+  interface Modal { lookup?:ProtocolLookup; enrollmentReturn?: EnrollmentReturn; kind: string; title: string; fields: Field[]; form: PigeAPI.FormDataMap; target: Row | null; action: string; error: string }
   interface LegacyImportTable { name: string; rows: number; destination: string }
   interface LegacyImportPreview { fingerprint: string; source_system: string; source_database: string; source_record_count: number; table_count: number; max_package_mb:number; tables: LegacyImportTable[]; media: Record<string, number>; warnings: string[] }
   interface LegacyImportRun { id: string; created_at: string; source_system: string; fingerprint: string; summary: Record<string, unknown> }
@@ -32,31 +43,40 @@ namespace PigeUI {
   type DeskContext = ReturnType<typeof createDesk>;
   interface Desk { context:DeskContext; node:HTMLElement; app:{unmount():void}; scroll:number; changed:Set<HTMLElement>; initial:WeakMap<HTMLElement,string> }
   const sidebarStorageKey='pige-sidebar-collapsed';
-  const compactViewport=window.matchMedia?.('(max-width: 800px)');
   function savedSidebarPreference():boolean {
     try { return localStorage.getItem(sidebarStorageKey)==='true'; }
     catch { return false; }
   }
   const taskState=Vue.reactive({pages:[] as string[],active:'dashboard',home:'dashboard',paused:false,
-    sidebarCollapsed:savedSidebarPreference(),mobileMenu:compactViewport?.matches??false});
-  compactViewport?.addEventListener('change',event=>{taskState.mobileMenu=event.matches;});
+    sidebarCollapsed:savedSidebarPreference()});
+  const rail=PigeSidebarRail.use(()=>taskState.sidebarCollapsed);
   function toggleSidebar():void {
+    rail.close();
     taskState.sidebarCollapsed=!taskState.sidebarCollapsed;
     try { localStorage.setItem(sidebarStorageKey,String(taskState.sidebarCollapsed)); }
     catch { /* A preferência permanece nesta sessão se o navegador restringir o armazenamento. */ }
   }
-  function sidebarRail():boolean {return taskState.sidebarCollapsed&&!taskState.mobileMenu;}
+  function sidebarRail():boolean {return rail.enabled();}
   type GuideWalkthrough = {
     id:string; page?:string; title:string; steps:string[]; image:string; alt:string; caption:string;
   };
   const guideSelection=Vue.reactive({topic:'navigation'});
   const walkthroughs:GuideWalkthrough[]=[
     {id:'navigation',title:'Organizar o menu e as guias',image:'navegacao',
-      steps:['No computador, pressione Recolher menu lateral para ampliar a área de trabalho. Use Expandir menu lateral para voltar. No celular, use Abrir menu e escolha o módulo.',
-        'Clique em uma guia para retomar sua tarefa. Use o × ao lado do título para fechar apenas aquela guia.',
-        'Para voltar à guia inicial, use Fechar outras guias ou clique duas vezes na guia inicial e confira a confirmação. Salve antes de fechar formulários em edição.'],
-      alt:'Barra superior da aplicação com o menu lateral recolhido, guias abertas e controles de fechamento.',
-      caption:'Com o menu recolhido, as guias continuam acessíveis no alto da tela.'},
+      steps:['No computador, selecione Recolher menu lateral. Aponte para o ícone de um grupo ou clique nele para ver as opções ao lado da barra. No gestor, abra Cadastros e escolha Alunos. Para voltar a ver todos os nomes na barra, use Expandir menu lateral.',
+        'Pelo teclado, use Tab até o ícone do grupo, pressione a seta para a direita e percorra as opções com as setas para cima e para baixo. Esc fecha o painel e devolve o foco ao ícone. Com o mouse, você também pode clicar fora para fechar.',
+        'No Portal do Aluno e Responsável, procure as atividades em Acompanhamento escolar → Atividades. No Portal do Professor, abra Rotina docente → Minha programação para consultar a agenda. Cada acesso mostra as rotinas liberadas pela escola.',
+        'No celular, toque em Abrir menu e escolha a área. Use Fechar menu para voltar ao conteúdo sem sair da guia atual.',
+        'Selecione o nome de uma guia para retomar a tarefa. O × ao lado do nome fecha essa guia. Para manter só a inicial, dê um duplo clique em Visão geral ou use Fechar outras guias.',
+        'Ao ver o aviso, escolha Voltar se precisar salvar algo. Para descartar os rascunhos das guias que serão fechadas e manter a inicial, confirme em Fechar outras guias.'],
+      alt:'Menu do gestor recolhido, com o painel Cadastros aberto e a opção Alunos ao lado dos ícones.',
+      caption:'Gestor da escola de demonstração com o grupo Cadastros aberto. Selecione Alunos no painel para abrir a lista.'},
+    {id:'dashboard',page:'dashboard',title:'Acompanhar a rotina da escola',image:'visao-geral',
+      steps:['Confira a instituição selecionada e os totais de alunos, matrículas e vagas. Consulte a ocupação para entender quantas vagas já estão comprometidas.',
+        'Escolha um período de 7, 30 ou 90 dias em Movimentação da escola. Clique em uma matrícula ou protocolo para abrir o registro correspondente.',
+        'Consulte as filas em O que precisa de atenção? e os prazos, eventos e avaliações na Agenda da escola. A agenda mostra a semana atual a partir de hoje. O botão Atualizar painel consulta os dados da escola novamente.'],
+      alt:'Visão geral do gestor com movimentações datadas, inscrições, aulas sem chamada, ocupação das turmas e agenda de sete dias.',
+      caption:'A movimentação segue o período escolhido. Os compromissos seguem os próximos sete dias.'},
     {id:'users',page:'users',title:'Criar o acesso ao portal',image:'usuarios',
       steps:['Cadastre a pessoa em Alunos, Professores ou Pais e responsáveis. Na ficha do aluno, use Responsáveis para registrar os vínculos legal e financeiro que se aplicam àquela pessoa.',
         'Abra Gerenciar acesso ao portal na ficha ou entre em Usuários e acessos e escolha + Criar usuário. Confira o e-mail que receberá o convite, o Perfil base e a Pessoa vinculada.',
@@ -65,6 +85,13 @@ namespace PigeUI {
         'Se o primeiro acesso estiver pendente, use Reenviar convite e oriente a pessoa a abrir a mensagem mais recente. Quem já ativou a conta pode escolher Esqueci minha senha no próprio portal. Você também pode usar Enviar recuperação de senha na lista de usuários.'],
       alt:'Formulário Criar usuário com perfil Professor e uma pessoa fictícia selecionada em Pessoa vinculada.',
       caption:'O perfil define as permissões. A pessoa vinculada identifica de quem são a ficha e as atribuições.'},
+    {id:'census-individual',page:'educacenso',title:'Conferir a declaração de um aluno no Educacenso',image:'educacenso-individual',
+      steps:['Abra Educacenso e confira a instituição e o ambiente. Em Dados a declarar, escolha a etapa, o ano letivo e a data de referência. Em Abrangência, selecione Um aluno.',
+        'Busque pelo nome ou número de matrícula. Confira o aluno e a turma antes de selecionar o vínculo. Use Validar prévia e, depois de conferir o resultado, Guardar rascunho.',
+        'No rascunho, Editar dados permite ajustar o nome, o código Inep e a data de nascimento na etapa Matrícula Inicial ou a situação na etapa Situação do Aluno. Informe o motivo e salve. Baixar ficha do aluno gera o PDF da revisão salva. O ajuste preserva o cadastro escolar.',
+        'Para consultar as alterações, abra o Histórico no mesmo ambiente. O diagnóstico JSON de uma revisão conserva os dados daquela versão. O envio oficial ao INEP é uma etapa externa.'],
+      alt:'Rascunho de treinamento do Educacenso com uma matrícula selecionada e opções de revisão da declaração.',
+      caption:'Confira o ano, a data de referência e a matrícula antes de ajustar os dados da declaração.'},
     {id:'diary',page:'diary',title:'Preparar a turma para o diário do professor',image:'diario',
       steps:['No Diário Escolar, abra Configuração. Cadastre o componente curricular e os períodos letivos da escola.',
         'Em Abrir diário ou vincular professor, escolha a turma e o componente. Selecione uma atribuição existente ou pesquise um professor cadastrado.',
@@ -77,13 +104,29 @@ namespace PigeUI {
         'Em Fazer chamada, selecione a aula e registre a frequência de cada aluno. Confira os lançamentos antes de salvar. Se sua turma aparece e falta um desses atalhos, peça ao gestor que confira as permissões de lançamento do seu perfil.'],
       alt:'Portal do Professor com a turma atribuída e os botões Abrir diário, Fazer chamada e Planejar aula para Ciências.',
       caption:'Os atalhos abrem a atividade na turma e no componente do professor.'},
-    {id:'family',title:'Consultar atividades e boletim no Portal do Aluno',image:'portal-aluno',
+    {id:'family',title:'Orientar a família sobre atividades e cobranças',image:'portal-aluno',
       steps:['Na Visão geral, confira a turma e o ano letivo. Quem acompanha mais de um aluno deve escolher o dependente antes de consultar as atividades.',
         'Em Atividades recentes, abra o título para ler o material. Use Baixar para imprimir para obter o PDF. Ver todas as atividades abre a lista completa.',
-        'Escolha Consultar boletim e confira a matrícula e o período. Quando a escola tiver publicado os resultados, use Baixar boletim PDF.',
-        'Um responsável com vínculo exclusivamente financeiro consulta as cobranças autorizadas. Atividades e boletim exigem vínculo acadêmico com o aluno.'],
+        'Para consultar uma cobrança, o responsável com vínculo financeiro ativo escolhe o aluno e abre Financeiro. Confira descrição, vencimento, valor e situação.',
+        'Se você for o pagador e houver um documento disponível, escolha Consultar documentos da cobrança. No Asaas, abra a fatura ou o boleto disponível, ou copie o Pix. Na integração com o CRM, copie o Pix, a linha digitável ou o código de barras que aparecer.'],
       alt:'Visão geral de um aluno fictício do 3º Ano A, com os botões Consultar boletim e Ver atividades e uma lista de atividades recentes.',
       caption:'O painel reúne materiais da turma e atividades individuais do aluno selecionado.'},
+    {id:'protocols',page:'protocols',title:'Abrir e responder um protocolo nos portais',image:'atendimento',
+      steps:['No portal do professor, aluno ou responsável, entre em Atendimento e escolha Novo protocolo. No portal da família, selecione antes o aluno a que o pedido se refere.',
+        'Escolha a categoria, escreva o assunto e a mensagem e, se necessário, anexe um PDF, JPG ou PNG. Em Abrir protocolo, o sistema registra o pedido e gera um número que começa com PRO-.',
+        'No gestor, abra Protocolos e localize o número. Em Ver atendimento, escolha Responder ao solicitante para enviar uma mensagem ao portal. Use Adicionar nota interna para registrar algo restrito à equipe.',
+        'O solicitante abre o assunto em Meus protocolos para ler o Histórico do protocolo. Enquanto estiver aberto para respostas, pode escrever em Sua resposta e escolher Enviar resposta.',
+        'A preferência por e-mail ou WhatsApp, quando disponível, envia avisos de atualização. Em Avisos de novos protocolos abertos pela escola, o titular também pode escolher como receber a primeira mensagem da Secretaria.',
+        'Para registrar uma resposta no histórico, escreva no portal. Se escolher o chat, use Copiar número do protocolo e cole a referência na conversa. No WhatsApp, o atalho já prepara uma mensagem com esse número.'],
+      alt:'Protocolo fictício com três mensagens entre a escola e o responsável, um anexo, o formulário de resposta e a preferência de avisos.',
+      caption:'O histórico identifica quem escreveu cada mensagem e permite baixar os anexos daquela conversa.'},
+    {id:'bulletin',title:'Ler e imprimir o boletim escolar',image:'boletim-aluno',
+      steps:['Na Visão geral, escolha Consultar boletim. No menu, o aluno também pode abrir Minha vida escolar. Para o responsável com acesso acadêmico, a opção se chama Vida acadêmica.',
+        'Confira o nome, a turma e o ano. Se houver mais de uma matrícula, use Matrícula para escolher. O filtro Período e turma permite consultar um fechamento por vez quando houver mais de um.',
+        'Leia a nota ou o conceito de cada componente e a frequência do mesmo período. Não publicado indica que o período ainda não foi publicado. Não apurada indica que a frequência ainda não pôde ser calculada.',
+        'Para imprimir, escolha Baixar boletim PDF e abra o arquivo. Essa via reúne todos os resultados publicados da matrícula, inclusive ao filtrar a tela. Quando a escola emitir uma via oficial com certificado A1, escolha a revisão em Vias oficiais assinadas.'],
+      alt:'Boletim fictício em grade integrada com cinco componentes, quatro bimestres, notas, conceitos, frequência e parecer de Arte.',
+      caption:'No exemplo, Arte usa conceitos. As outras disciplinas usam notas e o quarto bimestre aguarda publicação.'},
     {id:'online',page:'online',title:'Abrir e acompanhar a matrícula online',image:'matricula-online',
       steps:['Abra Inscrições online, selecione Processos e link público e use + Novo processo. Informe ano letivo, turmas e datas. Confira os termos para as famílias.',
         'Marque Publicar processo no portal quando a escola quiser receber inscrições. Confira a oferta e o prazo antes de compartilhar o link. A escola pode deixar a cobrança desativada. Para cobrar a inscrição, configure a conta bancária, o valor e a modalidade Pix ou boleto.',
@@ -118,6 +161,7 @@ namespace PigeUI {
   }
   function activateDesk(desk:Desk):void {
     if(!shell||desk===currentDesk)return;
+    rail.close();
     rememberMenu(currentDesk);
     currentDesk.scroll=currentDesk.node.querySelector('main')?.scrollTop||0;
     currentDesk.context.state.menuOpen=false;
@@ -147,6 +191,7 @@ namespace PigeUI {
     taskState.pages=taskState.pages.filter(page=>page!==key);
   }
   function resetDesks():void {
+    PigePortalTabs.cancelClose();
     if(!shell||!primaryDesk)return;
     activateDesk(primaryDesk);
     for(const key of [...desks.keys()])removeDesk(key);
@@ -166,7 +211,13 @@ namespace PigeUI {
           currentDesk.context.state.error='Aguarde a operação em Usuários e acessos antes de abrir outro cadastro.';
           return;
         }
-        if(hasDraft(existing)&&!window.confirm('Descartar a edição em Usuários e acessos para abrir esta pessoa?'))return;
+        const origin=currentDesk;
+        if(hasDraft(existing)&&!await PigeDialogs.confirm(
+          'A edição em Usuários e acessos será descartada para abrir a ficha de '+portalTarget.name+'.',
+          {title:'Abrir outro cadastro?',confirmLabel:'Descartar e abrir',cancelLabel:'Continuar editando',destructive:true}
+        ))return;
+        if(currentDesk!==origin||desks.get(page)!==existing||origin.context.state.schoolId!==portalTarget.schoolId||
+           !origin.context.pageAllowed(page)||deskBusy(existing))return;
         existing.changed.clear();
         existing.context.state.portalTarget=portalTarget;
       }
@@ -186,31 +237,56 @@ namespace PigeUI {
       if(!desk.node.contains(field)||desk.initial.get(field)===fieldValue(field))desk.changed.delete(field);
     }
     return desk.changed.size>0||Boolean(desk.node.querySelector('[data-workspace-dirty="true"]'))||
-      Boolean(desk.context.state.modal.kind&&desk.context.modalDirty())||desk.context.contractDirty();
+      Boolean(desk.context.state.modal.kind&&desk.context.modalDirty())||desk.context.contractDirty()||
+      (desk.context.state.page==='webmail'&&PigeEmail.hasUnsavedWork());
   }
   function deskBusy(desk:Desk):boolean {
     return desk.context.state.busy||Boolean(desk.node.querySelector('[aria-busy="true"]'));
   }
-  function closeDesk(page:string):void {
+  async function closeDesk(page:string):Promise<void> {
     const desk=desks.get(page);
-    if(!desk||desk===primaryDesk||deskBusy(desk))return;
-    if((hasDraft(desk)||desk.context.state.modal.kind)&&!window.confirm('Fechar esta guia e descartar alterações que ainda não foram salvas?'))return;
+    if(!desk||desk===primaryDesk)return;
+    if(deskBusy(desk)){
+      await PigeDialogs.alert('Aguarde o término da operação nesta guia antes de fechá-la.',{title:'Operação em andamento'});
+      return;
+    }
+    if((hasDraft(desk)||desk.context.state.modal.kind)&&!await PigeDialogs.confirm(
+      'As alterações ainda não salvas em '+pageLabels[page]+' serão descartadas.',
+      {title:'Fechar esta guia?',confirmLabel:'Fechar guia',cancelLabel:'Voltar',destructive:true}
+    ))return;
+    if(desks.get(page)!==desk||deskBusy(desk))return;
     if(desk===currentDesk)activateDesk(primaryDesk);
     removeDesk(page);
+    await Vue.nextTick();
+    currentDesk.node.querySelector<HTMLElement>('[data-work-tab][aria-selected="true"]')?.focus({preventScroll:true});
   }
-  function closeOtherDesks():void {
+  async function confirmWorkspaceExit(title:string,confirmLabel:string):Promise<boolean>{
+    const origin=currentDesk,school=origin.context.state.schoolId;
+    const open=[...desks.values()];
+    if(open.some(deskBusy)){
+      await PigeDialogs.alert('Aguarde o término das operações nas guias abertas antes de continuar.',{title:'Operação em andamento'});
+      return false;
+    }
+    const drafts=open.filter(hasDraft);
+    if(drafts.length&&!await PigeDialogs.confirm(
+      'Há alterações ainda não salvas em '+drafts.map(desk=>pageLabels[desk.context.state.page]).join(', ')+'. Ao continuar, essas alterações serão descartadas.',
+      {title,confirmLabel,cancelLabel:'Voltar',destructive:true}
+    ))return false;
+    return currentDesk===origin&&currentDesk.context.state.schoolId===school&&open.length===desks.size&&
+      open.every(desk=>desks.get(desk.context.state.page)===desk&&!deskBusy(desk));
+  }
+  async function closeOtherDesks():Promise<void> {
     const others=[...desks.entries()].filter(([,desk])=>desk!==primaryDesk);
     if(!others.length)return;
     if(others.some(([,desk])=>deskBusy(desk))){
-      window.alert('Aguarde o término das operações em andamento para fechar as guias.');
+      await PigeDialogs.alert('Aguarde o término das operações em andamento para fechar as guias.',{title:'Operação em andamento'});
       return;
     }
     const drafts=others.filter(([,desk])=>hasDraft(desk)||desk.context.state.modal.kind||
       (desk.context.state.page==='webmail'&&PigeEmail.hasUnsavedWork()));
     const home=pageLabels[taskState.home];
-    const question=others.length===1?'Fechar a outra guia aberta?':`Fechar as ${others.length} outras guias abertas?`;
-    const warning=drafts.length?' Alterações não salvas serão descartadas em: '+drafts.map(([key])=>pageLabels[key]).join(', ')+'.':'';
-    if(!window.confirm(question+' A guia '+home+' continuará aberta.'+warning))return;
+    if(!await PigePortalTabs.confirmClose(home,drafts.map(([key])=>pageLabels[key])))return;
+    if(others.some(([key,desk])=>desks.get(key)!==desk||deskBusy(desk)))return;
     activateDesk(primaryDesk);
     for(const [key] of others)removeDesk(key);
     void Vue.nextTick(()=>primaryDesk.node.querySelector<HTMLButtonElement>('[data-work-tab][aria-selected="true"]')?.focus({preventScroll:true}));
@@ -250,7 +326,7 @@ namespace PigeUI {
   const state = Vue.reactive({
     guideSelection,
     guideChoices():GuideWalkthrough[]{
-      return walkthroughs.filter(item=>!item.page || (pageAllowed(item.page) && (item.id!=='diary' || can('diary.configure'))));
+      return walkthroughs.filter(item=>(item.id!=='dashboard' || !isProfileRole()) && (!item.page || (pageAllowed(item.page) && (item.id!=='diary' || can('diary.configure')))));
     },
     currentGuide():GuideWalkthrough{
       return state.guideChoices().find(item=>item.id===guideSelection.topic) || walkthroughs[0];
@@ -267,14 +343,14 @@ namespace PigeUI {
     ready:false, configured:true, embedded:window.self!==window.top, online:navigator.onLine, loginBusy:false, busy:false, loading:false,
     error:'', success:'', menuOpen:false, loginPasswordVisible:false, registryFiltersOpen:false, user:null as PigeAPI.User|null, userPhotoUrl:'', profilePhotoPreview:'', cameraTarget:'', captureName:'',
     schools:[] as PigeAPI.School[], schoolId:'', page:'dashboard', q:'', pageNumber:1, total:0,
-    rows:[] as Row[], dashboard:{} as Row, catalogs:{} as Record<string,Row[]>, catalog:'class-groups',
+    rows:[] as Row[], dashboard:{} as Row, dashboardDays:7, catalogs:{} as Record<string,Row[]>, catalog:'class-groups',
     recordOrientation:'',personRecord:null as PigeDossier.Reply|null, recordTab:'general', recordArchived:false, familyBusy:false,
     selectedStudent:null as Student|null, studentTab:'cadastro', contractEnrollmentId:'', contractReviewIssuedId:'', profileContext:{} as Row, studentDocs:{items:[],checklist:[],issued:[]} as {items:Row[];checklist:Row[];issued:Row[]}, history:[] as Row[],
     studentChoices:[] as Student[], personChoices:[] as Row[], studentSearchQuery:'',studentSearchBusy:false,studentSearchMessage:'Digite ao menos 2 caracteres para pesquisar.',personSearchQuery:'',personSearchBusy:false,personSearchMessage:'Digite ao menos 2 caracteres para pesquisar.',photoUrls:{} as Record<string,string>, companies:[] as Row[], reportClass:'', reportRows:[] as Row[],
     supportHub:blankSupport(),
-    personTypeQuery:'',cadastresOpen:true,integrationsOpen:true,emailStatus:'idle' as 'idle'|'configured'|'missing'|'unavailable', registryFilter:{type_code:'',entity_kind:'',active:''}, modalSection:'identification', discardChanges:false, modalInitial:'', reuseTarget:'',
+    personTypeQuery:'',cadastresOpen:true,integrationsOpen:true,emailStatus:'idle' as 'idle'|'configured'|'missing'|'unavailable', registryFilter:{type_code:'',entity_kind:'',active:''}, modalSection:'identification', modalInitial:'', reuseTarget:'',
     modal:blankModal(), login:{email:'',password:''}, setup:{token:'',admin_name:'',admin_email:'',admin_password:'',company_name:'',company_document:'',school_name:'',unit_name:'Unidade principal',academic_year:new Date().getFullYear()},
-    filters:{status:'',academic_year_id:'',class_group_id:'',document_type_id:'',document_status:'',overdue:false},
+    filters:{status:'',academic_year_id:'',class_group_id:'',document_type_id:'',document_status:'',overdue:false,source:'',category:''},
     pendencySummary:{truncated:false,total_documents:0,scanned_students:0,total_students:0},
     studentProtocols:[] as Row[], studentProtocolTotal:0,
     canInstall:false, updateAvailable:false,
@@ -288,22 +364,24 @@ namespace PigeUI {
   let webmailPreferenceCache:{key:string;loadedAt:number;choice:MailWebmailChoice}|null=null;
   let sogoFrameAttempt=0;
   let sequence = 0;
+  let confirmingEnrollment=false;
   let loadedSchoolId='';
   let schoolSequence=0;
   let personSearchSequence=0,studentSearchSequence=0;
   let personSearchTimer=0,studentSearchTimer=0;
   let installEvent: (Event & {prompt:()=>Promise<void>})|null = null;
   let waitingWorker: ServiceWorker|null = null;
+  let updateRequested=false;
   const photoDownloadLimit=4;
   const photoPending=new Map<string,Promise<void>>();
   const photoRetryAfter=new Map<string,number>();
   const photoWaiters:Array<()=>void>=[];
   let activePhotoDownloads=0,photoEpoch=0;
-  function resetFilters():void { state.filters={status:'',academic_year_id:'',class_group_id:'',document_type_id:'',document_status:'',overdue:false}; }
+  function resetFilters():void { state.filters={status:'',academic_year_id:'',class_group_id:'',document_type_id:'',document_status:'',overdue:false,source:'',category:''}; }
   function filteredClasses():Option[] { return options('class-groups').filter(o=>!state.filters.academic_year_id||state.catalogs['class-groups']?.find(c=>c.id===o.value)?.academic_year_id===state.filters.academic_year_id); }
   function filterQuery():string {
     const query=new URLSearchParams();
-    const keys=state.page==='protocols'?['status','overdue']:state.page==='documents'?['academic_year_id','class_group_id','document_type_id','document_status']:['status','academic_year_id','class_group_id'];
+    const keys=state.page==='protocols'?['status','overdue','source','category']:state.page==='documents'?['academic_year_id','class_group_id','document_type_id','document_status']:['status','academic_year_id','class_group_id'];
     for(const key of keys){const value=(state.filters as unknown as Record<string,unknown>)[key];if(value)query.set(key,text(value));}
     return query.toString();
   }
@@ -363,6 +441,16 @@ namespace PigeUI {
     return names[text(value)] || label(value);
   }
   function label(value: unknown): string { const key=text(value); return statusLabels[key] || key || '—'; }
+  function dashboardIcon(page:string):string {
+    const icons:Record<string,string>={enrollments:'enrollment',online:'online',diary:'academic',protocols:'protocols',community:'bell',documents:'documents'};
+    return icons[page] || 'clock';
+  }
+  async function openDashboardItem(item:{id:string;page:string;record_id?:string}):Promise<void>{
+    if(!pageAllowed(item.page))return;
+    if(item.page==='protocols')return viewProtocol(item.id);
+    if(item.page==='enrollments')return viewEnrollment(item.record_id||item.id);
+    await navigate(item.page);
+  }
   function date(value: unknown): string { const v=text(value); return v ? new Intl.DateTimeFormat('pt-BR',{timeZone:v.length===10?'UTC':'America/Bahia'}).format(new Date(v.length===10?v+'T12:00:00Z':v)) : '—'; }
   function cpf(value: unknown): string { const v=text(value); return v.length===11 ? `***.${v.slice(3,6)}.${v.slice(6,9)}-**` : 'Não informado'; }
   function initials(value: unknown): string { return text(value).split(' ').filter(Boolean).slice(0,2).map(v=>v[0]).join('').toUpperCase(); }
@@ -479,7 +567,7 @@ namespace PigeUI {
   function landingPage():string{if(state.user?.role==='finance'&&pageAllowed('banking'))return 'banking';return ['dashboard','people','enrollments','diary','documents','reports','users','banking','help'].find(pageAllowed)||'help';}
   async function academicPrepared():Promise<void>{await safe(async()=>{await loadCatalogs();await loadPage();});}
   async function importedDataChanged():Promise<void>{await safe(async()=>{await loadCatalogs();state.success='Importação concluída. Cadastros atualizados para consulta.';});}
-  async function refreshAccess():Promise<void>{const sid=state.schoolId;const user=await PigeAPI.request<PigeAPI.User>('/auth/me');if(sid!==state.schoolId||openProfilePortal(user.role))return;state.user=user;
+  async function refreshAccess():Promise<void>{const sid=state.schoolId;const user=await PigeAPI.request<PigeAPI.User>('/auth/me');if(sid!==state.schoolId||openProfilePortal(user.role))return;rail.close();state.user=user;
     if(shell&&!primaryDesk.context.pageAllowed(taskState.home)){
       resetDesks();primaryDesk.context.state.page=primaryDesk.context.landingPage();pinHome(primaryDesk.context.state.page);
       history.replaceState({},'','#/'+taskState.home);await primaryDesk.context.loadPage();
@@ -552,11 +640,11 @@ namespace PigeUI {
   }
   async function selectSchool(event:Event):Promise<void>{
     const select=event.target as HTMLSelectElement;
-    const requested=select.value;
-    if(requested===state.schoolId)return;
-    if([...desks.values()].some(hasDraft)&&!window.confirm('Trocar de escola e fechar as guias com alterações não salvas?')){
-      select.value=state.schoolId;return;
-    }
+    const requested=select.value,previous=state.schoolId;
+    if(requested===previous)return;
+    select.value=previous;
+    select.focus({preventScroll:true});
+    if(!await confirmWorkspaceExit('Trocar de escola?','Trocar de escola')||previous!==state.schoolId||state.schoolLoading||!state.schools.some(item=>item.id===requested))return;
     PigeDiary.clearPilotContext(state.schoolId);
     rememberMenu(currentDesk);
     const page=state.page;
@@ -567,12 +655,19 @@ namespace PigeUI {
     if(!home.state.schoolLoading&&home.state.schoolId===requested&&page!==home.state.page&&home.pageAllowed(page))await openDesk(page);
   }
   async function changeSchool():Promise<void>{
-    if(!shell&&loadedSchoolId&&loadedSchoolId!==state.schoolId&&PigeEmail.hasUnsavedWork()&&!window.confirm('Descartar a mensagem não salva antes de trocar de escola?')){state.schoolId=loadedSchoolId;return;}
+    if(!shell&&loadedSchoolId&&loadedSchoolId!==state.schoolId&&PigeEmail.hasUnsavedWork()){
+      const requested=state.schoolId,scope=schoolSequence;
+      state.schoolId=loadedSchoolId;
+      if(!await PigeDialogs.confirm('A mensagem em edição será descartada ao trocar de escola.',
+        {title:'Trocar de escola?',confirmLabel:'Descartar e trocar',cancelLabel:'Continuar editando',destructive:true})||
+        scope!==schoolSequence||!state.user)return;
+      state.schoolId=requested;
+    }
     if(shell){resetDesks();state.page=pageAllowed('dashboard')?'dashboard':landingPage();pinHome(state.page);history.replaceState({},'','#/'+state.page);}
     state.portalTarget=null;closePersonRecord();const epoch=++schoolSequence,sid=state.schoolId;loadedSchoolId=sid;state.schoolLoading=true;
     ++sequence;++personSearchSequence;++studentSearchSequence;
     clearTimeout(personSearchTimer);clearTimeout(studentSearchTimer);
-    PigeSupport.dispose();PigeAPI.setActiveSchool(sid);state.cameraTarget='';state.captureName='';selectedFile=null;identityFiles={};clearProfilePreview();
+    rail.close();PigeSupport.dispose();PigeAPI.setActiveSchool(sid);state.cameraTarget='';state.captureName='';selectedFile=null;identityFiles={};clearProfilePreview();
     state.dashboard={} as Row;state.profileContext={} as Row;state.history=[];state.companies=[];state.supportHub=blankSupport();state.total=0;state.error='';state.success='';state.emailAvailable=false;state.certificateAlerts=[];state.institutionTab='general';state.modal=blankModal();state.assistSource='';state.studentChoices=[];state.personChoices=[];state.studentSearchBusy=false;state.personSearchBusy=false;state.pendencySummary={truncated:false,total_documents:0,scanned_students:0,total_students:0};
     resetFilters();state.archiveFilter='active';state.lifecycleTarget=null;state.studentProtocols=[];state.studentProtocolTotal=0;clearPhotos();try{localStorage.setItem('pige-school',state.schoolId);}catch{/* Contexto incorporado sem localStorage. */}state.selectedStudent=null;state.contractEnrollmentId='';state.contractReviewIssuedId='';state.studentDocs={items:[],checklist:[],issued:[]};state.rows=[];state.catalogs={};state.reportRows=[];state.reportClass='';state.q='';state.pageNumber=1;
     legacyBackupFile=null;legacyMediaFile=null;state.emailStatus='idle';state.legacyImport={busy:false,backupName:'',mediaName:'',confirmation:'',error:'',preview:null,result:null,runs:[]};
@@ -619,8 +714,9 @@ namespace PigeUI {
     if(currentDesk?.context.state.page==='community')currentDesk.context.state.websiteRequest++;
   }
   async function navigate(page:string):Promise<void>{
+    rail.close();
     page=canonicalPage(page);
-    if(state.busy||state.schoolLoading||(!taskState.paused&&(state.modal.kind||document.querySelector('.modal-backdrop'))))return;
+    if(state.busy||state.schoolLoading||document.querySelector('dialog[open]')||(!taskState.paused&&(state.modal.kind||document.querySelector('.modal-backdrop'))))return;
     if(!pageAllowed(page)){
       state.error=page==='legacy-import'?'A portabilidade não está habilitada ou seu acesso não foi delegado nesta escola.':page==='contracts'?'Seu perfil não possui acesso aos documentos da escola.':integrationPages.includes(page)?'Seu perfil não possui acesso a esta integração.':'Seu perfil não possui acesso a esta página.';
       if(location.hash!==`#/${state.page}`)history.replaceState({},'',`#/${state.page}`);
@@ -632,8 +728,11 @@ namespace PigeUI {
       guideSelection.topic=state.guideChoices().find(item=>item.id===topic)?.id || 'navigation';
     }
     if(shell){await openDesk(page);return;}
-    if(page!=='webmail'&&PigeEmail.hasUnsavedWork()&&!window.confirm('Descartar a mensagem não salva antes de sair do e-mail?'))return;
-    if(page!=='contracts'&&contractDirty()&&!window.confirm('Descartar as alterações não salvas no modelo?'))return;
+    const scope=schoolSequence,origin=state.page;
+    const draft=page!=='webmail'&&PigeEmail.hasUnsavedWork()?'A mensagem em edição será descartada.':
+      page!==origin&&contractDirty()?'As alterações feitas no modelo serão descartadas.':'';
+    if(draft&&!await PigeDialogs.confirm(draft,{title:'Sair da edição?',confirmLabel:'Descartar e sair',cancelLabel:'Continuar editando',destructive:true}))return;
+    if(scope!==schoolSequence||origin!==state.page||!pageAllowed(page))return;
     closePersonRecord();resetFilters();state.archiveFilter='active';state.lifecycleTarget=null;state.registryFilter={type_code:'',entity_kind:'',active:''};state.registryFiltersOpen=false;state.page=page;state.pageNumber=1;state.q='';state.selectedStudent=null;state.error='';state.menuOpen=false;if(page!=='contracts'){state.contractEnrollmentId='';state.contractReviewIssuedId='';}
     history.replaceState({},'',`#/${page}`);await safe(loadPage);
   }
@@ -667,7 +766,7 @@ namespace PigeUI {
           const data=await PigeAPI.request<Row>('/profile/context');
           if(current===sequence)state.profileContext=data;
         }else{
-          const data=await PigeAPI.request<Row>(base()+'/dashboard');if(current===sequence)state.dashboard=data;
+          const data=await PigeAPI.request<Row>(base()+'/dashboard'+(state.dashboardDays===7?'':'?days='+state.dashboardDays));if(current===sequence)state.dashboard=data;
         }
       }else if(state.page==='academic'){
         await loadCatalogs();const rows=state.archiveFilter==='active'?(state.catalogs[state.catalog]||[]):await PigeAPI.request<Row[]>(base()+'/'+state.catalog+'?archived='+state.archiveFilter);if(current===sequence){state.rows=filterAcademic(rows);state.total=state.rows.length;}
@@ -918,7 +1017,7 @@ namespace PigeUI {
   function openModal(kind:string,title:string,fields:Field[],values:PigeAPI.FormDataMap={},target:Row|null=null):void{
     resetPeopleSearch();
     const form:PigeAPI.FormDataMap={};for(const f of fields)form[f.key]=values[f.key]??(f.key==='entity_kind'?'individual':f.type==='checkbox'?(f.key==='active'):f.type==='number'?30:f.type==='multiselect'?[]:'');
-    state.modal={kind,title,fields,form,target,action:'',error:''};selectedFile=null;state.cameraTarget='';state.captureName='';clearProfilePreview();identityFiles={};state.error='';state.discardChanges=false;state.reuseTarget='';
+    state.modal={kind,title,fields,form,target,action:'',error:''};selectedFile=null;state.cameraTarget='';state.captureName='';clearProfilePreview();identityFiles={};state.error='';state.reuseTarget='';
     state.personTypeQuery='';state.assistSource='';
     if(dossier.eligible(kind)){
       const primary=kind.split('-')[0], additions:Field[]=[];
@@ -942,18 +1041,20 @@ namespace PigeUI {
     void loading.then(()=>{if(state.modal===currentModal)state.modalInitial=JSON.stringify(state.modal.form);});
   }
   function toggleMenuGroup(key:'cadastresOpen'|'documentsOpen'|'financeOpen'|'integrationsOpen'|'publicityOpen'|'configurationOpen'|'adminMenuOpen'):void {
-    if(sidebarRail()){
-      toggleSidebar();
-      state[key]=true;
-    }else state[key]=!state[key];
+    if(!sidebarRail())state[key]=!state[key];
   }
   function modalDirty():boolean{return dossier.dirty()||JSON.stringify(state.modal.form)!==state.modalInitial||Boolean(selectedFile)||Boolean(identityFiles.logo)||Boolean(identityFiles.font);}
-  function closeModal(discard=false):void{
+  async function closeModal(discard=false):Promise<void>{
     if(state.busy||PigeMFA.state.busy)return;
     if(state.modal.kind==='mfa-manage'&&PigeMFA.state.codes.length){PigeMFA.state.error='Guarde os códigos e confirme para continuar.';return;}
-    if(discard!==true&&state.modal.fields.length&&modalDirty()){state.discardChanges=true;return;}
-    if(state.modal.enrollmentReturn){resumeEnrollment(state.modal.enrollmentReturn);return;}
-    clearProfilePreview();state.cameraTarget='';state.captureName='';state.modal=blankModal();state.discardChanges=false;
+    const modal=state.modal,scope=schoolSequence;
+    if(discard!==true&&modal.fields.length&&modalDirty()&&!await PigeDialogs.confirm(
+      'As alterações ainda não salvas em '+modal.title+' serão descartadas.',
+      {title:'Descartar alterações?',confirmLabel:'Descartar alterações',cancelLabel:'Continuar editando',destructive:true}
+    ))return;
+    if(state.modal!==modal||scope!==schoolSequence||state.busy)return;
+    if(modal.enrollmentReturn){resumeEnrollment(modal.enrollmentReturn);return;}
+    clearProfilePreview();state.cameraTarget='';state.captureName='';state.modal=blankModal();
   }
   function valuesFrom(row:Row|PigeAPI.Person,fields:Field[]):PigeAPI.FormDataMap {const map:PigeAPI.FormDataMap={};for(const f of fields)map[f.key]=(row as unknown as Record<string,Value>)[f.key]??(f.type==='multiselect'?[]:'');return map;}
   function personTypesFrom(row:unknown):string[]{const value=(row as {person_types?:unknown})?.person_types;return Array.isArray(value)?value.map(text):[];}
@@ -1006,12 +1107,12 @@ namespace PigeUI {
   function visibleSection(id:string):boolean{if(isEnrollmentForm())return true;const all=modalSections();return (all.some(s=>s.id===state.modalSection)?state.modalSection:all[0]?.id)===id;}
   async function validateModal():Promise<boolean>{
     const form=document.querySelector<HTMLFormElement>('.modal-form');if(!form)return true;
-    const invalid=Array.from(form.querySelectorAll<HTMLInputElement>('input,select,textarea')).find(el=>!el.disabled&&!el.checkValidity());
+    const invalid=Array.from(form.querySelectorAll<HTMLInputElement>('input,select,textarea')).find(el=>el.willValidate&&!el.validity.valid);
     if(!invalid)return true;
     const group=invalid.closest<HTMLElement>('[data-form-section]');if(group)state.modalSection=group.dataset.formSection||'';
-    state.modal.error='Revise o campo: '+(invalid.labels?.[0]?.textContent?.trim().replace(/\s+/g,' ')||'informação obrigatória')+'.';
+    state.modal.error='';
     const details=invalid.closest('details');if(details)details.open=true;
-    await Vue.nextTick();invalid.focus();invalid.reportValidity();return false;
+    await Vue.nextTick();invalid.focus();invalid.checkValidity();return false;
   }
   function businessFields():Field[]{
     const common=personFields().filter(f=>!['person_types','birth_date','birth_certificate','birth_city','birth_state','nationality','sex','gender','race_color','marital_status','mother_name','father_name','occupation','employer','education','emergency_contact_name','emergency_contact_phone','rg','rg_issuer','rg_state','rg_issued_on'].includes(f.key));
@@ -1116,7 +1217,7 @@ namespace PigeUI {
     openModal('enrollment','Nova matrícula',fields,{student_id:selected?.id||'',enrolled_on:new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bahia',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),enrollment_type:'new'});
     if(selected)state.studentChoices=[selected];
   });}
-  async function viewEnrollment(id:string):Promise<void>{await safe(async()=>{const data=await PigeAPI.request<Row>(base()+'/enrollments/'+id);openModal('enrollment-detail','Matrícula '+text(data.number),[],{},data);});}
+  async function viewEnrollment(id:string):Promise<void>{await safe(async()=>{const school=state.schoolId;const modal=state.modal;const data=await PigeAPI.request<Row>(base()+'/enrollments/'+id);if(state.schoolId!==school || state.modal!==modal)return;openModal('enrollment-detail','Matrícula '+text(data.number),[],{},data);});}
   async function contractsForEnrollment(id:string,issuedId=''):Promise<void>{state.modal=blankModal();
     if(shell){if(!pageAllowed('contracts'))return;await openDesk('contracts');const target=desks.get('contracts');if(target){target.context.state.contractEnrollmentId=id;target.context.state.contractReviewIssuedId=issuedId;}}
     else {state.contractEnrollmentId=id;state.contractReviewIssuedId=issuedId;await navigate('contracts');}}
@@ -1126,12 +1227,90 @@ namespace PigeUI {
     const fields=[field('class_group_id','Turma de destino','select',true,groups),field('enrolled_on','Data da matrícula','date',true),field('notes','Observações','textarea',false,undefined,true),field('reason','Motivo da alteração','textarea',true,undefined,true)];
     openModal('draft-edit','Editar pré-matrícula',fields,valuesFrom(target,fields),target);
   }
+  function showProtocol(data:Row):void{
+    openModal('protocol-detail','Protocolo '+text(data.number),[],{},data);
+  }
   async function viewProtocol(id:string):Promise<void>{await safe(async()=>{
-    const data=await PigeAPI.request<Row>(base()+'/protocols/'+id);openModal('protocol-detail','Protocolo '+text(data.number),[],{},data);
+    const school=state.schoolId,modal=state.modal;
+    const data=await PigeAPI.request<Row>(base()+'/protocols/'+encodeURIComponent(id));
+    if(state.schoolId===school && state.modal===modal)showProtocol(data);
   });}
+  function timestamp(value:string):string{
+    return value?new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Bahia'}).format(new Date(value)):'';
+  }
   function protocolNote():void{
     const target=state.modal.target;if(!target)return;
-    openModal('protocol-note','Registrar atendimento',[field('message','Registro do atendimento','textarea',true,undefined,true)],{},target);
+    openModal('protocol-note',target.requester_user_id?'Adicionar nota interna':'Registrar atendimento',[field('message','Registro do atendimento','textarea',true,undefined,true)],{},target);
+  }
+  function replyProtocol():void{
+    const target=state.modal.target;if(!target?.requester_user_id||!can('protocols.write')||['completed','cancelled'].includes(text(target.status)))return;
+    openModal('protocol-reply','Responder ao solicitante',[field('message','Mensagem para o solicitante','textarea',true,undefined,true),field('attachment','Anexo (opcional)','file',false,undefined,true)],{},target);
+    state.modal.action=crypto.randomUUID();
+  }
+  function startPortalProtocol():void{
+    if(!can('protocols.write'))return;
+    openModal('protocol-contact','Iniciar atendimento no portal',[field('kind','Assunto','text',true),field('description','Mensagem para o solicitante','textarea',true,undefined,true)]);
+    state.modal.lookup={query:'',requesters:[],students:[],role:'',page:1,total:0,pageSize:20,busy:false,studentsBusy:false,searched:false,searchEpoch:0,studentEpoch:0,error:''};
+    Object.assign(state.modal.form,{requester_user_id:'',student_id:'',category:'secretaria'});
+    state.modalInitial=JSON.stringify(state.modal.form);
+    state.modal.action=crypto.randomUUID();
+  }
+  function eligibleProtocolStudents():ProtocolStudent[]{
+    const {form,lookup}=state.modal;
+    return (lookup?.students||[]).filter(s=>form.category==='financeiro'?s.financial_authorized:form.category==='pedagogico'?s.academic_authorized:s.academic_authorized||s.financial_authorized);
+  }
+  function syncProtocolStudent():void{
+    const form=state.modal.form,allowed=eligibleProtocolStudents();
+    if(!allowed.some(s=>s.id===form.student_id))form.student_id=allowed.length===1?allowed[0].id:'';
+  }
+  function clearProtocolRequester():void{
+    const {lookup,form}=state.modal;if(!lookup)return;
+    lookup.role='';lookup.students=[];lookup.studentsBusy=false;lookup.studentEpoch++;
+    form.requester_user_id='';form.student_id='';
+  }
+  function protocolQueryChanged():void{
+    const {lookup}=state.modal;if(!lookup)return;
+    clearProtocolRequester();lookup.searchEpoch++;lookup.requesters=[];lookup.busy=false;lookup.searched=false;lookup.error='';
+  }
+  async function searchProtocolRequesters(page=1):Promise<void>{
+    const modal=state.modal,lookup=modal.lookup;if(!lookup)return;
+    clearProtocolRequester();const epoch=++lookup.searchEpoch;
+    lookup.busy=true;lookup.error='';lookup.requesters=[];lookup.searched=false;
+    try{
+      const query=new URLSearchParams({q:lookup.query.trim(),page:String(page)});
+      const result=await PigeAPI.request<PigeAPI.Page<ProtocolRequester>>(base()+'/protocol-requesters?'+query);
+      if(state.modal!==modal||epoch!==lookup.searchEpoch)return;
+      lookup.page=result.page;lookup.pageSize=result.page_size;lookup.total=result.total;lookup.requesters=result.items;lookup.searched=true;
+    }catch(error){if(state.modal===modal&&epoch===lookup.searchEpoch)lookup.error=text((error as Error).message);}
+    finally{if(state.modal===modal&&epoch===lookup.searchEpoch)lookup.busy=false;}
+  }
+  async function chooseProtocolRequester(id:string):Promise<void>{
+    const modal=state.modal,lookup=modal.lookup;if(!lookup)return;
+    clearProtocolRequester();lookup.error='';
+    const recipient=lookup.requesters.find(item=>item.id===id);if(!recipient)return;
+    modal.form.requester_user_id=id;lookup.role=recipient.role;
+    if(recipient.role!=='guardian' && modal.form.category==='financeiro')modal.form.category='secretaria';
+    if(recipient.role==='teacher')return;
+    const epoch=lookup.studentEpoch;lookup.studentsBusy=true;
+    try{
+      const result=await PigeAPI.request<{items:ProtocolStudent[]}>(base()+'/protocol-requesters/'+encodeURIComponent(id)+'/students');
+      if(state.modal!==modal||lookup.studentEpoch!==epoch)return;
+      lookup.students=result.items;syncProtocolStudent();
+    }catch(error){if(state.modal===modal&&lookup.studentEpoch===epoch)lookup.error=text((error as Error).message);}
+    finally{if(state.modal===modal&&lookup.studentEpoch===epoch)lookup.studentsBusy=false;}
+  }
+  function protocolNoticeLabel(notice:ProtocolNotification):string{
+    const channel=notice.channel==='email'?'e-mail':'WhatsApp';
+    if(notice.status==='completed')return 'Aceito pelo serviço de '+channel;
+    const status={pending:'Na fila de envio',retry:'Aguardando nova tentativa',processing:'Envio em andamento',failed:'Falha no envio',uncertain:'Envio sem confirmação do serviço'};
+    return 'Aviso por '+channel+' · '+status[notice.status];
+  }
+  function protocolEvents(visibility:'internal'|'public'):ProtocolEvent[]{
+    const events=state.modal.target?.history as ProtocolEvent[]|undefined;
+    return (events||[]).filter(event=>visibility==='public'?event.visibility==='public':event.visibility!=='public');
+  }
+  async function protocolAttachment(protocolId:string,attachment:{id:string;name:string}):Promise<void>{
+    await safe(()=>PigeAPI.download(base()+'/protocols/'+encodeURIComponent(protocolId)+'/attachments/'+encodeURIComponent(attachment.id),attachment.name));
   }
   async function protocolReceipt(id:string):Promise<void>{await safe(()=>PigeAPI.download(base()+'/protocols/'+id+'/pdf','comprovante-protocolo.pdf'));}
   async function exportPendencies(format:string):Promise<void>{await safe(()=>PigeAPI.download(base()+'/reports/document-pendencies.'+format+'?q='+encodeURIComponent(state.q)+'&'+filterQuery(),'pendencias-documentais.'+format));}
@@ -1167,7 +1346,7 @@ namespace PigeUI {
   }
   function resumeEnrollment(resume:EnrollmentReturn):void{
     resetPeopleSearch();
-    state.modal=resume.modal;state.modalInitial=resume.initial;state.discardChanges=false;
+    state.modal=resume.modal;state.modalInitial=resume.initial;
     state.studentChoices=resume.students;state.personChoices=resume.people;
     state.studentSearchQuery=resume.studentQuery;state.personSearchQuery=resume.personQuery;
     if(resume.students.length)state.studentSearchMessage='Confira o aluno selecionado.';
@@ -1203,7 +1382,12 @@ namespace PigeUI {
     fields.push(field('orientation','Orientação da ficha do aluno','select',false,[{value:'portrait',label:'Retrato'},{value:'landscape',label:'Paisagem'}]));
     openModal('issue','Emitir documento em PDF',fields,{kind,enrollment_id:enrollment?.id||''},enrollment);
   }
-  async function newProtocol(row:Row|null=null):Promise<void>{await safe(async()=>{await searchStudents();const studentId=text(row?.student_id)||state.selectedStudent?.id;
+  async function newProtocol(row:Row|null=null):Promise<void>{await safe(async()=>{
+    if(row?.requester_user_id){
+      const fields=[field('due_on','Prazo','date'),field('status','Situação','select',true,['open','in_progress','waiting','completed','cancelled'].map(v=>({value:v,label:label(v)})))];
+      openModal('protocol','Atualizar protocolo',fields,valuesFrom(row,fields),row);return;
+    }
+    await searchStudents();const studentId=text(row?.student_id)||state.selectedStudent?.id;
     if(studentId&&!state.studentChoices.some(s=>s.id===studentId))state.studentChoices.unshift(await PigeAPI.request<Student>(base()+'/students/'+studentId));
     const fields=[field('kind','Tipo de solicitação','text',true),field('student_id','Aluno (opcional)','student'),field('description','Descrição / observações','textarea',false,undefined,true),field('due_on','Prazo','date'),field('status','Situação','select',true,['open','in_progress','waiting','completed','cancelled'].map(v=>({value:v,label:label(v)})))];openModal('protocol',row?'Atualizar protocolo':'Abrir protocolo',fields,row?valuesFrom(row,fields):{status:'open',student_id:studentId||''},row);});}
   async function editIdentity():Promise<void>{await safe(async()=>{
@@ -1294,11 +1478,19 @@ namespace PigeUI {
   function archiveStudent():void{if(state.selectedStudent)openModal('archive','Arquivar cadastro do aluno',[field('reason','Justificativa','textarea',true,undefined,true)],{},state.selectedStudent);}
   async function downloadFile(id:string,name='documento.pdf'):Promise<void>{await safe(()=>PigeAPI.download(base()+'/files/'+id+'/download',name));}
   async function saveModal(activateEnrollment=false):Promise<void>{
-    if(state.busy||dossier.state.loading||!await validateModal()||state.busy)return;
-    const activate=state.modal.kind==='enrollment'&&activateEnrollment===true;
-    if(activate&&!window.confirm('Efetivar a matrícula na turma selecionada e ocupar a vaga agora?'))return;
-    state.busy=true;state.modal.error='';
-    const modal=state.modal,form={...modal.form},target=modal.target,studentId=modal.enrollmentReturn?.student.id||state.selectedStudent?.id;let createdStudent:Student|null=null;let savedPersonId='';
+    const modal=state.modal,scope=schoolSequence;
+    if(!modal.kind||state.busy||confirmingEnrollment||dossier.state.loading||!await validateModal()||state.busy||confirmingEnrollment)return;
+    const activate=modal.kind==='enrollment'&&activateEnrollment===true;
+    if(activate){
+      confirmingEnrollment=true;
+      try{
+        if(!await PigeDialogs.confirm('A matrícula será efetivada na turma selecionada e ocupará a vaga agora.',
+          {title:'Efetivar matrícula?',confirmLabel:'Efetivar matrícula',cancelLabel:'Voltar'}))return;
+      }finally{confirmingEnrollment=false;}
+    }
+    if(scope!==schoolSequence||state.modal!==modal||state.busy)return;
+    state.busy=true;modal.error='';
+    const form={...modal.form},target=modal.target,studentId=modal.enrollmentReturn?.student.id||state.selectedStudent?.id;let createdStudent:Student|null=null;let savedPersonId='';
     try{
       const photo=selectedFile;delete form.photo;
       if(modal.kind==='ocr-target'){const source=state.assistSource;const data=await PigeAPI.request<{person:Row}>(base()+'/persons/'+form.person_id+'/dossier');editPerson(data.person);state.assistSource=source;return;}
@@ -1379,6 +1571,29 @@ namespace PigeUI {
         await PigeAPI.post(base()+'/enrollments'+(activate?'?activate=true':''),form);
       }
       else if(modal.kind==='draft-edit')await PigeAPI.patch(base()+'/enrollments/'+target!.id,{...form,version:target!.version});
+      else if(modal.kind==='protocol-contact'||modal.kind==='protocol-reply'){
+        let data:Row;
+        if(modal.kind==='protocol-contact'){
+          if(!modal.lookup?.role||!form.requester_user_id)throw new Error('Selecione o solicitante que receberá o atendimento.');
+          const teacher=modal.lookup.role==='teacher';
+          if(!teacher && !eligibleProtocolStudents().some(student=>student.id===form.student_id))throw new Error('Selecione um aluno com vínculo autorizado para esta categoria.');
+          data=await PigeAPI.post<Row>(base()+'/protocols',{kind:text(form.kind).trim(),description:text(form.description).trim(),
+            requester_user_id:form.requester_user_id,category:form.category,student_id:teacher?null:form.student_id,client_key:modal.action});
+        }else{
+          const payload=new FormData();payload.set('message',text(form.message).trim());payload.set('client_key',modal.action);
+          if(photo)payload.set('file',photo);
+          data=await PigeAPI.request<Row>(base()+'/protocols/'+encodeURIComponent(target!.id)+'/messages',{method:'POST',body:payload});
+        }
+        if(state.modal!==modal)return;
+        const schoolId=state.schoolId;
+        state.modal=blankModal();
+        const cleared=state.modal;
+        state.success=modal.kind==='protocol-contact'?'Atendimento iniciado no portal.':'Resposta publicada no portal.';
+        await safe(loadPage);
+        if(state.schoolId!==schoolId||state.modal!==cleared)return;
+        if(modal.kind==='protocol-reply')showProtocol(data);else await viewProtocol(data.id);
+        return;
+      }
       else if(modal.kind==='protocol-note')await PigeAPI.post(base()+'/protocols/'+target!.id+'/notes',{...form,version:target!.version});
       else if(modal.kind==='movement')await PigeAPI.post(base()+'/enrollments/'+target!.id+'/movements',{...form,version:target!.version,action:modal.action});
       else if(modal.kind==='reenroll')await PigeAPI.post(base()+'/enrollments/'+target!.id+'/reenroll',form);
@@ -1397,6 +1612,7 @@ namespace PigeUI {
           throw new Error('Documento emitido. Abra Documentos na ficha do aluno para baixar a via salva.');
         }
       }else if(modal.kind==='protocol'){
+        if(target?.requester_user_id)Object.assign(form,{kind:target.kind,description:target.description,student_id:target.student_id});
         form.student_id=form.student_id||null;form.due_on=form.due_on||null;
         if(target)await PigeAPI.patch(base()+'/protocols/'+target.id,{version:target.version,data:form});else await PigeAPI.post(base()+'/protocols',form);
       }else if(modal.kind==='support-hub'){
@@ -1467,35 +1683,61 @@ namespace PigeUI {
   async function loadReport():Promise<void>{await safe(async()=>{if(!state.reportClass){state.reportRows=[];return;}const result=await PigeAPI.request<{items:Row[]}>(base()+'/reports/class/'+state.reportClass);state.reportRows=result.items;});}
   async function exportStudents():Promise<void>{await safe(()=>PigeAPI.download(base()+'/reports/students.csv','alunos.csv'));}
   async function exportClass():Promise<void>{if(state.reportClass)await safe(()=>PigeAPI.download(base()+'/reports/class/'+state.reportClass+'/pdf','alunos-da-turma.pdf'));}
+  async function requestLogout():Promise<void>{
+    if(await confirmWorkspaceExit('Sair da aplicação?','Descartar e sair'))await logout();
+  }
   async function logout():Promise<void>{
     if(shell){if(state!==primaryDesk.context.state)return primaryDesk.context.logout();resetDesks();}
-    ++schoolSequence;++sequence;PigeSupport.dispose();state.cameraTarget='';state.captureName='';state.schoolLoading=false;
+    ++schoolSequence;++sequence;rail.close();PigeSupport.dispose();state.cameraTarget='';state.captureName='';state.schoolLoading=false;
     try{await PigeAPI.post('/auth/logout',{});}catch{/* Limpar a interface mesmo sem rede. */}
     if(state.userPhotoUrl)URL.revokeObjectURL(state.userPhotoUrl);state.userPhotoUrl='';clearProfilePreview();
     closePersonRecord();PigeAPI.clear();state.schoolId='';loadedSchoolId='';state.profileContext={} as Row;state.emailAvailable=false;state.certificateAlerts=[];state.user=null;state.page='dashboard';history.replaceState(null,'','#/dashboard');state.selectedStudent=null;state.contractEnrollmentId='';state.rows=[];state.dashboard={} as Row;state.studentDocs={items:[],checklist:[],issued:[]};state.history=[];state.studentProtocols=[];state.studentProtocolTotal=0;resetFilters();state.personChoices=[];state.studentChoices=[];clearPhotos();state.catalogs={};state.reportRows=[];state.companies=[];state.schools=[];state.supportHub=blankSupport();state.modal=blankModal();state.error='';state.login.password='';state.loginPasswordVisible=false;refreshSupport();
   }
-  async function install():Promise<void>{if(installEvent){await installEvent.prompt();installEvent=null;state.canInstall=false;}}
-  function updateApp():void{if(waitingWorker&&!state.modal.kind)waitingWorker.postMessage({type:'SKIP_WAITING'});}
+  async function install():Promise<void>{if(shell&&state!==primaryDesk.context.state)return primaryDesk.context.install();if(installEvent){await installEvent.prompt();installEvent=null;state.canInstall=false;}}
+  async function updateApp():Promise<void>{
+    if(shell&&state!==primaryDesk.context.state)return primaryDesk.context.updateApp();
+    if(!state.updateAvailable||updateRequested)return;
+    if(waitingWorker){
+      updateRequested=true;
+      waitingWorker.postMessage({type:'SKIP_WAITING'});
+      return;
+    }
+    if(await confirmWorkspaceExit('Atualizar a aplicação?','Atualizar aplicação'))location.reload();
+  }
   function setupPWA():void{
     window.addEventListener('online',()=>{state.online=true;});window.addEventListener('offline',()=>{state.online=false;});
     window.addEventListener('beforeinstallprompt',(event)=>{event.preventDefault();installEvent=event as Event&{prompt:()=>Promise<void>};state.canInstall=true;});
     window.addEventListener('pige:email-account-changed',event=>{if((event as CustomEvent<{schoolId:string}>).detail?.schoolId===state.schoolId)void loadPersonalTools();});
     window.addEventListener('pige-session-expired',()=>{void logout();state.error='Sua sessão expirou. Entre novamente.';});
-    window.addEventListener('hashchange',()=>{const target=canonicalPage(location.hash.replace(/^#\/?/,''));const ctx=currentDesk.context;if(target==='community/site'){void ctx.openSiteEditor();return;}if(pageLabels[target]&&target!==ctx.state.page)void ctx.navigate(target);});
+    window.addEventListener('popstate',()=>{
+      // Voltar/avançar dispensa primeiro a decisão aberta. A guia continua no seu endereço.
+      if(document.querySelector('dialog[open]'))history.replaceState({},'','#/'+currentDesk.context.state.page);
+    });
+    window.addEventListener('hashchange',()=>{
+      const target=canonicalPage(location.hash.replace(/^#\/?/,''));
+      const ctx=currentDesk.context;
+      if(target===ctx.state.page)return;
+      // O navegador já mudou o endereço. A rota visível permanece até a autorização da troca.
+      history.replaceState({},'','#/'+ctx.state.page);
+      if(target==='community/site')void ctx.openSiteEditor();
+      else if(pageLabels[target])void ctx.navigate(target);
+    });
     if('serviceWorker' in navigator&&window.isSecureContext){
       void navigator.serviceWorker.register('/sw.js').then(reg=>{
         if(reg.waiting){waitingWorker=reg.waiting;state.updateAvailable=true;}
         reg.addEventListener('updatefound',()=>{const worker=reg.installing;worker?.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller){waitingWorker=worker;state.updateAvailable=true;}});});
       }).catch(()=>{/* A aplicação online continua disponível sem SW. */});
-      navigator.serviceWorker.addEventListener('controllerchange',()=>{if(state.updateAvailable)location.reload();});
+      navigator.serviceWorker.addEventListener('controllerchange',()=>{
+        waitingWorker=null;
+        if(updateRequested){updateRequested=false;void updateApp();}
+      });
     }
-    window.addEventListener('beforeunload',event=>{if((state.modal.kind&&modalDirty())||[...desks.values()].some(hasDraft)){event.preventDefault();event.returnValue='';}});
   }
   function dispose():void{
     closePersonRecord();++sequence;++schoolSequence;++personSearchSequence;++studentSearchSequence;
     clearTimeout(personSearchTimer);clearTimeout(studentSearchTimer);clearPhotos();clearProfilePreview();
   }
-  return {portalRole,openPortalAccess,printStaff,editorPhoto,personPhotoChange,viewPersonRecord,recordKind,recordTabs,recordDetails,editRecord,closePersonRecord,moreRecordFamily,openSiteEditor,studentList,studentSection,selectSchool,taskState,openDesk,closeDesk,closeOtherDesks,selectWorkspaceTab,toggleMenuGroup,toggleSidebar,sidebarRail,resumeForm,keyTabs,scrollTabs,pageAllowed,loadShell,landingPage,safe,initialize,setupPWA,dispose,afterMFA,dialogHost,academicPrepared,importedDataChanged,openCamera,photoCaptured,documentPages,configurationPages,supportAreas,supportAreaLabels,refreshAccess,isEnrollmentForm,enrollmentStudent,enrollmentClass,administrationPages,institutionTabs,catalogDescriptions,adminTool,manageRecord,lifecycleCompleted,request:PigeAPI.request,download:PigeAPI.download,state,base,familyAssistFields,assistRequest,assistFields,assistEligible,assistCompany,setupCompany,setupCompanyFields,companyExtra,setupLookup,readStudentDocument,readResponsibleDocument,editIntake,mfa:PigeMFA,dossier,selectedPersonTypes,availablePersonTypes,togglePersonType,lockedPersonType,familyRelevant,manageMFA,editMFAPolicy,editEmbedding,probeEmbedding,editMyProfile,myPhotoChange,profilePassword,registryPages,integrationPages,businessTypes,isBusiness,newBusiness,reusePerson,personDocument,modalSections,modalTab,visibleSection,modalFieldLabel,modalFieldRelevant,advancedPersonField,isPersonModal,personTypeOptions,personTypeLabel,modalDirty,contractDirty,identity:PigeInstitution.state,supportStatus:PigeSupport.status,editIdentity,identityFileChange,manageUnits,editMaintainer,text,can,isProfileRole,school,label,enrollmentLabel,date,cpf,initials,photoSrc,getName,options,pageLabels,catalogLabels,configure,login,logout,navigate,changeSchool,setCatalog,search,page,loadPage,openSogoWebmail,webmailFrameLoaded,saveWebmailPreference,saveWebmailDefault,legacyImportFileChange,previewLegacyImport,applyLegacyImport,populatedImportTables,downloadLegacyArchive,viewStudent,newPerson,newStudent,editStudent,newGuardian,newTeacher,editTeacher,newEmployee,editEmployee,editPerson,newCatalog,newEnrollment,viewEnrollment,contractsForEnrollment,startMovement,reenroll,newLink,enrollmentLinkStudentId,linkFromEnrollment,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,editSupportHub,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,protocolReceipt,exportPendencies,install,updateApp};
+  return {rail,portalRole,openPortalAccess,printStaff,editorPhoto,personPhotoChange,viewPersonRecord,recordKind,recordTabs,recordDetails,editRecord,closePersonRecord,moreRecordFamily,openSiteEditor,studentList,studentSection,selectSchool,taskState,openDesk,closeDesk,closeOtherDesks,selectWorkspaceTab,toggleMenuGroup,toggleSidebar,sidebarRail,resumeForm,keyTabs,scrollTabs,pageAllowed,loadShell,landingPage,safe,initialize,setupPWA,dispose,afterMFA,dialogHost,academicPrepared,importedDataChanged,openCamera,photoCaptured,documentPages,configurationPages,supportAreas,supportAreaLabels,refreshAccess,isEnrollmentForm,enrollmentStudent,enrollmentClass,administrationPages,institutionTabs,catalogDescriptions,adminTool,manageRecord,lifecycleCompleted,request:PigeAPI.request,download:PigeAPI.download,state,base,familyAssistFields,assistRequest,assistFields,assistEligible,assistCompany,setupCompany,setupCompanyFields,companyExtra,setupLookup,readStudentDocument,readResponsibleDocument,editIntake,mfa:PigeMFA,dossier,selectedPersonTypes,availablePersonTypes,togglePersonType,lockedPersonType,familyRelevant,manageMFA,editMFAPolicy,editEmbedding,probeEmbedding,editMyProfile,myPhotoChange,profilePassword,registryPages,integrationPages,businessTypes,isBusiness,newBusiness,reusePerson,personDocument,modalSections,modalTab,visibleSection,modalFieldLabel,modalFieldRelevant,advancedPersonField,isPersonModal,personTypeOptions,personTypeLabel,modalDirty,contractDirty,identity:PigeInstitution.state,supportStatus:PigeSupport.status,editIdentity,identityFileChange,manageUnits,editMaintainer,text,can,isProfileRole,school,label,enrollmentLabel,date,cpf,initials,photoSrc,getName,options,dashboardIcon,openDashboardItem,pageLabels,catalogLabels,configure,login,logout,requestLogout,navigate,changeSchool,setCatalog,search,page,loadPage,openSogoWebmail,webmailFrameLoaded,saveWebmailPreference,saveWebmailDefault,legacyImportFileChange,previewLegacyImport,applyLegacyImport,populatedImportTables,downloadLegacyArchive,viewStudent,newPerson,newStudent,editStudent,newGuardian,newTeacher,editTeacher,newEmployee,editEmployee,editPerson,newCatalog,newEnrollment,viewEnrollment,contractsForEnrollment,startMovement,reenroll,newLink,enrollmentLinkStudentId,linkFromEnrollment,editLink,uploadDocument,fileChange,reviewDocument,waiveDocument,issueDocument,downloadFile,newProtocol,newCompany,newSchool,editSupportHub,password,archiveStudent,closeModal,saveModal,loadReport,exportStudents,exportClass,searchStudents,searchPersons,filteredClasses,clearFilters,yearChanged,editDraft,viewProtocol,protocolNote,timestamp,protocolReceipt,replyProtocol,startPortalProtocol,protocolLabels,protocolQueryChanged,searchProtocolRequesters,chooseProtocolRequester,eligibleProtocolStudents,syncProtocolStudent,protocolNoticeLabel,protocolEvents,protocolAttachment,exportPendencies,install,updateApp};
   }
   const components={'educacenso-panel':PigeEducacenso.component,'contract-value-field':PigeContractFields.component,'enrollment-workflow':PigeEnrollmentWorkflow.component,'academic-preparation':PigeAcademicPreparation.component,'notification-email':PigeNotificationEmail.component,'camera-capture':PigeCamera.component,'users-panel':PigeUsers.component,'institutional-email':PigeEmail.component,'audit-panel':PigeAudit.component,'lifecycle-panel':PigeLifecycle.component,'mailcow-panel':PigeMailcow.component,'school-community':PigeCommunity.component,'learning-panel':PigeLearning.component,'reports-panel':PigeReports.component,'legacy-import-panel':PigeLegacyImport.component,'diagnostics-panel':PigeDiagnostics.component,'expansion-panel':PigeExpansion.component,'diary-panel':PigeDiary.component,'contracts-panel':PigeContracts.component,'signing-panel':PigeSigning.component,'assist-panel':PigeAssist.component};
   function mountDesk(page:string,shared?:DeskContext,portalTarget?:PigeUsers.PortalTarget):Desk {
@@ -1511,6 +1753,7 @@ namespace PigeUI {
     }
     const app=Vue.createApp({components,render:PigeRenders.app,setup(){
       if(layer)Vue.provide('school-dialog-host',layer);
+      if(!shared){Vue.onUnmounted(rail.dispose);Vue.onMounted(rail.mount);}
       if(!shared)Vue.onMounted(()=>{PigeMFA.init(PigeAPI.request,context.afterMFA,context.logout);PigeDialogs.install();context.setupPWA();void context.initialize();});
       return context;
     }});
@@ -1524,7 +1767,9 @@ namespace PigeUI {
         if(field instanceof HTMLElement&&field.matches('input,textarea,select,[contenteditable="true"]')&&!desk.changed.has(field))desk.initial.set(field,fieldValue(field));
       });
       for(const event of ['input','change'])node.addEventListener(event,e=>{
-        if((e.target as HTMLElement).closest('form,[role="dialog"],textarea,[contenteditable="true"]'))desk.changed.add(e.target as HTMLElement);
+        const field=e.target;
+        if(!(field instanceof HTMLElement)||field.closest('.filter-bar,[data-workspace-filter]'))return;
+        if(field.closest('form,[role="dialog"],textarea,[contenteditable="true"]'))desk.changed.add(field);
       });
       app.mount(mount);
     }else app.mount('#app');

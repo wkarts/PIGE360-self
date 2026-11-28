@@ -142,7 +142,7 @@ try:
                 expect(dialog.locator('.form-section')).to_have_count(3)
                 expect(dialog.get_by_role('navigation', name='Seções do cadastro')).to_have_count(0)
                 dialog.get_by_role('button', name='Salvar rascunho', exact=True).click()
-                expect(dialog.get_by_role('alert')).to_contain_text('Revise o campo: Aluno')
+                expect(dialog.get_by_role('alert')).to_contain_text('Aluno · Selecione uma opção.')
                 expect(dialog.get_by_label('Aluno', exact=True)).to_be_focused()
                 checks.append('Modal amplo no desktop com três seções visíveis e validação do aluno antes de enviar.')
                 dialog.get_by_role('button', name='Fechar janela').click()
@@ -279,10 +279,22 @@ try:
                 form.get_by_label('Filtrar alunos', exact=True).fill('Gabriel')
                 form.get_by_label('Aluno', exact=True).select_option(counter_student['id'])
                 form.get_by_label('Turma de destino').select_option(group['id'])
-                counter.on('dialog', lambda prompt: prompt.accept())
-                form.get_by_role('button', name='Efetivar matrícula').click()
-                expect(form.get_by_role('alert')).to_contain_text('responsável legal')
+                activation_requests = []
+                counter.on('request',lambda req: activation_requests.append(req.url) if req.method=='POST' and '/enrollments?activate=true' in req.url else None)
+                activate = form.get_by_role('button', name='Efetivar matrícula', exact=True)
+                decision = counter.get_by_role('dialog', name='Efetivar matrícula?', exact=True)
                 lookup = base + '/enrollments?student_id=' + counter_student['id']
+                activate.click()
+                expect(decision).to_be_visible()
+                expect(decision.get_by_role('button', name='Voltar')).to_be_focused()
+                counter.keyboard.press('Escape')
+                expect(activate).to_be_focused()
+                expect(form.get_by_label('Turma de destino')).to_have_value(group['id'])
+                assert client.get(lookup, headers=headers).json()['total'] == 0
+                assert not activation_requests
+                activate.click()
+                decision.get_by_role('button', name='Efetivar matrícula').click()
+                expect(form.get_by_role('alert')).to_contain_text('responsável legal')
                 assert client.get(lookup, headers=headers).json()['total'] == 0
                 counter.screenshot(path=str(OUT/'balcao-pendencia.png'))
                 form.get_by_role('button', name='Vincular ou revisar responsável').click()
@@ -298,9 +310,12 @@ try:
                 form.get_by_role('button', name='Editar Helena', exact=False).click()
                 form.get_by_label('Responsável financeiro', exact=True).check()
                 form.get_by_role('button', name='Salvar', exact=True).click()
-                form.get_by_role('button', name='Efetivar matrícula').click()
+                assert len(activation_requests) == 1  # Tentativa legítima que exigiu vínculo legal.
+                activate.evaluate('button => {button.click();button.click()}')
+                decision.get_by_role('button', name='Efetivar matrícula').click()
                 expect(counter.get_by_text('Matrícula efetivada. A vaga está ocupada.')).to_be_visible()
                 rows = client.get(lookup, headers=headers).json()
+                assert len(activation_requests) == 2
                 assert rows['total'] == 1 and rows['items'][0]['status'] == 'active'
                 assert rows['items'][0]['class_group_id'] == group['id']
                 counter.screenshot(path=str(OUT/'balcao-efetivado.png'))

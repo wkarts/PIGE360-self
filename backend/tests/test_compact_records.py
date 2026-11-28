@@ -9,6 +9,7 @@ from app import models as m
 from app.db import SessionLocal
 from app.documents import write_file
 from test_school_report_kit import artwork, assert_document
+from test_profiles import create_user, login
 
 
 @pytest.mark.parametrize('orientation', ['portrait', 'landscape'])
@@ -85,3 +86,48 @@ def test_long_records_repeat_data_without_orphan_notice(api, tmp_path):
     assert all('Atribuições' in text or 'Dados da matrícula' in text for text in pages)
     assert sum(text.count('Não contém assinatura digital') for text in pages) == 1
     assert sum(text.count('Carimbo de identificação institucional') for text in pages) == 1
+
+
+@pytest.mark.parametrize('orientation', ['portrait', 'landscape'])
+def test_teacher_record_paginates_long_training_and_prints_full_issuer(api, orientation):
+    training = [f'Módulo {index:03} — Ciências e educação.' for index in range(1, 110)]
+    areas = [f'Área {index:03} — Prática docente.' for index in range(1, 100)]
+    person = api.post('/person-dossiers', {
+        'person': {'name': 'Maria de Assunção', 'person_types': ['teacher']},
+        'profiles': {'teacher': {'data': {'specialization': '\n'.join(training), 'teaching_areas': '\n'.join(areas)}}},
+    }, 200)['person']
+    issuer = 'Maria Antônia de Araújo Gonçalves e Albuquerque de Oliveira Monteiro do Nascimento e Silva Figueiredo'
+    email = f'operador-ficha-{orientation}@example.com'
+    create_user(api.client, api.headers, name=issuer, email=email, role='secretary', school_id=api.school['id'], person_id=None)
+    headers = login(api.client, email, 'Profile-Test-Password-2026!')
+    response = api.client.get(f"{api.base}/persons/{person['id']}/records/teacher.pdf?orientation={orientation}", headers=headers)
+    assert response.status_code == 200
+    pages = PdfReader(BytesIO(response.content)).pages
+    assert len(pages) > 1
+    page_texts = [' '.join(page.extract_text().split()) for page in pages]
+    assert all(text.count('Formação e habilitação') <= 1 for text in page_texts)
+    assert all(issuer in text for text in page_texts)
+    combined = ' '.join(page_texts)
+    assert all(combined.count(line) == 1 for line in training + areas)
+    assert combined.count('Não contém assinatura digital') == 1
+
+
+def test_last_record_page_keeps_notes_and_signatures_together(api):
+    group = api.catalogs()['group']
+    student = api.student('Marina da Escola Fictícia')
+    # Em A4 paisagem, as 31 linhas deixam a última linha na margem útil.
+    notes = '\n'.join(f'Conferência escolar {i:03} realizada.' for i in range(31))
+    enrollment = api.post('/enrollments', {
+        'student_id': student['id'], 'class_group_id': group['id'],
+        'enrolled_on': '2026-09-21', 'notes': notes,
+    })
+    issued = api.post(f"/students/{student['id']}/issued-documents", {
+        'kind': 'enrollment_form', 'orientation': 'landscape', 'enrollment_id': enrollment['id'],
+    })
+    content = api.get(f"/files/{issued['file_id']}/download").content
+    pages = PdfReader(BytesIO(content)).pages
+    assert len(pages) == 2
+    final = pages[-1].extract_text()
+    assert 'Conferência escolar 030 realizada.' in final
+    assert 'Carimbo de identificação institucional' in final
+    assert 'Assinatura da instituição / Secretaria' in final

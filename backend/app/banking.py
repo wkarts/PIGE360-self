@@ -46,7 +46,7 @@ def effective_status_expression():
     return case((and_(m.BankCharge.collection_mode=='manual',m.BankCharge.status=='pending',m.BankCharge.due_on<school_today()),'overdue'),else_=m.BankCharge.status)
 
 def safe_invoice_url(value):
-    if not isinstance(value,str):return ''
+    if not isinstance(value,str) or len(value)>2048 or any(char.isspace() or ord(char)<32 or ord(char)==127 or char==chr(92) for char in value):return ''
     try:
         url=urlsplit(value)
         host=url.hostname or ''
@@ -105,6 +105,7 @@ def apply_remote(db,charge,payment,source):
     old=charge.status
     state='cancelled' if payment.get('deleted') else STATUS.get(payment.get('status'),'awaiting_review')
     if payment.get('billingType')=='RECEIVED_IN_CASH' and state=='received':state='received_external'
+    charge.last_synced_at=now()
     # Uma observação antiga de pendência não desfaz um recebimento conciliado.
     if old in ('received','received_external') and state in ('pending','confirmed','overdue'):
         return charge
@@ -113,7 +114,7 @@ def apply_remote(db,charge,payment,source):
         # Uma via removida para confirmar dinheiro externo conserva a baixa local e o comprovante.
         return charge
     charge.remote_payment_id=str(payment['id']);charge.remote_customer_id=str(payment.get('customer') or charge.remote_customer_id)
-    charge.status=state;charge.last_synced_at=now();charge.version+=1
+    charge.status=state;charge.version+=1
     charge.invoice_url=safe_invoice_url(payment.get('invoiceUrl',''))
     charge.bank_slip_url=safe_invoice_url(payment.get('bankSlipUrl',''))
     if state not in ('pending','overdue'):

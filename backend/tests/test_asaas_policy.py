@@ -143,3 +143,81 @@ def test_adjust_and_restore_reuse_original_provider_id(online, monkeypatch):
     restored = o['api'].post(url + '/reactivate', restore, 200)['charge']
     assert (restored['remote_payment_id'], restored['status']) == (remote.remote_payment_id, 'pending')
     assert len(edits) == 2 and edits == ['PUT', 'restore']
+
+
+def test_reconcile_recent_receipts_with_school_settings(online, monkeypatch):
+    from datetime import timedelta
+    from sqlalchemy import select
+    from app import models as m
+    from app.db import SessionLocal, now
+    from app.integration_worker import process_one, schedule_reconciliations
+
+    o = online
+    bank(o)
+    api = o['api']
+    url = '/banking/asaas/settings'
+    application = submit(o, draft(o))
+    calls, store = provider_mock(monkeypatch, status='RECEIVED')
+    receipts = [run_issue(charge(o, application))[0] for _ in range(3)]
+    current_time = now()
+    with SessionLocal.begin() as db:
+        for receipt, age, last_sync in zip(receipts, [40, 3, 2], [40, 4, 3], strict=True):
+            db.get(m.BankCharge, receipt.id).last_synced_at = current_time - timedelta(days=last_sync)
+            event = db.scalars(select(m.BankEvent).where(
+                m.BankEvent.charge_id == receipt.id, m.BankEvent.status == 'received'
+            )).one()
+            event.created_at = current_time - timedelta(days=age)
+
+    def periodic_jobs():
+        with SessionLocal() as db:
+            return list(db.scalars(select(m.IntegrationJob).where(
+                m.IntegrationJob.school_id == o['account']['school_id'],
+                m.IntegrationJob.dedupe_key.like('bank-periodic:%')
+            ).order_by(m.IntegrationJob.created_at)))
+
+    calls.clear()
+    schedule_reconciliations()
+    assert periodic_jobs() == []
+    initial = api.get(url)
+    assert initial['settings']['periodic_reconciliation_enabled'] is True
+    assert initial['settings']['settled_review_days'] == 0
+    assert initial['settings']['reconciliation_batch_size'] == 25
+    saved = api.call('PUT', url, {'version': initial['version'], 'settings': {
+        **initial['settings'], 'settled_review_days': 7, 'reconciliation_batch_size': 1
+    }})
+    legacy = {key: value for key, value in saved['settings'].items() if key in {
+        'card_enabled', 'pix_enabled', 'boleto_enabled'
+    }}
+    saved = api.call('PUT', url, {'version': saved['version'], 'settings': legacy})
+    assert saved['settings']['settled_review_days'] == 7
+    assert saved['settings']['reconciliation_batch_size'] == 1
+    schedule_reconciliations()
+    schedule_reconciliations()
+    first, = periodic_jobs()
+    assert first.kind == 'bank_sync' and first.dedupe_key.startswith('bank-periodic:' + receipts[1].id + ':')
+    # Uma pendência defasada do banco conserva a baixa e libera o próximo título do lote.
+    store['payments'][receipts[1].remote_payment_id]['status'] = 'PENDING'
+    assert process_one(first.id)
+    with SessionLocal() as db:
+        assert db.get(m.BankCharge, receipts[1].id).status == 'received'
+        assert db.get(m.IntegrationJob, first.id).status == 'completed'
+    assert [(path, method) for _, path, method, _, _ in calls] == [('/payments/' + receipts[1].remote_payment_id, 'GET')]
+    paused = api.call('PUT', url, {'version': saved['version'], 'settings': {
+        **saved['settings'], 'periodic_reconciliation_enabled': False
+    }})
+    schedule_reconciliations()
+    assert len(periodic_jobs()) == 1
+    api.call('PUT', url, {'version': paused['version'], 'settings': {
+        **paused['settings'], 'periodic_reconciliation_enabled': True
+    }})
+    schedule_reconciliations()
+    assert periodic_jobs()[1].dedupe_key.startswith('bank-periodic:' + receipts[2].id + ':')
+
+
+@pytest.mark.parametrize('field, value', [
+    ('settled_review_days', -1), ('settled_review_days', 366),
+    ('reconciliation_batch_size', 0), ('reconciliation_batch_size', 101)
+])
+def test_reconciliation_policy_bounds(field, value):
+    with pytest.raises(ValueError):
+        Policy(**{field: value})

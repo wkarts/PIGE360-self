@@ -218,6 +218,19 @@ try:
         page.locator('.notice-menu summary').click()
         expect(page.locator('.notice-popover').get_by_text('Renovação do certificado', exact=True)).to_be_visible()
         page.screenshot(path=str(OUT / 'aviso-topo-1440.png'), full_page=True)
+        page.locator('.notice-menu summary').click()
+        deactivate=workspace.get_by_role('button',name='Desativar certificado',exact=True)
+        deactivate.click()
+        decision=page.get_by_role('dialog',name='Desativar certificado A1?')
+        expect(decision).to_be_visible()
+        decision.get_by_role('button',name='Manter certificado').click()
+        assert client.get(base+'/signing-certificate/a1',headers=headers).json()['configured']
+        deactivate.click()
+        decision.get_by_role('button',name='Desativar',exact=True).click()
+        expect(workspace.get_by_text('Certificado A1 desativado.',exact=False)).to_be_visible()
+        assert not client.get(base+'/signing-certificate/a1',headers=headers).json()['configured']
+        assert client.get(base+'/issued-documents/'+issued_id+'/signatures',headers=headers).json()['cryptographic_valid']
+        record('Manter preserva o A1 e desativar interrompe novas assinaturas, preservando o documento escolar já assinado')
         assert not errors, errors
         browser.close()
     (OUT / 'results.json').write_text(json.dumps({'status': 'passed', 'checks': checks, 'errors': errors,

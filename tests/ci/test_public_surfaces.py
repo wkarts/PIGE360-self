@@ -85,6 +85,22 @@ class SurfaceTests(unittest.TestCase):
                         with self.subTest(teacher=teacher, route=route, method=method):
                             self.assertEqual(portal.allowed(prefix + route, method), teacher and method in methods)
 
+    def test_protocols_proxy_only_allows_the_requesters_surface_and_methods(self):
+        identifier='12345678-1111-2222-3333-123456789012'
+        operations={'':{'GET','POST'}, '/options':{'GET'}, '/opening-channel':{'PUT'}, '/'+identifier:{'GET'},
+                    f'/{identifier}/messages':{'POST'}, f'/{identifier}/channel':{'PATCH'},
+                    f'/{identifier}/attachments/{identifier}':{'GET'}, f'/{identifier}/notes':set(),
+                    '/other':set()}
+        for teacher in (True,False):
+            with patch.object(portal,'TEACHER_ONLY',teacher):
+                for surface in ('teacher','family'):
+                    base=f'/api/v1/{surface}/schools/{identifier}/protocols'
+                    for suffix,methods in operations.items():
+                        for method in ('GET','POST','PATCH','PUT','DELETE'):
+                            with self.subTest(teacher=teacher,surface=surface,suffix=suffix,method=method):
+                                self.assertEqual(portal.allowed(base+suffix,method),(surface=='teacher')==teacher and method in methods)
+                self.assertFalse(portal.allowed(f'/api/v1/schools/{identifier}/protocols/{identifier}/notes','POST'))
+
     def test_support_widget_portal_policy(self):
         path='/api/v1/schools/12345678-1111-2222-3333-123456789012/support-widget'
         for teacher in (True,False):

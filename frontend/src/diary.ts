@@ -11,7 +11,7 @@ namespace PigeDiary {
   const emptyPlan=(d?:Diary|null)=>({class_group_id:d?.class_group_id||'',component_id:d?.component_id||'',academic_period_id:'',teacher_assignment_id:d?.teacher_assignment_id||'',objectives:'',thematic_units:'',knowledge_objects:'',bncc_references:'',methodology:'',resources:'',assessment_strategy:'',notes:'',status:'draft'});
   type AssessmentResult={id?:string;version?:number;numeric_score:string|number|null;concept:string;note:string};
   type CommunicationRecipient={guardian_link_id:string;name:string;relationship:string;portal_account_count:number};
-  type Props={schoolId:string;schoolName?:string;catalogEnabled?:boolean;permissions:string[];teacherPortal?:boolean;allowMaterials?:boolean;requestedDiary?:{id:string;tab?:string}};
+  type Props={schoolId:string;schoolName?:string;catalogEnabled?:boolean;permissions:string[];teacherPortal?:boolean;allowMaterials?:boolean;requestedDiary?:{id:string;tab?:string;discardApproved?:boolean}};
   const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bahia',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   interface DiaryPage {id:string; label:string; tab:string; permission?:string}
   interface DiaryGroup {label:string; pages:DiaryPage[]}
@@ -52,8 +52,8 @@ namespace PigeDiary {
       diaries:[] as Diary[],selected:null as Diary|null,academicYears:[] as Row[],periods:[] as Row[],components:[] as Row[],groups:[] as Row[],assignments:[] as Row[],plans:[] as Row[],
       calendarIds:[] as string[],periodForm:{academic_year_id:'',class_group_id:'',name:'',starts_on:'',ends_on:'',order_index:1,active:true},
       fields:{version:0,fields:[],standard_columns:{}} as EntrySettings,configFields:[] as EntryField[],configVersion:0,newFieldLabel:'',restoreFieldId:'',newFieldScope:'lesson' as EntryScope,
-      componentEditing:null as Row|null,removalTarget:null as Row|null,removalReason:'',
-      lessonRemoval:false,lessonRemovalReason:'',lessonEditing:null as Row|null,planEditing:null as Row|null,lessonValues:{} as Record<string,string>,planValues:{} as Record<string,string>,
+      componentEditing:null as Row|null,
+      lessonEditing:null as Row|null,planEditing:null as Row|null,lessonValues:{} as Record<string,string>,planValues:{} as Record<string,string>,
       attendanceBase:{} as Record<string,{status:string;note:string}>,
       componentForm:{name:'',code:'',workload_hours:0,active:true},
       diaryForm:{class_group_id:'',component_id:'',teacher_assignment_id:'',notes:''},
@@ -98,13 +98,17 @@ namespace PigeDiary {
       catalog.target=row.id;catalog.impact=await PigeAPI.request<Impact>(base()+'/diary-catalog/'+row.id+'/impact');
       catalog.reason='';state.notice='Sugestão guardada em rascunho.';
     });}
-    function decide(action:'retire'|'publish'|'discard'){
+    async function decide(action:'retire'|'publish'|'discard'){
       const impact=catalog.impact;
       if(!impact || catalog.reason.trim().length<3)return;
       const verbs={retire:'Desativar',publish:'Publicar',discard:'Descartar'};
-      if(!window.confirm(verbs[action]+' este componente curricular?'))return;
+      const reason=catalog.reason, school=props.schoolId;
+      if(!await PigeDialogs.confirm(verbs[action]+' este componente curricular?',{
+        title:'Componente curricular',confirmLabel:verbs[action]+' componente',destructive:action!=='publish'
+      }))return;
+      if(!active || props.schoolId!==school || catalog.impact!==impact || catalog.reason!==reason)return;
       return run(async()=>{
-        await PigeAPI.post(base()+'/diary-catalog/'+impact.id+'/decisions',{action,version:impact.version,reason:catalog.reason});
+        await PigeAPI.post(base()+'/diary-catalog/'+impact.id+'/decisions',{action,version:impact.version,reason});
         catalog.impact=null;catalog.target='';catalog.reason='';await loadBase();await catalogList();
         state.notice='Decisão registrada no histórico do componente.';
       });
@@ -122,10 +126,12 @@ namespace PigeDiary {
     });
     const lessons=Vue.computed(()=>(state.selected?.lessons||[]).filter(
       lesson=>!pilot || !state.lessonPeriod || lesson.academic_period_id===state.lessonPeriod));
-    function filterPeriod(event:Event){
+    async function filterPeriod(event:Event){
       const select=event.target as HTMLSelectElement;
-      if(!mayLeave()){select.value=state.lessonPeriod;return;}
-      state.lessonPeriod=select.value;
+      const next=select.value;
+      select.value=state.lessonPeriod;
+      if(workspaceDirty.value && !await confirmLeave())return;
+      state.lessonPeriod=next;select.value=next;
       state.selectedLesson=null;
       syncLink();
     }
@@ -141,14 +147,22 @@ namespace PigeDiary {
       return url.pathname+url.search+url.hash;
     }
     function syncLink(){if(pilot)history.replaceState(history.state,'',pageLink(state.page));}
-    function mayLeave(){return !state.dirty || window.confirm('Continuar com alterações ainda não salvas no Diário?');}
-    function navigatePage(id:string,check=true){
+    let active=true;
+    async function confirmLeave(){
+      const selected=state.selected, page=state.page, school=props.schoolId;
+      const accepted=await PigeDialogs.confirm('Há alterações ainda não salvas no diário. Deseja continuar?',{
+        title:'Sair da edição do diário?',confirmLabel:'Continuar',cancelLabel:'Voltar à edição'
+      });
+      return accepted && active && props.schoolId===school && state.selected===selected && page===state.page;
+    }
+    function navigatePage(id:string){
       const page=navigation.value.flatMap(group=>group.pages).find(item=>item.id===id);
-      if(!page || (check && page.id!==state.page && !mayLeave()))return false;
+      if(!page)return false;
       state.page=page.id;state.tab=page.tab;
       return true;
     }
-    function go(id:string){
+    async function go(id:string){
+      if(id!==state.page && workspaceDirty.value && !await confirmLeave())return;
       if(navigatePage(id)){
         syncLink();if(id==='catalog')void run(catalogList);
       }
@@ -163,17 +177,16 @@ namespace PigeDiary {
       await action();
       if(!state.error && state.notice){draftPages.delete(page);state.dirty=draftPages.size>0;}
     }
-    function beforeUnload(event:BeforeUnloadEvent){if(workspaceDirty.value){event.preventDefault();event.returnValue='';}}
     function markDraft(event:Event){
       if(tracksDrafts && (event.target as Element).closest('form,.x-form,td')){
         draftPages.add(draftSection());state.dirty=true;
       }
     }
-    function chooseAnother(){
-      if(!mayLeave())return;
+    async function chooseAnother(){
+      if(workspaceDirty.value && !await confirmLeave())return;
       draftPages.clear();state.dirty=false;state.lessonPeriod='';state.selected=null;state.selectedLesson=null;syncLink();
     }
-    if(pilot && !navigatePage(initial.get('guia')||'dashboard',false))navigatePage('dashboard',false);
+    if(pilot && !navigatePage(initial.get('guia')||'dashboard'))navigatePage('dashboard');
     const str=(v:unknown)=>v==null?'':String(v);
     const date=(v:unknown)=>{const x=str(v);return x?new Intl.DateTimeFormat('pt-BR',{timeZone:'UTC'}).format(new Date(x.length===10?x+'T12:00:00Z':x)):'—';};
     const labels:Record<string,string>={archived:'Arquivado',open:'Aberto',draft:'Rascunho',submitted:'Enviado',reviewed:'Revisado',closed:'Fechado',present:'Presente',absent:'Falta',justified_absence:'Falta justificada',active:'Ativo',suspended:'Suspenso',published:'Publicada',final:'Final',pending:'Pendente',calculated:'Calculado',below_minimum:'Abaixo da média',attendance_below_minimum:'Frequência abaixo do mínimo',opinion_pending:'Parecer pendente',concept:'Conceito',follow_up:'Acompanhamento',intervention:'Intervenção',recovery:'Recuperação',adaptation:'Adaptação',referral:'Encaminhamento',observation:'Observação',positive:'Positiva',pedagogical:'Pedagógica',behavioral:'Comportamental',safety:'Segurança',other:'Outra',resultados_avaliativos_pendentes:'Há notas pendentes',sem_resultado_aplicavel:'Sem resultado aplicável',chamada_pendente:'Chamada pendente',conceito_fora_da_escala:'Conceito fora da escala',peso_avaliativo_ausente:'Peso não definido',resultado_numerico_ausente:'Nota não informada',frequencia_abaixo_do_limite:'Frequência abaixo do mínimo',parecer_final_pendente:'Parecer final pendente'};
@@ -225,8 +238,8 @@ namespace PigeDiary {
       state.communicationRecipients=[];
       state.communicationForm={enrollment_id:'',academic_period_id:'',occurrence_id:'',recipient_guardian_link_ids:[],title:'',message:'',client_key:PigeOnline.newId()};
     }
-    async function selectDiary(d:Diary){
-      if(state.selected?.id!==d.id && !mayLeave())return;
+    async function selectDiary(d:Diary,discardApproved=false){
+      if(state.selected?.id!==d.id && discardApproved!==true && workspaceDirty.value && !await confirmLeave())return;
       await run(async()=>{await loadDiary(d);
         draftPages.clear();state.dirty=false;state.lessonPeriod='';syncLink();});
     }
@@ -291,13 +304,21 @@ namespace PigeDiary {
       else await PigeAPI.post(endpoint,state.componentForm);
       resetComponent();await loadBase();state.notice=editing?'Componente curricular atualizado.':'Componente curricular criado.';
     });}
-    async function removeComponent(){const row=state.removalTarget;if(!row)return;await run(async()=>{
-      const result=await PigeAPI.post<{action:string}>(base()+'/curriculum-components/'+row.id+'/remove',
-        {version:row.version,reason:state.removalReason});
-      if(state.componentEditing?.id===row.id)resetComponent();
-      state.removalTarget=null;state.removalReason='';await loadBase();
-      state.notice=result.action==='retired'?'Componente desativado. Os vínculos históricos foram preservados.':'Componente sem vínculos removido.';
-    });}
+    async function removeComponent(row:Row){
+      if(state.busy||!can('diary.configure'))return;
+      const school=props.schoolId,version=row.version;
+      const reason=await PigeDialogs.prompt('Componentes com registros serão desativados. Componentes sem vínculos serão excluídos.',{
+        title:'Retirar '+row.name+'?',inputLabel:'Justificativa',minLength:3,maxLength:1000,
+        confirmLabel:'Confirmar retirada',destructive:true
+      });
+      if(reason===null||!active||props.schoolId!==school||!can('diary.configure')||!state.components.some(item=>item.id===row.id&&item.version===version))return;
+      await run(async()=>{
+        const result=await PigeAPI.post<{action:string}>(base()+'/curriculum-components/'+row.id+'/remove',{version,reason});
+        if(state.componentEditing?.id===row.id)resetComponent();
+        await loadBase();
+        state.notice=result.action==='retired'?'Componente desativado. Os vínculos históricos foram preservados.':'Componente sem vínculos removido.';
+      });
+    }
     const existingDiary=Vue.computed(()=>state.diaries.find(row=>row.class_group_id===state.diaryForm.class_group_id && row.component_id===state.diaryForm.component_id));
     const selectedComponent=Vue.computed(()=>state.components.find(row=>row.id===state.diaryForm.component_id));
     const matchingAssignments=Vue.computed(()=>{
@@ -313,8 +334,8 @@ namespace PigeDiary {
       state.diaryForm.teacher_assignment_id=existingDiary.value?.teacher_assignment_id||'';
       state.teacherSearch='';resetTeacherSearch();
     }
-    function configureTeacher(d:Diary){
-      if(pilot){go('new-diary');if(state.page!=='new-diary')return;}else state.tab='setup';
+    async function configureTeacher(d:Diary){
+      if(pilot){await go('new-diary');if(state.page!=='new-diary')return;}else state.tab='setup';
       state.diaryForm.class_group_id=d.class_group_id;state.diaryForm.component_id=d.component_id;
       syncDiaryAssignment();focusHeading('diary-assignment-heading');
     }
@@ -350,7 +371,7 @@ namespace PigeDiary {
       state.diaryForm={class_group_id:'',component_id:'',teacher_assignment_id:'',notes:''};
       state.teacherSearch='';resetTeacherSearch();
       await loadBase();await loadDiary(diary);
-      if(pilot){navigatePage('diaries',false);syncLink();}else state.tab='diaries';
+      if(pilot){navigatePage('diaries');syncLink();}else state.tab='diaries';
       state.notice=current?'Vínculo docente do diário atualizado.':'Diário aberto.';
     });}
     function focusHeading(id:string){
@@ -395,10 +416,13 @@ namespace PigeDiary {
       state.plans=await PigeAPI.request<Row[]>(endpoint+'?class_group_id='+encodeURIComponent(f.class_group_id)+'&component_id='+encodeURIComponent(f.component_id));
       resetPlan();state.notice=editing?'Planejamento atualizado.':'Planejamento registrado.';
     });}
-    function resetLesson(){state.lessonRemoval=false;state.lessonRemovalReason='';state.lessonEditing=null;state.lessonValues={};state.lessonForm=emptyLesson();}
-    function editLesson(row:Lesson){
-      if(pilot && state.page!=='diaries' && !navigatePage('diaries'))return;
-      syncLink();state.lessonRemoval=false;state.lessonRemovalReason='';state.lessonEditing=row;state.lessonValues=editableValues(row,'lesson');
+    function resetLesson(){state.lessonEditing=null;state.lessonValues={};state.lessonForm=emptyLesson();}
+    async function editLesson(row:Lesson){
+      if(pilot && state.page!=='diaries'){
+        await go('diaries');
+        if(state.page!=='diaries')return;
+      }
+      syncLink();state.lessonEditing=row;state.lessonValues=editableValues(row,'lesson');
       const {academic_period_id,lesson_date,lesson_count,content,skills,methodology,activities,homework,notes}=row;
       state.lessonForm={academic_period_id:academic_period_id||'',lesson_date,lesson_count,content,skills,methodology,activities,homework,notes};
       focusHeading('diary-lesson-heading');
@@ -413,10 +437,15 @@ namespace PigeDiary {
     });}
     async function removeLesson(){
       const diary=state.selected,lesson=state.lessonEditing;
-      if(!diary || !lesson || !state.lessonRemoval || state.lessonRemovalReason.trim().length<3)return;
+      if(!diary||!lesson||state.busy||diary.status!=='open'||!can('diary.write'))return;
+      const school=props.schoolId,version=lesson.version;
+      const reason=await PigeDialogs.prompt('Somente aulas sem chamada e sem fechamento anterior podem ser removidas.',{
+        title:'Remover aula de '+date(lesson.lesson_date)+'?',inputLabel:'Justificativa',minLength:3,maxLength:1000,
+        confirmLabel:'Confirmar remoção da aula',destructive:true
+      });
+      if(reason===null||!active||props.schoolId!==school||state.selected!==diary||diary.status!=='open'||!can('diary.write')||state.lessonEditing!==lesson||lesson.version!==version)return;
       await run(async()=>{
-        await PigeAPI.post(base()+'/diaries/'+diary.id+'/lessons/'+lesson.id+'/remove',
-          {version:lesson.version,reason:state.lessonRemovalReason});
+        await PigeAPI.post(base()+'/diaries/'+diary.id+'/lessons/'+lesson.id+'/remove',{version,reason});
         resetLesson();await loadDiary(diary);state.notice='Aula removida do diário.';
       });
     }
@@ -435,12 +464,19 @@ namespace PigeDiary {
     function markPendingPresent(){
       for(const row of state.attendance)if(row.attendance && !row.attendance.status)row.attendance.status='present';
     }
-    function closeAttendance(){
-      if(changedAttendance.value.length && !window.confirm('Descartar as alterações desta chamada?'))return false;
+    async function confirmDiscardAttendance(){
+      const lesson=state.selectedLesson, selected=state.selected;
+      const accepted=await PigeDialogs.confirm('As presenças, faltas e justificativas em edição serão descartadas.',{
+        title:'Descartar as alterações desta chamada?',confirmLabel:'Descartar alterações',destructive:true
+      });
+      return accepted && active && state.selectedLesson===lesson && state.selected===selected;
+    }
+    async function closeAttendance(){
+      if(changedAttendance.value.length && !await confirmDiscardAttendance())return false;
       state.selectedLesson=null;state.attendance=[];state.attendanceBase={};return true;
     }
     async function openAttendance(lesson:Lesson){
-      if(!state.selected || (state.selectedLesson && !closeAttendance()))return;
+      if(!state.selected || (state.selectedLesson && changedAttendance.value.length && !await confirmDiscardAttendance()))return;
       await run(async()=>{await fetchAttendance(lesson);focusHeading('diary-attendance-heading');});
     }
     async function saveAttendance(){
@@ -532,20 +568,22 @@ namespace PigeDiary {
     async function printMaterial(id:string){if(state.selected)await run(()=>PigeAPI.download(base()+'/diaries/'+state.selected!.id+'/materials/'+id+'/print.pdf','material-escolar.pdf'));}
     async function report(){if(state.selected)await run(()=>{const q=new URLSearchParams();if(['attendance','pedagogical_register'].includes(state.reportType)){if(state.reportFrom)q.set('date_from',state.reportFrom);if(state.reportTo)q.set('date_to',state.reportTo);}if(state.reportPeriod)q.set('academic_period_id',state.reportPeriod);if(state.reportType==='student_record'&&state.reportEnrollment)q.set('enrollment_id',state.reportEnrollment);const query=q.toString();return PigeAPI.download(base()+'/diaries/'+state.selected!.id+'/reports/'+state.reportType+'.pdf'+(query?'?'+query:''),'diario-'+state.reportType+'.pdf');});}
     let handled:Props['requestedDiary'];
-    function openRequestedDiary():void {
+    async function openRequestedDiary():Promise<void> {
       const request=props.requestedDiary;
       if(!request||handled===request||state.busy||(request.tab==='materials'&&!materialsAllowed()))return;
       const diary=state.diaries.find(item=>item.id===request.id);
       if(!diary)return;
       handled=request;
-      if(pilot){navigatePage(request.tab||'diaries',false);syncLink();}else state.tab=request.tab==='attendance'?'diaries':request.tab||'diaries';
-      const loaded=state.selected?.id!==diary.id?selectDiary(diary):Promise.resolve();
-      if(request.tab==='attendance')void loaded.then(()=>focusHeading('diary-lessons-heading'));
+      if(state.selected?.id!==diary.id){
+        await selectDiary(diary,request.discardApproved===true);
+        if(!active || props.requestedDiary!==request || state.selected?.id!==diary.id)return;
+      }else if(!request.discardApproved && workspaceDirty.value && state.page!==request.tab && !await confirmLeave())return;
+      if(pilot){navigatePage(request.tab||'diaries');syncLink();}else state.tab=request.tab==='attendance'?'diaries':request.tab||'diaries';
+      if(request.tab==='attendance')focusHeading('diary-lessons-heading');
     }
     Vue.watch(()=>props.requestedDiary,openRequestedDiary);
     Vue.watch(()=>state.busy,openRequestedDiary);
     Vue.onMounted(async()=>{
-      if(tracksDrafts)window.addEventListener('beforeunload',beforeUnload);
       await load();
       if(pilot && state.page==='catalog')await run(catalogList);
       if(props.requestedDiary){openRequestedDiary();return;}
@@ -561,7 +599,7 @@ namespace PigeDiary {
         else syncLink();
       }
     });
-    Vue.onUnmounted(()=>{if(tracksDrafts)window.removeEventListener('beforeunload',beforeUnload);});
+    Vue.onUnmounted(()=>{active=false;});
     return{props,state,workspaceDirty,existingDiary,matchingAssignments,configureTeacher,syncDiaryAssignment,resetTeacherSearch,searchTeachers,compositionDirty,setComposition,restorableFields,restoreField,addField,moveField,saveFields,editComponent,resetComponent,removeComponent,editLesson,resetLesson,removeLesson,editPlan,resetPlan,storedFields,markPendingPresent,pendingAttendance,changedAttendance,closeAttendance,periodsFor,loadCalendar,saveCalendar,pilot,catalog,catalogImpact,suggest,decide,lessons,filterPeriod,save,navigation,activeGroup,filteredDiaries,pageLink,go,show,chooseAnother,markDraft,publishMaterial,printMaterial,can,str,date,label,load,selectDiary,loadCommunicationRecipients,communicationOccurrenceChanged,sendCommunication,createPeriod,createComponent,createDiary,createPlan,createLesson,openAttendance,saveAttendance,createAssessment,editAssessment,cancelAssessmentEdit,openAssessment,saveAssessmentResults,saveOpinion,createPedagogicalRecord,submitDiary,reviewDiary,closeDiary,resumeDiary,reopenDiary,report,selectRulePeriod,saveAssessmentRule,loadPeriodResults,consolidatePeriod,saveOccurrence};
   }};
 }

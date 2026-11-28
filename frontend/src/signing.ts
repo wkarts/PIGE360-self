@@ -19,7 +19,7 @@ namespace PigeSigning {
       busy:false,loading:false,error:'',notice:'',
       alerts:{email_enabled:false,whatsapp_enabled:false,email:'',phone_available:false},
       configured:false,certificate:null as Certificate|null,certificateName:'',certificatePassword:'',
-      pending:[] as QueueItem[],pendingTotal:0,offset:0,limit:30,unsigned:[] as QueueItem[],unsignedTotal:0,unsignedOffset:0,removeCertificateOpen:false,
+      pending:[] as QueueItem[],pendingTotal:0,offset:0,limit:30,unsigned:[] as QueueItem[],unsignedTotal:0,unsignedOffset:0,
       enrollmentIssued:[] as Row[],review:null as Review|null,reviewTitle:'',
       reportName:'',signerCpf:'',validationReference:'',confirmedReview:false,rejectionReason:''
     });
@@ -90,8 +90,17 @@ namespace PigeSigning {
       });
       clearCertificateInput();
     }
-    async function removeCertificate():Promise<void>{if(!isMode('certificate')||!canManageA1())return;
-      await run(async()=>{await request('/signing-certificate/a1',{method:'DELETE'});await loadCertificate();state.removeCertificateOpen=false;state.notice='Certificado A1 desativado. Cadastre um certificado válido para realizar novas assinaturas.';});
+    async function removeCertificate():Promise<void>{
+      if(!isMode('certificate')||!canManageA1()||!state.configured||!state.certificate)return;
+      await run(async()=>{
+        const fingerprint=state.certificate!.certificate_sha256;
+        const approved=await PigeDialogs.confirm('As próximas assinaturas exigirão um novo certificado A1. Os documentos já assinados serão preservados.',
+          {title:'Desativar certificado A1?',confirmLabel:'Desativar',cancelLabel:'Manter certificado',destructive:true});
+        if(!approved||!isCurrent()||!canManageA1()||!state.configured||!state.certificate||state.certificate.certificate_sha256!==fingerprint)return;
+        await request('/signing-certificate/a1',{method:'DELETE'});
+        await loadCertificate();
+        state.notice='Certificado A1 desativado. Cadastre um certificado válido para realizar novas assinaturas.';
+      });
     }
     async function page(delta:number):Promise<void>{const next=state.offset+delta*state.limit;if(next<0||next>=state.pendingTotal)return;state.offset=next;await run(loadPending);}
     async function download(fileId:string,name='documento-assinado.pdf'):Promise<void>{await run(()=>PigeAPI.download(base()+'/files/'+fileId+'/download',name));}

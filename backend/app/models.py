@@ -126,6 +126,7 @@ class SchoolAccess(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     teacher_routines: Mapped[list[str] | None] = mapped_column(JSON(none_as_null=True))
+    protocol_opening_channel: Mapped[str] = mapped_column(String(16), default='portal', server_default='portal')
     portability_granted: Mapped[bool] = mapped_column(Boolean,default=False,server_default='false')
     access_profile_id: Mapped[str | None] = mapped_column(ForeignKey('school_access_profiles.id'), index=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -456,6 +457,10 @@ class IssuedDocument(Record, Scoped, Base):
 
 class Protocol(Record, Scoped, Base):
     __tablename__ = 'protocols'
+    requester_user_id: Mapped[str | None] = mapped_column(ForeignKey('users.id'))
+    source: Mapped[str] = mapped_column(String(16), default='manager', server_default='manager')
+    category: Mapped[str] = mapped_column(String(24), default='', server_default='')
+    preferred_channel: Mapped[str] = mapped_column(String(16), default='portal', server_default='portal')
     number: Mapped[str] = mapped_column(String(40))
     student_id: Mapped[str | None] = mapped_column(ForeignKey('students.id'))
     kind: Mapped[str] = mapped_column(String(120))
@@ -463,7 +468,9 @@ class Protocol(Record, Scoped, Base):
     status: Mapped[str] = mapped_column(String(24), default='open')
     due_on: Mapped[date | None] = mapped_column(Date)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    __table_args__ = (UniqueConstraint('school_id', 'number'),)
+    __table_args__ = (UniqueConstraint('school_id', 'number'),
+                      Index('ix_protocol_requester_queue', 'school_id', 'requester_user_id', 'updated_at'),
+                      Index('ix_protocol_school_activity', 'school_id', 'updated_at', 'id'))
 
 class AuditEvent(Record, Base):
     __tablename__ = 'audit_events'
@@ -489,6 +496,11 @@ class ProtocolEvent(Record, Scoped, Base):
     actor_id: Mapped[str] = mapped_column(ForeignKey('users.id'))
     action: Mapped[str] = mapped_column(String(24))
     message: Mapped[str] = mapped_column(Text, default='')
+    visibility: Mapped[str] = mapped_column(String(12), default='internal', server_default='internal')
+    file_id: Mapped[str | None] = mapped_column(ForeignKey('files.id'))
+    client_key: Mapped[str | None] = mapped_column(String(36))
+    client_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    __table_args__ = (UniqueConstraint('school_id','actor_id','client_key',name='uq_protocol_post_key'),)
     before: Mapped[dict] = mapped_column(JSON, default=dict)
     after: Mapped[dict] = mapped_column(JSON, default=dict)
 

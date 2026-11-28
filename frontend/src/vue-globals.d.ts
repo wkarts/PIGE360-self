@@ -10,6 +10,6 @@ declare const Vue: {
   watch<T>(source: () => T, callback: (value: T, previous: T) => void): () => void;
   computed<T>(getter: () => T): { readonly value: T };
 };
-declare const PigeRenders: { asaas: Function; educacenso: Function; contractValue: Function; enrollmentWorkflow: Function; academicPreparation: Function; notificationEmail: Function; familyPortal: Function; teacherPortal: Function; portalMail: Function; app: Function; camera: Function; users: Function; portal: Function; expansion: Function; diagnostics: Function; assist: Function; diary: Function; contracts: Function; signing: Function; reports: Function; legacyImport: Function; learning: Function; community: Function; news: Function; mailcow: Function; audit: Function; email: Function; lifecycle: Function };
+declare const PigeRenders: { asaas: Function; educacenso: Function; contractValue: Function; enrollmentWorkflow: Function; academicPreparation: Function; notificationEmail: Function; familyPortal: Function; teacherPortal: Function; portalMail: Function; portalProtocols: Function; actionDialog: Function; app: Function; camera: Function; users: Function; portal: Function; expansion: Function; diagnostics: Function; assist: Function; diary: Function; contracts: Function; signing: Function; reports: Function; legacyImport: Function; learning: Function; community: Function; news: Function; mailcow: Function; audit: Function; email: Function; lifecycle: Function };
 
 interface HTMLElement { moveBefore?(node:Node, before:Node|null):void }

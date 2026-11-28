@@ -13,6 +13,7 @@
   },
   "files": [
     "src/vue-globals.d.ts",
+    "src/sidebar-rail.ts",
     "src/institution.ts",
     "src/api.ts",
     "src/support-widget.ts",
@@ -22,6 +23,7 @@
     "src/expansion.ts",
     "src/dialogs.ts",
     "src/workspace.ts",
+    "src/portal-tabs.ts",
     "src/mfa.ts",
     "src/dossiers.ts",
     "src/camera.ts",

@@ -1,4 +1,373 @@
 "use strict";
+var PigeDialogs;
+(function (PigeDialogs) {
+    let contextVersion = 0;
+    let pending;
+    function cancelPending() { contextVersion++; pending?.cancel(); }
+    PigeDialogs.cancelPending = cancelPending;
+    function ask(kind, message, options) {
+        // Um segundo acionamento não pode aproveitar a decisão do primeiro.
+        if (pending) {
+            if (kind !== 'alert')
+                return Promise.resolve(null);
+            if (pending.kind === 'alert' && pending.message === message)
+                return pending.closed.then(() => null);
+            const version = contextVersion;
+            return pending.closed.then(() => version === contextVersion ? ask(kind, message, options) : null);
+        }
+        const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const minimum = Math.max(0, options.minLength || 0);
+        const maximum = options.maxLength;
+        const state = Vue.reactive({ value: options.initialValue || '', error: '' });
+        let signalClosed;
+        const closed = new Promise(resolve => { signalClosed = resolve; });
+        return new Promise(resolve => {
+            function finish(accepted) {
+                if (pending?.cancel !== cancel)
+                    return;
+                if (accepted && kind !== 'alert' && opener && !opener.isConnected)
+                    accepted = false;
+                if (accepted && kind === 'prompt' && state.value.trim().length < minimum) {
+                    state.error = 'Informe pelo menos ' + minimum + (minimum === 1 ? ' caractere.' : ' caracteres.');
+                    dialog.querySelector('textarea')?.focus();
+                    return;
+                }
+                if (accepted && kind === 'prompt' && maximum !== undefined && state.value.length > maximum) {
+                    state.error = 'Use no máximo ' + maximum + (maximum === 1 ? ' caractere.' : ' caracteres.');
+                    dialog.querySelector('textarea')?.focus();
+                    return;
+                }
+                pending = undefined;
+                window.removeEventListener('pagehide', cancelPending);
+                window.removeEventListener('popstate', cancelPending);
+                window.removeEventListener('hashchange', cancelPending);
+                dialog.close();
+                app.unmount();
+                host.remove();
+                if (opener?.isConnected)
+                    opener.focus({ preventScroll: true });
+                resolve(accepted ? (kind === 'prompt' ? state.value : 'ok') : null);
+                signalClosed();
+            }
+            const cancel = () => finish(false);
+            const app = Vue.createApp({ render: PigeRenders.actionDialog, setup: () => ({
+                    kind, message, minimum, maximum, state, finish,
+                    title: options.title || ({ confirm: 'Confirmar ação', alert: 'Aviso', prompt: 'Informe um valor' })[kind],
+                    inputLabel: options.inputLabel || 'Resposta',
+                    confirmLabel: options.confirmLabel || (kind === 'alert' ? 'Entendi' : 'Confirmar'),
+                    cancelLabel: options.cancelLabel || 'Voltar', destructive: Boolean(options.destructive),
+                }) });
+            app.mount(host);
+            const dialog = host.querySelector('dialog');
+            dialog.addEventListener('keydown', event => {
+                if (event.key !== 'Tab')
+                    return;
+                const controls = dialog.querySelectorAll('button,textarea');
+                const first = controls[0], last = controls[controls.length - 1];
+                if (event.shiftKey && document.activeElement === first) {
+                    event.preventDefault();
+                    last.focus();
+                }
+                if (!event.shiftKey && document.activeElement === last) {
+                    event.preventDefault();
+                    first.focus();
+                }
+            });
+            pending = { cancel, closed, kind, message };
+            window.addEventListener('pagehide', cancelPending);
+            window.addEventListener('popstate', cancelPending);
+            window.addEventListener('hashchange', cancelPending);
+            dialog.showModal();
+            const selector = kind === 'prompt' ? 'textarea' : kind === 'alert' ? '[type="submit"]' : '[data-dialog-back]';
+            dialog.querySelector(selector)?.focus({ preventScroll: true });
+        });
+    }
+    async function confirm(message, options = {}) {
+        return await ask('confirm', message, options) !== null;
+    }
+    PigeDialogs.confirm = confirm;
+    async function alert(message, options = {}) {
+        await ask('alert', message, options);
+    }
+    PigeDialogs.alert = alert;
+    function prompt(message, options = {}) {
+        return ask('prompt', message, options);
+    }
+    PigeDialogs.prompt = prompt;
+    let installed = false;
+    function install() {
+        if (installed)
+            return;
+        installed = true;
+        let current = null, opener = null;
+        let saved = [], previousOverflow = '';
+        function restore() { for (const item of saved)
+            item.element.inert = item.inert; saved = []; document.body.style.overflow = previousOverflow; }
+        function update() {
+            if (pending)
+                return;
+            const dialogs = Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]'));
+            const next = dialogs.filter(element => element.getClientRects().length > 0).at(-1) || null;
+            if (next === current)
+                return;
+            if (current) {
+                restore();
+                current = null;
+                if (!next && opener?.isConnected)
+                    opener.focus({ preventScroll: true });
+            }
+            if (!next) {
+                opener = null;
+                return;
+            }
+            if (next.closest('.school-task') && !next.querySelector('[data-task-minimize]') && !next.querySelector('video') && !next.closest('.camera-dialog')) {
+                const header = next.querySelector('.modal-header');
+                if (header) {
+                    const minimize = document.createElement('button');
+                    minimize.type = 'button';
+                    minimize.className = 'btn task-minimize';
+                    minimize.dataset.taskMinimize = '';
+                    minimize.textContent = 'Minimizar';
+                    minimize.title = 'Manter o formulário aberto e voltar às guias';
+                    minimize.onclick = () => {
+                        const backdrop = next.closest('.modal-backdrop');
+                        if (!backdrop)
+                            return;
+                        backdrop.dataset.taskPaused = '';
+                        document.dispatchEvent(new Event('pige-pause-form'));
+                    };
+                    header.appendChild(minimize);
+                }
+            }
+            opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            current = next;
+            previousOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            let branch = next;
+            while (branch.parentElement) {
+                for (const sibling of Array.from(branch.parentElement.children)) {
+                    if (sibling !== branch && sibling instanceof HTMLElement) {
+                        saved.push({ element: sibling, inert: sibling.inert });
+                        sibling.inert = true;
+                    }
+                }
+                if (branch.parentElement === document.body)
+                    break;
+                branch = branch.parentElement;
+            }
+            const heading = next.querySelector('[data-dialog-title]');
+            if (heading) {
+                heading.tabIndex = -1;
+                heading.focus({ preventScroll: true });
+            }
+            else
+                next.querySelector('button,input,select,textarea')?.focus({ preventScroll: true });
+        }
+        new MutationObserver(update).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-task-paused'] });
+        document.addEventListener('keydown', event => {
+            if (!current || pending)
+                return;
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                current.querySelector('[data-dialog-close]')?.click();
+                return;
+            }
+            if (event.key !== 'Tab')
+                return;
+            const controls = Array.from(current.querySelectorAll('button,a[href],input,select,textarea,summary,[tabindex="0"]'))
+                .filter(el => !el.matches(':disabled') && el.getClientRects().length > 0 && !el.closest('[inert]'));
+            const first = controls[0], last = controls.at(-1);
+            if (!first) {
+                event.preventDefault();
+                return;
+            }
+            if (event.shiftKey && (document.activeElement === first || !controls.includes(document.activeElement))) {
+                event.preventDefault();
+                last?.focus();
+            }
+            else if (!event.shiftKey && (document.activeElement === last || !controls.includes(document.activeElement))) {
+                event.preventDefault();
+                first.focus();
+            }
+        }, true);
+        document.addEventListener('focusin', event => { if (!pending && current && !current.contains(event.target))
+            current.querySelector('[data-dialog-title],button')?.focus(); });
+        update();
+    }
+    PigeDialogs.install = install;
+})(PigeDialogs || (PigeDialogs = {}));
+/** Utiliza a própria lista do menu no painel lateral. Os links conservam ordem, filtros de acesso e ação. */
+var PigeSidebarRail;
+(function (PigeSidebarRail) {
+    function use(collapsed) {
+        const media = window.matchMedia?.('(width > 800px)');
+        const state = Vue.reactive({ desktop: media?.matches ?? true, active: '' });
+        const brand = Vue.reactive({ failed: '', wide: '' });
+        let trigger = null, panel = null, pinned = false, suppressFocus = false;
+        let leaveTimer;
+        const enabled = () => state.desktop && collapsed();
+        function brandLoad(e) { const img = e.currentTarget; brand.failed = ''; brand.wide = img.naturalWidth >= 2 * img.naturalHeight ? img.getAttribute('src') || '' : ''; }
+        function brandError(e) { brand.failed = e.currentTarget.getAttribute('src') || ''; brand.wide = ''; }
+        function cancelLeave() { if (leaveTimer !== undefined) {
+            window.clearTimeout(leaveTimer);
+            leaveTimer = undefined;
+        } }
+        function inside(node) { return Boolean(node instanceof Node && (trigger?.contains(node) || panel?.contains(node))); }
+        function outside(e) { if (!inside(e.target))
+            close(); }
+        function dismiss(e) { if (e.key === 'Escape' && trigger) {
+            e.preventDefault();
+            e.stopPropagation();
+            close(true);
+        } }
+        function scroll(e) { if (!panel?.contains(e.target))
+            position(); }
+        function listen(add) {
+            const method = add ? 'addEventListener' : 'removeEventListener';
+            document[method]('pointerdown', outside, true);
+            document[method]('focusin', outside, true);
+            document[method]('keydown', dismiss, true);
+            document[method]('scroll', scroll, true);
+            window[method]('resize', position);
+        }
+        function close(returnFocus = false) {
+            cancelLeave();
+            const old = trigger;
+            if (trigger)
+                listen(false);
+            if (panel?.hidePopover && panel.matches(':popover-open'))
+                panel.hidePopover();
+            trigger = null;
+            panel = null;
+            pinned = false;
+            state.active = '';
+            if (returnFocus && old?.isConnected) {
+                suppressFocus = true;
+                old.focus({ preventScroll: true });
+                suppressFocus = false;
+            }
+        }
+        function position() {
+            if (!trigger || !panel)
+                return;
+            const nav = trigger.closest('aside'), viewport = trigger.closest('.sidebar-scroll,.family-sidebar-scroll');
+            if (!nav || !viewport || !trigger.isConnected || !enabled()) {
+                close();
+                return;
+            }
+            const button = trigger.getBoundingClientRect(), bounds = viewport.getBoundingClientRect();
+            if (button.bottom <= bounds.top || button.top >= bounds.bottom) {
+                close();
+                return;
+            }
+            const left = Math.ceil(nav.getBoundingClientRect().right) + 4;
+            const top = Math.max(8, Math.min(button.top, window.innerHeight - 8 - panel.getBoundingClientRect().height));
+            panel.style.setProperty('--rail-flyout-left', left + 'px');
+            panel.style.setProperty('--rail-flyout-top', Math.round(top) + 'px');
+        }
+        function launcher(target) { return target instanceof Element ? target.closest('[data-rail-trigger]') : null; }
+        function items() { return Array.from(panel?.querySelectorAll('a[href],button:not(:disabled)') || []).filter(el => el.getClientRects().length); }
+        function open(button, focusFirst = false) {
+            if (!enabled())
+                return;
+            cancelLeave();
+            if (button !== trigger) {
+                close();
+                const group = button.parentElement?.querySelector('.sidebar-flyout');
+                if (!group)
+                    return;
+                trigger = button;
+                panel = group;
+                state.active = group.id;
+                listen(true);
+            }
+            const current = panel;
+            void Vue.nextTick(() => {
+                if (trigger !== button || panel !== current || !current?.isConnected)
+                    return;
+                // O top layer do navegador deixa o painel escapar do recorte da rolagem da barra.
+                if (current.showPopover && !current.matches(':popover-open'))
+                    current.showPopover();
+                position();
+                if (focusFirst && trigger === button)
+                    items()[0]?.focus({ preventScroll: true });
+            });
+        }
+        function pointerover(e) {
+            if (e.pointerType === 'touch' || !enabled())
+                return;
+            const btn = launcher(e.target);
+            if (btn)
+                open(btn);
+            else if (inside(e.target))
+                cancelLeave();
+        }
+        function pointerout(e) {
+            if (!trigger || e.pointerType === 'touch' || pinned || inside(e.relatedTarget) || panel?.contains(document.activeElement))
+                return;
+            cancelLeave();
+            leaveTimer = window.setTimeout(() => close(), 180);
+        }
+        function focusin(e) { const btn = launcher(e.target); if (!suppressFocus && btn)
+            open(btn);
+        else if (inside(e.target))
+            cancelLeave(); }
+        function click(e) {
+            if (!enabled())
+                return;
+            const btn = launcher(e.target);
+            if (btn) {
+                if (btn === trigger && pinned) {
+                    close();
+                    return;
+                }
+                open(btn, e.detail === 0);
+                pinned = true;
+            }
+            else if (panel?.contains(e.target))
+                close();
+        }
+        function keydown(e) {
+            if (!enabled())
+                return;
+            const btn = launcher(e.target);
+            if (e.key === 'Escape' && trigger) {
+                e.preventDefault();
+                e.stopPropagation();
+                close(true);
+                return;
+            }
+            if (btn && ['ArrowRight', 'ArrowDown'].includes(e.key)) {
+                e.preventDefault();
+                open(btn, true);
+                return;
+            }
+            if (!panel?.contains(e.target))
+                return;
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                close(true);
+                return;
+            }
+            const links = items(), n = links.length, index = links.indexOf(e.target);
+            if (!n || index < 0)
+                return;
+            const to = { ArrowDown: (index + 1) % n, ArrowUp: (index + n - 1) % n, Home: 0, End: n - 1 }[e.key];
+            if (to !== undefined) {
+                e.preventDefault();
+                links[to].focus();
+            }
+        }
+        function changeViewport() { close(); state.desktop = media?.matches ?? true; }
+        function mount() { changeViewport(); media?.addEventListener('change', changeViewport); }
+        function dispose() { close(); media?.removeEventListener('change', changeViewport); }
+        return { state, brand, enabled, close, mount, dispose, brandLoad, brandError, events: { pointerover, pointerout, focusin, keydown, click } };
+    }
+    PigeSidebarRail.use = use;
+})(PigeSidebarRail || (PigeSidebarRail = {}));
 /** Identidade pública da escola. Sem segredos, rotas bancárias ou seleção de cliente. */
 var PigeInstitution;
 (function (PigeInstitution) {
@@ -134,6 +503,47 @@ var PigeMFA;
 })(PigeMFA || (PigeMFA = {}));
 var PigeLearning;
 (function (PigeLearning) {
+    function orderPeriod(a, b) {
+        return (a.order_index ?? 0) - (b.order_index ?? 0) || (a.starts_on || '').localeCompare(b.starts_on || '') || a.period_id.localeCompare(b.period_id);
+    }
+    // Um diário pertence a uma turma de origem; nomes iguais podem identificar diários distintos.
+    function matrices(groups, calendars, filtered) {
+        const classes = new Map();
+        for (const group of groups) {
+            let matrix = classes.get(group.classId);
+            if (!matrix) {
+                const periods = new Map();
+                if (!filtered)
+                    for (const period of calendars?.[group.classId] || [])
+                        periods.set(period.period_id, period);
+                matrix = { className: group.className, periods, components: new Map(), published: new Set() };
+                classes.set(group.classId, matrix);
+            }
+            for (const item of group.items) {
+                matrix.periods.set(item.period_id, item);
+                matrix.published.add(item.period_id);
+                const key = JSON.stringify([item.diary_id, item.component_name]);
+                const component = matrix.components.get(key) || { id: key, name: item.component_name, results: new Map() };
+                component.results.set(item.period_id, item);
+                matrix.components.set(key, component);
+            }
+        }
+        const windows = [];
+        for (const [classId, matrix] of classes) {
+            const periods = Array.from(matrix.periods.values()).sort(orderPeriod);
+            const components = Array.from(matrix.components.values()).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+            for (let start = 0; start < periods.length; start += 4) {
+                const window = periods.slice(start, start + 4);
+                windows.push({ key: JSON.stringify([classId, window[0].period_id]), className: matrix.className, periods: window,
+                    periodLabel: window.map(p => p.period_name).join(', '), rows: components.map(component => ({
+                        id: component.id, name: component.name, cells: window.map(p => ({
+                            period: p, result: component.results.get(p.period_id), empty: matrix.published.has(p.period_id) ? 'Sem resultado publicado' : 'Não publicado',
+                        })),
+                    })) });
+            }
+        }
+        return windows;
+    }
     PigeLearning.component = { props: ['request', 'download', 'rootPath', 'schoolId', 'studentId', 'identity'], render: PigeRenders.learning, setup(props) {
             const state = Vue.reactive({ busy: false, error: '', students: [], studentId: '', enrollmentId: '', groupId: '', note: '' });
             const base = () => (props.rootPath || '/profile') + '/learning';
@@ -170,33 +580,47 @@ var PigeLearning;
                         state.groupId = '';
                 });
             }
-            const rows = () => (enrollment()?.subjects || []).flatMap(subject => subject.periods.map(period => ({ ...period, component_name: period.component_name || subject.component_name, diary_id: subject.diary_id })));
             const periodGroups = Vue.computed(() => {
                 const groups = new Map();
-                for (const row of rows()) {
-                    const className = row.class_label || row.class_name || enrollment()?.class_name || '';
-                    const id = JSON.stringify([row.period_id, row.class_group_id || className]);
-                    const group = groups.get(id) || { id, label: row.period_name, className, items: [] };
-                    group.items.push(row);
-                    groups.set(id, group);
+                for (const subject of enrollment()?.subjects || []) {
+                    for (const period of subject.periods) {
+                        const className = period.class_label || period.class_name || enrollment()?.class_name || '';
+                        const classId = period.class_group_id || className;
+                        const id = JSON.stringify([period.period_id, classId]);
+                        const group = groups.get(id) || { id, label: period.period_name, classId, className, items: [] };
+                        group.items.push({ ...period, component_name: period.component_name || subject.component_name, diary_id: subject.diary_id });
+                        groups.set(id, group);
+                    }
                 }
-                return Array.from(groups.values()).sort((left, right) => {
-                    const a = left.items[0], b = right.items[0];
-                    return (a.order_index ?? 0) - (b.order_index ?? 0) || (a.starts_on || '').localeCompare(b.starts_on || '') || left.className.localeCompare(right.className, 'pt-BR');
-                });
+                return Array.from(groups.values()).sort((a, b) => orderPeriod(a.items[0], b.items[0]) || a.className.localeCompare(b.className, 'pt-BR'));
             });
             const visibleGroups = Vue.computed(() => periodGroups.value.filter(group => !state.groupId || group.id === state.groupId));
+            const model = Vue.computed(() => enrollment()?.bulletin_model || 'integrated');
+            const tables = Vue.computed(() => matrices(visibleGroups.value, enrollment()?.class_calendars, Boolean(state.groupId)));
+            const tableKinds = Vue.computed(() => model.value === 'panel' ? ['grade', 'attendance'] : [model.value]);
+            const titles = { integrated: 'Rendimento e frequência', grade: 'Rendimento por componente', attendance: 'Aulas, faltas e frequência', journey: 'Percurso por componente' };
+            const modelNames = { integrated: 'Grade integrada', panel: 'Painel do aluno', journey: 'Percurso acadêmico' };
+            const fonts = { system: 'system-ui, sans-serif', arial: 'Arial, sans-serif', verdana: 'Verdana, sans-serif', georgia: 'Georgia, serif', times: 'Times New Roman, serif' };
+            const facts = Vue.computed(() => {
+                const e = enrollment();
+                return [['Registro escolar', student()?.student_number], ['Matrícula', e?.number], ['Ano letivo', e?.year_name], ['Etapa', e?.stage], ['Unidade', e?.unit], ['Turno', e?.shift]].filter(([, value]) => value);
+            });
+            const uniformStatus = Vue.computed(() => {
+                const values = new Set(visibleGroups.value.flatMap(group => group.items.map(item => item.result_label)));
+                return values.size === 1 ? Array.from(values)[0] : '';
+            });
+            const opinions = Vue.computed(() => visibleGroups.value.flatMap(group => group.items.filter(item => item.opinions?.length)));
             const percent = (value) => value === null || value === undefined ? 'Não apurada' : Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%';
             async function download(documentId = '') { await run(async () => { if (!student() || !enrollment())
                 return; await props.download(base() + '/' + encodeURIComponent(state.studentId) + '/report.pdf?enrollment_id=' + encodeURIComponent(state.enrollmentId) + (documentId ? '&document_id=' + encodeURIComponent(documentId) : '') + (props.schoolId ? '&school_id=' + encodeURIComponent(props.schoolId) : ''), 'boletim-' + student().student_number + '.pdf'); }); }
             Vue.onMounted(() => { void load(); });
-            return { props, state, student, enrollment, selectStudent, rows, periodGroups, visibleGroups, percent, load, download };
+            return { props, state, student, enrollment, selectStudent, model, modelNames, fonts, facts, periodGroups, visibleGroups, tables, tableKinds, titles, uniformStatus, opinions, percent, load, download };
         } };
 })(PigeLearning || (PigeLearning = {}));
 var PigeSupport;
 (function (PigeSupport) {
     const runtime = window;
-    PigeSupport.status = Vue.reactive({ error: '' });
+    PigeSupport.status = Vue.reactive({ error: '', canOpen: false });
     const busyMessage = 'O atendimento recebeu muitas solicitações. Aguarde antes de tentar novamente.';
     const roots = '#hub-widget-holder,#hub-bubble-holder';
     // A URL sem versão pode continuar em cache por um ano após atualizar o HUB.
@@ -210,8 +634,21 @@ var PigeSupport;
     let recovery = null, checkingArea = false, retryArea = null;
     let visibilityStyle = null;
     let listeningReady = false;
+    function launcher() { return document.querySelector?.('button#hub-bubble-holder, #hub-bubble-holder button, #hub-bubble-holder[role="button"]'); }
+    function checkLauncher() { PigeSupport.status.canOpen = Boolean(activeSDK && !checkingArea && runtime.$hub?.hasLoaded && (typeof runtime.$hub.toggle === 'function' || launcher())); }
+    function openChat() {
+        checkLauncher();
+        if (!PigeSupport.status.canOpen)
+            return;
+        if (typeof runtime.$hub?.toggle === 'function')
+            runtime.$hub.toggle('open');
+        else
+            launcher()?.click();
+    }
+    PigeSupport.openChat = openChat;
     function setChecking(checking) {
         checkingArea = checking;
+        checkLauncher();
         visibilityStyle?.remove();
         visibilityStyle = null;
         if (checking) {
@@ -235,6 +672,7 @@ var PigeSupport;
     function onReady() {
         if (!activeSDK || !runtime.$hub?.hasLoaded)
             return;
+        checkLauncher();
         cancelStartup();
         recovery?.remove();
         recovery = null;
@@ -252,6 +690,7 @@ var PigeSupport;
         }
         activeSDK = null;
         loadedSource = '';
+        PigeSupport.status.canOpen = false;
     }
     function dispose() {
         ++generation;
@@ -464,6 +903,7 @@ var PigeAutoPix;
             state.id = id;
             state.busy = true;
             state.error = '';
+            state.confirmCancel = false;
             try {
                 const path = '/family/students/' + encodeURIComponent(sid) + '/charges/' + encodeURIComponent(id) + '/pix-automatic';
                 const view = await request(path + (action ? '/' + action : ''), action ? { method: 'POST', body: JSON.stringify(body || {}) } : {});
@@ -496,10 +936,24 @@ var PigeAutoPix;
                 return;
             return send(state.id, 'enroll', { quote: v.quote, terms_version: v.terms_version, frequency: state.frequency, accepted: true });
         }
-        function cancel() {
-            if (!state.confirmCancel || !state.view?.authorization)
+        async function cancel() {
+            const authorization = state.view?.authorization;
+            if (!student() || state.busy || state.confirmCancel || !authorization || !['ACTIVE', 'CREATED'].includes(authorization.status))
                 return;
-            return send(state.id, 'cancel', { version: state.view.authorization.version });
+            const charge = state.id, sid = student(), current = epoch, version = authorization.version;
+            state.confirmCancel = true;
+            try {
+                const approved = await PigeDialogs.confirm('Os próximos débitos serão interrompidos. Pagamentos já enviados dependem de confirmação bancária.', { title: 'Cancelar autorização do Pix Automático?', confirmLabel: 'Confirmar cancelamento', cancelLabel: 'Manter autorização', destructive: true });
+                if (!approved || current !== epoch || sid !== student() || charge !== state.id || authorization !== state.view?.authorization ||
+                    version !== authorization.version || !['ACTIVE', 'CREATED'].includes(authorization.status))
+                    return;
+                state.confirmCancel = false;
+                await send(charge, 'cancel', { version });
+            }
+            finally {
+                if (current === epoch)
+                    state.confirmCancel = false;
+            }
         }
         const label = (value) => labels[value] || value;
         const money = (value) => Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -568,6 +1022,221 @@ var PigeFamilyCard;
     }
     PigeFamilyCard.use = use;
 })(PigeFamilyCard || (PigeFamilyCard = {}));
+var PigePortalProtocols;
+(function (PigePortalProtocols) {
+    const categories = { secretaria: 'Secretaria', pedagogico: 'Pedagógico', financeiro: 'Financeiro', tecnico: 'Suporte técnico' };
+    const statuses = { open: 'Aberto', in_progress: 'Em atendimento', waiting: 'Aguardando', completed: 'Concluído', cancelled: 'Cancelado' };
+    const channels = { portal: 'No portal', email: 'E-mail', whatsapp: 'WhatsApp' };
+    const dateFormatter = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+    const date = (value) => value && Number.isFinite(Date.parse(value)) ? dateFormatter.format(new Date(value)) : '';
+    const blank = () => ({ category: 'secretaria', subject: '', message: '', channel: 'portal', file: null });
+    PigePortalProtocols.component = { props: ['area', 'schoolId', 'studentId', 'academic', 'financial', 'request', 'download'], render: PigeRenders.portalProtocols, setup(props) {
+            const s = Vue.reactive({ view: 'list', busy: false, error: '', notice: '', items: [], ticket: null,
+                query: '', term: '', page: 1, pageSize: 20, total: 0, form: blank(), fileVersion: 0, options: { channels: ['portal'] }, optionsError: '', openingChannel: 'portal' });
+            const availableCategories = Vue.computed(() => Object.keys(categories).filter(key => key === 'financeiro' ? props.area === 'family' && props.financial :
+                key !== 'pedagogico' || props.area === 'teacher' || props.academic !== false));
+            const dirty = () => Boolean(s.form.message || s.form.file || (s.view === 'detail' && s.ticket && s.form.channel !== s.ticket.preferred_channel) || (s.view === 'new' && (s.form.subject || s.form.category !== 'secretaria' || s.form.channel !== 'portal')));
+            const closed = () => ['completed', 'cancelled'].includes(s.ticket?.status || '');
+            const base = '/' + props.area + '/schools/' + encodeURIComponent(props.schoolId) + '/protocols';
+            const path = (id) => base + '/' + encodeURIComponent(id);
+            const controller = new AbortController();
+            let active = true, waitingForDiscard = false, optionsVersion = 0, clientKey = '', lastPayload = '', lastFile = null;
+            function reset() { s.form = blank(); s.fileVersion++; clientKey = ''; lastPayload = ''; lastFile = null; }
+            function displayError(e) { return e instanceof Error ? e.message : 'Não foi possível concluir a solicitação.'; }
+            async function discard() {
+                if (waitingForDiscard)
+                    return false;
+                waitingForDiscard = true;
+                const form = s.form, view = s.view, ticket = s.ticket?.id;
+                const { subject, category, channel, message, file } = form;
+                const approved = await PigeDialogs.confirm('O texto, o anexo e as alterações ainda não enviados serão descartados.', {
+                    title: 'Descartar a edição do protocolo?', confirmLabel: 'Descartar edição', cancelLabel: 'Voltar', destructive: true
+                });
+                waitingForDiscard = false;
+                return approved && active && !s.busy && s.form === form && s.view === view && s.ticket?.id === ticket &&
+                    subject === form.subject && category === form.category && channel === form.channel && message === form.message && file === form.file;
+            }
+            function focusTitle() { void Vue.nextTick(() => { if (active)
+                document.getElementById('portal-protocol-title')?.focus(); }); }
+            async function run(work) {
+                if (s.busy || !active)
+                    return;
+                s.busy = true;
+                s.error = '';
+                s.notice = '';
+                try {
+                    await work();
+                }
+                catch (e) {
+                    if (active) {
+                        s.error = displayError(e);
+                        if ([403, 404].includes(e?.status || 0)) {
+                            reset();
+                            s.ticket = null;
+                            s.items = [];
+                            s.total = 0;
+                            s.view = 'list';
+                        }
+                    }
+                }
+                finally {
+                    if (active)
+                        s.busy = false;
+                }
+            }
+            function applyOptions(data) {
+                const allowed = Object.keys(channels).filter(key => key === 'portal' || data.channels.includes(key));
+                const opening = data.opening_channel === undefined ? undefined : allowed.includes(data.opening_channel) ? data.opening_channel : 'portal';
+                s.options = { ...data, channels: allowed, opening_channel: opening };
+                s.openingChannel = opening || 'portal';
+                s.optionsError = '';
+            }
+            async function options() {
+                const version = ++optionsVersion;
+                try {
+                    const data = await props.request(base + '/options', { signal: controller.signal });
+                    if (active && version === optionsVersion)
+                        applyOptions(data);
+                }
+                catch (e) {
+                    if (active && version === optionsVersion) {
+                        s.options = { channels: ['portal'] };
+                        s.optionsError = displayError(e);
+                    }
+                }
+            }
+            async function saveOpeningChannel() {
+                if (!s.options.opening_channel || !s.options.channels.includes(s.openingChannel))
+                    return;
+                await run(async () => {
+                    const version = ++optionsVersion;
+                    const data = await props.request(base + '/opening-channel', { method: 'PUT', body: JSON.stringify({ preferred_channel: s.openingChannel }), signal: controller.signal });
+                    if (active && version === optionsVersion) {
+                        applyOptions(data);
+                        s.notice = 'Preferência de avisos para novos protocolos da escola salva.';
+                    }
+                });
+            }
+            const whatsappUrl = Vue.computed(() => {
+                const line = s.options.whatsapp_contact;
+                if (!line || !/^[1-9]\d{7,14}$/.test(line) || !s.ticket || closed() || !/^PRO-\d+$/.test(s.ticket.number))
+                    return '';
+                return 'https://wa.me/' + line + '?' + new URLSearchParams({ text: 'Olá, quero falar sobre o protocolo ' + s.ticket.number }).toString();
+            });
+            async function list(page = 1, search = false) {
+                if (s.busy || !active || (dirty() && !await discard()))
+                    return;
+                const term = search ? s.query.trim() : s.term;
+                await run(async () => {
+                    const params = new URLSearchParams({ page: String(page) });
+                    if (props.studentId)
+                        params.set('student_id', props.studentId);
+                    if (term)
+                        params.set('q', term);
+                    const data = await props.request(base + '?' + params, { signal: controller.signal });
+                    if (!active)
+                        return;
+                    const changed = s.view !== 'list';
+                    s.view = 'list';
+                    s.ticket = null;
+                    reset();
+                    s.items = data.items;
+                    s.total = data.total;
+                    s.page = data.page;
+                    s.pageSize = data.page_size;
+                    s.term = term;
+                    if (changed)
+                        focusTitle();
+                });
+            }
+            function showNew() { if (s.busy || (props.area === 'family' && !props.studentId))
+                return; reset(); s.view = 'new'; s.ticket = null; s.error = ''; s.notice = ''; focusTitle(); }
+            function showTicket(data) { reset(); s.ticket = data; s.form.channel = data.preferred_channel; s.view = 'detail'; }
+            async function open(id) {
+                if (s.busy || !active || (dirty() && !await discard()))
+                    return;
+                await run(async () => { const data = await props.request(path(id), { signal: controller.signal }); if (active) {
+                    showTicket(data);
+                    focusTitle();
+                } });
+            }
+            function chooseFile(event) { s.form.file = event.target.files?.[0] || null; }
+            async function copyNumber() {
+                const ticket = s.ticket;
+                if (!ticket)
+                    return;
+                try {
+                    await navigator.clipboard.writeText(ticket.number);
+                    if (active && ticket.id === s.ticket?.id)
+                        s.notice = 'Número do protocolo copiado.';
+                }
+                catch {
+                    if (active && ticket.id === s.ticket?.id)
+                        s.notice = 'Selecione o número ' + ticket.number + ' no cabeçalho para copiá-lo.';
+                }
+            }
+            async function send() {
+                const creating = s.view === 'new';
+                if ((!creating && (!s.ticket || closed())) || s.busy)
+                    return;
+                await run(async () => {
+                    const message = s.form.message.trim(), subject = s.form.subject.trim();
+                    if (message.length < 3 || (creating && subject.length < 2))
+                        throw new Error('Informe ao menos dois caracteres no assunto e três na mensagem.');
+                    if (s.form.file && s.options.max_attachment_mb && s.form.file.size > s.options.max_attachment_mb * 1024 * 1024)
+                        throw new Error('O anexo ultrapassa o limite de ' + s.options.max_attachment_mb + ' MB.');
+                    const body = new FormData();
+                    body.set('message', message);
+                    if (creating) {
+                        body.set('subject', subject);
+                        body.set('category', s.form.category);
+                        body.set('preferred_channel', s.form.channel);
+                        if (props.studentId)
+                            body.set('student_id', props.studentId);
+                    }
+                    const target = creating ? base : path(s.ticket.id) + '/messages';
+                    const payload = JSON.stringify(creating ? [target, message, subject, s.form.category, s.form.channel] : [target, message]);
+                    if (!clientKey || payload !== lastPayload || s.form.file !== lastFile) {
+                        clientKey = crypto.randomUUID();
+                        lastPayload = payload;
+                        lastFile = s.form.file;
+                    }
+                    body.set('client_key', clientKey);
+                    if (s.form.file)
+                        body.set('file', s.form.file);
+                    const data = await props.request(target, { method: 'POST', body, signal: controller.signal });
+                    if (active) {
+                        showTicket(data);
+                        s.notice = creating ? 'Protocolo ' + data.number + ' aberto.' : 'Resposta registrada.';
+                        if (creating)
+                            focusTitle();
+                    }
+                });
+            }
+            async function changeChannel() {
+                const ticket = s.ticket;
+                if (!ticket || closed() || !s.options.channels.includes(s.form.channel) || ticket.preferred_channel === s.form.channel)
+                    return;
+                await run(async () => {
+                    const data = await props.request(path(ticket.id) + '/channel', { method: 'PATCH', body: JSON.stringify({ preferred_channel: s.form.channel }), signal: controller.signal });
+                    if (active) {
+                        s.ticket = data;
+                        s.form.channel = data.preferred_channel;
+                        s.notice = 'Preferência de avisos atualizada.';
+                    }
+                });
+            }
+            async function attachment(file) {
+                const ticket = s.ticket;
+                if (ticket && file)
+                    await run(() => props.download(path(ticket.id) + '/attachments/' + encodeURIComponent(file.id), file.name));
+            }
+            Vue.onMounted(() => { void options(); void list(); });
+            Vue.onUnmounted(() => { active = false; if (waitingForDiscard)
+                PigeDialogs.cancelPending(); controller.abort(); reset(); });
+            return { s, props, availableCategories, categories, statuses, channels, closed, dirty, date, options, saveOpeningChannel, whatsappUrl, list, showNew, open, chooseFile, copyNumber, send, changeChannel, attachment, chat: PigeSupport.status, openChat: PigeSupport.openChat };
+        } };
+})(PigePortalProtocols || (PigePortalProtocols = {}));
 /** Caixa pessoal já vinculada à conta escolar. O SOGo autentica pelo proxy da própria origem. */
 var PigePortalMail;
 (function (PigePortalMail) {
@@ -686,6 +1355,13 @@ var PigePortalMail;
 /** Interação da faixa de guias compartilhada pelos portais da escola. */
 var PigePortalTabs;
 (function (PigePortalTabs) {
+    function cancelClose() { PigeDialogs.cancelPending(); }
+    PigePortalTabs.cancelClose = cancelClose;
+    function confirmClose(home, drafts) {
+        const text = 'A guia ' + home + ' permanecerá aberta. As outras guias serão fechadas. Alterações e preenchimentos ainda não salvos nessas guias serão descartados. Os dados já salvos serão preservados.';
+        return PigeDialogs.confirm(text + (drafts.length ? '\n\nConfira antes de fechar · ' + drafts.join(', ') + '.' : ''), { title: 'Fechar as outras guias?', cancelLabel: 'Voltar', confirmLabel: 'Fechar outras guias', destructive: true });
+    }
+    PigePortalTabs.confirmClose = confirmClose;
     function reveal() {
         void Vue.nextTick(() => {
             const tab = window.document.querySelector('.work-tabs-list [role="tab"][aria-selected="true"]');
@@ -726,6 +1402,7 @@ var PigeFamily;
         }
     }
     function toggleSidebar() {
+        rail.close();
         s.sidebarCollapsed = !s.sidebarCollapsed;
         PigePortalTabs.reveal();
         try {
@@ -735,6 +1412,7 @@ var PigeFamily;
     }
     const s = Vue.reactive({ ready: false, busy: false, error: '', contextError: false, account: null, email: '', password: '', passwordVisible: false, menuOpen: false, sidebarCollapsed: savedSidebarPreference(), feedQuery: '', feedTerm: '', schoolId: '', schools: {}, section: routeSection(), tabs: [], students: [], studentId: new URLSearchParams(location.search).get('student') || '', charges: [], financePage: 1, financePageSize: 30, financeTotal: 0, financeOverdue: 0, financeNote: '', financeError: '', financeLoaded: false, news: [], events: [], feedItems: [], feedTotal: 0, feedPage: 1, feedBusy: false, feedError: '', overviewFeedError: '', selectedPost: null });
     const recentMaterials = Vue.reactive({ items: [], loading: false, error: '' });
+    const rail = PigeSidebarRail.use(() => s.sidebarCollapsed);
     let recentSequence = 0;
     function clearRecentMaterials() {
         recentSequence++;
@@ -841,7 +1519,7 @@ var PigeFamily;
     function checkAuth(epoch) { if (epoch !== authEpoch)
         throw new SessionChanged(); }
     function invalidateAuth() { authEpoch++; refreshing = null; }
-    function clearPrivate() { generation++; s.tabs = []; savedFeeds.clear(); postTrigger = null; clearRecentMaterials(); mail.clear(); autoPix.clear(); cards.clear(); feedGeneration++; clearSchoolwork(); s.students = []; s.charges = []; s.financeTotal = 0; s.financePage = 1; s.financeOverdue = 0; s.financeNote = ''; s.financeError = ''; s.financeLoaded = false; s.news = []; s.events = []; s.feedItems = []; s.feedTotal = 0; s.feedPage = 1; s.feedBusy = false; s.selectedPost = null; s.feedError = ''; s.feedQuery = ''; s.feedTerm = ''; s.overviewFeedError = ''; s.menuOpen = false; }
+    function clearPrivate() { rail.close(); PigeDialogs.cancelPending(); generation++; s.tabs = []; savedFeeds.clear(); postTrigger = null; clearRecentMaterials(); mail.clear(); autoPix.clear(); cards.clear(); clearChargeDocuments(); feedGeneration++; clearSchoolwork(); s.students = []; s.charges = []; s.financeTotal = 0; s.financePage = 1; s.financeOverdue = 0; s.financeNote = ''; s.financeError = ''; s.financeLoaded = false; s.news = []; s.events = []; s.feedItems = []; s.feedTotal = 0; s.feedPage = 1; s.feedBusy = false; s.selectedPost = null; s.feedError = ''; s.feedQuery = ''; s.feedTerm = ''; s.overviewFeedError = ''; s.menuOpen = false; }
     async function raw(path, options = {}) { const headers = new Headers(options.headers); headers.set('X-CSRF-Protection', '1'); if (token)
         headers.set('Authorization', 'Bearer ' + token); if (s.schoolId)
         headers.set('X-School-Id', s.schoolId); if (typeof options.body === 'string')
@@ -920,7 +1598,9 @@ var PigeFamily;
         return; invalidateAuth(); clearPrivate(); token = ''; s.account = null; s.schoolId = ''; await run(async () => { const result = await request('/auth/login', { method: 'POST', body: JSON.stringify({ email: s.email, password: s.password }) }); s.password = ''; s.passwordVisible = false; if (await PigeMFA.accept(result))
         return; await authenticated(result); }); }
     async function logout() {
-        if (s.busy)
+        if (workspaceBusy(s.tabs))
+            return;
+        if ((drafts(s.tabs).length || s.tabs.includes('webmail')) && !await canLeaveContext('Sair do portal?', 'Sair'))
             return;
         // Invalidate pending renewals before the logout network request, not after it.
         invalidateAuth();
@@ -1016,9 +1696,91 @@ var PigeFamily;
     const date = (value) => { if (!value)
         return 'Data não informada'; const d = new Date(value.length === 10 ? value + 'T12:00:00' : value); return Number.isNaN(d.getTime()) ? 'Data não informada' : new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: 'short', year: 'numeric', ...(value.length > 10 ? { hour: '2-digit', minute: '2-digit' } : {}) }).format(d); };
     const money = (value) => Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    const autoPix = PigeAutoPix.use(request, () => s.studentId);
+    const autoPix = PigeAutoPix.use(request, () => student()?.financial_authorized ? s.studentId : '');
     const cards = PigeFamilyCard.use(request, () => s.studentId);
+    const paymentSources = { asaas: 'Asaas', crm: 'CRM', manual: 'Lançamento da escola' };
+    function chargeStatus(charge) {
+        if (charge.payment_source === 'crm') {
+            if (charge.external_payment_status === 'settled')
+                return 'Pagamento identificado no CRM';
+            if (charge.external_payment_status === 'cancelled')
+                return 'Cancelada no CRM';
+            if (charge.external_payment_status === 'unavailable')
+                return 'Situação no CRM indisponível';
+        }
+        return label(charge.status);
+    }
+    const paymentKinds = { PIX: 'Pix', BOLETO: 'Boleto', CREDIT_CARD: 'Cartão de crédito', MANUAL: 'Cobrança manual' };
+    const documentsPanel = Vue.reactive({ chargeId: '', loading: false, error: '', notice: '', data: null });
+    let documentRequest = 0, financeRequest = 0;
+    function clearChargeDocuments() {
+        documentRequest++;
+        documentsPanel.chargeId = '';
+        documentsPanel.data = null;
+        documentsPanel.loading = false;
+        documentsPanel.error = '';
+        documentsPanel.notice = '';
+    }
+    function instrumentLink(value) {
+        if (!value)
+            return '';
+        try {
+            const url = new URL(value);
+            return url.protocol === 'https:' && !url.username && !url.password && !url.port &&
+                (url.hostname === 'asaas.com' || url.hostname.endsWith('.asaas.com')) ? url.href : '';
+        }
+        catch {
+            return '';
+        }
+    }
+    async function showChargeDocuments(charge, retry = false) {
+        if (documentsPanel.chargeId === charge.id && !retry) {
+            clearChargeDocuments();
+            return;
+        }
+        clearChargeDocuments();
+        if (!student()?.financial_authorized || !charge.has_payment_documents || !s.charges.some(row => row.id === charge.id))
+            return;
+        const sequence = documentRequest, school = s.schoolId, selected = s.studentId;
+        const current = () => sequence === documentRequest && school === s.schoolId && selected === s.studentId;
+        documentsPanel.chargeId = charge.id;
+        documentsPanel.loading = true;
+        try {
+            const data = await request('/family/students/' + encodeURIComponent(selected) + '/charges/' + encodeURIComponent(charge.id) + '/documents');
+            if (!current())
+                return;
+            documentsPanel.data = { ...data, invoice_url: instrumentLink(data.invoice_url), bank_slip_url: instrumentLink(data.bank_slip_url) };
+        }
+        catch (error) {
+            if (current())
+                documentsPanel.error = error instanceof Error ? error.message : 'Não foi possível consultar os documentos desta cobrança.';
+        }
+        finally {
+            if (current())
+                documentsPanel.loading = false;
+        }
+    }
+    async function copyChargeCode(controlId) {
+        const control = window.document.getElementById(controlId);
+        if (!control || !documentsPanel.data || !student()?.financial_authorized)
+            return;
+        const current = documentRequest;
+        try {
+            await navigator.clipboard.writeText(control.value);
+            if (current === documentRequest)
+                documentsPanel.notice = 'Código copiado.';
+        }
+        catch {
+            if (current !== documentRequest)
+                return;
+            control.focus();
+            control.select();
+            documentsPanel.notice = 'Código selecionado. Use a opção Copiar do seu dispositivo.';
+        }
+    }
     async function finance(page = 1) {
+        const sequence = ++financeRequest;
+        clearChargeDocuments();
         s.charges = [];
         s.financeLoaded = false;
         s.financeNote = '';
@@ -1030,7 +1792,7 @@ var PigeFamily;
         const selected = s.studentId, current = generation;
         try {
             const data = await request(`/family/students/${selected}/charges?page=${page}&page_size=${s.financePageSize}`);
-            if (selected !== s.studentId || current !== generation)
+            if (sequence !== financeRequest || selected !== s.studentId || current !== generation)
                 return;
             s.charges = data.items;
             s.financeTotal = data.total ?? 0;
@@ -1040,7 +1802,7 @@ var PigeFamily;
             s.financeLoaded = true;
         }
         catch (e) {
-            if (selected === s.studentId && current === generation)
+            if (sequence === financeRequest && selected === s.studentId && current === generation)
                 s.financeError = e instanceof Error ? e.message : 'Não foi possível carregar o financeiro.';
         }
     }
@@ -1092,11 +1854,14 @@ var PigeFamily;
         history[push ? 'pushState' : 'replaceState'](scope, '', '/family?' + params);
     }
     function clearStudentWorkspace() {
+        rail.close();
+        PigeDialogs.cancelPending();
         generation++;
         feedGeneration++;
         clearRecentMaterials();
         autoPix.clear();
         cards.clear();
+        clearChargeDocuments();
         clearSchoolwork();
         savedFeeds.clear();
         s.tabs = [];
@@ -1127,21 +1892,23 @@ var PigeFamily;
     }
     async function selectStudent(event) {
         const input = event.currentTarget;
-        if (!canLeaveContext()) {
-            input.value = s.studentId;
+        const target = input.value;
+        input.value = s.studentId;
+        if (!await canLeaveContext() || !s.students.some(item => item.id === target))
             return;
-        }
-        s.studentId = input.value;
+        s.studentId = target;
         await changeStudent();
     }
     async function chooseStudent(id) {
         if (s.busy)
             return;
         if (id !== s.studentId) {
-            if (!canLeaveContext())
+            if (!await canLeaveContext() || !s.students.some(item => item.id === id))
                 return;
             s.studentId = id;
             await changeStudent();
+            if (s.studentId !== id || !s.account)
+                return;
         }
         section('academic');
     }
@@ -1149,15 +1916,22 @@ var PigeFamily;
         return; s.studentId = ''; s.section = 'overview'; await run(load); updateLocation(); }
     async function selectSchool(event) {
         const input = event.currentTarget;
-        if (!canLeaveContext()) {
-            input.value = s.schoolId;
+        const target = input.value;
+        input.value = s.schoolId;
+        if (!await canLeaveContext() || !s.account?.school_ids.includes(target))
             return;
-        }
-        s.schoolId = input.value;
+        s.schoolId = target;
         await changeSchool();
     }
-    function refreshWorkspace() { if (canLeaveContext())
-        void run(load); }
+    async function openRegistration(e) {
+        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)
+            return;
+        e.preventDefault();
+        if (await canLeaveContext('Ir para inscrição e contratos?', 'Continuar'))
+            window.location.assign('/online');
+    }
+    async function refreshWorkspace() { if (await canLeaveContext())
+        await run(load); }
     async function download(path, filename) { const current = generation, selected = s.studentId; const r = await response(path); const blob = await r.blob(); if (current !== generation || selected !== s.studentId)
         return; const url = URL.createObjectURL(blob); const a = window.document.createElement('a'); a.href = url; a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
     async function document(file) { await run(() => download('/family/students/' + s.studentId + '/documents/' + file.id, 'documento-escolar')); }
@@ -1204,6 +1978,30 @@ var PigeFamily;
     function allowedSection(name) { if (name === 'webmail' && mail.state.available)
         return name; if (name === 'webmail' || (name === 'absences' && s.account?.role !== 'guardian'))
         name = 'overview'; return student()?.academic_authorized === false && name !== 'support' ? (student()?.financial_authorized ? 'finance' : 'support') : name; }
+    function sidebarGroups() {
+        const academic = student()?.academic_authorized !== false;
+        const groups = [];
+        if (academic)
+            groups.push({ id: 'family-learning-menu', label: 'Acompanhamento escolar', icon: 'academic', items: [
+                    { id: 'students', label: title('students'), icon: 'students' },
+                    { id: 'materials', label: 'Atividades', icon: 'documents' },
+                    { id: 'academic', label: title('academic'), icon: 'academic' },
+                    { id: 'agenda', label: 'Agenda escolar', icon: 'clock' },
+                    { id: 'news', label: 'Comunicados', icon: 'bell' },
+                ] });
+        const services = [];
+        if (mail.state.available)
+            services.push({ id: 'webmail', label: 'E-mail', icon: 'email' });
+        if (s.account?.role === 'guardian' && academic)
+            services.push({ id: 'absences', label: 'Justificativas de ausência', icon: 'documents' });
+        if (student()?.financial_authorized)
+            services.push({ id: 'finance', label: 'Financeiro', icon: 'billing' });
+        if (academic)
+            services.push({ id: 'documents', label: 'Documentos', icon: 'documents' });
+        services.push({ id: 'support', label: 'Atendimento', icon: 'school' }, { id: 'online', label: 'Inscrição e contratos', icon: 'online' });
+        groups.push({ id: 'family-services-menu', label: 'Serviços escolares', icon: 'school', items: services });
+        return groups;
+    }
     const isFeed = (key) => key === 'news' || key === 'agenda';
     const savedFeeds = new Map();
     function rememberFeed() {
@@ -1240,10 +2038,12 @@ var PigeFamily;
     }
     let navigationVersion = 0;
     function setView(requested, materialId = '', focusHeading = true) {
+        rail.close();
         navigationVersion++;
         const name = allowedSection(requested), changed = s.section !== name;
         let cached = false;
         if (changed) {
+            PigeDialogs.cancelPending();
             rememberFeed();
             feedGeneration++;
             s.selectedPost = null;
@@ -1283,6 +2083,8 @@ var PigeFamily;
     }
     function drafts(tabs) {
         const result = [];
+        if (tabs.includes('support') && window.document.querySelector?.('#family-protocols [data-workspace-dirty="true"]'))
+            result.push('mensagem de atendimento');
         if (tabs.includes('absences') && (schoolwork.day || schoolwork.reason || schoolwork.file))
             result.push('justificativa de ausência');
         if (tabs.includes('finance') && financeDraft())
@@ -1290,23 +2092,29 @@ var PigeFamily;
         return result;
     }
     function workspaceBusy(tabs) {
-        return s.busy || (tabs.includes('finance') && (autoPix.state.busy || cards.state.loading));
+        return s.busy || (tabs.includes('support') && Boolean(window.document.querySelector?.('#family-protocols [aria-busy="true"]'))) || (tabs.includes('finance') && (autoPix.state.busy || cards.state.loading));
     }
-    function canLeaveContext() {
+    function workspaceKey() {
+        return JSON.stringify([authEpoch, generation, navigationVersion, s.account?.id, s.schoolId, s.studentId, s.section, s.tabs]);
+    }
+    async function canLeaveContext(heading = 'Fechar as guias deste contexto?', action = 'Continuar') {
         if (workspaceBusy(s.tabs))
             return false;
-        const pending = drafts(s.tabs);
-        const mailOpen = s.tabs.includes('webmail');
-        if (!pending.length && !mailOpen)
+        const pending = drafts(s.tabs), mail = s.tabs.includes('webmail');
+        if (!pending.length && !mail)
             return true;
-        return window.confirm('Continuar e fechar as guias deste contexto?' + (pending.length ? ' Alterações ainda não salvas: ' + pending.join(', ') + '.' : '') +
-            (mailOpen ? ' Confira se as mensagens em edição foram salvas em Rascunhos.' : ''));
+        const previous = workspaceKey();
+        const message = [pending.length ? 'As alterações em ' + pending.join(' e ') + ' ainda não foram salvas.' : '',
+            mail ? 'Confira se as mensagens em edição foram salvas em Rascunhos.' : ''].filter(Boolean).join(' ');
+        const confirmed = await PigeDialogs.confirm(message, { title: heading, confirmLabel: action, cancelLabel: 'Voltar', destructive: true });
+        return confirmed && previous === workspaceKey() && !workspaceBusy(s.tabs);
     }
     function forget(key) {
         savedFeeds.delete(key);
         if (key === 'finance') {
             autoPix.clear();
             cards.clear();
+            clearChargeDocuments();
         }
         if (key === 'absences') {
             schoolwork.day = '';
@@ -1323,7 +2131,7 @@ var PigeFamily;
         }
     }
     function focusTab() { void Vue.nextTick(() => window.document.getElementById('family-tab-' + s.section)?.focus()); }
-    function closeTabs(key) {
+    async function closeTabs(key) {
         const home = s.tabs[0];
         if (!home || s.tabs.length < 2 || key === home || (key && !s.tabs.includes(key)))
             return;
@@ -1331,10 +2139,22 @@ var PigeFamily;
         if (workspaceBusy(closing))
             return;
         const pending = drafts(closing), mailOpen = closing.includes('webmail');
-        const question = key ? 'Fechar a guia ' + title(key) + '?' : 'Fechar todas as outras guias e manter ' + title(home) + ' aberta?';
-        if ((!key || pending.length || mailOpen) && !window.confirm(question +
-            (pending.length ? ' As alterações em ' + pending.join(' e ') + ' serão descartadas.' : '') +
-            (mailOpen ? ' Confira se as mensagens em edição foram salvas em Rascunhos.' : '')))
+        const previous = workspaceKey();
+        if (key) {
+            const warnings = [pending.length ? 'As alterações em ' + pending.join(' e ') + ' serão descartadas.' : '',
+                mailOpen ? 'Confira se as mensagens em edição foram salvas em Rascunhos.' : ''].filter(Boolean);
+            if (warnings.length && !await PigeDialogs.confirm(warnings.join(' '), {
+                title: 'Fechar a guia ' + title(key) + '?', confirmLabel: 'Fechar guia', cancelLabel: 'Voltar', destructive: true
+            }))
+                return;
+        }
+        else {
+            if (mailOpen)
+                pending.push('mensagens em edição no E-mail');
+            if (!await PigePortalTabs.confirmClose(title(home), pending))
+                return;
+        }
+        if (previous !== workspaceKey() || workspaceBusy(closing))
             return;
         if (closing.includes(s.section)) {
             setView(home, '', false);
@@ -1351,7 +2171,9 @@ var PigeFamily;
             focusTab();
         }
     }
+    let historyRequest = 0;
     async function popstate(event) {
+        const request = ++historyRequest;
         if (!s.account)
             return;
         const requested = routeSection(), id = new URLSearchParams(location.search).get('student');
@@ -1362,8 +2184,12 @@ var PigeFamily;
         }
         const changed = Boolean(id && id !== s.studentId && s.students.some(item => item.id === id));
         if (changed && id) {
-            if (!canLeaveContext()) {
-                updateLocation();
+            const approved = await canLeaveContext();
+            if (request !== historyRequest)
+                return;
+            if (!approved || !s.students.some(item => item.id === id)) {
+                if (s.account)
+                    updateLocation();
                 return;
             }
             clearStudentWorkspace();
@@ -1377,7 +2203,8 @@ var PigeFamily;
         if (s.section !== requested || (id && id !== s.studentId))
             updateLocation();
     }
-    Vue.createApp({ components: { 'portal-mail': PigePortalMail.component, 'learning-portal': PigeLearning.component }, render: PigeRenders.familyPortal, setup() {
+    Vue.createApp({ components: { 'portal-protocols': PigePortalProtocols.component, 'portal-mail': PigePortalMail.component, 'learning-portal': PigeLearning.component }, render: PigeRenders.familyPortal, setup() {
+            Vue.watch(() => [s.schoolId, s.account?.id, s.studentId, student()?.academic_authorized, student()?.financial_authorized, mail.state.available].join('|'), () => rail.close());
             Vue.watch(() => [s.ready, s.account?.id, s.account?.role, s.schoolId].join('|'), () => {
                 if (s.account && s.schoolId)
                     void PigeSupport.load(s.schoolId, s.account.role === 'student' ? 'student_portal' : 'guardian_portal', s.account.id);
@@ -1386,9 +2213,11 @@ var PigeFamily;
                 else
                     PigeSupport.dispose();
             });
+            Vue.onMounted(rail.mount);
+            Vue.onUnmounted(rail.dispose);
             Vue.onUnmounted(PigeSupport.dispose);
             Vue.onMounted(() => { window.addEventListener('popstate', popstate); window.document.addEventListener?.('visibilitychange', checkWhenVisible); window.addEventListener('keydown', menuKeys); window.addEventListener('resize', resized); PigeMFA.init(request, authenticated, logout); void start(); });
             Vue.onUnmounted(() => { window.removeEventListener('popstate', popstate); window.document.removeEventListener?.('visibilitychange', checkWhenVisible); window.removeEventListener('keydown', menuKeys); window.removeEventListener('resize', resized); });
-            return { s, closeTabs, tabKeys, isOpen, selectSchool, selectStudent, refreshWorkspace, recentMaterials, loadRecentMaterials, toggleSidebar, activeEnrollments, visibleMaterials, mail, autoPix, cards, schoolwork, loadSchoolwork, studentView, portalName, pickEvidence, submitAbsence, label, student, title, initials, date, money, pendingDocuments, finance, login, logout, changeSchool, changeStudent, chooseStudent, document, request, download, section, run, load, loadFeed, searchFeed, openPost, closePost, openMenu, closeMenu, mfa: PigeMFA, identity: PigeInstitution.state };
+            return { s, rail, openRegistration, sidebarGroups, chargeStatus, documentsPanel, paymentSources, paymentKinds, showChargeDocuments, copyChargeCode, closeTabs, tabKeys, isOpen, selectSchool, selectStudent, refreshWorkspace, recentMaterials, loadRecentMaterials, toggleSidebar, activeEnrollments, visibleMaterials, mail, autoPix, cards, schoolwork, loadSchoolwork, studentView, portalName, pickEvidence, submitAbsence, label, student, title, initials, date, money, pendingDocuments, finance, login, logout, changeSchool, changeStudent, chooseStudent, document, request, download, section, run, load, loadFeed, searchFeed, openPost, closePost, openMenu, closeMenu, mfa: PigeMFA, identity: PigeInstitution.state };
         } }).mount('#family');
 })(PigeFamily || (PigeFamily = {}));
