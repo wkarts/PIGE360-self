@@ -9265,8 +9265,11 @@ var PigeUI;
             });
             for (const event of ['input', 'change'])
                 node.addEventListener(event, e => {
-                    if (e.target.closest('form,[role="dialog"],textarea,[contenteditable="true"]'))
-                        desk.changed.add(e.target);
+                    const field = e.target;
+                    if (!(field instanceof HTMLElement) || field.closest('.filter-bar'))
+                        return;
+                    if (field.closest('form,[role="dialog"],textarea,[contenteditable="true"]'))
+                        desk.changed.add(field);
                 });
             app.mount(mount);
         }

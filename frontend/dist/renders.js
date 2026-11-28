@@ -15926,7 +15926,7 @@ var _Vue=Vue; var PigeRenders={asaas:function render(_ctx, _cache) {
                     class: "btn btn-secondary",
                     onClick: $event => (search())
                   }, "Buscar aluno", 8, ["onClick"])]), (state.searched)
-                    ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createElementVNode("p", { role: "status" }, _toDisplayString(state.total===0?'Nenhuma matrícula encontrada para esses filtros.':state.total+' matrícula(s) encontrada(s).'), 1), _createElementVNode("ul", { class: "censo-records" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.results, (row) => {
+                    ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [_createElementVNode("p", { role: "status" }, _toDisplayString(state.total===0?'Nenhuma matrícula encontrada para esses filtros.':state.total===1?'Uma matrícula encontrada.':state.total+' matrículas encontradas.'), 1), _createElementVNode("ul", { class: "censo-records" }, [(_openBlock(true), _createElementBlock(_Fragment, null, _renderList(state.results, (row) => {
                         return (_openBlock(), _createElementBlock("li", { key: row.enrollment_id }, [_createElementVNode("div", null, [_createElementVNode("strong", null, _toDisplayString(nameOf(row)), 1), _createElementVNode("small", null, _toDisplayString(fmtClass(row)) + " · Matrícula " + _toDisplayString(row.enrollment_number||'sem número'), 1)]), _createElementVNode("button", {
                           type: "button",
                           class: "btn btn-secondary",

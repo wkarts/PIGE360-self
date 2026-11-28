@@ -25,7 +25,7 @@
           <template v-if="!state.chosen">
             <div class="censo-search-controls"><label>Buscar aluno ou matrícula<input type="search" maxlength="180" v-model="state.q" placeholder="Nome, matrícula ou código Inep" @input="resetSearch" @keydown.enter.prevent="search()"></label><button type="button" class="btn btn-secondary" @click="search()">Buscar aluno</button></div>
             <template v-if="state.searched">
-              <p role="status">{{state.total===0?'Nenhuma matrícula encontrada para esses filtros.':state.total+' matrícula(s) encontrada(s).'}}</p>
+              <p role="status">{{state.total===0?'Nenhuma matrícula encontrada para esses filtros.':state.total===1?'Uma matrícula encontrada.':state.total+' matrículas encontradas.'}}</p>
               <ul class="censo-records">
                 <li v-for="row in state.results" :key="row.enrollment_id"><div><strong>{{nameOf(row)}}</strong><small>{{fmtClass(row)}} · Matrícula {{row.enrollment_number||'sem número'}}</small></div><button type="button" class="btn btn-secondary" :aria-label="'Selecionar '+nameOf(row)+' · '+(row.enrollment_number||'sem número')" @click="choose(row)">Selecionar</button></li>
               </ul>

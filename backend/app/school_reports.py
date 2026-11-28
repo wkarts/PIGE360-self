@@ -341,6 +341,8 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                                       ('INNERGRID',(0,0),(len(group)-1,0),.4,border), ('LINEABOVE',(0,0),(len(group)-1,0),1,accent)]))
             return card
 
+        compact_card_height = 122
+
         def compact_data(section, available, *, full=False):
             # Cada campo mantém rótulo e valor na mesma célula. Campos maiores
             # usam a largura inteira, sem reduzir fonte ou cortar o conteúdo.
@@ -350,10 +352,13 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
             values.append([title] + [''] * (slots - 1))
             spans.append(('SPAN', (0, 0), (slots - 1, 0)))
             pending = []
+            split_long_value = False
             for key, value in section.get('fields', []):
                 value = value if value not in (None, '') else 'Não informado'
                 field = [p(key, 'field'), p(value)]
                 if field[1].wrap(available / slots - 12, 1000)[1] > 2 * styles['body'].leading:
+                    if full and field[1].wrap(available - 12, 1000)[1] > compact_card_height:
+                        split_long_value = True
                     if pending:
                         values.append(pending + [''] * (slots - len(pending)))
                         pending = []
@@ -366,8 +371,10 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                         pending = []
             if pending:
                 values.append(pending + [''] * (slots - len(pending)))
+            # Um campo extenso começa no espaço restante e continua na página
+            # seguinte, sem repetir o cabeçalho da seção na mesma página.
             card = Table(values, colWidths=[available / slots] * slots, hAlign='LEFT',
-                         repeatRows=1, splitByRow=1, splitInRow=1)
+                         repeatRows=1, splitByRow=not split_long_value, splitInRow=1)
             card.setStyle(TableStyle(spans + [
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'), ('BOX', (0, 0), (-1, -1), .5, border),
                 ('BACKGROUND', (0, 0), (-1, 0), pale), ('LINEBELOW', (0, 0), (-1, 0), .6, border),
@@ -402,7 +409,7 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
             for section in sections or []:
                 if section.get('fields'):
                     trial = compact_data(section, nominal_width)
-                    if trial.wrap(nominal_width, 1000)[1] <= 122:
+                    if trial.wrap(nominal_width, 1000)[1] <= compact_card_height:
                         group.append(section)
                         if len(group) == maximum:
                             flush()
@@ -425,6 +432,9 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
 
         if compact:
             compact_sections()
+            # O espaço entre seções não pode criar uma folha após o último registro.
+            if parts and isinstance(parts[-1], Spacer):
+                parts.pop()
         cards = []
         for index, section in enumerate((sections or []) if not compact else []):
             if layout == 'record' and section.get('fields') and not section.get('columns'):
@@ -664,8 +674,15 @@ def render_table(school_name, title, columns, rows, *, summary=None, period='', 
                         issued_label = ('Prévia da Secretaria' if preview_copy else 'Boletim oficial' if signed_bulletin else 'Consulta de resultados publicados') + ' · ' + stamp
                     else:
                         issued_label = ('Via de consulta · ' if preview_copy else '') + 'Emitido em ' + stamp + (' · ' + issuer if kit and issuer else '')
-                    self.drawString(margin, 14 * mm, issued_label[:110])
-                    self.drawRightString(page_width - margin, 14 * mm, f'Página {self._pageNumber} de {total}')
+                    page_label = f'Página {self._pageNumber} de {total}'
+                    if compact:
+                        footer_width = page_width - 2*margin - self.stringWidth(page_label, regular, 7.5) - 4*mm
+                        issuer_block = KeepInFrame(footer_width, 6*mm, [p(issued_label, 'small')], mode='shrink')
+                        issuer_block.wrapOn(self, footer_width, 6*mm)
+                        issuer_block.drawOn(self, margin, 12.5*mm)
+                    else:
+                        self.drawString(margin, 14 * mm, issued_label[:110])
+                    self.drawRightString(page_width - margin, 14 * mm, page_label)
                     self.setFont(regular, 7)
                     if bulletin:
                         reference = ' · '.join(filter(None, [profile['name'], profile.get('registration'), profile.get('enrollment_label')]))

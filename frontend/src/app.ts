@@ -1751,7 +1751,9 @@ namespace PigeUI {
         if(field instanceof HTMLElement&&field.matches('input,textarea,select,[contenteditable="true"]')&&!desk.changed.has(field))desk.initial.set(field,fieldValue(field));
       });
       for(const event of ['input','change'])node.addEventListener(event,e=>{
-        if((e.target as HTMLElement).closest('form,[role="dialog"],textarea,[contenteditable="true"]'))desk.changed.add(e.target as HTMLElement);
+        const field=e.target;
+        if(!(field instanceof HTMLElement)||field.closest('.filter-bar'))return;
+        if(field.closest('form,[role="dialog"],textarea,[contenteditable="true"]'))desk.changed.add(field);
       });
       app.mount(mount);
     }else app.mount('#app');

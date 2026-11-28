@@ -201,7 +201,7 @@ def main():
             with sync_playwright() as pw:
                 executable = os.getenv('CHROMIUM_PATH') or shutil.which('chromium') or pw.chromium.executable_path
                 browser = pw.chromium.launch(executable_path=executable, args=['--no-sandbox'])
-                page = browser.new_page(viewport={'width':1280,'height':900})
+                page = browser.new_page(viewport={'width':1280,'height':900},locale='pt-BR')
                 errors = []
                 page.on('pageerror', lambda exc: errors.append(str(exc)))
                 def unexpected_prompt(dialog):
